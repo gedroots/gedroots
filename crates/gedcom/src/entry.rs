@@ -8,7 +8,7 @@
 //! la **mentionner** seulement. [`Entry::apply`] écrit tout en GEDCOM 7 standard
 //! (citations avec `PAGE`, `DATA`, `EVEN`/`ROLE`, `ASSO` pour les témoins…) ;
 //! seules les valeurs structurées des champs de la citation passent par
-//! l'extension `_GRFLD`.
+//! l'extension `_GR_FLD`.
 
 use crate::document::{Gedcom, RecordKind};
 use crate::model::{Individual, sort_key};
@@ -387,8 +387,8 @@ impl Entry {
                 let x = x.clone();
                 let tpl_ref = template_ref(t);
                 let node = w.ged.get_mut(&x).unwrap();
-                if node.child("_GRTPL").is_none() {
-                    node.insert_child(Node::with_value("_GRTPL", tpl_ref));
+                if node.child("_GR_TPL").is_none() {
+                    node.insert_child(Node::with_value("_GR_TPL", tpl_ref));
                     w.touch(&x);
                 }
                 x
@@ -406,7 +406,7 @@ impl Entry {
                     }
                     node.insert_child(repo);
                 }
-                node.insert_child(Node::with_value("_GRTPL", template_ref(t)));
+                node.insert_child(Node::with_value("_GR_TPL", template_ref(t)));
                 w.mark_created(&x);
                 x
             }
@@ -746,7 +746,7 @@ impl Entry {
         if full {
             for (k, v) in &self.fields {
                 if !v.trim().is_empty() {
-                    c.children.push(Node::with_value("_GRFLD", format!("{k} {}", v.trim())));
+                    c.children.push(Node::with_value("_GR_FLD", format!("{k} {}", v.trim())));
                 }
             }
         }
@@ -800,7 +800,7 @@ impl Entry {
     }
 }
 
-/// Valeur de `_GRTPL` sur une source : identifiant intégré ou pointeur vers l'enregistrement.
+/// Valeur de `_GR_TPL` sur une source : identifiant intégré ou pointeur vers l'enregistrement.
 fn template_ref(t: &Template) -> String {
     if t.custom { format!("@{}@", t.id) } else { t.id.clone() }
 }
@@ -1107,7 +1107,7 @@ fn merge_citation(children: &mut Vec<Node>, cite: Node) {
         Some(existing) => {
             for sub in cite.children {
                 if !existing.children.iter().any(|e| {
-                    e.tag == sub.tag && (sub.tag != "OBJE" && sub.tag != "NOTE" && sub.tag != "_GRFLD" || *e == sub)
+                    e.tag == sub.tag && (sub.tag != "OBJE" && sub.tag != "NOTE" && sub.tag != "_GR_FLD" || *e == sub)
                 }) {
                     // PAGE en tête, comme l'écrivent les autres logiciels.
                     if sub.tag == "PAGE" {

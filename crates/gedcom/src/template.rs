@@ -7,7 +7,7 @@
 //! familiaux qu'ils impliquent.
 //!
 //! Les modèles intégrés sont définis ici. Un fichier peut en ajouter d'autres
-//! sous forme d'enregistrements d'extension GEDCOM 7 (`0 @T1@ _GRTPL`), décrits
+//! sous forme d'enregistrements d'extension GEDCOM 7 (`0 @T1@ _GR_TPL`), décrits
 //! dans `docs/extensions.md` : rien n'est stocké à côté du `.ged`.
 
 use crate::document::Gedcom;
@@ -17,7 +17,8 @@ use crate::node::Node;
 pub const EXT_DOC: &str = "https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md";
 
 /// Balises d'extension GedRoots utilisées par la saisie guidée.
-pub const EXT_TAGS: &[&str] = &["_GRTPL", "_GRFLD", "_GRROLE", "_GRREL", "_GRPF", "_GRPAGE", "_GREVT", "_GRMULT"];
+pub const EXT_TAGS: &[&str] =
+    &["_GR_TPL", "_GR_FLD", "_GR_ROLE", "_GR_REL", "_GR_PF", "_GR_PAGE", "_GR_EVT", "_GR_MULT"];
 
 /// Données qu'on peut saisir pour une personne citée.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -155,7 +156,7 @@ pub struct FieldDef {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Template {
-    /// `NAISSANCE`… pour les modèles intégrés, identifiant de l'enregistrement `_GRTPL` sinon.
+    /// `NAISSANCE`… pour les modèles intégrés, identifiant de l'enregistrement `_GR_TPL` sinon.
     pub id: String,
     pub name: String,
     /// Balise de l'événement créé (`BIRT`, `MARR`, `CENS`, `EVEN`…).
@@ -219,32 +220,32 @@ impl Template {
     // Stockage en extension GEDCOM
     // ------------------------------------------------------------------
 
-    /// Enregistrement `0 @xref@ _GRTPL` décrivant ce modèle.
+    /// Enregistrement `0 @xref@ _GR_TPL` décrivant ce modèle.
     pub fn to_node(&self, xref: &str) -> Node {
-        let mut n = Node::new("_GRTPL").with_xref(xref);
+        let mut n = Node::new("_GR_TPL").with_xref(xref);
         n.children.push(Node::with_value("NAME", &self.name));
-        let mut ev = Node::with_value("_GREVT", &self.event);
+        let mut ev = Node::with_value("_GR_EVT", &self.event);
         if let Some(t) = &self.event_type {
             ev.children.push(Node::with_value("TYPE", t));
         }
         n.children.push(ev);
-        n.children.push(Node::with_value("_GRPAGE", &self.page));
+        n.children.push(Node::with_value("_GR_PAGE", &self.page));
         for f in &self.fields {
-            n.children.push(Node::with_value("_GRFLD", &f.key).push(Node::with_value("NAME", &f.label)));
+            n.children.push(Node::with_value("_GR_FLD", &f.key).push(Node::with_value("NAME", &f.label)));
         }
         for r in &self.roles {
-            let mut rn = Node::with_value("_GRROLE", &r.key).push(Node::with_value("NAME", &r.label));
+            let mut rn = Node::with_value("_GR_ROLE", &r.key).push(Node::with_value("NAME", &r.label));
             let mut role = Node::with_value("ROLE", &r.role);
             if let Some(p) = &r.phrase {
                 role.children.push(Node::with_value("PHRASE", p));
             }
             rn.children.push(role);
-            rn.children.push(Node::with_value("_GRREL", r.relation.encode()));
+            rn.children.push(Node::with_value("_GR_REL", r.relation.encode()));
             if let Some(s) = &r.sex {
                 rn.children.push(Node::with_value("SEX", s));
             }
             let pf: Vec<&str> = r.fields.iter().map(|f| f.code()).collect();
-            rn.children.push(Node::with_value("_GRPF", pf.join(" ")));
+            rn.children.push(Node::with_value("_GR_PF", pf.join(" ")));
             if r.multiple || r.default {
                 let flags = [(r.multiple, "MULTIPLE"), (r.default, "DEFAULT")]
                     .into_iter()
@@ -252,46 +253,46 @@ impl Template {
                     .map(|(_, f)| f)
                     .collect::<Vec<_>>()
                     .join(" ");
-                rn.children.push(Node::with_value("_GRMULT", flags));
+                rn.children.push(Node::with_value("_GR_MULT", flags));
             }
             n.children.push(rn);
         }
         n
     }
 
-    /// Lit un enregistrement `_GRTPL`.
+    /// Lit un enregistrement `_GR_TPL`.
     pub fn from_node(n: &Node) -> Result<Self, String> {
-        if n.tag != "_GRTPL" {
-            return Err(format!("{} n'est pas un modèle _GRTPL", n.tag));
+        if n.tag != "_GR_TPL" {
+            return Err(format!("{} n'est pas un modèle _GR_TPL", n.tag));
         }
-        let id = n.xref.clone().ok_or("un modèle _GRTPL doit avoir un identifiant")?;
-        let ev = n.child("_GREVT").ok_or("_GREVT manquant (balise de l'événement)")?;
+        let id = n.xref.clone().ok_or("un modèle _GR_TPL doit avoir un identifiant")?;
+        let ev = n.child("_GR_EVT").ok_or("_GR_EVT manquant (balise de l'événement)")?;
         let mut t = Template {
             id,
             name: n.child_val("NAME").unwrap_or("Modèle sans nom").to_string(),
             event: ev.val().to_string(),
             event_type: ev.child_val("TYPE").map(str::to_string),
-            page: n.child_val("_GRPAGE").unwrap_or("").to_string(),
+            page: n.child_val("_GR_PAGE").unwrap_or("").to_string(),
             fields: Vec::new(),
             roles: Vec::new(),
             custom: true,
         };
-        for f in n.children_with("_GRFLD") {
+        for f in n.children_with("_GR_FLD") {
             t.fields
                 .push(FieldDef { key: f.val().to_string(), label: f.child_val("NAME").unwrap_or(f.val()).to_string() });
         }
-        for r in n.children_with("_GRROLE") {
+        for r in n.children_with("_GR_ROLE") {
             let role = r.child("ROLE");
-            let flags = r.child_val("_GRMULT").unwrap_or("");
+            let flags = r.child_val("_GR_MULT").unwrap_or("");
             t.roles.push(RoleDef {
                 key: r.val().to_string(),
                 label: r.child_val("NAME").unwrap_or(r.val()).to_string(),
                 role: role.map(|x| x.val()).unwrap_or("OTHER").to_string(),
                 phrase: role.and_then(|x| x.child_val("PHRASE")).map(str::to_string),
-                relation: r.child_val("_GRREL").and_then(Relation::decode).unwrap_or(Relation::Witness),
+                relation: r.child_val("_GR_REL").and_then(Relation::decode).unwrap_or(Relation::Witness),
                 sex: r.child_val("SEX").map(str::to_string),
                 fields: r
-                    .child_val("_GRPF")
+                    .child_val("_GR_PF")
                     .unwrap_or("SURN GIVN")
                     .split_whitespace()
                     .filter_map(PersonField::from_code)
@@ -301,7 +302,7 @@ impl Template {
             });
         }
         if t.event.is_empty() {
-            return Err("_GREVT vide".into());
+            return Err("_GR_EVT vide".into());
         }
         Ok(t)
     }
@@ -527,16 +528,16 @@ pub fn builtin_templates() -> Vec<Template> {
 }
 
 impl Gedcom {
-    /// Modèles disponibles : intégrés puis définis dans le fichier (`_GRTPL`).
+    /// Modèles disponibles : intégrés puis définis dans le fichier (`_GR_TPL`).
     pub fn templates(&self) -> Vec<Template> {
         let mut v = builtin_templates();
-        v.extend(self.records.iter().filter(|r| r.tag == "_GRTPL").filter_map(|r| Template::from_node(r).ok()));
+        v.extend(self.records.iter().filter(|r| r.tag == "_GR_TPL").filter_map(|r| Template::from_node(r).ok()));
         v
     }
 
-    /// Modèle associé à une source (`1 _GRTPL` sur l'enregistrement `SOUR`).
+    /// Modèle associé à une source (`1 _GR_TPL` sur l'enregistrement `SOUR`).
     pub fn source_template(&self, source: &str) -> Option<Template> {
-        let id = self.get(source)?.child_val("_GRTPL")?;
+        let id = self.get(source)?.child_val("_GR_TPL")?;
         let id = id.trim_matches('@');
         self.templates().into_iter().find(|t| t.id == id)
     }
@@ -569,7 +570,7 @@ impl Gedcom {
         let schma = self.header.ensure_child("SCHMA");
         for tag in EXT_TAGS {
             if !schma.children.iter().any(|c| c.tag == "TAG" && c.val().split_whitespace().next() == Some(tag)) {
-                let anchor = tag.trim_start_matches('_').to_lowercase();
+                let anchor = tag.to_lowercase();
                 schma.children.push(Node::with_value("TAG", format!("{tag} {EXT_DOC}#{anchor}")));
             }
         }

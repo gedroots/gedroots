@@ -63,7 +63,7 @@ fn birth_entry_links_existing_and_creates_new() {
     assert_eq!(cite.child_val("PAGE"), Some("Acte n° 27, vue 12"));
     assert_eq!(cite.path_val(&["EVEN", "ROLE"]), Some("CHIL"));
     assert!(cite.child("OBJE").is_some());
-    assert_eq!(cite.child_val("_GRFLD"), Some("numero 27"));
+    assert_eq!(cite.child_val("_GR_FLD"), Some("numero 27"));
     assert!(cite.path_val(&["DATA", "TEXT"]).unwrap().starts_with("L'an"));
     // Témoin associé à l'événement.
     let witness = res.persons[3].clone().unwrap();
@@ -81,10 +81,10 @@ fn birth_entry_links_existing_and_creates_new() {
 
     // Source : modèle mémorisé, image liée, extensions déclarées.
     let src = g.get("S00001").unwrap();
-    assert_eq!(src.child_val("_GRTPL"), Some("NAISSANCE"));
+    assert_eq!(src.child_val("_GR_TPL"), Some("NAISSANCE"));
     assert_eq!(src.children_with("OBJE").count(), 2);
     assert_eq!(g.source_template("S00001").unwrap().name, "Naissance");
-    assert!(g.header.child("SCHMA").unwrap().children.iter().any(|c| c.val().starts_with("_GRTPL ")));
+    assert!(g.header.child("SCHMA").unwrap().children.iter().any(|c| c.val().starts_with("_GR_TPL ")));
 
     // Le fichier reste du GEDCOM valide qui se relit à l'identique.
     let text = g.to_gedcom_string();
@@ -251,7 +251,7 @@ fn custom_template_stored_in_file() {
     t.fields = vec![FieldDef { key: "annee".into(), label: "Années".into() }];
     let x = g.store_template(&t);
     let text = g.to_gedcom_string();
-    assert!(text.contains(&format!("0 @{x}@ _GRTPL")), "{text}");
+    assert!(text.contains(&format!("0 @{x}@ _GR_TPL")), "{text}");
     let g2 = Gedcom::parse(&text).unwrap();
     let back = g2.templates().into_iter().find(|t| t.id == x).unwrap();
     assert!(back.custom);
