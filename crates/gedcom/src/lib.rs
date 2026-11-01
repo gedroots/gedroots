@@ -9,12 +9,14 @@
 //! - [`geo`] : coordonnées des lieux (`MAP`) et projection de la carte ;
 //! - [`search`] : recherche et filtres sur les individus ;
 //! - [`relations`] : ajout/liaison/suppression de proches, lieux et médias ;
+//! - [`crop`] : recadrage des médias (`CROP`) et personnes identifiées sur les photos ;
 //! - [`pedigree`] : descendance pour les vues en arbre ;
 //! - [`date`] : dates GEDCOM (y compris calendrier républicain) affichées en français ;
 //! - [`template`] et [`entry`] : modèles d'actes et saisie guidée des sources.
 
 pub mod analysis;
 pub mod complete;
+pub mod crop;
 pub mod date;
 pub mod document;
 pub mod entry;
@@ -28,6 +30,7 @@ pub mod schema;
 pub mod search;
 pub mod template;
 
+pub use crop::{Crop, MediaLink, Rect};
 pub use date::Date;
 pub use document::{Gedcom, RecordKind};
 pub use entry::{Entry, EntryResult, MediaChoice, Participant, PersonChoice, SourceChoice, Suggestion};
