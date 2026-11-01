@@ -15,6 +15,7 @@ use gpui_kit::component::select::Select;
 use gpui_kit::component::{Disableable, Icon, Sizable, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
+use menus::{From as MenuFrom, WithMenu};
 use std::path::PathBuf;
 use std::rc::Rc;
 
@@ -22,6 +23,7 @@ mod add;
 mod commands;
 mod filters;
 mod history;
+mod menus;
 mod photo;
 mod relatives;
 mod tree;
@@ -193,6 +195,8 @@ pub struct Workspace {
     /// Champ de lieu en cours de saisie dans la fiche.
     place_focus: Option<EntityId>,
     editor_subs: Vec<Subscription>,
+    /// Ligne de la liste visée par le dernier clic droit.
+    menu_row: Rc<std::cell::RefCell<Option<String>>>,
     /// Défilement de la liste, pour garder l'élément affiché visible.
     list_scroll: UniformListScrollHandle,
     _subs: Vec<Subscription>,
@@ -238,6 +242,7 @@ impl Workspace {
             orphans_open: false,
             show_detach: false,
             list_scroll: UniformListScrollHandle::new(),
+            menu_row: Rc::default(),
             place_focus: None,
             editor_subs: Vec::new(),
             add_dialog: None,
@@ -1061,6 +1066,7 @@ impl Workspace {
         let rows = self.rows.clone();
         let selected = self.selected.clone();
         let entity = cx.entity().downgrade();
+        let menu_row = self.menu_row.clone();
         let flag = self.flag_label();
         let only = self.only_flagged;
         // Le nom de la liste et son total sont dans la barre de gauche : ici, seulement
@@ -1091,55 +1097,74 @@ impl Workspace {
                 ))
             })
             .child(
-                uniform_list("records", rows.len(), move |range, _window, _cx| {
-                    range
-                        .map(|i| {
-                            let r = &rows[i];
-                            let on = selected.as_deref() == Some(r.key.as_str());
-                            let key = r.key.clone();
-                            let entity = entity.clone();
-                            h_flex()
-                                .id(i)
-                                .w_full()
-                                .h(px(30.))
-                                .px_3()
-                                .gap_2()
-                                .items_center()
-                                .cursor_pointer()
-                                .when(on, |d| d.bg(theme::hover()))
-                                .hover(|d| d.bg(theme::surface()))
-                                .child(dot(r.dot.unwrap_or(theme::border_strong())))
-                                .child(
+                div()
+                    .id("list-area")
+                    .flex_1()
+                    .min_h_0()
+                    .child(
+                        uniform_list("records", rows.len(), move |range, _window, _cx| {
+                            range
+                                .map(|i| {
+                                    let r = &rows[i];
+                                    let on = selected.as_deref() == Some(r.key.as_str());
+                                    let key = r.key.clone();
+                                    let entity = entity.clone();
+                                    let menu_row = menu_row.clone();
                                     h_flex()
-                                        .flex_1()
-                                        .min_w_0()
-                                        .gap_1()
-                                        .overflow_hidden()
-                                        .whitespace_nowrap()
-                                        .text_ellipsis()
-                                        .when(!r.strong.is_empty(), |d| {
-                                            d.child(div().font_weight(FontWeight::SEMIBOLD).child(r.strong.clone()))
+                                        .id(i)
+                                        .w_full()
+                                        .h(px(30.))
+                                        .px_3()
+                                        .gap_2()
+                                        .items_center()
+                                        .cursor_pointer()
+                                        .when(on, |d| d.bg(theme::hover()))
+                                        .hover(|d| d.bg(theme::surface()))
+                                        .child(dot(r.dot.unwrap_or(theme::border_strong())))
+                                        .child(
+                                            h_flex()
+                                                .flex_1()
+                                                .min_w_0()
+                                                .gap_1()
+                                                .overflow_hidden()
+                                                .whitespace_nowrap()
+                                                .text_ellipsis()
+                                                .when(!r.strong.is_empty(), |d| {
+                                                    d.child(
+                                                        div().font_weight(FontWeight::SEMIBOLD).child(r.strong.clone()),
+                                                    )
+                                                })
+                                                .child(r.title.clone()),
+                                        )
+                                        .child(
+                                            mono(r.meta_display().to_string())
+                                                .flex_none()
+                                                .max_w(px(96.))
+                                                .overflow_hidden()
+                                                .whitespace_nowrap()
+                                                .text_ellipsis(),
+                                        )
+                                        .on_click({
+                                            let (key, entity) = (key.clone(), entity.clone());
+                                            move |_, window, cx| {
+                                                let key = key.clone();
+                                                let _ = entity.update(cx, |this, cx| this.select(key, window, cx));
+                                            }
                                         })
-                                        .child(r.title.clone()),
-                                )
-                                .child(
-                                    mono(r.meta_display().to_string())
-                                        .flex_none()
-                                        .max_w(px(96.))
-                                        .overflow_hidden()
-                                        .whitespace_nowrap()
-                                        .text_ellipsis(),
-                                )
-                                .on_click(move |_, window, cx| {
-                                    let key = key.clone();
-                                    let _ = entity.update(cx, |this, cx| this.select(key, window, cx));
+                                        // Clic droit : le menu de la liste (plus bas) vise cette ligne.
+                                        .on_mouse_down(MouseButton::Right, move |_, _, _| {
+                                            *menu_row.borrow_mut() = Some(key.clone());
+                                        })
                                 })
+                                .collect()
                         })
-                        .collect()
-                })
-                .track_scroll(&self.list_scroll)
-                .flex_1()
-                .text_sm(),
+                        .track_scroll(&self.list_scroll)
+                        .size_full()
+                        .text_sm(),
+                    )
+                    // Un seul menu pour toute la liste : celui de la ligne visée, ou
+                    // sous les lignes, créer un élément.
+                    .with_menu(self.list_menu(cx)),
             )
     }
 
@@ -1250,7 +1275,11 @@ impl Workspace {
                                     )
                                     .when(is_root, |d| d.child(icon(IconName::House).text_color(theme::accent()))),
                             )
-                            .on_click(cx.listener(move |this, _, w, cx| this.select(x.clone(), w, cx)))
+                            .on_click({
+                                let x = x.clone();
+                                cx.listener(move |this, _, w, cx| this.select(x.clone(), w, cx))
+                            })
+                            .with_menu(self.person_menu(&x, MenuFrom::Link, cx))
                             .into_any_element()
                     }
                     // Branche inconnue plus haut : on n'affiche pas ses ascendants.
@@ -1259,8 +1288,10 @@ impl Workspace {
                     None => {
                         let child = anc[k / 2].clone().unwrap_or_default();
                         let rel = if k % 2 == 0 { Relation::Father } else { Relation::Mother };
+                        let menu = self.slot_menu(&child, rel, cx);
                         add_slot(format!("anc-add-{k}"), if k % 2 == 0 { "Père" } else { "Mère" })
                             .on_click(cx.listener(move |this, _, w, cx| this.add_relative(child.clone(), rel, w, cx)))
+                            .with_menu(menu)
                             .into_any_element()
                     }
                 };
@@ -1272,12 +1303,22 @@ impl Workspace {
                 v_flex()
                     .gap_2()
                     .child(card)
-                    .child(add_slot("anc-add-child", "Enfant").on_click(
-                        cx.listener(move |this, _, w, cx| this.add_relative(c1.clone(), Relation::Child, w, cx)),
-                    ))
-                    .child(add_slot("anc-add-sibling", "Frère ou sœur").on_click(
-                        cx.listener(move |this, _, w, cx| this.add_relative(c2.clone(), Relation::Sibling, w, cx)),
-                    ))
+                    .child(
+                        add_slot("anc-add-child", "Enfant")
+                            .on_click(
+                                cx.listener(move |this, _, w, cx| {
+                                    this.add_relative(c1.clone(), Relation::Child, w, cx)
+                                }),
+                            )
+                            .with_menu(self.slot_menu(root, Relation::Child, cx)),
+                    )
+                    .child(
+                        add_slot("anc-add-sibling", "Frère ou sœur")
+                            .on_click(cx.listener(move |this, _, w, cx| {
+                                this.add_relative(c2.clone(), Relation::Sibling, w, cx)
+                            }))
+                            .with_menu(self.slot_menu(root, Relation::Sibling, cx)),
+                    )
                     .into_any_element()
             }))
         };
@@ -1485,6 +1526,7 @@ impl Workspace {
                         .child(body)
                         .child(div().text_xs().text_color(theme::muted()).child(title))
                         .on_click(cx.listener(move |this, _, w, cx| this.goto(target.clone(), w, cx)))
+                        .with_menu(self.record_menu(m.xref(), MenuFrom::Attached(xref.clone()), cx))
                 }))
                 .into_any_element(),
         )
@@ -1500,6 +1542,7 @@ impl Workspace {
         let n = images.len();
         let tiles = images.into_iter().map(|m| {
             let target = m.xref().to_string();
+            let menu = self.record_menu(m.xref(), MenuFrom::Attached(xref.to_string()), cx);
             let path = media_path(doc, &m).filter(|p| p.exists());
             let tile = div()
                 .id(SharedString::from(format!("thumb-{target}")))
@@ -1513,7 +1556,7 @@ impl Workspace {
                 .on_click(cx.listener(move |this, _, w, cx| this.goto(target.clone(), w, cx)));
             let tile = if large { tile.w_full().h(px(220.)) } else { tile.h(px(96.)) };
             let crop = doc.ged.link_crop(xref, m.xref());
-            match path {
+            let tile = match path {
                 Some(p) if crop.is_some() => {
                     // Zone recadrée du lien : visage sur une photo de groupe, extrait d'un acte…
                     let (w, h) = if large { (326., 218.) } else { (104., 94.) };
@@ -1531,7 +1574,8 @@ impl Workspace {
                         .child(icon(IconName::Image))
                         .child("Introuvable"),
                 ),
-            }
+            };
+            tile.with_menu(menu)
         });
         Some(
             v_flex()
@@ -1718,6 +1762,7 @@ impl Workspace {
                             ),
                     )
                     .children(actions)
+                    .when(kind == Some(RecordKind::Family), |d| d.child(self.render_events(key, cx)))
                     .when_some(gallery, |d, el| d.child(el))
                     .when(!outgoing.is_empty(), |d| d.child(self.render_links("Liens", outgoing, cx)))
                     // Photo : la liste « Utilisée par » est sous l'image, avec les cadres.
@@ -1745,8 +1790,91 @@ impl Workspace {
                     .children(kind.map(|k| icon(View::for_kind(k).icon()).text_color(theme::muted())))
                     .child(div().flex_1().overflow_hidden().whitespace_nowrap().text_ellipsis().child(label))
                     .on_click(cx.listener(move |this, _, w, cx| this.goto(target.clone(), w, cx)))
+                    .with_menu(self.record_menu(&x, MenuFrom::Link, cx))
             }),
         )
+    }
+
+    /// Section « Événements » d'un individu ou d'une famille : un clic ouvre
+    /// l'événement en modification, clic droit pour les autres actions.
+    fn render_events(&self, owner: &str, cx: &mut Context<Self>) -> AnyElement {
+        let g = &self.doc.as_ref().unwrap().ged;
+        let mut events = g.events_of(owner);
+        events.sort_by_key(|(_, e)| e.date().map(|d| d.sort_key()).unwrap_or((i32::MAX, 0, 0)));
+        let x = owner.to_string();
+        v_flex()
+            .p_4()
+            .gap_1()
+            .border_b_1()
+            .border_color(theme::border())
+            .child(section_header("Événements", {
+                let x = x.clone();
+                add::plus_button("add-event")
+                    .tooltip("Ajouter un événement")
+                    .on_click(cx.listener(move |this, _, w, cx| this.open_event_dialog(x.clone(), None, w, cx)))
+            }))
+            .children(events.into_iter().map(|(ix, e)| {
+                let place = e.place().map(|p| p.to_string());
+                let sources: Vec<String> = e.source_xrefs().iter().map(|s| s.to_string()).collect();
+                let label = match e.value() {
+                    Some(v) => format!("{} : {v}", e.label()),
+                    None => e.label(),
+                };
+                let (o1, o2) = (x.clone(), x.clone());
+                v_flex()
+                    .id(SharedString::from(format!("ev-{ix}")))
+                    .gap_0p5()
+                    .px_2()
+                    .py_1()
+                    .rounded_sm()
+                    .cursor_pointer()
+                    .hover(|d| d.bg(theme::hover()))
+                    .child(
+                        h_flex()
+                            .justify_between()
+                            .gap_2()
+                            .child(
+                                h_flex()
+                                    .gap_1p5()
+                                    .items_center()
+                                    .child(div().font_weight(FontWeight::MEDIUM).child(label))
+                                    // Point orange : événement sans source.
+                                    .when(sources.is_empty(), |d| d.child(dot(theme::warn()))),
+                            )
+                            .child(mono(e.date().map(|d| d.to_french()).unwrap_or_default())),
+                    )
+                    .when_some(place, |d, p| {
+                        let target = p.clone();
+                        d.child(
+                            div()
+                                .id(SharedString::from(format!("ev-place-{ix}")))
+                                .text_color(theme::muted())
+                                .hover(|d| d.text_color(theme::accent()))
+                                .child(short_place(&p))
+                                .on_click(cx.listener(move |this, _, w, cx| {
+                                    cx.stop_propagation();
+                                    this.goto_place(target.clone(), w, cx)
+                                })),
+                        )
+                    })
+                    .children(sources.into_iter().map(|s| {
+                        let title = g.record_label(&s);
+                        let target = s.clone();
+                        div()
+                            .id(SharedString::from(format!("ev-src-{ix}-{s}")))
+                            .text_xs()
+                            .text_color(theme::ok())
+                            .hover(|d| d.text_color(theme::accent()))
+                            .child(title)
+                            .on_click(cx.listener(move |this, _, w, cx| {
+                                cx.stop_propagation();
+                                this.goto(target.clone(), w, cx)
+                            }))
+                    }))
+                    .on_click(cx.listener(move |this, _, w, cx| this.open_event_dialog(o1.clone(), Some(ix), w, cx)))
+                    .with_menu(self.event_menu(o2, ix, cx))
+            }))
+            .into_any_element()
     }
 
     fn render_individual_card(&self, g: &Gedcom, i: Individual<'_>, cx: &mut Context<Self>) -> impl IntoElement {
@@ -1757,8 +1885,6 @@ impl Workspace {
         let is_root = g.root().as_deref() == Some(i.xref());
         let lineage =
             sosa.as_deref().and_then(|s| s.parse().ok()).map(theme::lineage).unwrap_or(theme::border_strong());
-        let mut events: Vec<Event> = i.events();
-        events.sort_by_key(|e| e.date().map(|d| d.sort_key()).unwrap_or((i32::MAX, 0, 0)));
         let xref = i.xref().to_string();
 
         let header = h_flex()
@@ -1812,65 +1938,7 @@ impl Workspace {
                     ),
             );
 
-        let events_el = v_flex()
-            .p_4()
-            .gap_3()
-            .border_b_1()
-            .border_color(theme::border())
-            .child(section_header("Événements", {
-                let x = xref.clone();
-                add::plus_button("add-event")
-                    .tooltip("Ajouter un événement")
-                    .on_click(cx.listener(move |this, _, w, cx| this.open_event_dialog(x.clone(), w, cx)))
-            }))
-            .children(events.into_iter().enumerate().map(|(n, e)| {
-                let place = e.place().map(|p| p.to_string());
-                let sources: Vec<String> = e.source_xrefs().iter().map(|s| s.to_string()).collect();
-                let label = match e.value() {
-                    Some(v) => format!("{} : {v}", e.label()),
-                    None => e.label(),
-                };
-                v_flex()
-                    .gap_0p5()
-                    .child(
-                        h_flex()
-                            .justify_between()
-                            .gap_2()
-                            .child(
-                                h_flex()
-                                    .gap_1p5()
-                                    .items_center()
-                                    .child(div().font_weight(FontWeight::MEDIUM).child(label))
-                                    // Point orange : événement sans source.
-                                    .when(sources.is_empty(), |d| d.child(dot(theme::warn()))),
-                            )
-                            .child(mono(e.date().map(|d| d.to_french()).unwrap_or_default())),
-                    )
-                    .when_some(place, |d, p| {
-                        let target = p.clone();
-                        d.child(
-                            div()
-                                .id(SharedString::from(format!("ev-place-{n}")))
-                                .text_color(theme::muted())
-                                .cursor_pointer()
-                                .hover(|d| d.text_color(theme::accent()))
-                                .child(short_place(&p))
-                                .on_click(cx.listener(move |this, _, w, cx| this.goto_place(target.clone(), w, cx))),
-                        )
-                    })
-                    .children(sources.into_iter().map(|s| {
-                        let title = g.record_label(&s);
-                        let target = s.clone();
-                        div()
-                            .id(SharedString::from(format!("ev-src-{n}-{s}")))
-                            .text_xs()
-                            .text_color(theme::ok())
-                            .cursor_pointer()
-                            .hover(|d| d.text_color(theme::accent()))
-                            .child(title)
-                            .on_click(cx.listener(move |this, _, w, cx| this.goto(target.clone(), w, cx)))
-                    }))
-            }));
+        let events_el = self.render_events(&xref, cx);
 
         // Famille : parents, conjoints, enfants.
         let mut family: Vec<(&'static str, String)> = Vec::new();
@@ -1908,6 +1976,7 @@ impl Workspace {
                     .child(div().flex_1().overflow_hidden().whitespace_nowrap().text_ellipsis().child(p.display_name()))
                     .child(mono(p.years()))
                     .on_click(cx.listener(move |this, _, w, cx| this.goto(target.clone(), w, cx)))
+                    .with_menu(self.person_menu(&x, MenuFrom::Link, cx))
             }));
 
         let images: Vec<String> = g.images_of(&xref).iter().map(|m| m.xref().to_string()).collect();

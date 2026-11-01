@@ -9,6 +9,7 @@
 //! - [`geo`] : coordonnées des lieux (`MAP`) et projection de la carte ;
 //! - [`search`] : recherche et filtres sur les individus ;
 //! - [`relations`] : ajout/liaison/suppression de proches, lieux et médias ;
+//! - [`events`] : modification et suppression des événements ;
 //! - [`crop`] : recadrage des médias (`CROP`) et personnes identifiées sur les photos ;
 //! - [`pedigree`] : descendance pour les vues en arbre ;
 //! - [`date`] : dates GEDCOM (y compris calendrier républicain) affichées en français ;
@@ -20,6 +21,7 @@ pub mod crop;
 pub mod date;
 pub mod document;
 pub mod entry;
+pub mod events;
 pub mod geo;
 pub mod model;
 pub mod node;

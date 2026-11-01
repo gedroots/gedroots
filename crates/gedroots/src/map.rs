@@ -9,6 +9,7 @@ use crate::theme;
 use gedcom::Place;
 use gedcom::geo::{TILE_SIZE, project, unproject};
 use gpui_kit::component::button::{Button, ButtonVariants};
+use gpui_kit::component::menu::{ContextMenuExt, PopupMenu, PopupMenuItem};
 use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::{Disableable, Sizable, h_flex};
 use gpui_kit::prelude::FluentBuilder;
@@ -67,6 +68,10 @@ pub struct MapView {
     scroll_acc: f32,
     online: bool,
     placing: bool,
+    /// Position du dernier clic droit sur la carte (menu « Placer ici »).
+    /// (Partagée sans passer par la vue : la mettre à jour pendant le clic
+    /// empêcherait le menu de recevoir la souris.)
+    menu_pos: std::rc::Rc<std::cell::Cell<Option<Point<Pixels>>>>,
     tile_dir: Option<PathBuf>,
     tile_url: String,
     pending: HashSet<TileKey>,
@@ -97,6 +102,7 @@ impl MapView {
             scroll_acc: 0.,
             online: std::env::var_os("GEDROOTS_OFFLINE").is_none(),
             placing: false,
+            menu_pos: Default::default(),
             tile_dir: tile_cache_dir(),
             tile_url: std::env::var("GEDROOTS_TILE_URL").unwrap_or_else(|_| DEFAULT_TILES.into()),
             pending: HashSet::new(),
@@ -401,13 +407,14 @@ impl MapView {
                     .cursor_pointer()
                     .hover(|d| d.bg(theme::accent()))
                     .tooltip(move |w, cx| Tooltip::new(label.clone()).build(w, cx))
-                    .on_mouse_down(
-                        MouseButton::Left,
+                    .on_mouse_down(MouseButton::Left, {
+                        let name = name.clone();
                         cx.listener(move |_, _, _, cx| {
                             cx.stop_propagation();
                             cx.emit(MapEvent::Select(name.clone()));
-                        }),
-                    )
+                        })
+                    })
+                    .context_menu(marker_menu(cx.entity().downgrade(), name, point(px(x), px(y))))
                     .into_any_element(),
             );
         }
@@ -661,6 +668,10 @@ impl Render for MapView {
                     cx.notify();
                 }),
             )
+            .on_mouse_down(MouseButton::Right, {
+                let pos = self.menu_pos.clone();
+                move |ev: &MouseDownEvent, _, _| pos.set(Some(ev.position))
+            })
             .on_scroll(cx.listener(|this, ev: &ScrollEvent, _, cx| {
                 let dy = f32::from(ev.delta.pixel_delta(px(20.)).y);
                 this.scroll_acc += dy;
@@ -694,6 +705,74 @@ impl Render for MapView {
                     .child(format!("zoom {}", self.zoom))
                     .child("© les contributeurs d'OpenStreetMap"),
             )
+            .context_menu(background_menu(cx.entity().downgrade()))
+    }
+}
+
+/// Une entrée du menu contextuel de la carte.
+fn map_item(
+    map: &WeakEntity<MapView>,
+    label: impl Into<SharedString>,
+    f: impl Fn(&mut MapView, &mut Context<MapView>) + 'static,
+) -> PopupMenuItem {
+    let map = map.clone();
+    PopupMenuItem::new(label).on_click(move |_, _, cx| {
+        let _ = map.update(cx, |this, cx| {
+            f(this, cx);
+            cx.notify();
+        });
+    })
+}
+
+/// Clic droit sur un repère. `at` : position du repère dans la carte.
+fn marker_menu(
+    map: WeakEntity<MapView>,
+    name: String,
+    at: Point<Pixels>,
+) -> impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static {
+    move |menu, _, _| {
+        let (n1, n2) = (name.clone(), name.clone());
+        menu.item(map_item(&map, "Afficher ce lieu", move |_, cx| cx.emit(MapEvent::Select(n1.clone()))))
+            .item(map_item(&map, "Déplacer à la main…", move |this, cx| {
+                cx.emit(MapEvent::Select(n2.clone()));
+                this.placing = true;
+            }))
+            .separator()
+            .item(map_item(&map, "Zoomer ici", move |this, cx| {
+                let origin = this.bounds.origin;
+                this.zoom_by(2, Some(origin + at), cx)
+            }))
+    }
+}
+
+/// Clic droit sur le fond de la carte.
+fn background_menu(
+    map: WeakEntity<MapView>,
+) -> impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static {
+    move |menu, _, cx| {
+        let Some(this) = map.upgrade() else { return menu };
+        let (selected, pos) = {
+            let this = this.read(cx);
+            (this.selected.clone(), this.menu_pos.get())
+        };
+        menu.when_some(selected.zip(pos), |m, (name, pos)| {
+            let short = gedcom::short_place(&name).to_string();
+            m.item(map_item(&map, format!("Placer « {short} » ici"), move |this, cx| {
+                let (x, y) = this.to_world(pos);
+                let (lat, lon) = unproject(x.rem_euclid(TILE_SIZE), y.clamp(0., TILE_SIZE));
+                this.placing = false;
+                cx.emit(MapEvent::SetCoords { name: name.clone(), lat, lon, checkpoint: true });
+            }))
+            .separator()
+        })
+        .when_some(pos, |m, pos| {
+            m.item(map_item(&map, "Zoomer ici", move |this, cx| this.zoom_by(2, Some(pos), cx))).item(map_item(
+                &map,
+                "Dézoomer",
+                move |this, cx| this.zoom_by(-2, Some(pos), cx),
+            ))
+        })
+        .item(map_item(&map, "Tout afficher", |this, _| this.fit()))
     }
 }
 
