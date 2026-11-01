@@ -13,6 +13,7 @@
 //! - [`import`] : contrôles de l'assistant d'import (balises non standard → GEDCOM 7) ;
 //! - [`weblink`] : liens web en GEDCOM 7 standard (`OBJE` dont le `FILE` est une URL) ;
 //! - [`crop`] : recadrage des médias (`CROP`) et personnes identifiées sur les photos ;
+//! - [`multipage`] : médias à plusieurs pages (plusieurs `FILE`), fusion et séparation ;
 //! - [`pedigree`] : descendance pour les vues en arbre ;
 //! - [`date`] : dates GEDCOM (y compris calendrier républicain) affichées en français ;
 //! - [`template`] et [`entry`] : modèles d'actes et saisie guidée des sources.
@@ -27,6 +28,7 @@ pub mod events;
 pub mod geo;
 pub mod import;
 pub mod model;
+pub mod multipage;
 pub mod node;
 pub mod parse;
 pub mod pedigree;
@@ -41,6 +43,7 @@ pub use date::Date;
 pub use document::{Gedcom, RecordKind};
 pub use entry::{Entry, EntryResult, MediaChoice, Participant, PersonChoice, SourceChoice, Suggestion};
 pub use model::*;
+pub use multipage::{MediaFile, PAGE_TAG, page_of_link, strip_page_suffix};
 pub use node::Node;
 pub use parse::{ParseError, node_from_string, node_to_string};
 pub use pedigree::{DescNode, DescUnion};

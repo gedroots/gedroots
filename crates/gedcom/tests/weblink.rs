@@ -115,3 +115,14 @@ fn import_wizard_checks() {
     assert_eq!(import::apply(&mut g, &["url"]), [("url", 4)]);
     assert!(import::analyze(&g).is_empty());
 }
+
+#[test]
+fn web_links_have_no_pages() {
+    let mut g = Gedcom::parse(LEGACY).unwrap();
+    g.add_web_link("I1", "https://geneanet.org/fiche", "").unwrap();
+    let WebLinkKind::Media(web) = g.web_links("I1")[0].kind.clone() else { panic!() };
+    let photo = g.media_for_file("Actes/acte.jpg");
+    assert!(g.merge_media(&[photo.clone(), web.clone()]).is_err());
+    assert!(g.add_media_pages(&web, &["Actes/p2.jpg".into()]).is_err());
+    assert_eq!(Media::new(g.get(&web).unwrap()).page_count(), 1);
+}

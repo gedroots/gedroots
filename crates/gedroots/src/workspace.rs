@@ -25,6 +25,7 @@ mod filters;
 mod history;
 mod import;
 mod menus;
+mod pages;
 mod photo;
 mod relatives;
 mod tree;
@@ -186,6 +187,10 @@ pub struct Workspace {
     photo_bounds: photo::PhotoBounds,
     /// Personne survolée sur la photo ou dans la liste des liens.
     photo_hover: Option<String>,
+    /// Page affichée d'un média multipage (à partir de 1).
+    media_page: usize,
+    /// Médias sélectionnés ensemble (⌘ / Maj + clic), dans l'ordre, pour les fusionner.
+    media_marked: Vec<String>,
     /// Précédent / Suivant, et dernier élément vu dans chaque liste.
     history: history::History,
     /// Fenêtre « Fichiers du dossier sans média » ouverte.
@@ -240,6 +245,8 @@ impl Workspace {
             photo_draw: None,
             photo_bounds: Default::default(),
             photo_hover: None,
+            media_page: 1,
+            media_marked: Vec::new(),
             history: Default::default(),
             orphans_open: false,
             show_detach: false,
@@ -408,6 +415,7 @@ impl Workspace {
         }
         self.leave_location();
         self.view = view;
+        self.media_marked.clear();
         self.only_flagged = false;
         self.selected = None;
         self.editor = None;
@@ -427,7 +435,9 @@ impl Workspace {
     fn select(&mut self, key: String, window: &mut Window, cx: &mut Context<Self>) {
         if self.selected.as_deref() != Some(key.as_str()) {
             self.leave_location();
+            self.media_page = 1;
         }
+        self.media_marked.clear();
         self.note_selected(&key);
         if self.view == View::Places {
             self.map.update(cx, |m, cx| m.set_selected(Some(key.clone()), cx));
@@ -793,16 +803,23 @@ impl Workspace {
                 .map(|r| {
                     let m = Media::new(r);
                     let web = m.web_url();
-                    let missing = web.is_none() && !media_path(doc, &m).is_some_and(|p| p.exists());
+                    let files = m.files();
+                    let missing = web.is_none()
+                        && (files.is_empty()
+                            || files.iter().any(|f| !pages::file_path(doc, f.path).is_some_and(|p| p.exists())));
                     Row {
                         key: m.xref().to_string(),
                         title: m.title(),
                         strong: String::new(),
-                        meta: web.map(|u| host(u).to_string()).unwrap_or_default(),
+                        meta: match web {
+                            Some(u) => host(u).to_string(),
+                            None if files.len() > 1 => format!("{} p.", files.len()),
+                            None => String::new(),
+                        },
                         dot: missing.then(theme::warn),
                         flagged: missing,
                     }
-                    .with_search(m.file().unwrap_or("").to_string())
+                    .with_search(files.iter().map(|f| f.path).collect::<Vec<_>>().join(" "))
                 })
                 .collect(),
             View::Repositories => g
@@ -895,19 +912,6 @@ fn dirs_home() -> PathBuf {
     std::env::var_os("HOME").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."))
 }
 
-/// Chemin absolu d'un média (`FILE` est relatif au dossier du .ged).
-fn media_path(doc: &Document, m: &Media) -> Option<PathBuf> {
-    let f = m.file()?;
-    if f.is_empty() || f.contains("://") {
-        return None;
-    }
-    let p = PathBuf::from(f.strip_prefix("file://").unwrap_or(f));
-    if p.is_absolute() {
-        return Some(p);
-    }
-    Some(doc.path.as_ref()?.parent()?.join(p))
-}
-
 // ======================================================================
 // Rendu
 // ======================================================================
@@ -966,7 +970,9 @@ fn avatar(doc: &Document, i: &Individual<'_>, size: f32, ring: Hsla) -> Div {
         .items_center()
         .justify_center();
     let portrait = doc.ged.portrait(i.xref());
-    match portrait.and_then(|m| media_path(doc, &m)).filter(|p| p.exists()) {
+    // Personne située sur une autre page d'un média multipage : cette page-là.
+    let page = |m: &Media| pages::page_path(doc, m, doc.ged.link_page(i.xref(), m.xref()));
+    match portrait.and_then(|m| page(&m)).filter(|p| p.exists()) {
         Some(p) => {
             // Le recadrage du lien (CROP) cadre le visage sur une photo de groupe.
             let crop = portrait.and_then(|m| doc.ged.link_crop(i.xref(), m.xref()));
@@ -1068,6 +1074,8 @@ impl Workspace {
     fn render_list(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let rows = self.rows.clone();
         let selected = self.selected.clone();
+        let marked: Rc<Vec<String>> = Rc::new(self.media_marked.clone());
+        let multi = self.view == View::Media;
         let entity = cx.entity().downgrade();
         let menu_row = self.menu_row.clone();
         let flag = self.flag_label();
@@ -1109,7 +1117,11 @@ impl Workspace {
                             range
                                 .map(|i| {
                                     let r = &rows[i];
-                                    let on = selected.as_deref() == Some(r.key.as_str());
+                                    let on = if marked.is_empty() {
+                                        selected.as_deref() == Some(r.key.as_str())
+                                    } else {
+                                        marked.contains(&r.key)
+                                    };
                                     let key = r.key.clone();
                                     let entity = entity.clone();
                                     let menu_row = menu_row.clone();
@@ -1149,9 +1161,18 @@ impl Workspace {
                                         )
                                         .on_click({
                                             let (key, entity) = (key.clone(), entity.clone());
-                                            move |_, window, cx| {
+                                            move |ev: &ClickEvent, window, cx| {
                                                 let key = key.clone();
-                                                let _ = entity.update(cx, |this, cx| this.select(key, window, cx));
+                                                // Médias : ⌘ / Ctrl + clic ou Maj + clic pour en sélectionner plusieurs.
+                                                let m = ev.modifiers();
+                                                let add = multi && (m.secondary(cx) || m.shift);
+                                                let _ = entity.update(cx, |this, cx| {
+                                                    if add {
+                                                        this.mark_media(key, m.shift, cx)
+                                                    } else {
+                                                        this.select(key, window, cx)
+                                                    }
+                                                });
                                             }
                                         })
                                         // Clic droit : le menu de la liste (plus bas) vise cette ligne.
@@ -1178,8 +1199,10 @@ impl Workspace {
             _ => vec![CenterTab::Form, CenterTab::Raw],
         };
         let tab = if tabs.contains(&self.tab) { self.tab } else { tabs[0] };
+        let merging = self.view == View::Media && self.media_marked.len() >= 2;
         let body: AnyElement = match (tab, &self.editor) {
             (CenterTab::Map, _) => self.map.clone().into_any_element(),
+            (CenterTab::Form, _) if merging => self.render_merge_panel(cx),
             (_, None) => self.render_empty_center().into_any_element(),
             (CenterTab::Tree, _) => self.render_tree_tab(cx),
             (CenterTab::Form, Some(ed)) => self.render_form(ed, cx).into_any_element(),
@@ -1505,16 +1528,23 @@ impl Workspace {
                     let target = m.xref().to_string();
                     let title = m.title();
                     let crop = doc.ged.link_crop(xref, m.xref());
-                    let body = match media_path(doc, &m).filter(|p| p.exists()) {
-                        Some(p) if crop.is_some() => photo::fitted_crop(p, crop, 700., 640.),
-                        Some(p) => {
-                            img(p).max_w_full().max_h(px(640.)).object_fit(ObjectFit::Contain).into_any_element()
-                        }
-                        None => div()
-                            .text_color(theme::warn())
-                            .child(format!("Fichier introuvable : {}", m.file().unwrap_or("")))
-                            .into_any_element(),
+                    // Zone recadrée : sa page seulement ; sinon toutes les pages, l'une sous l'autre.
+                    let shown: Vec<usize> = match crop {
+                        Some(_) => vec![doc.ged.link_page(xref, m.xref())],
+                        None => (1..=m.page_count().max(1)).collect(),
                     };
+                    let body = v_flex().gap_2().children(shown.into_iter().map(|page| {
+                        match pages::page_path(doc, &m, page).filter(|p| p.exists()) {
+                            Some(p) if crop.is_some() => photo::fitted_crop(p, crop, 700., 640.),
+                            Some(p) => {
+                                img(p).max_w_full().max_h(px(640.)).object_fit(ObjectFit::Contain).into_any_element()
+                            }
+                            None => div()
+                                .text_color(theme::warn())
+                                .child(format!("Fichier introuvable : {}", m.page_file(page).unwrap_or("")))
+                                .into_any_element(),
+                        }
+                    }));
                     v_flex()
                         .id(SharedString::from(format!("img-{target}")))
                         .gap_1()
@@ -1545,8 +1575,10 @@ impl Workspace {
         let tiles = images.into_iter().map(|m| {
             let target = m.xref().to_string();
             let menu = self.record_menu(m.xref(), MenuFrom::Attached(xref.to_string()), cx);
-            let path = media_path(doc, &m).filter(|p| p.exists());
+            let page_count = m.page_count();
+            let path = pages::page_path(doc, &m, doc.ged.link_page(xref, m.xref())).filter(|p| p.exists());
             let tile = div()
+                .relative()
                 .id(SharedString::from(format!("thumb-{target}")))
                 .rounded_md()
                 .overflow_hidden()
@@ -1558,6 +1590,19 @@ impl Workspace {
                 .on_click(cx.listener(move |this, _, w, cx| this.goto(target.clone(), w, cx)));
             let tile = if large { tile.w_full().h(px(220.)) } else { tile.h(px(96.)) };
             let crop = doc.ged.link_crop(xref, m.xref());
+            // Nombre de pages d'un média multipage, en coin.
+            let badge = (page_count > 1).then(|| {
+                div()
+                    .absolute()
+                    .right(px(4.))
+                    .bottom(px(4.))
+                    .px_1()
+                    .rounded_sm()
+                    .bg(gpui_kit::hsla(0., 0., 0., 0.7))
+                    .text_xs()
+                    .text_color(theme::text())
+                    .child(format!("{page_count} p."))
+            });
             let tile = match path {
                 Some(p) if crop.is_some() => {
                     // Zone recadrée du lien : visage sur une photo de groupe, extrait d'un acte…
@@ -1577,7 +1622,7 @@ impl Workspace {
                         .child("Introuvable"),
                 ),
             };
-            tile.with_menu(menu)
+            tile.children(badge).with_menu(menu)
         });
         Some(
             v_flex()
@@ -1620,17 +1665,43 @@ impl Workspace {
                     .into_any_element(),
             );
         }
-        let path = media_path(doc, &m);
-        let el = match path {
-            Some(p) if p.exists() && m.is_image() => return Some(self.render_photo(xref, p, cx)),
+        let page = self.current_page(xref);
+        let strip = self.render_page_strip(xref, cx);
+        let file = m.page_file(page).unwrap_or("");
+        let path = pages::page_path(doc, &m, page);
+        let image = m
+            .files()
+            .get(page - 1)
+            .is_some_and(|f| f.form.is_some_and(|t| t.starts_with("image/")) || mime_for(f.path).starts_with("image/"));
+        let el: Option<AnyElement> = match path {
+            Some(p) if p.exists() && image => Some(self.render_photo(xref, p, cx)),
             // Fichier présent mais sans aperçu (PDF…) : rien à signaler.
-            Some(p) if p.exists() => return None,
+            Some(p) if p.exists() => None,
             Some(_) => {
-                v_flex().child(div().text_color(theme::warn()).child("Fichier introuvable dans le dossier du .ged"))
+                Some(div().text_color(theme::warn()).child(format!("Fichier introuvable : {file}")).into_any_element())
             }
-            None => v_flex().child(div().text_color(theme::muted()).child("Aucun fichier local associé")),
+            None => Some(div().text_color(theme::muted()).child("Aucun fichier local associé").into_any_element()),
         };
-        Some(el.into_any_element())
+        if strip.is_none() && el.is_none() {
+            return None;
+        }
+        // Déposer des fichiers sur l'aperçu les ajoute comme pages.
+        let (media, entity) = (xref.clone(), cx.entity().downgrade());
+        Some(
+            v_flex()
+                .gap_3()
+                .drag_over::<ExternalPaths>(|d, _, _, _| d.bg(theme::accent_soft()))
+                .on_drop(move |paths: &ExternalPaths, window, cx| {
+                    let media = media.clone();
+                    let _ = entity.update(cx, |this, cx| {
+                        let files = paths.paths().iter().map(|p| this.file_value(p)).collect();
+                        this.add_pages(media, files, window, cx);
+                    });
+                })
+                .children(strip)
+                .children(el)
+                .into_any_element(),
+        )
     }
 
     fn render_raw(&self, ed: &RecordEditor, cx: &mut Context<Self>) -> impl IntoElement {
@@ -1676,18 +1747,24 @@ impl Workspace {
             .border_color(theme::border())
             .text_sm();
         // Déposer des photos ou documents n'importe où sur le panneau les rattache.
-        let attachable = g
-            .get(key)
-            .and_then(|n| RecordKind::from_tag(&n.tag))
-            .is_some_and(|k| matches!(k, RecordKind::Individual | RecordKind::Family | RecordKind::Source));
+        // Sur un média, ils deviennent de nouvelles pages.
+        let kind = g.get(key).and_then(|n| RecordKind::from_tag(&n.tag));
+        let attachable = kind.is_some_and(|k| {
+            matches!(k, RecordKind::Individual | RecordKind::Family | RecordKind::Source | RecordKind::Media)
+        });
         let panel = if attachable {
             let (record, entity) = (key.clone(), cx.entity().downgrade());
+            let as_pages = kind == Some(RecordKind::Media);
             panel.drag_over::<ExternalPaths>(|d, _, _, _| d.bg(theme::accent_soft())).on_drop(
                 move |paths: &ExternalPaths, window, cx| {
                     let record = record.clone();
                     let _ = entity.update(cx, |this, cx| {
                         let files = paths.paths().iter().map(|p| this.file_value(p)).collect();
-                        this.attach_files(Some(record), files, window, cx);
+                        if as_pages {
+                            this.add_pages(record, files, window, cx);
+                        } else {
+                            this.attach_files(Some(record), files, window, cx);
+                        }
                     });
                 },
             )
@@ -2138,6 +2215,7 @@ impl Render for Workspace {
             .track_focus(&self.focus)
             .key_context("Workspace")
             .map(|d| self.bind_actions(d, window, cx))
+            .map(|d| self.bind_page_actions(d, cx))
             // Boutons « précédent / suivant » de la souris.
             .on_mouse_down(
                 MouseButton::Navigate(NavigationDirection::Back),

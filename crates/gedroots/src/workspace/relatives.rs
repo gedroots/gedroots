@@ -14,8 +14,10 @@ pub enum PickPurpose {
     FamilyChild { fam: String },
     /// Le média est rattaché à l'enregistrement choisi.
     MediaTo { media: String },
-    /// La personne choisie est identifiée sur la photo, dans la zone `crop`.
-    TagPerson { media: String, crop: Crop },
+    /// La personne choisie est identifiée sur la photo (page `page`), dans la zone `crop`.
+    TagPerson { media: String, page: usize, crop: Crop },
+    /// Le média choisi est ajouté à la fin de `media`, comme nouvelles pages.
+    MergeInto { media: String },
 }
 
 impl PickPurpose {
@@ -28,6 +30,7 @@ impl PickPurpose {
             PickPurpose::FamilyChild { fam } => format!("Choisir un enfant pour {}", g.record_label(fam)),
             PickPurpose::MediaTo { media } => format!("Rattacher « {} » à…", g.record_label(media)),
             PickPurpose::TagPerson { .. } => "Qui est sur cette zone de la photo ?".into(),
+            PickPurpose::MergeInto { media } => format!("Ajouter à « {} » les pages du média…", g.record_label(media)),
         }
     }
 }
@@ -164,8 +167,11 @@ impl Workspace {
     }
 
     pub(super) fn open_picker(&mut self, purpose: PickPurpose, window: &mut Window, cx: &mut Context<Self>) {
-        let input =
-            cx.new(|cx| InputState::new(window, cx).placeholder("Nom, prénom… (critères : né:1850 lieu:troyes)"));
+        let hint = match purpose {
+            PickPurpose::MergeInto { .. } => "Titre ou fichier du média…",
+            _ => "Nom, prénom… (critères : né:1850 lieu:troyes)",
+        };
+        let input = cx.new(|cx| InputState::new(window, cx).placeholder(hint));
         let sub = cx.subscribe_in(&input, window, |this, _, ev: &InputEvent, window, cx| match ev {
             InputEvent::Change => cx.notify(),
             InputEvent::PressEnter { .. } => {
@@ -238,6 +244,24 @@ impl Workspace {
             (distance, sort_key(&i.surname()), sort_key(&i.given()))
         });
         let mut out: Vec<String> = Vec::new();
+        if let PickPurpose::MergeInto { media } = &p.purpose {
+            // Autres médias, d'après leur titre ou leurs fichiers.
+            let words: Vec<String> = text.split_whitespace().map(sort_key).collect();
+            for r in g.records_of(RecordKind::Media) {
+                let Some(x) = r.xref.as_deref().filter(|x| x != media) else { continue };
+                let m = Media::new(r);
+                let k = sort_key(&format!(
+                    "{} {}",
+                    m.title(),
+                    m.files().iter().map(|f| f.path).collect::<Vec<_>>().join(" ")
+                ));
+                if words.iter().all(|w| k.contains(w.as_str())) {
+                    out.push(x.to_string());
+                }
+            }
+            out.truncate(80);
+            return out;
+        }
         if let PickPurpose::MediaTo { .. } = p.purpose {
             // Sources et familles aussi, d'après le texte libre.
             let words: Vec<String> = q.words.clone();
@@ -295,8 +319,13 @@ impl Workspace {
                     g.attach_media(&chosen, &media)?;
                     Ok((format!("Média rattaché à {who}"), None))
                 }
-                PickPurpose::TagPerson { media, crop } => {
-                    g.tag_person(&chosen, &media, crop)?;
+                PickPurpose::MergeInto { media } => {
+                    let n = Media::new(g.get(&chosen).ok_or("média introuvable")?).page_count();
+                    g.merge_media(&[media.clone(), chosen])?;
+                    Ok((format!("« {who} » ajouté au média ({n} page{})", plural(n)), Some(media)))
+                }
+                PickPurpose::TagPerson { media, page, crop } => {
+                    g.tag_person_on(&chosen, &media, page, crop)?;
                     Ok((format!("{who} identifié(e) sur la photo"), None))
                 }
             }
@@ -721,6 +750,10 @@ impl Workspace {
                                                 .filter(|s| !s.is_empty())
                                                 .collect::<Vec<_>>()
                                                 .join(" · ")
+                                        }
+                                        None if kind == Some(RecordKind::Media) => {
+                                            let n = g.get(&x).map(|r| Media::new(r).page_count()).unwrap_or(0);
+                                            if n > 1 { format!("{n} pages") } else { "Média".into() }
                                         }
                                         None => kind.map(|k| k.label_fr().to_string()).unwrap_or_default(),
                                     };
