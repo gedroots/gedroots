@@ -12,6 +12,7 @@ pub(super) enum AddDialog {
         target: String,
     },
     WebLink(Box<super::weblinks::WebLinkDialog>),
+    Import(Box<super::import::ImportDialog>),
 }
 
 /// Action d'une ligne de la fenêtre des proches.
@@ -177,6 +178,7 @@ impl Workspace {
                 None => (format!("Proches · {}", g.record_label(target)), self.relatives_body(target, cx)),
             },
             AddDialog::WebLink(d) => (self.weblink_dialog_title(d), self.weblink_body(d, cx)),
+            AddDialog::Import(d) => (self.import_title(d), self.import_body(d, cx)),
         };
         Some(
             div()

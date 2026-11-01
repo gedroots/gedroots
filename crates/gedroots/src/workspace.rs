@@ -23,6 +23,7 @@ mod add;
 mod commands;
 mod filters;
 mod history;
+mod import;
 mod menus;
 mod photo;
 mod relatives;
@@ -283,12 +284,7 @@ impl Workspace {
                 if let Some(x) = first {
                     self.select(x, window, cx);
                 }
-                let legacy = self.doc.as_ref().map_or(0, |d| d.ged.legacy_url_count());
-                let hint = match legacy {
-                    0 => String::new(),
-                    n => format!(" · {n} lien(s) _URL à convertir : Édition › Convertir les liens _URL"),
-                };
-                self.set_status(format!("{name} ouvert{hint}"), false);
+                self.set_status(format!("{name} ouvert"), false);
             }
             Err(e) => self.set_status(format!("Impossible d'ouvrir {} : {e}", path.display()), true),
         }

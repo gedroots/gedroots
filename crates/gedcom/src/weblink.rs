@@ -16,8 +16,9 @@
 //! Les dépôts (`REPO`) n'acceptent pas de lien multimédia mais ont la balise
 //! standard `WWW` (jusqu'à trois) : c'est elle qu'on utilise pour eux.
 //!
-//! L'ancienne balise `_URL` (Ancestris, Geneanet…) est encore lue, et
-//! [`Gedcom::migrate_url_tags`] la convertit en liens multimédia.
+//! La balise non standard `_URL` (écrite par plusieurs logiciels) est encore
+//! lue, et [`Gedcom::migrate_url_tags`] la convertit (contrôle de l'assistant
+//! d'import, voir [`crate::import`]).
 
 use crate::document::{Gedcom, RecordKind};
 use crate::model::Media;
@@ -111,6 +112,11 @@ impl<'a> Media<'a> {
     pub fn is_web(&self) -> bool {
         self.web_url().is_some()
     }
+}
+
+/// `_URL` dont la valeur est une adresse web valide (avec ou sans `https://`).
+fn is_convertible(n: &Node) -> bool {
+    n.tag == LEGACY_TAG && normalize_url(n.val()).is_ok()
 }
 
 /// Le type d'enregistrement accepte-t-il des liens multimédia (`OBJE`) ?
@@ -264,23 +270,26 @@ impl Gedcom {
         }
     }
 
-    /// Le fichier contient-il encore des `_URL` (recherche rapide, sans le schéma) ?
-    pub fn has_legacy_urls(&self) -> bool {
-        fn any(n: &Node) -> bool {
-            n.children.iter().any(|c| c.tag == LEGACY_TAG || any(c))
-        }
-        self.records.iter().any(any)
-    }
-
     /// Nombre de `_URL` que [`Gedcom::migrate_url_tags`] peut convertir.
     pub fn legacy_url_count(&self) -> usize {
-        self.legacy_url_sites().len()
+        self.legacy_url_sites()
+            .iter()
+            .map(|(r, path)| {
+                let mut n = self.get(r).unwrap();
+                for &i in path {
+                    n = &n.children[i];
+                }
+                n.children.iter().filter(|c| is_convertible(c)).count()
+            })
+            .sum()
     }
 
     /// Emplacements des `_URL` convertibles : (enregistrement, chemin d'indices jusqu'au parent).
+    /// Convertible = adresse web valide, sous une structure qui permet un lien
+    /// multimédia (`OBJE`) ou, à défaut, une adresse `WWW`.
     fn legacy_url_sites(&self) -> Vec<(String, Vec<usize>)> {
         fn walk(n: &Node, def: &schema::StructDef, path: &mut Vec<usize>, out: &mut Vec<Vec<usize>>) {
-            if def.sub("OBJE").is_some() && n.children.iter().any(|c| c.tag == LEGACY_TAG && is_web_url(c.val())) {
+            if (def.sub("OBJE").is_some() || def.sub("WWW").is_some()) && n.children.iter().any(is_convertible) {
                 out.push(path.clone());
             }
             for (i, c) in n.children.iter().enumerate() {
@@ -301,13 +310,37 @@ impl Gedcom {
         sites
     }
 
-    /// Convertit les `_URL` en liens multimédia standard (`OBJE` → `FILE <url>`,
-    /// `FORM text/html`), là où GEDCOM 7 permet un lien multimédia
-    /// (individus, familles, sources, événements, citations…). Le titre du média
+    /// Convertit les `_URL` en GEDCOM 7 standard : lien multimédia (`OBJE` →
+    /// `FILE <url>`, `FORM text/html`) là où il est permis (individus, familles,
+    /// sources, événements, citations…), sinon `WWW` (dépôts). Le titre du média
     /// reprend celui de la source, quand il y en a un. Renvoie le nombre de liens convertis.
     pub fn migrate_url_tags(&mut self) -> usize {
         let mut converted = 0;
         for (record, path) in self.legacy_url_sites() {
+            let def = {
+                let r = self.get(&record).unwrap();
+                let mut def = schema::record(&r.tag).unwrap();
+                let mut n = r;
+                for &i in &path {
+                    n = &n.children[i];
+                    def = def.sub(&n.tag).unwrap().def();
+                }
+                def
+            };
+            if def.sub("OBJE").is_none() {
+                // Pas de lien multimédia possible ici : adresse `WWW` standard.
+                let mut n = self.get_mut(&record).unwrap();
+                for &i in &path {
+                    n = &mut n.children[i];
+                }
+                for c in n.children.iter_mut().filter(|c| is_convertible(c)) {
+                    c.value = normalize_url(c.val()).ok();
+                    c.tag = "WWW".into();
+                    converted += 1;
+                }
+                self.get_mut(&record).unwrap().touch();
+                continue;
+            }
             let title = self
                 .get(&record)
                 .filter(|r| r.tag == "SOUR" && path.is_empty())
@@ -319,7 +352,7 @@ impl Gedcom {
                 for &i in &path {
                     n = &n.children[i];
                 }
-                n.children_with(LEGACY_TAG).map(|c| c.val().trim().to_string()).filter(|u| is_web_url(u)).collect()
+                n.children.iter().filter(|c| is_convertible(c)).filter_map(|c| normalize_url(c.val()).ok()).collect()
             };
             let medias: Vec<String> = urls.iter().map(|u| self.web_media_for(u, &title)).collect();
             let r = self.get_mut(&record).unwrap();
@@ -328,8 +361,8 @@ impl Gedcom {
                 n = &mut n.children[i];
             }
             // Le lien prend la place du premier `_URL`, les autres sont retirés.
-            let at = n.children.iter().position(|c| c.tag == LEGACY_TAG && is_web_url(c.val())).unwrap();
-            n.children.retain(|c| !(c.tag == LEGACY_TAG && is_web_url(c.val())));
+            let at = n.children.iter().position(is_convertible).unwrap();
+            n.children.retain(|c| !is_convertible(c));
             for (k, m) in medias.iter().enumerate() {
                 let p = format!("@{m}@");
                 if !n.children.iter().any(|c| c.tag == "OBJE" && c.val() == p) {

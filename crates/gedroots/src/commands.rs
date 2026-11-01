@@ -15,6 +15,7 @@ actions!(
         // Fichier
         NewFile,
         OpenFile,
+        ImportFile,
         SaveFile,
         SaveFileAs,
         Quit,
@@ -26,7 +27,6 @@ actions!(
         FocusSearch,
         ToggleFlagged,
         AddWebLink,
-        ConvertUrlTags,
         // Individu
         NewIndividual,
         AddFather,
@@ -157,6 +157,7 @@ fn model() -> Vec<(&'static str, Vec<Item>)> {
     let mut file = vec![
         a("Nouveau fichier", NewFile),
         a("Ouvrir…", OpenFile),
+        a("Importer un GEDCOM…", ImportFile),
         Sep,
         a("Enregistrer", SaveFile),
         a("Enregistrer sous…", SaveFileAs),
@@ -180,7 +181,6 @@ fn model() -> Vec<(&'static str, Vec<Item>)> {
             a("Copier l'ID", CopyId),
             Sep,
             a("Ajouter un lien web…", AddWebLink),
-            a("Convertir les liens _URL en liens multimédia", ConvertUrlTags),
             Sep,
             a("Rechercher", FocusSearch),
         ],

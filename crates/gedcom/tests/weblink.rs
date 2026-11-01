@@ -21,6 +21,9 @@ const LEGACY: &str = "0 HEAD
 0 @R1@ REPO
 1 NAME AD43
 1 WWW https://www.archives43.fr
+0 @R2@ REPO
+1 NAME Archives
+1 _URL archives.example.fr
 0 TRLR
 ";
 
@@ -72,8 +75,8 @@ fn repositories_use_www() {
 fn migrate_legacy_url_tags() {
     let mut g = Gedcom::parse(LEGACY).unwrap();
     assert_eq!(g.web_links("S1")[0].kind, WebLinkKind::Legacy(0));
-    assert_eq!(g.legacy_url_count(), 3);
-    assert_eq!(g.migrate_url_tags(), 3);
+    assert_eq!(g.legacy_url_count(), 4);
+    assert_eq!(g.migrate_url_tags(), 4);
     assert_eq!(g.legacy_url_count(), 0);
 
     let text = g.to_gedcom_string();
@@ -88,6 +91,8 @@ fn migrate_legacy_url_tags() {
     assert!(text.contains("1 TITL Mariage Guyot × Martin\n1 OBJE @M"), "{text}");
     // `_URL` sous un événement : lien multimédia de l'événement (permis par GEDCOM 7).
     assert!(text.contains("1 BIRT\n2 DATE 1850\n2 OBJE @M"), "{text}");
+    // Dépôt : pas de lien multimédia permis, l'adresse devient un `WWW` complété.
+    assert!(text.contains("1 NAME Archives\n1 WWW https://archives.example.fr\n"), "{text}");
     // Relu sans perte.
     let again = Gedcom::parse(&text).unwrap();
     assert_eq!(again.to_gedcom_string(), text);
@@ -98,4 +103,15 @@ fn mime_for_urls() {
     assert_eq!(mime_for("https://www.archives43.fr/ark:47539/s0051b032d062eee"), "text/html");
     assert_eq!(mime_for("https://x.fr/photo.jpg?w=200"), "image/jpeg");
     assert_eq!(mime_for("Actes/acte.jpg"), "image/jpeg");
+}
+
+#[test]
+fn import_wizard_checks() {
+    let mut g = Gedcom::parse(LEGACY).unwrap();
+    let found = import::analyze(&g);
+    assert_eq!(found.len(), 1);
+    assert_eq!((found[0].id, found[0].label.as_str()), ("url", "4 liens _URL"));
+    assert_eq!(import::apply(&mut g, &[]), []);
+    assert_eq!(import::apply(&mut g, &["url"]), [("url", 4)]);
+    assert!(import::analyze(&g).is_empty());
 }

@@ -1,5 +1,5 @@
 //! Liens web des fiches : liste cliquable (ouverture dans le navigateur),
-//! fenêtre d'ajout / de modification, et conversion des anciens `_URL`.
+//! et fenêtre d'ajout / de modification.
 //!
 //! Stockage en GEDCOM 7 standard, voir `gedcom::weblink` : lien multimédia
 //! vers un `OBJE` dont le `FILE` est l'URL (`WWW` pour les dépôts).
@@ -75,15 +75,6 @@ impl Workspace {
         self.mutate(window, cx, move |g| {
             g.remove_web_link(&owner, &kind);
             Ok(("Lien web retiré".into(), None))
-        });
-    }
-
-    /// Convertit tous les `_URL` du fichier en liens multimédia standard.
-    pub(super) fn migrate_url_tags(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.mutate(window, cx, |g| match g.migrate_url_tags() {
-            0 => Err("Aucun lien _URL à convertir".into()),
-            1 => Ok(("1 lien _URL converti en lien multimédia".into(), None)),
-            n => Ok((format!("{n} liens _URL convertis en liens multimédia"), None)),
         });
     }
 

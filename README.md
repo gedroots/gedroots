@@ -65,7 +65,11 @@ et suit la maquette « Lignée » (thème sombre, barre d'activité, liste, arbr
   du panneau de détail, cliquable (ouverture dans le navigateur), avec « + », modifier et
   retirer ; aussi Édition › « Ajouter un lien web… ». Stockés en GEDCOM 7 standard : lien
   multimédia vers un `OBJE` dont le `FILE` est l'URL (`FORM text/html`), et `WWW` pour les
-  dépôts. Édition › « Convertir les liens _URL » remplace les anciens `_URL` (Ancestris…).
+  dépôts.
+- **Assistant d'import** (Fichier › « Importer un GEDCOM… ») : ouvre un fichier venu d'un autre
+  logiciel, liste ce qu'il contient de non standard et propose de le convertir en GEDCOM 7
+  (annulable). Premier contrôle : les balises `_URL` deviennent des liens multimédia (`WWW`
+  pour les dépôts). Les contrôles sont dans `crates/gedcom/src/import.rs`.
 
 ![Personnes identifiées sur une photo](docs/capture-photo.png)
 - **Individu racine** : enregistré dans le fichier lui-même (extension `_GR_ROOT`, voir
