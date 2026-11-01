@@ -3,6 +3,7 @@
 mod analyses;
 mod completion;
 mod editor;
+mod entry_form;
 mod map;
 mod theme;
 mod workspace;
@@ -10,7 +11,7 @@ mod workspace;
 use gpui_kit::*;
 use std::borrow::Cow;
 use std::path::PathBuf;
-use workspace::{NewFile, OpenAnalyses, OpenFile, Quit, SaveFile, Undo, Workspace};
+use workspace::{EnterRecord, NewFile, OpenAnalyses, OpenFile, Quit, SaveFile, Undo, Workspace};
 
 // Icônes Lucide utilisées en plus du jeu par défaut de gpui-kit.
 gpui_kit::assets::icon_assets!(
@@ -62,6 +63,7 @@ fn main() {
             // Suggestions de l'éditeur GEDCOM brut à la demande.
             KeyBinding::new("ctrl-space", component::input::ShowCompletions, Some("Input")),
             KeyBinding::new(shortcut!("shift-a"), OpenAnalyses, Some("Workspace")),
+            KeyBinding::new(shortcut!("e"), EnterRecord, Some("Workspace")),
         ]);
         cx.on_action(|_: &Quit, cx| cx.quit());
 

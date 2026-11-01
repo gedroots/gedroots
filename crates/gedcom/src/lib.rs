@@ -10,12 +10,14 @@
 //! - [`search`] : recherche et filtres sur les individus ;
 //! - [`relations`] : ajout/liaison/suppression de proches, lieux et médias ;
 //! - [`pedigree`] : descendance pour les vues en arbre ;
-//! - [`date`] : dates GEDCOM (y compris calendrier républicain) affichées en français.
+//! - [`date`] : dates GEDCOM (y compris calendrier républicain) affichées en français ;
+//! - [`template`] et [`entry`] : modèles d'actes et saisie guidée des sources.
 
 pub mod analysis;
 pub mod complete;
 pub mod date;
 pub mod document;
+pub mod entry;
 pub mod geo;
 pub mod model;
 pub mod node;
@@ -24,15 +26,18 @@ pub mod pedigree;
 pub mod relations;
 pub mod schema;
 pub mod search;
+pub mod template;
 
 pub use date::Date;
 pub use document::{Gedcom, RecordKind};
+pub use entry::{Entry, EntryResult, MediaChoice, Participant, PersonChoice, SourceChoice, Suggestion};
 pub use model::*;
 pub use node::Node;
 pub use parse::{ParseError, node_from_string, node_to_string};
 pub use pedigree::{DescNode, DescUnion};
 pub use relations::{Relation, is_media_file, mime_for, title_from_file};
 pub use search::{IndividualQuery, has_token, toggle_token};
+pub use template::{FieldDef, PersonField, Relation as RoleRelation, RoleDef, Template, builtin_templates};
 
 /// Charge un fichier GEDCOM depuis le disque.
 pub fn load(path: impl AsRef<std::path::Path>) -> Result<Gedcom, String> {

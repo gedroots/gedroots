@@ -51,6 +51,16 @@ et suit la maquette « Lignée » (thème sombre, barre d'activité, liste, arbr
   « nais » → `BIRT`), individus/familles/sources pour les pointeurs, valeurs énumérées,
   mots-clés et mois des dates (calendrier républicain compris), lieux déjà saisis.
   `Ctrl+Espace` affiche les suggestions à la demande.
+- **Saisie d'acte guidée** (`⌘E` / `Ctrl+E`), à la manière d'*Ancestral Sources* pour
+  Family Historian : on choisit un modèle (naissance, baptême, mariage, décès, inhumation,
+  recensement, registre matricule), la source et son image, puis on saisit les personnes
+  citées. Pour chacune, GedRoots propose les individus existants qui correspondent (nom,
+  âge, et liens déjà connus : « parent de… », « conjoint de… ») ; on peut lier, créer, ou
+  mentionner sans créer. Un seul enregistrement crée les individus, l'événement, les liens
+  familiaux, les témoins (`ASSO`), les professions et domiciles datés, une naissance estimée
+  d'après l'âge, et toutes les citations avec leur rôle (`EVEN`/`ROLE`). Aperçu du GEDCOM
+  avant d'écrire, et « Enregistrer et acte suivant » pour dépouiller un registre.
+  Les modèles sont des extensions GEDCOM (voir [docs/extensions.md](docs/extensions.md)).
 - Créer / supprimer un enregistrement (avec confirmation ; un lieu peut être retiré de tous
   les événements), annuler (50 niveaux), date de modification `CHAN`
   mise à jour comme dans Ancestris.
@@ -73,6 +83,8 @@ et suit la maquette « Lignée » (thème sombre, barre d'activité, liste, arbr
 
 ![Éditeur visuel](docs/capture-fiche.png)
 
+![Saisie d'acte](docs/capture-saisie.png)
+
 ## Lancer
 
 ```sh
@@ -81,7 +93,7 @@ cargo run --release -- chemin/vers/arbre.ged
 
 Sans argument, l'app propose d'ouvrir un fichier ou d'en créer un nouveau.
 Raccourcis : `⌘O` / `Ctrl+O` ouvrir, `⌘S` / `Ctrl+S` enregistrer, `⌘N` nouveau,
-`⌘⇧Z` annuler la dernière modification du document.
+`⌘E` saisir un acte, `⌘⇧Z` annuler la dernière modification du document.
 
 Variables d'environnement facultatives pour la carte : `GEDROOTS_OFFLINE=1` (démarrer hors ligne),
 `GEDROOTS_TILE_URL` (autre serveur de tuiles, `{z}/{x}/{y}`), `GEDROOTS_TILE_CACHE` (dossier du
@@ -95,8 +107,8 @@ Sous Linux, installer d'abord les dépendances de GPUI :
 
 | Crate | Rôle |
 | --- | --- |
-| [`crates/gedcom`](crates/gedcom) | Lecture/écriture GEDCOM 7 sans perte, vues typées (individus, familles, sources, lieux, médias), formulaires d'édition, dates, coordonnées (`geo.rs`), outils d'analyse (`analysis/`), recherche (`search.rs`), ajout/liaison de proches et médias (`relations.rs`), descendance (`pedigree.rs`). Sans dépendance. |
-| [`crates/gedroots`](crates/gedroots) | Application GPUI : `workspace.rs` (fenêtre et vues) et `workspace/` (`tree.rs` arbres, `relatives.rs` proches/sélecteur/médias, `filters.rs` filtres rapides), `editor.rs` (éditeurs visuel et brut), `map.rs` (carte des lieux), `theme.rs` (palette de la maquette), `analyses.rs` (fenêtre Analyses). |
+| [`crates/gedcom`](crates/gedcom) | Lecture/écriture GEDCOM 7 sans perte, vues typées (individus, familles, sources, lieux, médias), formulaires d'édition, dates, coordonnées (`geo.rs`), outils d'analyse (`analysis/`), recherche (`search.rs`), ajout/liaison de proches et médias (`relations.rs`), descendance (`pedigree.rs`), modèles d'actes (`template.rs`) et saisie guidée (`entry.rs`). Sans dépendance. |
+| [`crates/gedroots`](crates/gedroots) | Application GPUI : `workspace.rs` (fenêtre et vues) et `workspace/` (`tree.rs` arbres, `relatives.rs` proches/sélecteur/médias, `filters.rs` filtres rapides), `editor.rs` (éditeurs visuel et brut), `entry_form.rs` (saisie d'acte), `map.rs` (carte des lieux), `theme.rs` (palette de la maquette), `analyses.rs` (fenêtre Analyses). |
 
 ## Tests
 
