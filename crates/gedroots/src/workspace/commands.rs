@@ -48,8 +48,10 @@ impl Workspace {
         let can_undo = doc.is_some_and(|d| !d.history.is_empty());
         let individuals = has_doc && self.view == View::Individuals && self.entry_form.is_none();
         let attachable = matches!(sel_kind, Some(RecordKind::Individual | RecordKind::Family | RecordKind::Source));
+        let web_linkable = sel.as_ref().is_some_and(|x| g.is_some_and(|g| g.can_have_web_links(x)));
 
         let d = on!(d, cx, OpenFile, |this, w, cx| this.open_file(&OpenFile, w, cx));
+        let d = on!(d, cx, ImportFile, |this, w, cx| this.import_file(w, cx));
         let d = on!(d, cx, NewFile, |this, w, cx| this.new_file(&NewFile, w, cx));
         let d = on!(d, cx, CommandPalette, |this, w, cx| this.toggle_palette(w, cx));
         if !has_doc {
@@ -158,6 +160,13 @@ impl Workspace {
                 on!(d, cx, AddEvent, |this, w, cx| {
                     if let Some(x) = this.selected.clone() {
                         this.open_event_dialog(x, None, w, cx)
+                    }
+                })
+            })
+            .when(web_linkable, |d| {
+                on!(d, cx, AddWebLink, |this, w, cx| {
+                    if let Some(x) = this.selected.clone() {
+                        this.open_weblink_dialog(x, None, w, cx)
                     }
                 })
             })

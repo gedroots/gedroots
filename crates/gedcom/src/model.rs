@@ -338,16 +338,20 @@ impl<'a> Media<'a> {
             .child("FILE")
             .and_then(|f| f.child_val("TITL"))
             .or_else(|| self.node.child_val("TITL"))
+            .filter(|t| !t.trim().is_empty())
             .map(str::to_string)
+            .or_else(|| self.web_url().map(|u| crate::weblink::host(u).to_string()))
             .or_else(|| self.file().map(|f| f.rsplit('/').next().unwrap_or(f).to_string()))
             .unwrap_or_else(|| "(sans titre)".into())
     }
     pub fn is_image(&self) -> bool {
-        self.form().is_some_and(|f| f.starts_with("image/"))
-            || self.file().is_some_and(|f| {
-                let l = f.to_ascii_lowercase();
-                [".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tif", ".tiff"].iter().any(|e| l.ends_with(e))
-            })
+        // Une image en ligne n'a pas de fichier local à afficher.
+        !self.is_web()
+            && (self.form().is_some_and(|f| f.starts_with("image/"))
+                || self.file().is_some_and(|f| {
+                    let l = f.to_ascii_lowercase();
+                    [".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tif", ".tiff"].iter().any(|e| l.ends_with(e))
+                }))
     }
 }
 

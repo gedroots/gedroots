@@ -149,6 +149,15 @@ impl Gedcom {
         self.get(media).filter(|n| n.tag == "OBJE").ok_or_else(|| "média introuvable".to_string())
     }
 
+    /// Média qui peut avoir des pages : pas un lien web (`FILE https://…`).
+    fn paged_media(&self, media: &str) -> Result<&Node, String> {
+        let n = self.media_node(media)?;
+        if Media::new(n).is_web() {
+            return Err("un lien web ne peut pas avoir de pages".into());
+        }
+        Ok(n)
+    }
+
     /// Réécrit les liens vers `media` dans tout le fichier ; touche les enregistrements modifiés.
     fn rewrite_links(&mut self, media: &str, mut f: impl FnMut(&mut Node) -> Vec<Node>, dedupe: &[&str]) {
         let p = ptr(media);
@@ -175,7 +184,7 @@ impl Gedcom {
     /// Ajoute des pages (fichiers) à la fin d'un média. Les fichiers déjà présents
     /// dans ce média sont ignorés. Renvoie le nombre de pages ajoutées.
     pub fn add_media_pages(&mut self, media: &str, files: &[String]) -> Result<usize, String> {
-        self.media_node(media)?;
+        self.paged_media(media)?;
         let node = self.get_mut(media).unwrap();
         let mut added = 0;
         for f in files {
@@ -277,7 +286,7 @@ impl Gedcom {
     pub fn merge_media(&mut self, media: &[String]) -> Result<String, String> {
         let mut list: Vec<&str> = Vec::new();
         for m in media {
-            self.media_node(m)?;
+            self.paged_media(m)?;
             if !list.contains(&m.as_str()) {
                 list.push(m);
             }

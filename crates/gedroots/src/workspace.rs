@@ -23,11 +23,13 @@ mod add;
 mod commands;
 mod filters;
 mod history;
+mod import;
 mod menus;
 mod pages;
 mod photo;
 mod relatives;
 mod tree;
+mod weblinks;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum View {
@@ -800,14 +802,20 @@ impl Workspace {
                 .records_of(RecordKind::Media)
                 .map(|r| {
                     let m = Media::new(r);
+                    let web = m.web_url();
                     let files = m.files();
-                    let missing = files.is_empty()
-                        || files.iter().any(|f| !pages::file_path(doc, f.path).is_some_and(|p| p.exists()));
+                    let missing = web.is_none()
+                        && (files.is_empty()
+                            || files.iter().any(|f| !pages::file_path(doc, f.path).is_some_and(|p| p.exists())));
                     Row {
                         key: m.xref().to_string(),
                         title: m.title(),
                         strong: String::new(),
-                        meta: if files.len() > 1 { format!("{} p.", files.len()) } else { String::new() },
+                        meta: match web {
+                            Some(u) => host(u).to_string(),
+                            None if files.len() > 1 => format!("{} p.", files.len()),
+                            None => String::new(),
+                        },
                         dot: missing.then(theme::warn),
                         flagged: missing,
                     }
@@ -1643,6 +1651,21 @@ impl Workspace {
         let Target::Record { xref, kind: RecordKind::Media } = &ed.target else { return None };
         let doc = self.doc.as_ref()?;
         let m = Media::new(doc.ged.get(xref)?);
+        if let Some(url) = m.web_url() {
+            // Page web : bouton pour l'ouvrir dans le navigateur.
+            let href = url.to_string();
+            return Some(
+                h_flex()
+                    .child(
+                        Button::new("open-web-media")
+                            .small()
+                            .icon(IconName::ExternalLink)
+                            .label(format!("Ouvrir {}", host(url)))
+                            .on_click(move |_, _, cx| cx.open_url(&href)),
+                    )
+                    .into_any_element(),
+            );
+        }
         let page = self.current_page(xref);
         let strip = self.render_page_strip(xref, cx);
         let file = m.page_file(page).unwrap_or("");
@@ -1789,7 +1812,8 @@ impl Workspace {
                     .map(|n| {
                         let mut v: Vec<String> = Vec::new();
                         for p in n.pointers() {
-                            if !v.contains(&p) && p != *key {
+                            // Les pages web sont dans « Liens web ».
+                            if !v.contains(&p) && p != *key && !weblinks::is_web_media(g, &p) {
                                 v.push(p);
                             }
                         }
@@ -1811,9 +1835,10 @@ impl Workspace {
                     && !refs.is_empty();
                 let actions = self.render_actions(cx);
                 let show_refs = !shown_under_photo && !refs.is_empty();
+                let web = self.render_web_links(key, cx);
                 // Rien d'autre que le titre (déjà dans la fiche) : pas de panneau, la
                 // zone centrale prend la place.
-                if actions.is_none() && gallery.is_none() && outgoing.is_empty() && !show_refs {
+                if actions.is_none() && gallery.is_none() && outgoing.is_empty() && !show_refs && web.is_none() {
                     return div().into_any_element();
                 }
                 panel
@@ -1836,6 +1861,7 @@ impl Workspace {
                     .children(actions)
                     .when(kind == Some(RecordKind::Family), |d| d.child(self.render_events(key, cx)))
                     .when_some(gallery, |d, el| d.child(el))
+                    .when_some(web, |d, el| d.child(el))
                     .when(!outgoing.is_empty(), |d| d.child(self.render_links("Liens", outgoing, cx)))
                     // Photo : la liste « Utilisée par » est sous l'image, avec les cadres.
                     .when(show_refs, |d| d.child(self.render_links("Utilisé par", refs, cx)))
@@ -2052,8 +2078,13 @@ impl Workspace {
             }));
 
         let images: Vec<String> = g.images_of(&xref).iter().map(|m| m.xref().to_string()).collect();
-        let media: Vec<String> =
-            i.media_xrefs().iter().map(|s| s.to_string()).filter(|x| !images.contains(x)).collect();
+        let media: Vec<String> = i
+            .media_xrefs()
+            .iter()
+            .map(|s| s.to_string())
+            .filter(|x| !images.contains(x) && !weblinks::is_web_media(g, x))
+            .collect();
+        let web = self.render_web_links(&xref, cx);
         let gallery = self.render_gallery(&xref, false, cx);
         let notes = i.notes();
         v_flex()
@@ -2061,6 +2092,7 @@ impl Workspace {
             .when_some(gallery, |d, el| d.child(el))
             .child(events_el)
             .child(family_el)
+            .when_some(web, |d, el| d.child(el))
             .when(!media.is_empty(), |d| d.child(self.render_links("Autres médias", media, cx)))
             .when(!notes.is_empty(), |d| {
                 d.child(
