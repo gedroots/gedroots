@@ -14,9 +14,9 @@ et suit la maquette « Lignée » (thème sombre, barre d'activité, liste, arbr
 - **Individus** : liste avec recherche sans accents ni casse et critères
   (`né:1800-1850`, `mort:<1900`, `vécu:1870`, `lieu:troyes`, `prof:meunier`, `sexe:f`,
   `sans:source`, `sans:parents`, `avec:média`, `sosa:1-63`…), filtres rapides en un clic ;
-  fiche avec événements (dates en français, calendrier républicain compris), sources citées,
+  fiche avec portrait, galerie d'images, événements (dates en français, calendrier républicain compris), sources citées,
   famille (parents, conjoints, enfants) cliquable.
-- **Arbres** : ascendance (4 générations, lignées paternelle/maternelle, numéros Sosa),
+- **Arbres** : ascendance (4 générations, portraits, lignées paternelle/maternelle, numéros Sosa),
   descendance (2 à 8 générations) et **éventail** (2 à 7 générations), cliquables pour recentrer.
 - **Ajouter un proche** en un clic depuis une personne (père, mère, conjoint, enfant, frère ou
   sœur), ou **lier une personne existante** via un sélecteur qui propose d'abord les dates
@@ -37,7 +37,12 @@ et suit la maquette « Lignée » (thème sombre, barre d'activité, liste, arbr
 
 ![Carte des lieux](docs/capture-carte.png)
 
-- **Médias / photos** : aperçu des images, chemins relatifs au fichier `.ged`.
+- **Médias / photos** : portraits des individus, images des sources (actes numérisés)
+  dans la fiche et le panneau de détail, chemins relatifs au fichier `.ged`.
+- **Individu racine** : enregistré dans le fichier lui-même (extension `_GR_ROOT`, voir
+  [docs/extensions.md](docs/extensions.md)), jamais dans un fichier annexe.
+- Les identifiants GEDCOM n'apparaissent pas dans l'interface : liens choisis par nom
+  (époux, dépôt…), identifiant accessible via **… → Copier l'ID** et l'onglet GEDCOM.
 - **Éditeur visuel** pour les enregistrements courants (individu, famille, source, dépôt,
   média, note) : seuls les champs affichés sont modifiés, tout le reste est conservé.
 - **Éditeur GEDCOM brut** pour chaque enregistrement, avec validation ; changer un

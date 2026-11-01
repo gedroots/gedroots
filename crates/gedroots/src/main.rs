@@ -13,7 +13,13 @@ use std::path::PathBuf;
 use workspace::{NewFile, OpenAnalyses, OpenFile, Quit, SaveFile, Undo, Workspace};
 
 // Icônes Lucide utilisées en plus du jeu par défaut de gpui-kit.
-gpui_kit::assets::icon_assets!(ExtraIcons, [Users, MapPin, Image, Save, Code, Pencil, Library, Landmark, StickyNote]);
+gpui_kit::assets::icon_assets!(
+    ExtraIcons,
+    [
+        Users, Heart, BookOpen, MapPin, Image, Images, Landmark, StickyNote, FolderOpen, Undo2, Save, Plus, GitFork,
+        Pencil, Code, Ellipsis, Copy, House, Star, Trash, Network, Library,
+    ]
+);
 
 struct AppAssets;
 
