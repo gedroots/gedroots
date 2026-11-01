@@ -17,8 +17,48 @@ pub enum Target {
 
 pub struct Field {
     pub label: &'static str,
-    pub hint: &'static str,
-    pub state: Entity<InputState>,
+    pub state: FieldState,
+    /// Lieu : propose les lieux déjà présents dans le fichier.
+    pub place: bool,
+}
+
+/// Saisie libre, ou choix dans une liste de valeurs fixes (sexe…).
+pub enum FieldState {
+    Text(Entity<InputState>),
+    Choice(Entity<PickerState>),
+}
+
+impl FieldState {
+    pub fn value(&self, cx: &App) -> String {
+        match self {
+            FieldState::Text(e) => e.read(cx).value().to_string(),
+            FieldState::Choice(e) => e.read(cx).selected_value().cloned().unwrap_or_default(),
+        }
+    }
+}
+
+/// Valeurs de `SEX` (GEDCOM 7) et leur libellé.
+const SEXES: &[(&str, &str)] = &[("M", "Homme"), ("F", "Femme"), ("X", "Autre"), ("U", "Inconnu")];
+
+/// Liste déroulante de valeurs fixes (valeur GEDCOM, libellé).
+pub(crate) fn choice<T: 'static>(
+    options: &[(&str, &str)],
+    selected: &str,
+    window: &mut Window,
+    cx: &mut Context<T>,
+) -> Entity<PickerState> {
+    let items: Vec<Pick> = options
+        .iter()
+        .map(|(v, l)| Pick { xref: v.to_string(), label: SharedString::from(l.to_string()), search: sort_key(l) })
+        .collect();
+    let selected = selected.trim().to_uppercase();
+    cx.new(|cx| {
+        let mut s = SelectState::new(SearchableVec::new(items), None, window, cx);
+        if !selected.is_empty() {
+            s.set_selected_value(&selected, window, cx);
+        }
+        s
+    })
 }
 
 /// Un enregistrement proposé dans un sélecteur (affiché par son nom, jamais par son identifiant).
@@ -80,7 +120,7 @@ fn picks(ged: &Gedcom, kind: RecordKind) -> Vec<Pick> {
     v
 }
 
-fn picker<T: 'static>(
+pub(crate) fn picker<T: 'static>(
     ged: &Gedcom,
     kind: RecordKind,
     selected: &str,
@@ -108,18 +148,15 @@ pub struct RecordEditor {
     pub error: Option<SharedString>,
 }
 
-fn input<T: 'static>(window: &mut Window, cx: &mut Context<T>, value: &str) -> Entity<InputState> {
+/// Champ de saisie ; l'exemple de format s'affiche en grisé tant qu'il est vide.
+fn input<T: 'static>(window: &mut Window, cx: &mut Context<T>, value: &str, hint: &'static str) -> Entity<InputState> {
     let value = value.to_string();
-    cx.new(|cx| InputState::new(window, cx).default_value(value))
+    cx.new(|cx| InputState::new(window, cx).placeholder(hint).default_value(value))
 }
 
 fn textarea<T: 'static>(window: &mut Window, cx: &mut Context<T>, value: &str) -> Entity<TextareaState> {
     let value = value.to_string();
     cx.new(|cx| TextareaState::new(window, cx).rows(5).default_value(value))
-}
-
-fn get(cx: &App, e: &Entity<InputState>) -> String {
-    e.read(cx).value().to_string()
 }
 
 impl RecordEditor {
@@ -130,7 +167,16 @@ impl RecordEditor {
         let mut raw = None;
         macro_rules! field {
             ($label:expr, $hint:expr, $v:expr) => {
-                fields.push(Field { label: $label, hint: $hint, state: input(window, cx, &$v) })
+                fields.push(Field {
+                    label: $label,
+                    state: FieldState::Text(input(window, cx, &$v, $hint)),
+                    place: false,
+                })
+            };
+        }
+        macro_rules! place_field {
+            ($label:expr, $v:expr) => {
+                fields.push(Field { label: $label, state: FieldState::Text(input(window, cx, &$v, "")), place: true })
             };
         }
         match &target {
@@ -160,12 +206,13 @@ impl RecordEditor {
                         let f = IndividualForm::read(node);
                         field!("Prénoms", "", f.given);
                         field!("Nom", "", f.surname);
-                        field!("Sexe", "M, F, X ou U", f.sex);
-                        field!("Naissance — date", "ex. 14 MAR 1912, ABT 1850", f.birth.date);
-                        field!("Naissance — lieu", "", f.birth.place);
-                        field!("Décès — date", "", f.death.date);
-                        field!("Décès — lieu", "", f.death.place);
+                        let sex = choice(SEXES, &f.sex, window, cx);
+                        fields.push(Field { label: "Sexe", state: FieldState::Choice(sex), place: false });
                         field!("Profession", "", f.occupation);
+                        field!("Naissance — date", "ex. 14 MAR 1912, ABT 1850", f.birth.date);
+                        place_field!("Naissance — lieu", f.birth.place);
+                        field!("Décès — date", "", f.death.date);
+                        place_field!("Décès — lieu", f.death.place);
                         long_text = Some(("Note", textarea(window, cx, &f.note)));
                     }
                     RecordKind::Family => {
@@ -175,7 +222,7 @@ impl RecordEditor {
                             pickers.push(Picker { label, placeholder: "Choisir un individu…", state });
                         }
                         field!("Mariage — date", "", f.marriage.date);
-                        field!("Mariage — lieu", "", f.marriage.place);
+                        place_field!("Mariage — lieu", f.marriage.place);
                     }
                     RecordKind::Source => {
                         let f = SourceForm::read(node);
@@ -194,9 +241,9 @@ impl RecordEditor {
                     }
                     RecordKind::Media => {
                         let f = MediaForm::read(node);
-                        field!("Fichier", "chemin relatif au fichier .ged", f.file);
-                        field!("Format", "ex. image/jpeg", f.form);
+                        // Le format (FORM) se déduit du fichier : pas de champ.
                         field!("Titre", "", f.title);
+                        field!("Fichier", "Actes/acte.jpg", f.file);
                     }
                     RecordKind::SharedNote => {
                         long_text = Some(("Texte", textarea(window, cx, &node.text())));
@@ -223,7 +270,7 @@ impl RecordEditor {
     }
 
     fn values(&self, cx: &App) -> Vec<String> {
-        self.fields.iter().map(|f| get(cx, &f.state)).collect()
+        self.fields.iter().map(|f| f.state.value(cx)).collect()
     }
 
     fn long_value(&self, cx: &App) -> String {
@@ -246,9 +293,9 @@ impl RecordEditor {
                         given: v[0].clone(),
                         surname: v[1].clone(),
                         sex: v[2].clone(),
-                        birth: EventForm { date: v[3].clone(), place: v[4].clone() },
-                        death: EventForm { date: v[5].clone(), place: v[6].clone() },
-                        occupation: v[7].clone(),
+                        occupation: v[3].clone(),
+                        birth: EventForm { date: v[4].clone(), place: v[5].clone() },
+                        death: EventForm { date: v[6].clone(), place: v[7].clone() },
                         note,
                     }
                     .apply(node),
@@ -269,7 +316,14 @@ impl RecordEditor {
                     .apply(node),
                     RecordKind::Repository => RepositoryForm { name: v[0].clone(), www: v[1].clone() }.apply(node),
                     RecordKind::Media => {
-                        MediaForm { file: v[0].clone(), form: v[1].clone(), title: v[2].clone() }.apply(node)
+                        let before = MediaForm::read(node);
+                        let file = v[1].trim().to_string();
+                        let form = if file != before.file || before.form.is_empty() {
+                            mime_for(&file).to_string()
+                        } else {
+                            before.form
+                        };
+                        MediaForm { file, form, title: v[0].clone() }.apply(node)
                     }
                     RecordKind::SharedNote => node.set_text(&note),
                     RecordKind::Submitter => node.set_child_val("NAME", &v[0]),

@@ -2,7 +2,7 @@
 //! GEDCOM brut), panneau de détail et barre d'état — d'après la maquette.
 
 use crate::commands::*;
-use crate::editor::{RecordEditor, Target};
+use crate::editor::{FieldState, RecordEditor, Target};
 use crate::entry_form::{EntryForm, EntryFormEvent};
 use crate::map::{MapEvent, MapView};
 use crate::theme;
@@ -18,13 +18,15 @@ use gpui_kit::*;
 use std::path::PathBuf;
 use std::rc::Rc;
 
+mod add;
 mod commands;
 mod filters;
+mod history;
 mod photo;
 mod relatives;
 mod tree;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum View {
     Individuals,
     Families,
@@ -180,6 +182,19 @@ pub struct Workspace {
     photo_bounds: photo::PhotoBounds,
     /// Personne survolée sur la photo ou dans la liste des liens.
     photo_hover: Option<String>,
+    /// Précédent / Suivant, et dernier élément vu dans chaque liste.
+    history: history::History,
+    /// Fenêtre « Fichiers du dossier sans média » ouverte.
+    orphans_open: bool,
+    /// Boutons « Détacher » dépliés dans le panneau d'un individu.
+    show_detach: bool,
+    /// Fenêtre d'ajout (événement, proches) ouverte par un « + ».
+    add_dialog: Option<add::AddDialog>,
+    /// Champ de lieu en cours de saisie dans la fiche.
+    place_focus: Option<EntityId>,
+    editor_subs: Vec<Subscription>,
+    /// Défilement de la liste, pour garder l'élément affiché visible.
+    list_scroll: UniformListScrollHandle,
     _subs: Vec<Subscription>,
 }
 
@@ -219,6 +234,13 @@ impl Workspace {
             photo_draw: None,
             photo_bounds: Default::default(),
             photo_hover: None,
+            history: Default::default(),
+            orphans_open: false,
+            show_detach: false,
+            list_scroll: UniformListScrollHandle::new(),
+            place_focus: None,
+            editor_subs: Vec::new(),
+            add_dialog: None,
             _subs: vec![sub, map_sub],
         };
         if let Some(p) = path {
@@ -249,6 +271,7 @@ impl Workspace {
                 });
                 self.view = View::Individuals;
                 self.selected = None;
+                self.reset_history();
                 self.rescan_media();
                 self.rebuild_rows(cx);
                 if let Some(x) = first {
@@ -266,6 +289,8 @@ impl Workspace {
         let x = ged.create(RecordKind::Individual);
         self.doc = Some(Document { ged, path: None, dirty: true, dirty_before_checkpoint: true, history: Vec::new() });
         self.view = View::Individuals;
+        self.selected = None;
+        self.reset_history();
         self.rebuild_rows(cx);
         self.select(x, window, cx);
         self.tab = CenterTab::Form;
@@ -359,10 +384,22 @@ impl Workspace {
     // Navigation
     // ------------------------------------------------------------------
 
+    /// Passe dans une liste, sur le dernier élément vu (ou la racine pour les individus).
     fn set_view(&mut self, view: View, window: &mut Window, cx: &mut Context<Self>) {
+        if self.view != view {
+            self.open_location(view, None, window, cx);
+        }
+    }
+
+    /// Affiche une liste et un élément (`None` : le dernier vu dans cette liste).
+    fn open_location(&mut self, view: View, key: Option<String>, window: &mut Window, cx: &mut Context<Self>) {
         if self.view == view {
+            if let Some(k) = key {
+                self.select(k, window, cx);
+            }
             return;
         }
+        self.leave_location();
         self.view = view;
         self.only_flagged = false;
         self.selected = None;
@@ -374,18 +411,26 @@ impl Workspace {
             _ => CenterTab::Form,
         };
         self.rebuild_rows(cx);
-        if let Some(first) = self.rows.first().map(|r| r.key.clone()) {
-            self.select(first, window, cx);
+        if let Some(k) = key.or_else(|| self.landing(view)) {
+            self.select(k, window, cx);
         }
         cx.notify();
     }
 
     fn select(&mut self, key: String, window: &mut Window, cx: &mut Context<Self>) {
+        if self.selected.as_deref() != Some(key.as_str()) {
+            self.leave_location();
+        }
+        self.note_selected(&key);
         if self.view == View::Places {
             self.map.update(cx, |m, cx| m.set_selected(Some(key.clone()), cx));
         }
+        if let Some(ix) = self.rows.iter().position(|r| r.key == key) {
+            self.list_scroll.scroll_to_item(ix, ScrollStrategy::Center);
+        }
         self.selected = Some(key);
         self.pending_delete = None;
+        self.show_detach = false;
         self.photo_draw = None;
         self.photo_hover = None;
         self.refresh_editor(window, cx);
@@ -398,16 +443,11 @@ impl Workspace {
         else {
             return;
         };
-        let view = View::for_kind(kind);
-        if view != self.view {
-            self.set_view(view, window, cx);
-        }
-        self.select(xref, window, cx);
+        self.open_location(View::for_kind(kind), Some(xref), window, cx);
     }
 
     fn goto_place(&mut self, name: String, window: &mut Window, cx: &mut Context<Self>) {
-        self.set_view(View::Places, window, cx);
-        self.select(name, window, cx);
+        self.open_location(View::Places, Some(name), window, cx);
     }
 
     /// Clic sur un repère, ou coordonnées trouvées / posées sur la carte.
@@ -435,8 +475,7 @@ impl Workspace {
     /// Revient à l'individu racine, dans l'arbre.
     fn goto_root(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(root) = self.doc.as_ref().and_then(|d| d.ged.root()) else { return };
-        self.set_view(View::Individuals, window, cx);
-        self.select(root, window, cx);
+        self.open_location(View::Individuals, Some(root), window, cx);
         self.tab = CenterTab::Tree;
     }
 
@@ -474,7 +513,24 @@ impl Workspace {
             },
             None => Target::Place(key.clone()),
         };
-        self.editor = Some(RecordEditor::new(&doc.ged, target, window, cx));
+        let ed = RecordEditor::new(&doc.ged, target, window, cx);
+        // Champs de lieu : suggestions des lieux existants pendant la saisie.
+        self.place_focus = None;
+        self.editor_subs = ed
+            .fields
+            .iter()
+            .filter(|f| f.place)
+            .filter_map(|f| match &f.state {
+                FieldState::Text(e) => Some(cx.subscribe_in(e, window, |this, input, ev: &InputEvent, _, cx| {
+                    if matches!(ev, InputEvent::Focus | InputEvent::Change) {
+                        this.place_focus = Some(input.entity_id());
+                        cx.notify();
+                    }
+                })),
+                FieldState::Choice(_) => None,
+            })
+            .collect();
+        self.editor = Some(ed);
         // Les anciens champs disparaissent : on rend le focus à l'espace de travail
         // pour que les raccourcis clavier restent actifs.
         window.focus(&self.focus, cx);
@@ -535,7 +591,7 @@ impl Workspace {
         let doc = self.doc.as_mut().unwrap();
         let result = ed.apply_form(&mut doc.ged, cx);
         let renamed = match &ed.target {
-            Target::Place(_) => Some(ed.fields[0].state.read(cx).value().trim().to_string()),
+            Target::Place(_) => Some(ed.fields[0].state.value(cx).trim().to_string()),
             _ => None,
         };
         self.editor = Some(ed);
@@ -848,6 +904,30 @@ fn media_path(doc: &Document, m: &Media) -> Option<PathBuf> {
 // Rendu
 // ======================================================================
 
+/// Titre de section avec un bouton (« + ») à droite.
+fn section_header(title: &'static str, button: impl IntoElement) -> Div {
+    h_flex().items_center().justify_between().child(label_caps(title)).child(button)
+}
+
+/// Emplacement en pointillés « + … » pour ajouter une personne.
+fn add_slot(id: impl Into<SharedString>, label: &'static str) -> Stateful<Div> {
+    h_flex()
+        .id(ElementId::Name(id.into()))
+        .p_2()
+        .gap_1p5()
+        .items_center()
+        .rounded_md()
+        .border_1()
+        .border_dashed()
+        .border_color(theme::border_strong())
+        .text_color(theme::muted())
+        .text_xs()
+        .cursor_pointer()
+        .hover(|d| d.border_color(theme::accent()).text_color(theme::accent()))
+        .child(icon(IconName::Plus))
+        .child(label)
+}
+
 fn label_caps(s: impl Into<SharedString>) -> Div {
     div().text_xs().font_weight(FontWeight::SEMIBOLD).text_color(theme::muted()).child(s.into())
 }
@@ -983,24 +1063,20 @@ impl Workspace {
         let entity = cx.entity().downgrade();
         let flag = self.flag_label();
         let only = self.only_flagged;
+        // Le nom de la liste et son total sont dans la barre de gauche : ici, seulement
+        // le nombre de résultats quand une recherche ou un filtre est actif.
+        let filtered = only || !self.filter.read(cx).value().trim().is_empty();
         v_flex()
             .w(px(300.))
             .flex_none()
             .bg(theme::bg())
             .border_r_1()
             .border_color(theme::border())
-            .child(
-                h_flex()
-                    .px_3()
-                    .pt_3()
-                    .pb_2()
-                    .gap_2()
-                    .items_center()
-                    .child(div().font_weight(FontWeight::SEMIBOLD).child(self.view.label()))
-                    .child(mono(rows.len().to_string()))
-                    .child(div().flex_1()),
-            )
-            .child(div().px_3().pb_2().child(Input::new(&self.filter).small().cleanable(true)))
+            .child(div().px_3().pt_3().pb_2().child(Input::new(&self.filter).small().cleanable(true)))
+            .when(filtered, |d| {
+                let n = rows.len();
+                d.child(mono(format!("{n} résultat{}", if n > 1 { "s" } else { "" })).px_3().pb_2())
+            })
             .when(self.view == View::Individuals, |d| d.child(self.render_quick_filters(cx)))
             // Filtre actif (Affichage › Filtrer la liste) : rappel, cliquable pour le retirer.
             .when(only && !flag.is_empty(), |d| {
@@ -1061,6 +1137,7 @@ impl Workspace {
                         })
                         .collect()
                 })
+                .track_scroll(&self.list_scroll)
                 .flex_1()
                 .text_sm(),
             )
@@ -1073,10 +1150,6 @@ impl Workspace {
             _ => vec![CenterTab::Form, CenterTab::Raw],
         };
         let tab = if tabs.contains(&self.tab) { self.tab } else { tabs[0] };
-        let title = self.selected.as_ref().map(|k| match self.view {
-            View::Places => short_place(k),
-            _ => self.doc.as_ref().map(|d| d.ged.record_label(k)).unwrap_or_default(),
-        });
         let body: AnyElement = match (tab, &self.editor) {
             (CenterTab::Map, _) => self.map.clone().into_any_element(),
             (_, None) => self.render_empty_center().into_any_element(),
@@ -1114,9 +1187,6 @@ impl Workspace {
                                 }
                                 _ => t.label().to_string(),
                             })
-                            .when(active && title.is_some(), |d| {
-                                d.child(div().text_color(theme::muted()).child(format!("— {}", title.clone().unwrap())))
-                            })
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 this.tab = t;
                                 cx.notify();
@@ -1145,7 +1215,7 @@ impl Workspace {
         let tree_root = g.root();
         let column = |range: std::ops::Range<usize>, cx: &mut Context<Self>| {
             v_flex().flex_1().min_w(px(140.)).justify_around().gap_2().children(range.map(|k| {
-                match anc[k].as_ref().and_then(|x| g.individual(x)) {
+                let card = match anc[k].as_ref().and_then(|x| g.individual(x)) {
                     Some(i) => {
                         let x = i.xref().to_string();
                         let on = k == 1;
@@ -1185,17 +1255,30 @@ impl Workspace {
                     }
                     // Branche inconnue plus haut : on n'affiche pas ses ascendants.
                     None if k > 3 && anc[k / 2].is_none() => div().h(px(36.)).into_any_element(),
-                    None => div()
-                        .p_2()
-                        .rounded_md()
-                        .border_1()
-                        .border_dashed()
-                        .border_color(theme::border_strong())
-                        .text_color(theme::muted())
-                        .text_xs()
-                        .child(format!("{} inconnu(e) · {k}", if k % 2 == 0 { "Père" } else { "Mère" }))
-                        .into_any_element(),
+                    // Parent inconnu : un clic le crée.
+                    None => {
+                        let child = anc[k / 2].clone().unwrap_or_default();
+                        let rel = if k % 2 == 0 { Relation::Father } else { Relation::Mother };
+                        add_slot(format!("anc-add-{k}"), if k % 2 == 0 { "Père" } else { "Mère" })
+                            .on_click(cx.listener(move |this, _, w, cx| this.add_relative(child.clone(), rel, w, cx)))
+                            .into_any_element()
+                    }
+                };
+                // Sous la personne centrale : ajouter un enfant, un frère ou une sœur.
+                if k != 1 {
+                    return card;
                 }
+                let (c1, c2) = (root.clone(), root.clone());
+                v_flex()
+                    .gap_2()
+                    .child(card)
+                    .child(add_slot("anc-add-child", "Enfant").on_click(
+                        cx.listener(move |this, _, w, cx| this.add_relative(c1.clone(), Relation::Child, w, cx)),
+                    ))
+                    .child(add_slot("anc-add-sibling", "Frère ou sœur").on_click(
+                        cx.listener(move |this, _, w, cx| this.add_relative(c2.clone(), Relation::Sibling, w, cx)),
+                    ))
+                    .into_any_element()
             }))
         };
         div().flex_1().p_4().child(
@@ -1212,8 +1295,7 @@ impl Workspace {
                         )
                         .child(
                             h_flex().gap_1p5().items_center().child(dot(theme::maternal())).child("Lignée maternelle"),
-                        )
-                        .child("Cliquer une personne pour recentrer l'arbre"),
+                        ),
                 )
                 .child(
                     h_flex()
@@ -1236,7 +1318,6 @@ impl Workspace {
             v_flex()
                 .p_4()
                 .gap_3()
-                .max_w(px(760.))
                 .when(!ed.pickers.is_empty(), |d| {
                     d.child(div().grid().grid_cols(2).gap_3().children(ed.pickers.iter().map(|p| {
                         v_flex().gap_1().child(label_caps(p.label)).child(
@@ -1251,9 +1332,16 @@ impl Workspace {
                 .child(div().grid().grid_cols(2).gap_3().children(ed.fields.iter().map(|f| {
                     v_flex()
                         .gap_1()
+                        .min_w_0()
                         .child(label_caps(f.label))
-                        .child(Input::new(&f.state).small())
-                        .when(!f.hint.is_empty(), |d| d.child(mono(f.hint)))
+                        .child(match &f.state {
+                            FieldState::Text(e) => Input::new(e).small().into_any_element(),
+                            FieldState::Choice(e) => Select::new(e).small().into_any_element(),
+                        })
+                        .children(match &f.state {
+                            FieldState::Text(e) if f.place => self.place_suggestions(e, cx),
+                            _ => None,
+                        })
                 })))
                 .when_some(ed.long_text.as_ref(), |d, (label, state)| {
                     d.child(v_flex().gap_1().child(label_caps(*label)).child(Textarea::new(state).h(px(120.))))
@@ -1297,12 +1385,60 @@ impl Workspace {
                             )
                         }),
                 )
-                .child(mono(
-                    "Seuls les champs ci-dessus sont modifiés : les autres structures (citations, \
-                     balises propriétaires…) sont conservées. Onglet GEDCOM pour tout le reste.",
-                ))
                 .when_some(preview, |d, p| d.child(p))
                 .when_some(self.record_images(ed, cx), |d, p| d.child(p)),
+        )
+    }
+
+    /// Lieux existants qui correspondent au champ de lieu en cours de saisie.
+    fn place_suggestions(&self, input: &Entity<InputState>, cx: &mut Context<Self>) -> Option<AnyElement> {
+        if self.place_focus != Some(input.entity_id()) {
+            return None;
+        }
+        let value = input.read(cx).value().to_string();
+        let q = sort_key(value.trim());
+        if q.len() < 2 {
+            return None;
+        }
+        let doc = self.doc.as_ref()?;
+        let mut hits: Vec<(String, String)> = doc
+            .ged
+            .places()
+            .into_iter()
+            .filter(|p| p.name != value && sort_key(&p.name).contains(&q))
+            .map(|p| (short_place(&p.name), p.name))
+            .collect();
+        // Les lieux qui commencent par la saisie d'abord.
+        hits.sort_by_key(|(short, _)| (!sort_key(short).starts_with(&q), short.clone()));
+        hits.truncate(6);
+        if hits.is_empty() {
+            return None;
+        }
+        Some(
+            h_flex()
+                .flex_wrap()
+                .gap_1()
+                .children(hits.into_iter().enumerate().map(|(n, (short, full))| {
+                    let entity = input.clone();
+                    div()
+                        .id(SharedString::from(format!("pl-{}-{n}", input.entity_id())))
+                        .px_2()
+                        .py(px(3.))
+                        .rounded_md()
+                        .border_1()
+                        .border_color(theme::border_strong())
+                        .bg(theme::surface())
+                        .text_xs()
+                        .cursor_pointer()
+                        .hover(|d| d.border_color(theme::accent()))
+                        .child(short)
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            entity.update(cx, |s, cx| s.set_value(full.clone(), window, cx));
+                            this.place_focus = None;
+                            cx.notify();
+                        }))
+                }))
+                .into_any_element(),
         )
     }
 
@@ -1425,10 +1561,11 @@ impl Workspace {
         let path = media_path(doc, &m);
         let el = match path {
             Some(p) if p.exists() && m.is_image() => return Some(self.render_photo(xref, p, cx)),
-            Some(p) => v_flex()
-                .gap_1()
-                .child(label_caps("Aperçu"))
-                .child(div().text_color(theme::warn()).child(format!("Fichier introuvable : {}", p.display()))),
+            // Fichier présent mais sans aperçu (PDF…) : rien à signaler.
+            Some(p) if p.exists() => return None,
+            Some(_) => {
+                v_flex().child(div().text_color(theme::warn()).child("Fichier introuvable dans le dossier du .ged"))
+            }
             None => v_flex().child(div().text_color(theme::muted()).child("Aucun fichier local associé")),
         };
         Some(el.into_any_element())
@@ -1458,7 +1595,6 @@ impl Workspace {
                             cx.notify();
                         },
                     )))
-                    .child(mono("Niveau 0 = l'enregistrement. Changer l'identifiant met à jour tous les liens."))
                     .when_some(ed.error.clone(), |d, e| d.child(div().text_sm().text_color(theme::danger()).child(e))),
             )
             .child(div().flex_1().min_h_0().font_family("monospace").text_sm().child(Editor::new(raw).h_full()))
@@ -1477,6 +1613,25 @@ impl Workspace {
             .border_l_1()
             .border_color(theme::border())
             .text_sm();
+        // Déposer des photos ou documents n'importe où sur le panneau les rattache.
+        let attachable = g
+            .get(key)
+            .and_then(|n| RecordKind::from_tag(&n.tag))
+            .is_some_and(|k| matches!(k, RecordKind::Individual | RecordKind::Family | RecordKind::Source));
+        let panel = if attachable {
+            let (record, entity) = (key.clone(), cx.entity().downgrade());
+            panel.drag_over::<ExternalPaths>(|d, _, _, _| d.bg(theme::accent_soft())).on_drop(
+                move |paths: &ExternalPaths, window, cx| {
+                    let record = record.clone();
+                    let _ = entity.update(cx, |this, cx| {
+                        let files = paths.paths().iter().map(|p| this.file_value(p)).collect();
+                        this.attach_files(Some(record), files, window, cx);
+                    });
+                },
+            )
+        } else {
+            panel
+        };
         match self.view {
             View::Individuals => match g.individual(key) {
                 Some(i) => panel
@@ -1525,7 +1680,25 @@ impl Workspace {
                     })
                     .unwrap_or_default();
                 let kind = node.and_then(|n| RecordKind::from_tag(&n.tag));
+                // Famille : les membres sont déjà listés (section « Membres »).
+                let (outgoing, refs): (Vec<String>, Vec<String>) = if kind == Some(RecordKind::Family) {
+                    let not_person = |x: &String| g.individual(x).is_none();
+                    (outgoing.into_iter().filter(not_person).collect(), refs.into_iter().filter(not_person).collect())
+                } else {
+                    (outgoing, refs)
+                };
                 let gallery = self.render_gallery(key, kind == Some(RecordKind::Source), cx);
+                let shown_under_photo = kind == Some(RecordKind::Media)
+                    && self.tab == CenterTab::Form
+                    && self.photo_file(key).is_some()
+                    && !refs.is_empty();
+                let actions = self.render_actions(cx);
+                let show_refs = !shown_under_photo && !refs.is_empty();
+                // Rien d'autre que le titre (déjà dans la fiche) : pas de panneau, la
+                // zone centrale prend la place.
+                if actions.is_none() && gallery.is_none() && outgoing.is_empty() && !show_refs {
+                    return div().into_any_element();
+                }
                 panel
                     .child(
                         h_flex()
@@ -1538,19 +1711,16 @@ impl Workspace {
                                 d.child(icon(View::for_kind(k).icon()).text_color(theme::accent()).mt_1())
                             })
                             .child(
-                                v_flex()
-                                    .flex_1()
-                                    .min_w_0()
-                                    .gap_1()
-                                    .child(div().text_lg().font_weight(FontWeight::SEMIBOLD).child(g.record_label(key)))
-                                    .child(mono(kind.map(|k| k.label_fr()).unwrap_or(""))),
+                                v_flex().flex_1().min_w_0().gap_1().child(
+                                    div().text_lg().font_weight(FontWeight::SEMIBOLD).child(g.record_label(key)),
+                                ),
                             ),
                     )
-                    .children(self.render_actions(cx))
-                    .children(self.render_unreferenced_files(cx))
+                    .children(actions)
                     .when_some(gallery, |d, el| d.child(el))
                     .when(!outgoing.is_empty(), |d| d.child(self.render_links("Liens", outgoing, cx)))
-                    .child(self.render_links("Utilisé par", refs, cx))
+                    // Photo : la liste « Utilisée par » est sous l'image, avec les cadres.
+                    .when(show_refs, |d| d.child(self.render_links("Utilisé par", refs, cx)))
                     .into_any_element()
             }
         }
@@ -1558,12 +1728,8 @@ impl Workspace {
 
     fn render_links(&self, title: &'static str, xrefs: Vec<String>, cx: &mut Context<Self>) -> impl IntoElement {
         let g = &self.doc.as_ref().unwrap().ged;
-        v_flex()
-            .p_4()
-            .gap_1()
-            .child(label_caps(format!("{title} · {}", xrefs.len())))
-            .when(xrefs.is_empty(), |d| d.child(div().text_color(theme::muted()).child("Aucun")))
-            .children(xrefs.into_iter().take(300).map(|x| {
+        v_flex().p_4().gap_1().child(label_caps(format!("{title} · {}", xrefs.len()))).children(
+            xrefs.into_iter().take(300).map(|x| {
                 let kind = g.get(&x).and_then(|n| RecordKind::from_tag(&n.tag));
                 let label = g.record_label(&x);
                 let target = x.clone();
@@ -1578,7 +1744,8 @@ impl Workspace {
                     .children(kind.map(|k| icon(View::for_kind(k).icon()).text_color(theme::muted())))
                     .child(div().flex_1().overflow_hidden().whitespace_nowrap().text_ellipsis().child(label))
                     .on_click(cx.listener(move |this, _, w, cx| this.goto(target.clone(), w, cx)))
-            }))
+            }),
+        )
     }
 
     fn render_individual_card(&self, g: &Gedcom, i: Individual<'_>, cx: &mut Context<Self>) -> impl IntoElement {
@@ -1649,8 +1816,12 @@ impl Workspace {
             .gap_3()
             .border_b_1()
             .border_color(theme::border())
-            .child(label_caps("Événements"))
-            .when(events.is_empty(), |d| d.child(div().text_color(theme::muted()).child("Aucun événement")))
+            .child(section_header("Événements", {
+                let x = xref.clone();
+                add::plus_button("add-event")
+                    .tooltip("Ajouter un événement")
+                    .on_click(cx.listener(move |this, _, w, cx| this.open_event_dialog(x.clone(), w, cx)))
+            }))
             .children(events.into_iter().enumerate().map(|(n, e)| {
                 let place = e.place().map(|p| p.to_string());
                 let sources: Vec<String> = e.source_xrefs().iter().map(|s| s.to_string()).collect();
@@ -1664,7 +1835,14 @@ impl Workspace {
                         h_flex()
                             .justify_between()
                             .gap_2()
-                            .child(div().font_weight(FontWeight::MEDIUM).child(label))
+                            .child(
+                                h_flex()
+                                    .gap_1p5()
+                                    .items_center()
+                                    .child(div().font_weight(FontWeight::MEDIUM).child(label))
+                                    // Point orange : événement sans source.
+                                    .when(sources.is_empty(), |d| d.child(dot(theme::warn()))),
+                            )
                             .child(mono(e.date().map(|d| d.to_french()).unwrap_or_default())),
                     )
                     .when_some(place, |d, p| {
@@ -1679,9 +1857,6 @@ impl Workspace {
                                 .on_click(cx.listener(move |this, _, w, cx| this.goto_place(target.clone(), w, cx))),
                         )
                     })
-                    .when(sources.is_empty(), |d| {
-                        d.child(div().text_xs().text_color(theme::warn()).child("Aucune source citée"))
-                    })
                     .children(sources.into_iter().map(|s| {
                         let title = g.record_label(&s);
                         let target = s.clone();
@@ -1691,7 +1866,7 @@ impl Workspace {
                             .text_color(theme::ok())
                             .cursor_pointer()
                             .hover(|d| d.text_color(theme::accent()))
-                            .child(format!("Source : {title}"))
+                            .child(title)
                             .on_click(cx.listener(move |this, _, w, cx| this.goto(target.clone(), w, cx)))
                     }))
             }));
@@ -1710,8 +1885,12 @@ impl Workspace {
             .gap_1()
             .border_b_1()
             .border_color(theme::border())
-            .child(label_caps("Famille"))
-            .when(family.is_empty(), |d| d.child(div().text_color(theme::muted()).child("Aucun lien familial")))
+            .child(section_header("Famille", {
+                let x = xref.clone();
+                add::plus_button("add-relative")
+                    .tooltip("Ajouter ou lier un proche")
+                    .on_click(cx.listener(move |this, _, _, cx| this.open_relatives_dialog(x.clone(), cx)))
+            }))
             .children(family.into_iter().map(|(role, x)| {
                 let p = g.individual(&x).unwrap();
                 let target = x.clone();
@@ -1753,26 +1932,7 @@ impl Workspace {
     }
 
     fn render_status(&self) -> impl IntoElement {
-        let (saved, counts, unsourced) = match &self.doc {
-            Some(d) => {
-                let unsourced: usize = d
-                    .ged
-                    .records_of(RecordKind::Individual)
-                    .map(|r| Individual::new(r).events().iter().filter(|e| !e.is_sourced()).count())
-                    .sum();
-                (
-                    !d.dirty,
-                    format!(
-                        "{} individus · {} familles · {} sources",
-                        d.ged.count(RecordKind::Individual),
-                        d.ged.count(RecordKind::Family),
-                        d.ged.count(RecordKind::Source)
-                    ),
-                    unsourced,
-                )
-            }
-            None => (true, String::new(), 0),
-        };
+        let saved = self.doc.as_ref().is_none_or(|d| !d.dirty);
         h_flex()
             .h(px(26.))
             .flex_none()
@@ -1792,13 +1952,8 @@ impl Workspace {
                         .child(dot(if saved { theme::ok() } else { theme::warn() }))
                         .child(if saved { "Enregistré" } else { "Modifications non enregistrées" }),
                 )
-                .child(counts)
-                .when(unsourced > 0, |d| {
-                    d.child(div().text_color(theme::warn()).child(format!("{unsourced} événements sans source")))
-                })
             })
             .child(div().flex_1())
-            .when_some(self.doc.as_ref(), |d, doc| d.child(mono(format!("GEDCOM {}", doc.ged.version()))))
             .when_some(self.status.clone(), |d, (msg, err)| {
                 d.child(div().text_color(if err { theme::danger() } else { theme::muted() }).child(msg))
             })
@@ -1835,7 +1990,6 @@ impl Workspace {
             .when_some(self.status.clone().filter(|s| s.1), |d, (msg, _)| {
                 d.child(div().text_color(theme::danger()).child(msg))
             })
-            .child(mono("Astuce : gedroots chemin/vers/fichier.ged"))
     }
 }
 
@@ -1888,6 +2042,15 @@ impl Render for Workspace {
             .track_focus(&self.focus)
             .key_context("Workspace")
             .map(|d| self.bind_actions(d, window, cx))
+            // Boutons « précédent / suivant » de la souris.
+            .on_mouse_down(
+                MouseButton::Navigate(NavigationDirection::Back),
+                cx.listener(|this, _, w, cx| this.go_back(w, cx)),
+            )
+            .on_mouse_down(
+                MouseButton::Navigate(NavigationDirection::Forward),
+                cx.listener(|this, _, w, cx| this.go_forward(w, cx)),
+            )
             .on_key_down(cx.listener(|this, ev: &KeyDownEvent, _, cx| {
                 if ev.keystroke.key == "escape" && this.photo_draw.is_some() {
                     this.cancel_draw(cx);
@@ -1901,6 +2064,8 @@ impl Render for Workspace {
             .child(body)
             .child(self.render_status())
             .children(self.render_picker(cx))
+            .children(self.render_unreferenced_files(cx))
+            .children(self.render_add_dialog(cx))
             .children(self.render_palette(cx))
     }
 }

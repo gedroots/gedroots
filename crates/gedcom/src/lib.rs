@@ -38,7 +38,7 @@ pub use model::*;
 pub use node::Node;
 pub use parse::{ParseError, node_from_string, node_to_string};
 pub use pedigree::{DescNode, DescUnion};
-pub use relations::{Relation, is_media_file, mime_for, title_from_file};
+pub use relations::{FAMILY_EVENTS, INDIVIDUAL_EVENTS, NewEvent, Relation, is_media_file, mime_for, title_from_file};
 pub use search::{IndividualQuery, has_token, toggle_token};
 pub use template::{FieldDef, PersonField, Relation as RoleRelation, RoleDef, Template, builtin_templates};
 

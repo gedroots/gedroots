@@ -173,3 +173,30 @@ fn descendants_tree() {
     assert!(d.unions[0].children[0].truncated);
     let _ = kid;
 }
+
+#[test]
+fn add_events() {
+    let mut g = Gedcom::parse(SAMPLE).unwrap();
+    let x = g.records_of(RecordKind::Individual).next().unwrap().xref.clone().unwrap();
+    let src = g.records_of(RecordKind::Source).next().map(|s| s.xref.clone().unwrap());
+    let before = g.individual(&x).unwrap().events().len();
+    let ev = NewEvent {
+        tag: "RESI".into(),
+        date: "12 mar 1901".into(),
+        place: "Troyes, Aube".into(),
+        source: src.clone(),
+        ..Default::default()
+    };
+    g.add_event(&x, &ev).unwrap();
+    g.add_event(&x, &NewEvent { tag: "OCCU".into(), detail: "Meunier".into(), ..Default::default() }).unwrap();
+    g.add_event(&x, &NewEvent { tag: "BURI".into(), ..Default::default() }).unwrap();
+    assert!(g.add_event(&x, &NewEvent { tag: "EVEN".into(), ..Default::default() }).is_err());
+    let i = g.individual(&x).unwrap();
+    let evs = i.events();
+    assert_eq!(evs.len(), before + 3);
+    let resi = evs.iter().find(|e| e.tag() == "RESI" && e.date_raw() == Some("12 MAR 1901")).unwrap();
+    assert_eq!(resi.place(), Some("Troyes, Aube"));
+    assert_eq!(resi.is_sourced(), src.is_some());
+    assert!(evs.iter().any(|e| e.tag() == "OCCU" && e.value() == Some("Meunier")));
+    assert!(evs.iter().any(|e| e.tag() == "BURI" && e.node.val() == "Y"));
+}

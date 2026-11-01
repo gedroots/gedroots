@@ -40,6 +40,7 @@ actions!(
         SetRoot,
         GoToRoot,
         AttachFiles,
+        AddEvent,
         // Famille
         NewFamily,
         NewFamilyChild,
@@ -52,7 +53,10 @@ actions!(
         NewMedia,
         AttachMediaTo,
         TagPerson,
+        ShowUnreferencedFiles,
         // Affichage
+        GoBack,
+        GoForward,
         ShowIndividuals,
         ShowFamilies,
         ShowSources,
@@ -108,6 +112,8 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new(shortcut!("shift-h"), GoToRoot, WS),
         KeyBinding::new(shortcut!("shift-a"), OpenAnalyses, WS),
         KeyBinding::new(shortcut!("shift-p"), CommandPalette, WS),
+        KeyBinding::new(shortcut!("["), GoBack, WS),
+        KeyBinding::new(shortcut!("]"), GoForward, WS),
         KeyBinding::new(shortcut!("1"), ShowIndividuals, WS),
         KeyBinding::new(shortcut!("2"), ShowFamilies, WS),
         KeyBinding::new(shortcut!("3"), ShowSources, WS),
@@ -199,6 +205,7 @@ fn model() -> Vec<(&'static str, Vec<Item>)> {
                     a("Frère ou sœur…", LinkSibling),
                 ],
             ),
+            a("Ajouter un événement…", AddEvent),
             a("Rattacher des photos ou documents…", AttachFiles),
             Sep,
             a("Définir comme individu racine", SetRoot),
@@ -210,6 +217,7 @@ fn model() -> Vec<(&'static str, Vec<Item>)> {
         vec![
             a("Nouvelle famille", NewFamily),
             Sep,
+            a("Ajouter un événement…", AddEvent),
             a("Ajouter un nouvel enfant", NewFamilyChild),
             a("Lier un enfant existant…", LinkFamilyChild),
             a("Lier un parent existant…", LinkFamilyParent),
@@ -224,11 +232,16 @@ fn model() -> Vec<(&'static str, Vec<Item>)> {
             a("Rattacher ce média à…", AttachMediaTo),
             Sep,
             a("Identifier une personne sur la photo", TagPerson),
+            Sep,
+            a("Fichiers du dossier sans média…", ShowUnreferencedFiles),
         ],
     ));
     menus.push((
         "Affichage",
         vec![
+            a("Précédent", GoBack),
+            a("Suivant", GoForward),
+            Sep,
             a("Individus", ShowIndividuals),
             a("Familles", ShowFamilies),
             a("Sources", ShowSources),

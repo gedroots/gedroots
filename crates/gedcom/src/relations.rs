@@ -178,6 +178,39 @@ impl Gedcom {
         Ok(fam)
     }
 
+    /// Ajoute un événement (ou attribut) à un individu ou une famille.
+    /// `detail` : la profession pour OCCU, le type pour un événement libre
+    /// (EVEN), sinon un complément (`TYPE`). La source est citée si donnée.
+    pub fn add_event(&mut self, owner: &str, ev: &NewEvent) -> Result<(), String> {
+        let node = self.get_mut(owner).ok_or("enregistrement introuvable")?;
+        let detail = ev.detail.trim();
+        if ev.tag == "EVEN" && detail.is_empty() {
+            return Err("précisez le type de l'événement".into());
+        }
+        let attribute = matches!(ev.tag.as_str(), "OCCU" | "EDUC" | "RELI" | "TITL" | "NATI" | "RESI" | "FACT");
+        let mut e = Node::new(ev.tag.as_str());
+        if attribute && ev.tag != "RESI" {
+            e.value = Some(detail.to_string());
+        } else if !detail.is_empty() {
+            e.children.push(Node::with_value("TYPE", detail));
+        }
+        if !ev.date.trim().is_empty() {
+            e.children.push(Node::with_value("DATE", ev.date.trim().to_uppercase()));
+        }
+        if !ev.place.trim().is_empty() {
+            e.children.push(Node::with_value("PLAC", ev.place.trim()));
+        }
+        if let Some(s) = ev.source.as_deref().filter(|s| !s.is_empty()) {
+            e.children.push(Node::with_value("SOUR", format!("@{}@", s.trim_matches('@'))));
+        }
+        // Événement sans aucun détail : « 1 DEAT Y » (il a eu lieu).
+        if !attribute && e.children.is_empty() {
+            e.value = Some("Y".into());
+        }
+        node.insert_child(e);
+        Ok(())
+    }
+
     /// Crée une nouvelle personne liée à `indi` et renvoie son identifiant.
     /// `family` choisit l'union pour un enfant quand il y en a plusieurs.
     pub fn add_relative(&mut self, indi: &str, rel: Relation, family: Option<&str>) -> Result<String, String> {
@@ -474,3 +507,20 @@ impl<'a> Individual<'a> {
             .collect()
     }
 }
+
+/// Événement à ajouter avec [`Gedcom::add_event`].
+#[derive(Debug, Clone, Default)]
+pub struct NewEvent {
+    pub tag: String,
+    pub detail: String,
+    pub date: String,
+    pub place: String,
+    pub source: Option<String>,
+}
+
+/// Événements proposés à l'ajout : individuels, puis familiaux.
+pub const INDIVIDUAL_EVENTS: &[&str] = &[
+    "BIRT", "BAPM", "DEAT", "BURI", "CREM", "RESI", "OCCU", "CENS", "EDUC", "GRAD", "RETI", "EMIG", "IMMI", "NATU",
+    "CONF", "FCOM", "WILL", "PROB", "EVEN",
+];
+pub const FAMILY_EVENTS: &[&str] = &["MARR", "ENGA", "MARB", "MARC", "DIV", "EVEN"];
