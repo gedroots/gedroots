@@ -14,6 +14,7 @@ use std::collections::{HashMap, HashSet};
 
 /// Balise d'extension qui masque une anomalie (valeur = code de l'anomalie).
 pub const IGNORE_TAG: &str = "_GR_IGNORE";
+pub const IGNORE_URI: &str = "https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_ignore";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Severity {
@@ -452,7 +453,7 @@ impl Gedcom {
         }
         r.insert_child(Node::with_value(IGNORE_TAG, code));
         r.touch();
-        self.declare_extension(IGNORE_TAG);
+        self.declare_extension(IGNORE_TAG, IGNORE_URI);
         true
     }
 }

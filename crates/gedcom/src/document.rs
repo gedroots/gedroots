@@ -260,4 +260,13 @@ impl Gedcom {
     pub fn referrers(&self, xref: &str) -> Vec<&Node> {
         self.records.iter().filter(|r| r.pointers().iter().any(|p| p == xref)).collect()
     }
+
+    /// Déclare une balise d'extension (`HEAD.SCHMA.TAG`), comme l'exige GEDCOM 7.
+    pub fn declare_extension(&mut self, tag: &str, uri: &str) {
+        let schma = self.header.ensure_child("SCHMA");
+        let declared = schma.children_with("TAG").any(|t| t.val().split_whitespace().next() == Some(tag));
+        if !declared {
+            schma.children.push(Node::with_value("TAG", format!("{tag} {uri}")));
+        }
+    }
 }
