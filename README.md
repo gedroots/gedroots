@@ -39,6 +39,14 @@ et suit la maquette « Lignée » (thème sombre, barre d'activité, liste, arbr
 
 - **Médias / photos** : portraits des individus, images des sources (actes numérisés)
   dans la fiche et le panneau de détail, chemins relatifs au fichier `.ged`.
+- **Recadrage et identification des personnes** : sur la fiche d'une photo, « Identifier une
+  personne » puis tracer un cadre autour du visage et choisir la personne. C'est le `CROP`
+  standard de GEDCOM 7 sur le lien `INDI → OBJE` (pas d'extension, lisible par les autres
+  logiciels) : la photo de groupe affiche les noms, le portrait et les vignettes de la personne
+  sont recadrés sur son visage. Chaque lien vers une image (source, famille…) peut aussi être
+  délimité, par exemple l'extrait utile d'un registre.
+
+![Personnes identifiées sur une photo](docs/capture-photo.png)
 - **Individu racine** : enregistré dans le fichier lui-même (extension `_GR_ROOT`, voir
   [docs/extensions.md](docs/extensions.md)), jamais dans un fichier annexe.
 - Les identifiants GEDCOM n'apparaissent pas dans l'interface : liens choisis par nom
@@ -107,8 +115,8 @@ Sous Linux, installer d'abord les dépendances de GPUI :
 
 | Crate | Rôle |
 | --- | --- |
-| [`crates/gedcom`](crates/gedcom) | Lecture/écriture GEDCOM 7 sans perte, vues typées (individus, familles, sources, lieux, médias), formulaires d'édition, dates, coordonnées (`geo.rs`), outils d'analyse (`analysis/`), recherche (`search.rs`), ajout/liaison de proches et médias (`relations.rs`), descendance (`pedigree.rs`), modèles d'actes (`template.rs`) et saisie guidée (`entry.rs`). Sans dépendance. |
-| [`crates/gedroots`](crates/gedroots) | Application GPUI : `workspace.rs` (fenêtre et vues) et `workspace/` (`tree.rs` arbres, `relatives.rs` proches/sélecteur/médias, `filters.rs` filtres rapides), `editor.rs` (éditeurs visuel et brut), `entry_form.rs` (saisie d'acte), `map.rs` (carte des lieux), `theme.rs` (palette de la maquette), `analyses.rs` (fenêtre Analyses). |
+| [`crates/gedcom`](crates/gedcom) | Lecture/écriture GEDCOM 7 sans perte, vues typées (individus, familles, sources, lieux, médias), recadrage `CROP` (`crop.rs`), formulaires d'édition, dates, coordonnées (`geo.rs`), outils d'analyse (`analysis/`), recherche (`search.rs`), ajout/liaison de proches et médias (`relations.rs`), descendance (`pedigree.rs`), modèles d'actes (`template.rs`) et saisie guidée (`entry.rs`). Sans dépendance. |
+| [`crates/gedroots`](crates/gedroots) | Application GPUI : `workspace.rs` (fenêtre et vues) et `workspace/` (`tree.rs` arbres, `relatives.rs` proches/sélecteur/médias, `photo.rs` recadrage et personnes sur les photos, `filters.rs` filtres rapides), `editor.rs` (éditeurs visuel et brut), `entry_form.rs` (saisie d'acte), `map.rs` (carte des lieux), `theme.rs` (palette de la maquette), `analyses.rs` (fenêtre Analyses). |
 
 ## Tests
 

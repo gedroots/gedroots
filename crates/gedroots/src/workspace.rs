@@ -18,6 +18,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 mod filters;
+mod photo;
 mod relatives;
 mod tree;
 
@@ -168,6 +169,11 @@ pub struct Workspace {
     search_help: bool,
     /// Saisie guidée d'un acte en cours (remplace liste, fiche et détail).
     entry_form: Option<(Entity<EntryForm>, Subscription)>,
+    /// Cadre en cours de tracé sur une photo.
+    photo_draw: Option<photo::PhotoDraw>,
+    photo_bounds: photo::PhotoBounds,
+    /// Personne survolée sur la photo ou dans la liste des liens.
+    photo_hover: Option<String>,
     _subs: Vec<Subscription>,
 }
 
@@ -201,6 +207,9 @@ impl Workspace {
             pending_delete: None,
             search_help: false,
             entry_form: None,
+            photo_draw: None,
+            photo_bounds: Default::default(),
+            photo_hover: None,
             _subs: vec![sub, map_sub],
         };
         if let Some(p) = path {
@@ -368,6 +377,8 @@ impl Workspace {
         }
         self.selected = Some(key);
         self.pending_delete = None;
+        self.photo_draw = None;
+        self.photo_hover = None;
         self.refresh_editor(window, cx);
         cx.notify();
     }
@@ -886,8 +897,13 @@ fn avatar(doc: &Document, i: &Individual<'_>, size: f32, ring: Hsla) -> Div {
         .flex()
         .items_center()
         .justify_center();
-    match doc.ged.portrait(i.xref()).and_then(|m| media_path(doc, &m)).filter(|p| p.exists()) {
-        Some(p) => base.child(img(p).size_full().rounded_full().object_fit(ObjectFit::Cover)),
+    let portrait = doc.ged.portrait(i.xref());
+    match portrait.and_then(|m| media_path(doc, &m)).filter(|p| p.exists()) {
+        Some(p) => {
+            // Le recadrage du lien (CROP) cadre le visage sur une photo de groupe.
+            let crop = portrait.and_then(|m| doc.ged.link_crop(i.xref(), m.xref()));
+            base.child(photo::linked_img(p, crop, size, size, true))
+        }
         None => {
             let initials: String =
                 [i.given().chars().next(), i.surname().chars().next()].into_iter().flatten().collect();
@@ -1302,7 +1318,7 @@ impl Workspace {
     }
 
     fn render_form(&self, ed: &RecordEditor, cx: &mut Context<Self>) -> impl IntoElement {
-        let preview = self.media_preview(ed);
+        let preview = self.media_preview(ed, cx);
         let can_delete = true;
         let confirm = self.pending_delete.is_some() && self.pending_delete == self.selected;
         div().id("form-scroll").flex_1().overflow_y_scroll().child(
@@ -1391,7 +1407,9 @@ impl Workspace {
                 .children(images.into_iter().map(|m| {
                     let target = m.xref().to_string();
                     let title = m.title();
+                    let crop = doc.ged.link_crop(xref, m.xref());
                     let body = match media_path(doc, &m).filter(|p| p.exists()) {
+                        Some(p) if crop.is_some() => photo::fitted_crop(p, crop, 700., 640.),
                         Some(p) => {
                             img(p).max_w_full().max_h(px(640.)).object_fit(ObjectFit::Contain).into_any_element()
                         }
@@ -1440,7 +1458,13 @@ impl Workspace {
                 .hover(|d| d.border_color(theme::accent()))
                 .on_click(cx.listener(move |this, _, w, cx| this.goto(target.clone(), w, cx)));
             let tile = if large { tile.w_full().h(px(220.)) } else { tile.h(px(96.)) };
+            let crop = doc.ged.link_crop(xref, m.xref());
             match path {
+                Some(p) if crop.is_some() => {
+                    // Zone recadrée du lien : visage sur une photo de groupe, extrait d'un acte…
+                    let (w, h) = if large { (326., 218.) } else { (104., 94.) };
+                    tile.flex().justify_center().child(photo::linked_img(p, crop, w, h, !large))
+                }
                 Some(p) => {
                     tile.child(img(p).size_full().object_fit(if large { ObjectFit::Contain } else { ObjectFit::Cover }))
                 }
@@ -1477,25 +1501,13 @@ impl Workspace {
         )
     }
 
-    fn media_preview(&self, ed: &RecordEditor) -> Option<AnyElement> {
+    fn media_preview(&self, ed: &RecordEditor, cx: &mut Context<Self>) -> Option<AnyElement> {
         let Target::Record { xref, kind: RecordKind::Media } = &ed.target else { return None };
         let doc = self.doc.as_ref()?;
         let m = Media::new(doc.ged.get(xref)?);
         let path = media_path(doc, &m);
         let el = match path {
-            Some(p) if p.exists() && m.is_image() => v_flex()
-                .gap_1()
-                .child(label_caps("Aperçu"))
-                .child(
-                    div()
-                        .rounded_md()
-                        .border_1()
-                        .border_color(theme::border())
-                        .bg(theme::surface())
-                        .p_2()
-                        .child(img(p.clone()).max_w_full().max_h(px(560.)).object_fit(ObjectFit::Contain)),
-                )
-                .child(mono(p.display().to_string())),
+            Some(p) if p.exists() && m.is_image() => return Some(self.render_photo(xref, p, cx)),
             Some(p) => v_flex()
                 .gap_1()
                 .child(label_caps("Aperçu"))
@@ -1949,6 +1961,11 @@ impl Render for Workspace {
             .on_action(cx.listener(Self::new_file))
             .on_action(cx.listener(Self::open_analyses))
             .on_action(cx.listener(Self::open_entry))
+            .on_key_down(cx.listener(|this, ev: &KeyDownEvent, _, cx| {
+                if ev.keystroke.key == "escape" && this.photo_draw.is_some() {
+                    this.cancel_draw(cx);
+                }
+            }))
             .bg(theme::bg())
             .text_color(theme::text())
             .text_sm()

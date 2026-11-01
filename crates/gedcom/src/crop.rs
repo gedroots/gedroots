@@ -48,7 +48,12 @@ impl Crop {
     pub fn from_link(link: &Node) -> Option<Self> {
         let c = link.child("CROP")?;
         let num = |t: &str| c.child_val(t).and_then(|v| v.trim().parse::<u32>().ok());
-        Some(Self { top: num("TOP").unwrap_or(0), left: num("LEFT").unwrap_or(0), height: num("HEIGHT"), width: num("WIDTH") })
+        Some(Self {
+            top: num("TOP").unwrap_or(0),
+            left: num("LEFT").unwrap_or(0),
+            height: num("HEIGHT"),
+            width: num("WIDTH"),
+        })
     }
 
     /// Structure `CROP` à placer sous un lien `OBJE`.
