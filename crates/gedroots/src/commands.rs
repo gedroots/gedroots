@@ -52,7 +52,10 @@ actions!(
         NewMedia,
         AttachMediaTo,
         TagPerson,
+        ShowUnreferencedFiles,
         // Affichage
+        GoBack,
+        GoForward,
         ShowIndividuals,
         ShowFamilies,
         ShowSources,
@@ -108,6 +111,8 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new(shortcut!("shift-h"), GoToRoot, WS),
         KeyBinding::new(shortcut!("shift-a"), OpenAnalyses, WS),
         KeyBinding::new(shortcut!("shift-p"), CommandPalette, WS),
+        KeyBinding::new(shortcut!("["), GoBack, WS),
+        KeyBinding::new(shortcut!("]"), GoForward, WS),
         KeyBinding::new(shortcut!("1"), ShowIndividuals, WS),
         KeyBinding::new(shortcut!("2"), ShowFamilies, WS),
         KeyBinding::new(shortcut!("3"), ShowSources, WS),
@@ -224,11 +229,16 @@ fn model() -> Vec<(&'static str, Vec<Item>)> {
             a("Rattacher ce média à…", AttachMediaTo),
             Sep,
             a("Identifier une personne sur la photo", TagPerson),
+            Sep,
+            a("Fichiers du dossier sans média…", ShowUnreferencedFiles),
         ],
     ));
     menus.push((
         "Affichage",
         vec![
+            a("Précédent", GoBack),
+            a("Suivant", GoForward),
+            Sep,
             a("Individus", ShowIndividuals),
             a("Familles", ShowFamilies),
             a("Sources", ShowSources),

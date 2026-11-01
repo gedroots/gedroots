@@ -308,7 +308,7 @@ impl Workspace {
     // ------------------------------------------------------------------
 
     /// Chemin à écrire dans `FILE` : relatif au dossier du `.ged` si possible.
-    fn file_value(&self, path: &std::path::Path) -> String {
+    pub(super) fn file_value(&self, path: &std::path::Path) -> String {
         let base = self.doc.as_ref().and_then(|d| d.path.as_ref()).and_then(|p| p.parent());
         match base.and_then(|b| path.strip_prefix(b).ok()) {
             Some(rel) => rel.components().map(|c| c.as_os_str().to_string_lossy()).collect::<Vec<_>>().join("/"),
@@ -402,8 +402,22 @@ impl Workspace {
                 let mut media_keys = keywords(&i.surname());
                 media_keys.extend(keywords(&i.given()).into_iter().take(1));
                 // Ajouter ou lier un proche : menu Individu.
+                if detach.is_empty() && !self.has_suggestions(&media_keys) {
+                    return None;
+                }
+                let open = self.show_detach;
                 section()
-                    .when(!detach.is_empty(), |d| {
+                    .when(!detach.is_empty() && !open, |d| {
+                        d.child(h_flex().child(
+                            Button::new("show-detach").xsmall().ghost().label("Détacher de…").on_click(cx.listener(
+                                |this, _, _, cx| {
+                                    this.show_detach = true;
+                                    cx.notify();
+                                },
+                            )),
+                        ))
+                    })
+                    .when(!detach.is_empty() && open, |d| {
                         d.child(label_caps("Détacher")).children(detach.into_iter().map(|(fam, label)| {
                             let x = key.clone();
                             let id = SharedString::from(format!("unlink-{fam}"));
@@ -454,142 +468,169 @@ impl Workspace {
                     .child(self.render_media_drop(&key, vec![], cx))
             }
             View::Sources => {
-                let title = g.record_label(&key);
-                section().child(self.render_media_drop(&key, keywords(&title), cx))
+                let keys = keywords(&g.record_label(&key));
+                if !self.has_suggestions(&keys) {
+                    return None;
+                }
+                section().child(self.render_media_drop(&key, keys, cx))
             }
             _ => return None,
         };
         Some(el.into_any_element())
     }
 
-    /// Zone « Photos et documents » : bouton, glisser-déposer et suggestions de fichiers.
+    fn has_suggestions(&self, keys: &[String]) -> bool {
+        let Some(doc) = &self.doc else { return false };
+        !keys.is_empty() && !suggest_files(&self.media_files, &doc.ged.referenced_files(), keys).is_empty()
+    }
+
+    /// Fichiers du dossier qui semblent correspondre à l'élément. On peut aussi
+    /// déposer des fichiers sur le panneau, ou passer par le menu (Rattacher…).
     fn render_media_drop(&self, record: &str, keys: Vec<String>, cx: &mut Context<Self>) -> impl IntoElement {
         let g = &self.doc.as_ref().unwrap().ged;
         let referenced = g.referenced_files();
         let suggestions = suggest_files(&self.media_files, &referenced, &keys);
-        let (r1, r2) = (record.to_string(), record.to_string());
-        let entity = cx.entity().downgrade();
-        v_flex()
-            .gap_1()
-            .child(label_caps("Photos et documents"))
-            .child(
-                div()
-                    .id("media-drop")
-                    .p_2()
-                    .rounded_md()
-                    .border_1()
-                    .border_dashed()
-                    .border_color(theme::border_strong())
-                    .text_xs()
-                    .text_color(theme::muted())
-                    .cursor_pointer()
-                    .hover(|d| d.border_color(theme::accent()))
-                    .drag_over::<ExternalPaths>(|d, _, _, _| d.border_color(theme::accent()).bg(theme::accent_soft()))
+        v_flex().gap_1().when(!suggestions.is_empty(), |d| {
+            d.child(label_caps("Fichiers suggérés")).children(suggestions.into_iter().map(|f| {
+                let (rec, file) = (record.to_string(), f.clone());
+                h_flex()
+                    .gap_2()
+                    .items_center()
                     .child(
-                        h_flex()
-                            .gap_2()
-                            .items_center()
-                            .child(svg().path("icons/folder-open.svg").size(px(14.)).text_color(theme::muted()))
-                            .child("Déposer des fichiers ici, ou cliquer pour choisir…"),
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .overflow_hidden()
+                            .whitespace_nowrap()
+                            .text_ellipsis()
+                            .text_xs()
+                            .child(f.clone()),
                     )
-                    .on_click(cx.listener(move |this, _, w, cx| this.choose_files(r1.clone(), w, cx)))
-                    .on_drop(move |paths: &ExternalPaths, window, cx| {
-                        let record = r2.clone();
-                        let _ = entity.update(cx, |this, cx| {
-                            let files = paths.paths().iter().map(|p| this.file_value(p)).collect();
-                            this.attach_files(Some(record), files, window, cx);
-                        });
-                    }),
-            )
-            .when(!suggestions.is_empty(), |d| {
-                d.child(mono("Fichiers du dossier qui semblent correspondre :")).children(suggestions.into_iter().map(
-                    |f| {
-                        let (rec, file) = (record.to_string(), f.clone());
-                        h_flex()
-                            .gap_2()
-                            .items_center()
-                            .child(
-                                div()
-                                    .flex_1()
-                                    .min_w_0()
-                                    .overflow_hidden()
-                                    .whitespace_nowrap()
-                                    .text_ellipsis()
-                                    .text_xs()
-                                    .child(f.clone()),
-                            )
-                            .child(
-                                Button::new(SharedString::from(format!("suggest-{f}")))
-                                    .xsmall()
-                                    .ghost()
-                                    .icon(IconName::Plus)
-                                    .label("Rattacher")
-                                    .on_click(cx.listener(move |this, _, w, cx| {
-                                        this.attach_files(Some(rec.clone()), vec![file.clone()], w, cx)
-                                    })),
-                            )
-                    },
-                ))
-            })
+                    .child(
+                        Button::new(SharedString::from(format!("suggest-{f}")))
+                            .xsmall()
+                            .ghost()
+                            .icon(IconName::Plus)
+                            .label("Rattacher")
+                            .on_click(cx.listener(move |this, _, w, cx| {
+                                this.attach_files(Some(rec.clone()), vec![file.clone()], w, cx)
+                            })),
+                    )
+            }))
+        })
     }
 
-    /// Panneau de la vue Médias : fichiers du dossier qui n'ont pas encore de média.
+    /// Fenêtre « Fichiers du dossier sans média » (menu Média) : images et PDF
+    /// du dossier du `.ged` qu'aucun média ne référence encore.
     pub(super) fn render_unreferenced_files(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
-        if self.view != View::Media {
+        if !self.orphans_open {
             return None;
         }
         let g = &self.doc.as_ref()?.ged;
         let referenced = g.referenced_files();
         let missing: Vec<String> = self.media_files.iter().filter(|f| !referenced.contains(*f)).cloned().collect();
-        if missing.is_empty() {
-            return None;
-        }
         let all = missing.clone();
+        let close = |this: &mut Self, cx: &mut Context<Self>| {
+            this.orphans_open = false;
+            cx.notify();
+        };
         Some(
-            v_flex()
-                .p_4()
-                .gap_1()
-                .border_b_1()
-                .border_color(theme::border())
+            div()
+                .absolute()
+                .inset_0()
+                .flex()
+                .justify_center()
+                .pt(px(90.))
+                .bg(gpui_kit::hsla(0., 0., 0., 0.45))
                 .child(
-                    h_flex()
-                        .gap_2()
-                        .items_center()
-                        .child(label_caps(format!("Fichiers sans média · {}", missing.len())))
-                        .child(div().flex_1())
+                    v_flex()
+                        .id("orphans")
+                        .occlude()
+                        .w(px(560.))
+                        .max_h(px(600.))
+                        .rounded_lg()
+                        .border_1()
+                        .border_color(theme::border_strong())
+                        .bg(theme::panel())
+                        .shadow_lg()
+                        .on_mouse_down_out(cx.listener(move |this, _, _, cx| close(this, cx)))
+                        .on_key_down(cx.listener(move |this, ev: &KeyDownEvent, _, cx| {
+                            if ev.keystroke.key == "escape" {
+                                close(this, cx);
+                            }
+                        }))
                         .child(
-                            Button::new("import-all").xsmall().ghost().label("Tout importer").on_click(
-                                cx.listener(move |this, _, w, cx| this.attach_files(None, all.clone(), w, cx)),
-                            ),
+                            h_flex()
+                                .p_3()
+                                .gap_2()
+                                .items_center()
+                                .border_b_1()
+                                .border_color(theme::border())
+                                .child(
+                                    div()
+                                        .flex_1()
+                                        .font_weight(FontWeight::SEMIBOLD)
+                                        .child(format!("Fichiers sans média · {}", missing.len())),
+                                )
+                                .when(!missing.is_empty(), |d| {
+                                    d.child(
+                                        Button::new("import-all").xsmall().primary().label("Tout importer").on_click(
+                                            cx.listener(move |this, _, w, cx| {
+                                                this.attach_files(None, all.clone(), w, cx)
+                                            }),
+                                        ),
+                                    )
+                                })
+                                .child(
+                                    Button::new("orphans-close")
+                                        .xsmall()
+                                        .ghost()
+                                        .icon(IconName::Close)
+                                        .on_click(cx.listener(move |this, _, _, cx| close(this, cx))),
+                                ),
+                        )
+                        .child(
+                            v_flex()
+                                .id("orphans-list")
+                                .max_h(px(520.))
+                                .overflow_y_scroll()
+                                .p_3()
+                                .gap_1()
+                                .when(missing.is_empty(), |d| {
+                                    d.child(
+                                        div()
+                                            .text_color(theme::muted())
+                                            .child("Tous les fichiers du dossier ont déjà un média."),
+                                    )
+                                })
+                                .children(missing.into_iter().take(500).map(|f| {
+                                    let file = f.clone();
+                                    h_flex()
+                                        .gap_2()
+                                        .items_center()
+                                        .child(
+                                            div()
+                                                .flex_1()
+                                                .min_w_0()
+                                                .overflow_hidden()
+                                                .whitespace_nowrap()
+                                                .text_ellipsis()
+                                                .text_xs()
+                                                .child(f.clone()),
+                                        )
+                                        .child(
+                                            Button::new(SharedString::from(format!("import-{f}")))
+                                                .xsmall()
+                                                .ghost()
+                                                .icon(IconName::Plus)
+                                                .tooltip("Créer le média")
+                                                .on_click(cx.listener(move |this, _, w, cx| {
+                                                    this.attach_files(None, vec![file.clone()], w, cx)
+                                                })),
+                                        )
+                                })),
                         ),
                 )
-                .child(mono("Images et PDF du dossier du .ged qu'aucun média ne référence."))
-                .children(missing.into_iter().take(200).map(|f| {
-                    let file = f.clone();
-                    h_flex()
-                        .gap_2()
-                        .items_center()
-                        .child(
-                            div()
-                                .flex_1()
-                                .min_w_0()
-                                .overflow_hidden()
-                                .whitespace_nowrap()
-                                .text_ellipsis()
-                                .text_xs()
-                                .child(f.clone()),
-                        )
-                        .child(
-                            Button::new(SharedString::from(format!("import-{f}")))
-                                .xsmall()
-                                .ghost()
-                                .icon(IconName::Plus)
-                                .tooltip("Créer le média")
-                                .on_click(cx.listener(move |this, _, w, cx| {
-                                    this.attach_files(None, vec![file.clone()], w, cx)
-                                })),
-                        )
-                }))
                 .into_any_element(),
         )
     }

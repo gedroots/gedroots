@@ -332,11 +332,9 @@ impl Workspace {
         let toolbar = h_flex()
             .gap_2()
             .items_center()
-            .child(label_caps(if people == 0 {
-                "Aperçu".to_string()
-            } else {
-                format!("Aperçu · {people} personne{} identifiée{}", plural(people), plural(people))
-            }))
+            .when(people > 0, |d| {
+                d.child(label_caps(format!("{people} personne{} identifiée{}", plural(people), plural(people))))
+            })
             .child(div().flex_1())
             // Identifier une personne : menu Média (le tracé se fait ensuite sur la photo).
             .when(drawing, |d| {
@@ -470,9 +468,8 @@ impl Workspace {
             )
             .children(hint)
             .when(!links.is_empty(), |d| {
-                d.child(label_caps(format!("Liens vers cette image · {}", links.len()))).child(v_flex().children(rows))
+                d.child(label_caps(format!("Utilisée par · {}", links.len()))).child(v_flex().children(rows))
             })
-            .child(mono(format!("{} × {} px · {}", size.0, size.1, path.display())))
             .into_any_element()
     }
 }

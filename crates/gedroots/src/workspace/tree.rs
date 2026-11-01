@@ -372,8 +372,7 @@ impl Workspace {
                                     .items_center()
                                     .child(dot(theme::maternal()))
                                     .child("Lignée maternelle"),
-                            )
-                            .child("Cliquer un ancêtre pour recentrer l'éventail"),
+                            ),
                     )
                     .child(fan),
             )

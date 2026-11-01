@@ -17,7 +17,6 @@ pub enum Target {
 
 pub struct Field {
     pub label: &'static str,
-    pub hint: &'static str,
     pub state: Entity<InputState>,
 }
 
@@ -108,9 +107,10 @@ pub struct RecordEditor {
     pub error: Option<SharedString>,
 }
 
-fn input<T: 'static>(window: &mut Window, cx: &mut Context<T>, value: &str) -> Entity<InputState> {
+/// Champ de saisie ; l'exemple de format s'affiche en grisé tant qu'il est vide.
+fn input<T: 'static>(window: &mut Window, cx: &mut Context<T>, value: &str, hint: &'static str) -> Entity<InputState> {
     let value = value.to_string();
-    cx.new(|cx| InputState::new(window, cx).default_value(value))
+    cx.new(|cx| InputState::new(window, cx).placeholder(hint).default_value(value))
 }
 
 fn textarea<T: 'static>(window: &mut Window, cx: &mut Context<T>, value: &str) -> Entity<TextareaState> {
@@ -130,7 +130,7 @@ impl RecordEditor {
         let mut raw = None;
         macro_rules! field {
             ($label:expr, $hint:expr, $v:expr) => {
-                fields.push(Field { label: $label, hint: $hint, state: input(window, cx, &$v) })
+                fields.push(Field { label: $label, state: input(window, cx, &$v, $hint) })
             };
         }
         match &target {
@@ -194,9 +194,9 @@ impl RecordEditor {
                     }
                     RecordKind::Media => {
                         let f = MediaForm::read(node);
-                        field!("Fichier", "chemin relatif au fichier .ged", f.file);
-                        field!("Format", "ex. image/jpeg", f.form);
+                        // Le format (FORM) se déduit du fichier : pas de champ.
                         field!("Titre", "", f.title);
+                        field!("Fichier", "Actes/acte.jpg", f.file);
                     }
                     RecordKind::SharedNote => {
                         long_text = Some(("Texte", textarea(window, cx, &node.text())));
@@ -269,7 +269,14 @@ impl RecordEditor {
                     .apply(node),
                     RecordKind::Repository => RepositoryForm { name: v[0].clone(), www: v[1].clone() }.apply(node),
                     RecordKind::Media => {
-                        MediaForm { file: v[0].clone(), form: v[1].clone(), title: v[2].clone() }.apply(node)
+                        let before = MediaForm::read(node);
+                        let file = v[1].trim().to_string();
+                        let form = if file != before.file || before.form.is_empty() {
+                            mime_for(&file).to_string()
+                        } else {
+                            before.form
+                        };
+                        MediaForm { file, form, title: v[0].clone() }.apply(node)
                     }
                     RecordKind::SharedNote => node.set_text(&note),
                     RecordKind::Submitter => node.set_child_val("NAME", &v[0]),

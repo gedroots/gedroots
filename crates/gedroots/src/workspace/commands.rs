@@ -82,8 +82,14 @@ impl Workspace {
         let d = on!(d, cx, ShowRepositories, |this, w, cx| this.show_view(View::Repositories, w, cx));
         let d = on!(d, cx, ShowNotes, |this, w, cx| this.show_view(View::Notes, w, cx));
         let d = on!(d, cx, ShowForm, |this, w, cx| this.show_tab(CenterTab::Form, cx));
+        let d = on!(d, cx, ShowUnreferencedFiles, |this, w, cx| {
+            this.orphans_open = true;
+            cx.notify();
+        });
 
-        d.when(can_undo, |d| on!(d, cx, Undo, |this, w, cx| this.undo(&Undo, w, cx)))
+        d.when(self.history.can_back(), |d| on!(d, cx, GoBack, |this, w, cx| this.go_back(w, cx)))
+            .when(self.history.can_forward(), |d| on!(d, cx, GoForward, |this, w, cx| this.go_forward(w, cx)))
+            .when(can_undo, |d| on!(d, cx, Undo, |this, w, cx| this.undo(&Undo, w, cx)))
             .when(self.view.kind().is_some(), |d| on!(d, cx, NewRecord, |this, w, cx| this.create_record(w, cx)))
             .when(sel.is_some(), |d| {
                 on!(d, cx, DeleteRecord, |this, w, cx| {
@@ -186,7 +192,7 @@ impl Workspace {
     }
 
     /// Image (existante) d'un média.
-    fn photo_file(&self, media: &str) -> Option<PathBuf> {
+    pub(super) fn photo_file(&self, media: &str) -> Option<PathBuf> {
         let doc = self.doc.as_ref()?;
         let m = Media::new(doc.ged.get(media)?);
         media_path(doc, &m).filter(|p| m.is_image() && p.exists())
