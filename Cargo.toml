@@ -1,3 +1,12 @@
 [workspace]
 resolver = "2"
 members = ["crates/gedcom", "crates/gedroots"]
+
+# Compilation de développement plus rapide : moins d'infos de débogage à lier,
+# et dépendances (GPUI…) optimisées une fois pour toutes pour une app fluide.
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+opt-level = 2
+debug = false

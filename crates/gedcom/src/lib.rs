@@ -4,18 +4,25 @@
 //! - [`parse`] : lecture/écriture du texte GEDCOM ;
 //! - [`document`] : un fichier chargé, avec index des identifiants et opérations d'édition ;
 //! - [`model`] : vues typées (individus, familles, sources, lieux, médias…) et formulaires d'édition ;
+//! - [`schema`] : schéma GEDCOM 7 (sous-structures permises, types de valeurs) ;
+//! - [`complete`] : autocomplétion du texte GEDCOM brut ;
+//! - [`geo`] : coordonnées des lieux (`MAP`) et projection de la carte ;
 //! - [`search`] : recherche et filtres sur les individus ;
 //! - [`relations`] : ajout/liaison/suppression de proches, lieux et médias ;
 //! - [`pedigree`] : descendance pour les vues en arbre ;
 //! - [`date`] : dates GEDCOM (y compris calendrier républicain) affichées en français.
 
+pub mod analysis;
+pub mod complete;
 pub mod date;
 pub mod document;
+pub mod geo;
 pub mod model;
 pub mod node;
 pub mod parse;
 pub mod pedigree;
 pub mod relations;
+pub mod schema;
 pub mod search;
 
 pub use date::Date;
