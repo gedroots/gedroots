@@ -6,6 +6,7 @@
 //! Le formulaire travaille sur une copie du document ; l'écriture réelle est
 //! faite par l'espace de travail quand il reçoit [`EntryFormEvent::Save`].
 
+use crate::date_field::{DateField, date_field};
 use crate::theme;
 use gedcom::*;
 use gpui_kit::component::button::{Button, ButtonVariants};
@@ -61,9 +62,9 @@ pub struct EntryForm {
     repo: Option<String>,
     call_number: Entity<InputState>,
     publication: Entity<InputState>,
-    date: Entity<InputState>,
+    date: Entity<DateField>,
     place: Entity<InputState>,
-    record_date: Entity<InputState>,
+    record_date: Entity<DateField>,
     fields: Vec<(String, String, Entity<InputState>)>,
     transcription: Entity<TextareaState>,
     quality: Option<u8>,
@@ -110,9 +111,9 @@ impl EntryForm {
         let repo_search = mk(cx, window, "Dépôt (archives, mairie…)");
         let call_number = mk(cx, window, "Cote, ex. 3 E 502/112");
         let publication = mk(cx, window, "ex. Saint-Lô, Naissances (1893-1912)");
-        let date = mk(cx, window, "ex. 14 MAR 1912, ABT 1850");
+        let date = date_field("", "", window, cx);
         let place = mk(cx, window, "Commune…");
-        let record_date = mk(cx, window, "si différente de l'événement");
+        let record_date = date_field("", "", window, cx);
         let transcription = cx.new(|cx| TextareaState::new(window, cx).rows(4));
         let mut this = Self {
             ged,
@@ -150,9 +151,9 @@ impl EntryForm {
             (this.repo_search.clone(), Kind::RepoSearch),
             (this.call_number.clone(), Kind::Plain),
             (this.publication.clone(), Kind::Plain),
-            (this.date.clone(), Kind::Name),
+            (this.date.read(cx).input().clone(), Kind::Name),
             (this.place.clone(), Kind::Place),
-            (this.record_date.clone(), Kind::Plain),
+            (this.record_date.read(cx).input().clone(), Kind::Plain),
         ] {
             this.watch(&e, kind, window, cx);
         }
@@ -290,9 +291,14 @@ impl EntryForm {
             },
         };
         let mut e = Entry::new(self.template().clone(), source);
-        e.date = v(&self.date).to_uppercase();
+        // Date impossible : le texte saisi est gardé, `save` signale l'erreur.
+        let date = |d: &Entity<DateField>| {
+            let f = d.read(cx);
+            f.value(cx).unwrap_or_else(|_| (f.input().read(cx).value().trim().to_string(), String::new()))
+        };
+        (e.date, e.date_phrase) = date(&self.date);
         e.place = v(&self.place);
-        e.record_date = v(&self.record_date).to_uppercase();
+        (e.record_date, e.record_date_phrase) = date(&self.record_date);
         for (k, _, i) in &self.fields {
             e.set_field(k, v(i));
         }
@@ -419,7 +425,9 @@ impl EntryForm {
 
     fn save(&mut self, next: bool, cx: &mut Context<Self>) {
         let entry = self.collect(cx);
-        match entry.validate(&self.ged) {
+        let dates = [&self.date, &self.record_date].map(|d| d.read(cx).value(cx));
+        let checked = dates.into_iter().try_for_each(|d| d.map(|_| ())).and_then(|_| entry.validate(&self.ged));
+        match checked {
             Ok(()) => cx.emit(EntryFormEvent::Save { entry: Box::new(entry), next }),
             Err(e) => {
                 self.error = Some(e.into());
@@ -455,8 +463,8 @@ impl EntryForm {
             if per_act {
                 self.call_number.update(cx, |s, cx| s.set_value("", window, cx));
             }
-            self.date.update(cx, |s, cx| s.set_value("", window, cx));
-            self.record_date.update(cx, |s, cx| s.set_value("", window, cx));
+            self.date.update(cx, |s, cx| s.clear(window, cx));
+            self.record_date.update(cx, |s, cx| s.clear(window, cx));
             self.transcription.update(cx, |s, cx| s.set_value("", window, cx));
             self.reset_template(Some(&n), window, cx);
             self.error = None;
@@ -499,6 +507,10 @@ fn caps(s: impl Into<SharedString>) -> Div {
 
 fn mono(s: impl Into<SharedString>) -> Div {
     div().font_family("monospace").text_xs().text_color(theme::muted()).child(s.into())
+}
+
+fn date_cell(label: impl Into<SharedString>, date: &Entity<DateField>) -> Div {
+    v_flex().gap_1().min_w_0().child(caps(label)).child(date.clone())
 }
 
 fn field(label: impl Into<SharedString>, input: &Entity<InputState>) -> Div {
@@ -812,7 +824,9 @@ impl EntryForm {
                 h_flex()
                     .gap_2()
                     .child(
-                        div().w(px(180.)).child(field(format!("Date — {}", self.template().event_label()), &self.date)),
+                        div()
+                            .w(px(200.))
+                            .child(date_cell(format!("Date — {}", self.template().event_label()), &self.date)),
                     )
                     .child(div().flex_1().child(field("Lieu", &self.place))),
             )
@@ -821,7 +835,7 @@ impl EntryForm {
                 h_flex()
                     .gap_2()
                     .children(self.fields.iter().map(|(_, label, e)| div().flex_1().child(field(label.clone(), e))))
-                    .child(div().w(px(170.)).child(field("Date de l'acte", &self.record_date))),
+                    .child(div().w(px(200.)).child(date_cell("Date de l'acte", &self.record_date))),
             )
             .child(h_flex().gap_2().items_center().child(caps("Référence")).child(mono(if page.is_empty() {
                 "—".to_string()
