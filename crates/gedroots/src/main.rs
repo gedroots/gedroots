@@ -2,6 +2,7 @@
 
 mod completion;
 mod editor;
+mod map;
 mod theme;
 mod workspace;
 

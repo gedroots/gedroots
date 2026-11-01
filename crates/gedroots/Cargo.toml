@@ -8,3 +8,5 @@ description = "GedRoots — logiciel de généalogie libre et local, GEDCOM 7"
 gpui-kit = "=0.8.1"
 gedcom = { path = "../gedcom" }
 lsp-types = "0.97"
+ureq = { version = "2", features = ["native-certs", "json"] }
+serde_json = "1.0.154"

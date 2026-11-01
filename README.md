@@ -18,6 +18,15 @@ et suit la maquette « Lignée » (thème sombre, barre d'activité, liste, arbr
 - **Familles, sources, dépôts, médias, notes partagées** : liste, éditeur visuel,
   et panneau « Utilisé par / Liens » pour naviguer entre les enregistrements.
 - **Lieux** : index de tous les `PLAC` du fichier, renommage global et coordonnées (`MAP`).
+- **Carte des lieux** : tous les lieux ayant des coordonnées sur une carte OpenStreetMap
+  (glisser pour déplacer, molette pour zoomer, clic sur un repère pour ouvrir le lieu).
+  Les lieux sans coordonnées se localisent d'un clic (un par un ou tous, via Nominatim) ou se
+  placent à la main ; les coordonnées sont écrites dans le GEDCOM (`PLAC.MAP.LATI/LONG`,
+  format `N49.11652` / `W1.11437`) et s'annulent comme toute modification. Les tuiles sont
+  gardées en cache sur le disque : en mode « Hors ligne », rien ne part sur Internet.
+
+![Carte des lieux](docs/capture-carte.png)
+
 - **Médias / photos** : aperçu des images, chemins relatifs au fichier `.ged`.
 - **Éditeur visuel** pour les enregistrements courants (individu, famille, source, dépôt,
   média, note) : seuls les champs affichés sont modifiés, tout le reste est conservé.
@@ -45,6 +54,11 @@ Sans argument, l'app propose d'ouvrir un fichier ou d'en créer un nouveau.
 Raccourcis : `⌘O` / `Ctrl+O` ouvrir, `⌘S` / `Ctrl+S` enregistrer, `⌘N` nouveau,
 `⌘⇧Z` annuler la dernière modification du document.
 
+Variables d'environnement facultatives pour la carte : `GEDROOTS_OFFLINE=1` (démarrer hors ligne),
+`GEDROOTS_TILE_URL` (autre serveur de tuiles, `{z}/{x}/{y}`), `GEDROOTS_TILE_CACHE` (dossier du
+cache, par défaut `~/Library/Caches/GedRoots/tiles` ou `~/.cache/gedroots/tiles`),
+`GEDROOTS_GEOCODER` (autre instance Nominatim).
+
 Sous Linux, installer d'abord les dépendances de GPUI :
 `libxkbcommon-dev libxkbcommon-x11-dev libfontconfig-dev libwayland-dev libvulkan-dev`.
 
@@ -52,8 +66,8 @@ Sous Linux, installer d'abord les dépendances de GPUI :
 
 | Crate | Rôle |
 | --- | --- |
-| [`crates/gedcom`](crates/gedcom) | Lecture/écriture GEDCOM 7 sans perte, vues typées (individus, familles, sources, lieux, médias), formulaires d'édition, dates. Sans dépendance. |
-| [`crates/gedroots`](crates/gedroots) | Application GPUI : `workspace.rs` (fenêtre et vues), `editor.rs` (éditeurs visuel et brut), `theme.rs` (palette de la maquette). |
+| [`crates/gedcom`](crates/gedcom) | Lecture/écriture GEDCOM 7 sans perte, vues typées (individus, familles, sources, lieux, médias), formulaires d'édition, dates, coordonnées (`geo.rs`). Sans dépendance. |
+| [`crates/gedroots`](crates/gedroots) | Application GPUI : `workspace.rs` (fenêtre et vues), `editor.rs` (éditeurs visuel et brut), `map.rs` (carte des lieux), `theme.rs` (palette de la maquette). |
 
 ## Tests
 
