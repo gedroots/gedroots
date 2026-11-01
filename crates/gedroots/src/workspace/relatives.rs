@@ -439,7 +439,12 @@ impl Workspace {
                     .collect();
                 // Ajouter un enfant, lier un parent : menu Famille.
                 section()
-                    .child(label_caps("Membres"))
+                    .child(section_header("Membres", {
+                        let f = key.clone();
+                        super::add::plus_button("add-member")
+                            .tooltip("Ajouter un enfant ou un parent")
+                            .on_click(cx.listener(move |this, _, _, cx| this.open_relatives_dialog(f.clone(), cx)))
+                    }))
                     .children(members.into_iter().map(|(role, x)| {
                         let (who, fam) = (x.clone(), key.clone());
                         h_flex()
@@ -540,6 +545,7 @@ impl Workspace {
                 .inset_0()
                 .flex()
                 .justify_center()
+                .items_start()
                 .pt(px(90.))
                 .bg(gpui_kit::hsla(0., 0., 0., 0.45))
                 .child(
@@ -647,6 +653,7 @@ impl Workspace {
                 .inset_0()
                 .flex()
                 .justify_center()
+                .items_start()
                 .pt(px(90.))
                 .bg(gpui_kit::hsla(0., 0., 0., 0.45))
                 .child(

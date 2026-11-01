@@ -154,6 +154,13 @@ impl Workspace {
                     })
                 })
             })
+            .when(indi.is_some() || fam.is_some(), |d| {
+                on!(d, cx, AddEvent, |this, w, cx| {
+                    if let Some(x) = this.selected.clone() {
+                        this.open_event_dialog(x, w, cx)
+                    }
+                })
+            })
             .when(attachable, |d| {
                 on!(d, cx, AttachFiles, |this, w, cx| {
                     if let Some(x) = this.selected.clone() {

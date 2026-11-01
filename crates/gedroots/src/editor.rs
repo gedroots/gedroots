@@ -41,7 +41,7 @@ impl FieldState {
 const SEXES: &[(&str, &str)] = &[("M", "Homme"), ("F", "Femme"), ("X", "Autre"), ("U", "Inconnu")];
 
 /// Liste déroulante de valeurs fixes (valeur GEDCOM, libellé).
-fn choice<T: 'static>(
+pub(crate) fn choice<T: 'static>(
     options: &[(&str, &str)],
     selected: &str,
     window: &mut Window,
@@ -120,7 +120,7 @@ fn picks(ged: &Gedcom, kind: RecordKind) -> Vec<Pick> {
     v
 }
 
-fn picker<T: 'static>(
+pub(crate) fn picker<T: 'static>(
     ged: &Gedcom,
     kind: RecordKind,
     selected: &str,

@@ -40,6 +40,7 @@ actions!(
         SetRoot,
         GoToRoot,
         AttachFiles,
+        AddEvent,
         // Famille
         NewFamily,
         NewFamilyChild,
@@ -204,6 +205,7 @@ fn model() -> Vec<(&'static str, Vec<Item>)> {
                     a("Frère ou sœur…", LinkSibling),
                 ],
             ),
+            a("Ajouter un événement…", AddEvent),
             a("Rattacher des photos ou documents…", AttachFiles),
             Sep,
             a("Définir comme individu racine", SetRoot),
@@ -215,6 +217,7 @@ fn model() -> Vec<(&'static str, Vec<Item>)> {
         vec![
             a("Nouvelle famille", NewFamily),
             Sep,
+            a("Ajouter un événement…", AddEvent),
             a("Ajouter un nouvel enfant", NewFamilyChild),
             a("Lier un enfant existant…", LinkFamilyChild),
             a("Lier un parent existant…", LinkFamilyParent),

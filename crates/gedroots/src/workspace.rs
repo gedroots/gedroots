@@ -18,6 +18,7 @@ use gpui_kit::*;
 use std::path::PathBuf;
 use std::rc::Rc;
 
+mod add;
 mod commands;
 mod filters;
 mod history;
@@ -187,6 +188,8 @@ pub struct Workspace {
     orphans_open: bool,
     /// Boutons « Détacher » dépliés dans le panneau d'un individu.
     show_detach: bool,
+    /// Fenêtre d'ajout (événement, proches) ouverte par un « + ».
+    add_dialog: Option<add::AddDialog>,
     /// Champ de lieu en cours de saisie dans la fiche.
     place_focus: Option<EntityId>,
     editor_subs: Vec<Subscription>,
@@ -237,6 +240,7 @@ impl Workspace {
             list_scroll: UniformListScrollHandle::new(),
             place_focus: None,
             editor_subs: Vec::new(),
+            add_dialog: None,
             _subs: vec![sub, map_sub],
         };
         if let Some(p) = path {
@@ -900,6 +904,30 @@ fn media_path(doc: &Document, m: &Media) -> Option<PathBuf> {
 // Rendu
 // ======================================================================
 
+/// Titre de section avec un bouton (« + ») à droite.
+fn section_header(title: &'static str, button: impl IntoElement) -> Div {
+    h_flex().items_center().justify_between().child(label_caps(title)).child(button)
+}
+
+/// Emplacement en pointillés « + … » pour ajouter une personne.
+fn add_slot(id: impl Into<SharedString>, label: &'static str) -> Stateful<Div> {
+    h_flex()
+        .id(ElementId::Name(id.into()))
+        .p_2()
+        .gap_1p5()
+        .items_center()
+        .rounded_md()
+        .border_1()
+        .border_dashed()
+        .border_color(theme::border_strong())
+        .text_color(theme::muted())
+        .text_xs()
+        .cursor_pointer()
+        .hover(|d| d.border_color(theme::accent()).text_color(theme::accent()))
+        .child(icon(IconName::Plus))
+        .child(label)
+}
+
 fn label_caps(s: impl Into<SharedString>) -> Div {
     div().text_xs().font_weight(FontWeight::SEMIBOLD).text_color(theme::muted()).child(s.into())
 }
@@ -1187,7 +1215,7 @@ impl Workspace {
         let tree_root = g.root();
         let column = |range: std::ops::Range<usize>, cx: &mut Context<Self>| {
             v_flex().flex_1().min_w(px(140.)).justify_around().gap_2().children(range.map(|k| {
-                match anc[k].as_ref().and_then(|x| g.individual(x)) {
+                let card = match anc[k].as_ref().and_then(|x| g.individual(x)) {
                     Some(i) => {
                         let x = i.xref().to_string();
                         let on = k == 1;
@@ -1227,17 +1255,30 @@ impl Workspace {
                     }
                     // Branche inconnue plus haut : on n'affiche pas ses ascendants.
                     None if k > 3 && anc[k / 2].is_none() => div().h(px(36.)).into_any_element(),
-                    None => div()
-                        .p_2()
-                        .rounded_md()
-                        .border_1()
-                        .border_dashed()
-                        .border_color(theme::border_strong())
-                        .text_color(theme::muted())
-                        .text_xs()
-                        .child(format!("{} inconnu(e) · {k}", if k % 2 == 0 { "Père" } else { "Mère" }))
-                        .into_any_element(),
+                    // Parent inconnu : un clic le crée.
+                    None => {
+                        let child = anc[k / 2].clone().unwrap_or_default();
+                        let rel = if k % 2 == 0 { Relation::Father } else { Relation::Mother };
+                        add_slot(format!("anc-add-{k}"), if k % 2 == 0 { "Père" } else { "Mère" })
+                            .on_click(cx.listener(move |this, _, w, cx| this.add_relative(child.clone(), rel, w, cx)))
+                            .into_any_element()
+                    }
+                };
+                // Sous la personne centrale : ajouter un enfant, un frère ou une sœur.
+                if k != 1 {
+                    return card;
                 }
+                let (c1, c2) = (root.clone(), root.clone());
+                v_flex()
+                    .gap_2()
+                    .child(card)
+                    .child(add_slot("anc-add-child", "Enfant").on_click(
+                        cx.listener(move |this, _, w, cx| this.add_relative(c1.clone(), Relation::Child, w, cx)),
+                    ))
+                    .child(add_slot("anc-add-sibling", "Frère ou sœur").on_click(
+                        cx.listener(move |this, _, w, cx| this.add_relative(c2.clone(), Relation::Sibling, w, cx)),
+                    ))
+                    .into_any_element()
             }))
         };
         div().flex_1().p_4().child(
@@ -1718,7 +1759,6 @@ impl Workspace {
         let mut events: Vec<Event> = i.events();
         events.sort_by_key(|e| e.date().map(|d| d.sort_key()).unwrap_or((i32::MAX, 0, 0)));
         let xref = i.xref().to_string();
-        let has_events = !events.is_empty();
 
         let header = h_flex()
             .p_4()
@@ -1771,59 +1811,65 @@ impl Workspace {
                     ),
             );
 
-        let events_el =
-            v_flex().p_4().gap_3().border_b_1().border_color(theme::border()).child(label_caps("Événements")).children(
-                events.into_iter().enumerate().map(|(n, e)| {
-                    let place = e.place().map(|p| p.to_string());
-                    let sources: Vec<String> = e.source_xrefs().iter().map(|s| s.to_string()).collect();
-                    let label = match e.value() {
-                        Some(v) => format!("{} : {v}", e.label()),
-                        None => e.label(),
-                    };
-                    v_flex()
-                        .gap_0p5()
-                        .child(
-                            h_flex()
-                                .justify_between()
-                                .gap_2()
-                                .child(
-                                    h_flex()
-                                        .gap_1p5()
-                                        .items_center()
-                                        .child(div().font_weight(FontWeight::MEDIUM).child(label))
-                                        // Point orange : événement sans source.
-                                        .when(sources.is_empty(), |d| d.child(dot(theme::warn()))),
-                                )
-                                .child(mono(e.date().map(|d| d.to_french()).unwrap_or_default())),
-                        )
-                        .when_some(place, |d, p| {
-                            let target = p.clone();
-                            d.child(
-                                div()
-                                    .id(SharedString::from(format!("ev-place-{n}")))
-                                    .text_color(theme::muted())
-                                    .cursor_pointer()
-                                    .hover(|d| d.text_color(theme::accent()))
-                                    .child(short_place(&p))
-                                    .on_click(
-                                        cx.listener(move |this, _, w, cx| this.goto_place(target.clone(), w, cx)),
-                                    ),
+        let events_el = v_flex()
+            .p_4()
+            .gap_3()
+            .border_b_1()
+            .border_color(theme::border())
+            .child(section_header("Événements", {
+                let x = xref.clone();
+                add::plus_button("add-event")
+                    .tooltip("Ajouter un événement")
+                    .on_click(cx.listener(move |this, _, w, cx| this.open_event_dialog(x.clone(), w, cx)))
+            }))
+            .children(events.into_iter().enumerate().map(|(n, e)| {
+                let place = e.place().map(|p| p.to_string());
+                let sources: Vec<String> = e.source_xrefs().iter().map(|s| s.to_string()).collect();
+                let label = match e.value() {
+                    Some(v) => format!("{} : {v}", e.label()),
+                    None => e.label(),
+                };
+                v_flex()
+                    .gap_0p5()
+                    .child(
+                        h_flex()
+                            .justify_between()
+                            .gap_2()
+                            .child(
+                                h_flex()
+                                    .gap_1p5()
+                                    .items_center()
+                                    .child(div().font_weight(FontWeight::MEDIUM).child(label))
+                                    // Point orange : événement sans source.
+                                    .when(sources.is_empty(), |d| d.child(dot(theme::warn()))),
                             )
-                        })
-                        .children(sources.into_iter().map(|s| {
-                            let title = g.record_label(&s);
-                            let target = s.clone();
+                            .child(mono(e.date().map(|d| d.to_french()).unwrap_or_default())),
+                    )
+                    .when_some(place, |d, p| {
+                        let target = p.clone();
+                        d.child(
                             div()
-                                .id(SharedString::from(format!("ev-src-{n}-{s}")))
-                                .text_xs()
-                                .text_color(theme::ok())
+                                .id(SharedString::from(format!("ev-place-{n}")))
+                                .text_color(theme::muted())
                                 .cursor_pointer()
                                 .hover(|d| d.text_color(theme::accent()))
-                                .child(title)
-                                .on_click(cx.listener(move |this, _, w, cx| this.goto(target.clone(), w, cx)))
-                        }))
-                }),
-            );
+                                .child(short_place(&p))
+                                .on_click(cx.listener(move |this, _, w, cx| this.goto_place(target.clone(), w, cx))),
+                        )
+                    })
+                    .children(sources.into_iter().map(|s| {
+                        let title = g.record_label(&s);
+                        let target = s.clone();
+                        div()
+                            .id(SharedString::from(format!("ev-src-{n}-{s}")))
+                            .text_xs()
+                            .text_color(theme::ok())
+                            .cursor_pointer()
+                            .hover(|d| d.text_color(theme::accent()))
+                            .child(title)
+                            .on_click(cx.listener(move |this, _, w, cx| this.goto(target.clone(), w, cx)))
+                    }))
+            }));
 
         // Famille : parents, conjoints, enfants.
         let mut family: Vec<(&'static str, String)> = Vec::new();
@@ -1834,13 +1880,17 @@ impl Workspace {
             family.extend(spouse.map(|s| ("Conjoint", s.xref().to_string())));
             family.extend(kids.into_iter().map(|k| ("Enfant", k.xref().to_string())));
         }
-        let family_empty = family.is_empty();
         let family_el = v_flex()
             .p_4()
             .gap_1()
             .border_b_1()
             .border_color(theme::border())
-            .child(label_caps("Famille"))
+            .child(section_header("Famille", {
+                let x = xref.clone();
+                add::plus_button("add-relative")
+                    .tooltip("Ajouter ou lier un proche")
+                    .on_click(cx.listener(move |this, _, _, cx| this.open_relatives_dialog(x.clone(), cx)))
+            }))
             .children(family.into_iter().map(|(role, x)| {
                 let p = g.individual(&x).unwrap();
                 let target = x.clone();
@@ -1864,12 +1914,11 @@ impl Workspace {
             i.media_xrefs().iter().map(|s| s.to_string()).filter(|x| !images.contains(x)).collect();
         let gallery = self.render_gallery(&xref, false, cx);
         let notes = i.notes();
-        let (has_events, has_family) = (has_events, !family_empty);
         v_flex()
             .child(header)
             .when_some(gallery, |d, el| d.child(el))
-            .when(has_events, |d| d.child(events_el))
-            .when(has_family, |d| d.child(family_el))
+            .child(events_el)
+            .child(family_el)
             .when(!media.is_empty(), |d| d.child(self.render_links("Autres médias", media, cx)))
             .when(!notes.is_empty(), |d| {
                 d.child(
@@ -2016,6 +2065,7 @@ impl Render for Workspace {
             .child(self.render_status())
             .children(self.render_picker(cx))
             .children(self.render_unreferenced_files(cx))
+            .children(self.render_add_dialog(cx))
             .children(self.render_palette(cx))
     }
 }
