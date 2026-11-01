@@ -11,6 +11,7 @@ l'exige GEDCOM 7 :
 2 TAG _GR_ROOT https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_root
 2 TAG _GR_TPL https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_tpl
 2 TAG _GR_FLD https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_fld
+2 TAG _GR_FILE https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_file
 ```
 
 Les autres logiciels ignorent ces balises sans perte de données.
@@ -35,6 +36,46 @@ menu **… → Définir comme racine**.
 Sans cette balise (ou si elle pointe vers un individu supprimé), GedRoots prend le Sosa 1
 déclaré par Ancestris (`_SOSADABOVILLE 1`), sinon le premier individu du fichier.
 Supprimer l'individu racine retire aussi la balise.
+
+## `_GR_FILE`
+
+Page d'un média à plusieurs pages visée par un lien. Un média multipage est un
+enregistrement `OBJE` standard avec plusieurs `FILE`, un par page, dans l'ordre :
+
+```
+0 @M1@ OBJE
+1 FILE Actes/acte_1.jpg
+2 FORM image/jpeg
+2 TITL Acte de mariage de Michel OHL et Jeanne BOUST
+1 FILE Actes/acte_2.jpg
+2 FORM image/jpeg
+```
+
+GEDCOM 7 applique le `CROP` d'un lien au premier fichier seulement. Pour situer une
+personne sur une autre page (cadre tracé sur la page 2 d'un acte), GedRoots ajoute
+`_GR_FILE` au lien :
+
+- **Sous** : un lien vers un média (`n OBJE @M@`), à côté de `CROP`.
+- **Valeur** : numéro de la page (du `FILE`), à partir de 1. Jamais écrit pour la page 1.
+- **Sous-structures** : aucune.
+
+```
+0 @I1@ INDI
+1 OBJE @M1@
+2 CROP
+3 TOP 120
+3 LEFT 340
+3 HEIGHT 260
+3 WIDTH 200
+2 _GR_FILE 2
+```
+
+Un lien sans `CROP` ni `_GR_FILE` concerne le document entier. Un logiciel qui ignore
+l'extension applique le cadre à la première page.
+
+Fusionner des médias (menu **Média › Fusionner…**, ou ⌘ / Maj + clic dans la liste des
+médias puis clic droit), ajouter, déplacer, retirer ou séparer une page (**Média › Pages**)
+met à jour `_GR_FILE` et tous les pointeurs du fichier, citations comprises.
 
 ## `_GR_IGNORE`
 
