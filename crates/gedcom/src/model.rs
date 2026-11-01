@@ -586,21 +586,21 @@ impl Gedcom {
 /// Date + lieu d'un événement, édités ensemble.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct EventForm {
+    /// Valeur GEDCOM de la date et sa phrase (`DATE.PHRASE`).
     pub date: String,
+    pub phrase: String,
     pub place: String,
 }
 
 impl EventForm {
     fn read(node: &Node, tag: &str) -> Self {
         let ev = node.child(tag);
-        Self {
-            date: ev.and_then(|e| e.child_val("DATE")).unwrap_or("").to_string(),
-            place: ev.and_then(|e| e.child_val("PLAC")).unwrap_or("").to_string(),
-        }
+        let (date, phrase) = ev.map(crate::date::read_date).unwrap_or_default();
+        Self { date, phrase, place: ev.and_then(|e| e.child_val("PLAC")).unwrap_or("").to_string() }
     }
 
     fn apply(&self, node: &mut Node, tag: &str) {
-        let empty = self.date.trim().is_empty() && self.place.trim().is_empty();
+        let empty = self.date.trim().is_empty() && self.phrase.trim().is_empty() && self.place.trim().is_empty();
         if empty {
             // On ne supprime l'événement que s'il ne porte rien d'autre (sources, notes…).
             if let Some(i) = node.children.iter().position(|c| c.tag == tag) {
@@ -613,7 +613,7 @@ impl EventForm {
             return;
         }
         let ev = node.ensure_child(tag);
-        ev.set_child_val("DATE", &self.date);
+        crate::date::write_date(ev, &self.date, &self.phrase);
         // Le lieu garde ses coordonnées si son libellé ne change pas.
         let place = self.place.trim();
         match ev.child_mut("PLAC") {

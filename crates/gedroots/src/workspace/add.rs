@@ -3,6 +3,7 @@
 
 use super::relatives::PickPurpose;
 use super::*;
+use crate::date_field::{DateField, date_field};
 use crate::editor::{PickerState, choice, picker};
 
 pub(super) enum AddDialog {
@@ -22,7 +23,7 @@ pub(super) struct EventDialog {
     editing: Option<usize>,
     kind: Entity<PickerState>,
     detail: Entity<InputState>,
-    date: Entity<InputState>,
+    date: Entity<DateField>,
     place: Entity<InputState>,
     source: Entity<PickerState>,
     error: Option<SharedString>,
@@ -68,7 +69,7 @@ impl Workspace {
             cx.new(|cx| InputState::new(window, cx).placeholder(ph).default_value(value))
         };
         let detail = text("", cur.detail, window, cx);
-        let date = text("ex. 14 MAR 1912, ABT 1850", cur.date, window, cx);
+        let date = date_field(&cur.date, &cur.date_phrase, window, cx);
         let place = text("Commune…", cur.place, window, cx);
         let source = picker(g, RecordKind::Source, cur.source.as_deref().unwrap_or(""), window, cx);
         let sub = cx.subscribe_in(&place, window, |this, input, ev: &InputEvent, _, cx| {
@@ -111,10 +112,19 @@ impl Workspace {
             cx.notify();
             return;
         }
+        let (date, date_phrase) = match d.date.read(cx).value(cx) {
+            Ok(v) => v,
+            Err(e) => {
+                d.error = Some(e.into());
+                cx.notify();
+                return;
+            }
+        };
         let ev = NewEvent {
             tag,
             detail: d.detail.read(cx).value().to_string(),
-            date: d.date.read(cx).value().to_string(),
+            date,
+            date_phrase,
             place: d.place.read(cx).value().to_string(),
             source: d.source.read(cx).selected_value().cloned(),
         };
@@ -248,7 +258,7 @@ impl Workspace {
                 h_flex()
                     .gap_3()
                     .items_start()
-                    .child(field("Date", Input::new(&d.date).small().into_any_element()).w(px(180.)).flex_none())
+                    .child(field("Date", d.date.clone().into_any_element()).w(px(230.)).flex_none())
                     .child(
                         field("Lieu", Input::new(&d.place).small().into_any_element())
                             .flex_1()

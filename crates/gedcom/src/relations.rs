@@ -194,8 +194,8 @@ impl Gedcom {
         } else if !detail.is_empty() {
             e.children.push(Node::with_value("TYPE", detail));
         }
-        if !ev.date.trim().is_empty() {
-            e.children.push(Node::with_value("DATE", ev.date.trim().to_uppercase()));
+        if let Some(d) = crate::date::date_node(&ev.date.to_uppercase(), &ev.date_phrase) {
+            e.children.push(d);
         }
         if !ev.place.trim().is_empty() {
             e.children.push(Node::with_value("PLAC", ev.place.trim()));
@@ -513,7 +513,9 @@ impl<'a> Individual<'a> {
 pub struct NewEvent {
     pub tag: String,
     pub detail: String,
+    /// Valeur GEDCOM de la date, et sa phrase éventuelle (`PHRASE`).
     pub date: String,
+    pub date_phrase: String,
     pub place: String,
     pub source: Option<String>,
 }

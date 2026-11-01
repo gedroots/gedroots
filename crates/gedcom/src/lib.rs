@@ -35,7 +35,7 @@ pub mod search;
 pub mod template;
 
 pub use crop::{Crop, MediaLink, Rect};
-pub use date::Date;
+pub use date::{Calendar, Date, DateKind, Parsed as DateInput, SimpleDate, parse_input as parse_date_input};
 pub use document::{Gedcom, RecordKind};
 pub use entry::{Entry, EntryResult, MediaChoice, Participant, PersonChoice, SourceChoice, Suggestion};
 pub use model::*;

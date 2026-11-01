@@ -1,6 +1,7 @@
 //! Éditeurs d'un enregistrement : formulaire visuel + éditeur GEDCOM brut.
 
 use crate::completion::GedcomCompletion;
+use crate::date_field::{DateField, date_field};
 use gedcom::complete::Catalog;
 use gedcom::*;
 use gpui_kit::component::input::{EditorState, InputState, TextareaState};
@@ -22,10 +23,11 @@ pub struct Field {
     pub place: bool,
 }
 
-/// Saisie libre, ou choix dans une liste de valeurs fixes (sexe…).
+/// Saisie libre, choix dans une liste de valeurs fixes (sexe…), ou date.
 pub enum FieldState {
     Text(Entity<InputState>),
     Choice(Entity<PickerState>),
+    Date(Entity<DateField>),
 }
 
 impl FieldState {
@@ -33,6 +35,7 @@ impl FieldState {
         match self {
             FieldState::Text(e) => e.read(cx).value().to_string(),
             FieldState::Choice(e) => e.read(cx).selected_value().cloned().unwrap_or_default(),
+            FieldState::Date(e) => e.read(cx).input().read(cx).value().to_string(),
         }
     }
 }
@@ -174,6 +177,15 @@ impl RecordEditor {
                 })
             };
         }
+        macro_rules! date_field {
+            ($label:expr, $ev:expr) => {
+                fields.push(Field {
+                    label: $label,
+                    state: FieldState::Date(date_field(&$ev.date, &$ev.phrase, window, cx)),
+                    place: false,
+                })
+            };
+        }
         macro_rules! place_field {
             ($label:expr, $v:expr) => {
                 fields.push(Field { label: $label, state: FieldState::Text(input(window, cx, &$v, "")), place: true })
@@ -209,9 +221,9 @@ impl RecordEditor {
                         let sex = choice(SEXES, &f.sex, window, cx);
                         fields.push(Field { label: "Sexe", state: FieldState::Choice(sex), place: false });
                         field!("Profession", "", f.occupation);
-                        field!("Naissance — date", "ex. 14 MAR 1912, ABT 1850", f.birth.date);
+                        date_field!("Naissance — date", f.birth);
                         place_field!("Naissance — lieu", f.birth.place);
-                        field!("Décès — date", "", f.death.date);
+                        date_field!("Décès — date", f.death);
                         place_field!("Décès — lieu", f.death.place);
                         long_text = Some(("Note", textarea(window, cx, &f.note)));
                     }
@@ -221,7 +233,7 @@ impl RecordEditor {
                             let state = picker(ged, RecordKind::Individual, x, window, cx);
                             pickers.push(Picker { label, placeholder: "Choisir un individu…", state });
                         }
-                        field!("Mariage — date", "", f.marriage.date);
+                        date_field!("Mariage — date", f.marriage);
                         place_field!("Mariage — lieu", f.marriage.place);
                     }
                     RecordKind::Source => {
@@ -273,6 +285,15 @@ impl RecordEditor {
         self.fields.iter().map(|f| f.state.value(cx)).collect()
     }
 
+    /// Événement (date + lieu) des champs `n` (date) et `n + 1` (lieu).
+    fn event(&self, n: usize, cx: &App) -> Result<EventForm, String> {
+        let (date, phrase) = match &self.fields[n].state {
+            FieldState::Date(e) => e.read(cx).value(cx)?,
+            other => (other.value(cx), String::new()),
+        };
+        Ok(EventForm { date, phrase, place: self.fields[n + 1].state.value(cx) })
+    }
+
     fn long_value(&self, cx: &App) -> String {
         self.long_text.as_ref().map(|(_, s)| s.read(cx).value().to_string()).unwrap_or_default()
     }
@@ -294,15 +315,15 @@ impl RecordEditor {
                         surname: v[1].clone(),
                         sex: v[2].clone(),
                         occupation: v[3].clone(),
-                        birth: EventForm { date: v[4].clone(), place: v[5].clone() },
-                        death: EventForm { date: v[6].clone(), place: v[7].clone() },
+                        birth: self.event(4, cx)?,
+                        death: self.event(6, cx)?,
                         note,
                     }
                     .apply(node),
                     RecordKind::Family => FamilyForm {
                         husband: self.picked(0, cx),
                         wife: self.picked(1, cx),
-                        marriage: EventForm { date: v[0].clone(), place: v[1].clone() },
+                        marriage: self.event(0, cx)?,
                     }
                     .apply(node),
                     RecordKind::Source => SourceForm {

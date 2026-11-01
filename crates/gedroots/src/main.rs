@@ -3,6 +3,7 @@
 mod analyses;
 mod commands;
 mod completion;
+mod date_field;
 mod editor;
 mod entry_form;
 mod map;
@@ -20,7 +21,7 @@ gpui_kit::assets::icon_assets!(
     ExtraIcons,
     [
         Users, Heart, BookOpen, MapPin, Image, Images, Landmark, StickyNote, FolderOpen, Undo2, Save, Plus, GitFork,
-        Pencil, Code, Ellipsis, Copy, House, Star, Trash, Network, Library, Crop, UserPlus,
+        Pencil, Code, Ellipsis, Copy, House, Star, Trash, Network, Library, Crop, UserPlus, Calendar,
     ]
 );
 

@@ -5,7 +5,8 @@
 //! intervalle de jours `[lo, hi]` (bornes éventuellement ouvertes) : « A est
 //! avant B » n'est affirmé que si c'est vrai pour toutes les valeurs possibles.
 
-use crate::date::{Calendar, Date, SimpleDate};
+use crate::date::calendar::UNIX_EPOCH_RD;
+use crate::date::{Date, SimpleDate};
 
 /// Marge appliquée aux dates « vers », « estimée » et « calculée ».
 pub const FUZZ_YEARS: i64 = 5;
@@ -22,53 +23,10 @@ pub fn days_from_civil(y: i64, m: u32, d: u32) -> i64 {
     era * 146_097 + doe - 719_468
 }
 
-fn days_in_month(y: i64, m: u32) -> u32 {
-    match m {
-        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
-        4 | 6 | 9 | 11 => 30,
-        _ if (y % 4 == 0 && y % 100 != 0) || y % 400 == 0 => 29,
-        _ => 28,
-    }
-}
-
-/// Intervalle de jours couvert par une date simple.
+/// Intervalle de jours couvert par une date simple (conversions exactes entre calendriers).
 pub fn simple_range(d: &SimpleDate) -> Option<(i64, i64)> {
-    let year = d.year? as i64;
-    let year = if d.bce { -year } else { year };
-    match d.calendar {
-        Calendar::FrenchRepublican => {
-            // An I = 22 septembre 1792 ; mois de 30 jours, puis 5 ou 6 jours complémentaires.
-            let base = days_from_civil(1791 + year, 9, 22);
-            Some(match (d.month, d.day) {
-                (Some(m), Some(day)) => {
-                    let x = base + (m as i64 - 1) * 30 + day as i64 - 1;
-                    (x, x)
-                }
-                (Some(m), None) => {
-                    let x = base + (m as i64 - 1) * 30;
-                    (x, x + if m == 13 { 5 } else { 29 })
-                }
-                _ => (base, base + 365),
-            })
-        }
-        Calendar::Hebrew => {
-            let g = d.gregorian_year()? as i64;
-            Some((days_from_civil(g - 1, 9, 1), days_from_civil(g, 10, 1)))
-        }
-        Calendar::Gregorian | Calendar::Julian => {
-            // Julien : écart de 10 à 13 jours avec le grégorien, négligeable ici.
-            let offset = if d.calendar == Calendar::Julian { 10 } else { 0 };
-            let r = match (d.month.map(u32::from).filter(|m| (1..=12).contains(m)), d.day) {
-                (Some(m), Some(day)) => {
-                    let x = days_from_civil(year, m, day.clamp(1, 31) as u32);
-                    (x, x)
-                }
-                (Some(m), None) => (days_from_civil(year, m, 1), days_from_civil(year, m, days_in_month(year, m))),
-                _ => (days_from_civil(year, 1, 1), days_from_civil(year, 12, 31)),
-            };
-            Some((r.0 + offset, r.1 + offset))
-        }
-    }
+    let (lo, hi) = d.rd_range()?;
+    Some((lo - UNIX_EPOCH_RD, hi - UNIX_EPOCH_RD))
 }
 
 /// Intervalle de jours possible pour une date ; `None` = borne ouverte.
@@ -188,8 +146,7 @@ mod tests {
     fn republican_dates() {
         // 30 germinal an IV = 19 avril 1796.
         let s = Span::parse("FRENCH_R 30 GERM 4").unwrap();
-        let g = days_from_civil(1796, 4, 19);
-        assert!((s.lo.unwrap() - g).abs() <= 2, "{} vs {g}", s.lo.unwrap());
+        assert_eq!(s.lo.unwrap(), days_from_civil(1796, 4, 19));
     }
 
     #[test]
