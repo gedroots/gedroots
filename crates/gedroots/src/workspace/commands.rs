@@ -198,11 +198,14 @@ impl Workspace {
             })
     }
 
-    /// Image (existante) d'un média.
+    /// Image (existante) de la page affichée d'un média.
     pub(super) fn photo_file(&self, media: &str) -> Option<PathBuf> {
         let doc = self.doc.as_ref()?;
         let m = Media::new(doc.ged.get(media)?);
-        media_path(doc, &m).filter(|p| m.is_image() && p.exists())
+        let page = self.current_page(media);
+        let f = m.files().get(page - 1).copied()?;
+        let image = f.form.is_some_and(|t| t.starts_with("image/")) || mime_for(f.path).starts_with("image/");
+        super::pages::page_path(doc, &m, page).filter(|p| image && p.exists())
     }
 
     pub(super) fn tag_person_on_photo(&mut self, cx: &mut Context<Self>) {

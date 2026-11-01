@@ -106,6 +106,8 @@ pub struct PhotoDraw {
     pub media: String,
     /// `Some(x)` : on (re)délimite le lien de `x` ; `None` : on identifie une nouvelle personne.
     pub owner: Option<String>,
+    /// Page du média (à partir de 1).
+    pub page: usize,
     /// Coin de départ et position courante, en pixels de l'image.
     pub start: Option<(f32, f32)>,
     pub current: Option<(f32, f32)>,
@@ -153,7 +155,8 @@ impl Workspace {
             cx.notify();
             return;
         };
-        self.photo_draw = Some(PhotoDraw { media, owner, start: None, current: None, size });
+        let page = self.current_page(&media);
+        self.photo_draw = Some(PhotoDraw { media, owner, page, start: None, current: None, size });
         self.set_status("Tracez un cadre sur la photo (Échap pour annuler)", false);
         cx.notify();
     }
@@ -188,23 +191,23 @@ impl Workspace {
         let crop = Crop::from_rect(rect.unwrap());
         match d.owner {
             Some(owner) => self.mutate(window, cx, |g| {
-                g.set_link_crop(&owner, &d.media, Some(crop))?;
+                g.set_link_crop_on(&owner, &d.media, d.page, Some(crop))?;
                 Ok((format!("Zone de {} enregistrée", g.record_label(&owner)), None))
             }),
-            None => self.open_picker(PickPurpose::TagPerson { media: d.media, crop }, window, cx),
+            None => self.open_picker(PickPurpose::TagPerson { media: d.media, page: d.page, crop }, window, cx),
         }
     }
 
-    fn remove_crop(&mut self, owner: String, media: String, window: &mut Window, cx: &mut Context<Self>) {
+    fn remove_crop(&mut self, owner: String, media: String, page: usize, window: &mut Window, cx: &mut Context<Self>) {
         self.mutate(window, cx, |g| {
-            g.set_link_crop(&owner, &media, None)?;
+            g.set_link_crop_on(&owner, &media, page, None)?;
             Ok((format!("Recadrage retiré pour {}", g.record_label(&owner)), None))
         });
     }
 
-    fn untag(&mut self, indi: String, media: String, window: &mut Window, cx: &mut Context<Self>) {
+    fn untag(&mut self, indi: String, media: String, page: usize, window: &mut Window, cx: &mut Context<Self>) {
         self.mutate(window, cx, |g| {
-            g.untag_person(&indi, &media);
+            g.untag_person_on(&indi, &media, page);
             Ok((format!("{} retiré(e) de la photo", g.record_label(&indi)), None))
         });
     }
@@ -225,12 +228,16 @@ impl Workspace {
         let draw = self.photo_draw.as_ref().filter(|d| d.media == media);
         let drawing = draw.is_some();
         let links = g.media_links(media);
-        let people = links.iter().filter(|l| l.owner_tag == "INDI" && l.crop.is_some()).count();
+        // Média multipage : seules les zones de la page affichée sont encadrées.
+        let page = self.current_page(media);
+        let multipage = self.page_count(media) > 1;
+        let here = |l: &MediaLink| l.crop.is_some() && l.page == page;
+        let people = links.iter().filter(|l| l.owner_tag == "INDI" && here(l)).count();
         let bounds = self.photo_bounds.bounds.clone();
         let avail_cell = self.photo_bounds.avail.clone();
 
         // Personnes identifiées, et zones recadrées pour les autres liens (extrait d'acte pour une source…).
-        let boxes = links.iter().filter_map(|l| {
+        let boxes = links.iter().filter(|l| here(l)).filter_map(|l| {
             let person = l.owner_tag == "INDI";
             let (x, y, w, h) = l.crop?.rect(size.0, size.1)?;
             let hovered = self.photo_hover.as_deref() == Some(l.owner.as_str());
@@ -355,7 +362,9 @@ impl Workspace {
             })
         });
 
-        let rows = links.iter().map(|l| {
+        let rows = links.iter().enumerate().map(|(n, l)| {
+            let elsewhere = l.crop.is_some() && l.page != page;
+            let link_page = l.page;
             let (owner, media_a, media_b, media_c) =
                 (l.owner.clone(), media.to_string(), media.to_string(), media.to_string());
             let (o1, o2, o3) = (owner.clone(), owner.clone(), owner.clone());
@@ -365,7 +374,7 @@ impl Workspace {
             let hovered = self.photo_hover.as_deref() == Some(owner.as_str());
             let hover_key = owner.clone();
             h_flex()
-                .id(SharedString::from(format!("link-{owner}")))
+                .id(SharedString::from(format!("link-{owner}-{n}")))
                 .gap_2()
                 .px_2()
                 .py_1()
@@ -382,7 +391,7 @@ impl Workspace {
                 .children(kind.map(|k| icon(View::for_kind(k).icon()).text_color(theme::muted())))
                 .child(
                     div()
-                        .id(SharedString::from(format!("link-name-{owner}")))
+                        .id(SharedString::from(format!("link-name-{owner}-{n}")))
                         .flex_1()
                         .min_w_0()
                         .overflow_hidden()
@@ -393,44 +402,59 @@ impl Workspace {
                         .child(g.record_label(&owner))
                         .on_click(cx.listener(move |this, _, w, cx| this.goto(o1.clone(), w, cx))),
                 )
-                .child(mono(match l.crop {
-                    Some(c) => c.describe(),
-                    None => "image entière".into(),
-                }))
-                .child(
-                    Button::new(SharedString::from(format!("crop-{owner}")))
-                        .xsmall()
-                        .ghost()
-                        .icon(IconName::Crop)
-                        .label(if l.crop.is_some() { "Redessiner" } else { "Délimiter" })
-                        .disabled(drawing)
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            this.start_draw(media_a.clone(), Some(o2.clone()), &path_c, cx)
-                        })),
-                )
-                .when(l.crop.is_some(), |d| {
+                // Zone sur une autre page : un clic y mène.
+                .when(elsewhere, |d| {
                     d.child(
-                        Button::new(SharedString::from(format!("uncrop-{owner}")))
+                        Button::new(SharedString::from(format!("goto-page-{owner}-{n}")))
+                            .xsmall()
+                            .ghost()
+                            .label(format!("page {link_page}"))
+                            .on_click(cx.listener(move |this, _, _, cx| this.show_page(link_page, cx))),
+                    )
+                })
+                .when(!elsewhere, |d| {
+                    d.child(mono(match l.crop {
+                        Some(c) => c.describe(),
+                        None if multipage => "document entier".into(),
+                        None => "image entière".into(),
+                    }))
+                })
+                .when(!elsewhere, |d| {
+                    d.child(
+                        Button::new(SharedString::from(format!("crop-{owner}-{n}")))
+                            .xsmall()
+                            .ghost()
+                            .icon(IconName::Crop)
+                            .label(if l.crop.is_some() { "Redessiner" } else { "Délimiter" })
+                            .disabled(drawing)
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                this.start_draw(media_a.clone(), Some(o2.clone()), &path_c, cx)
+                            })),
+                    )
+                })
+                .when(l.crop.is_some() && !elsewhere, |d| {
+                    d.child(
+                        Button::new(SharedString::from(format!("uncrop-{owner}-{n}")))
                             .xsmall()
                             .ghost()
                             .label("Image entière")
                             .disabled(drawing)
-                            .on_click(
-                                cx.listener(move |this, _, w, cx| this.remove_crop(o3.clone(), media_b.clone(), w, cx)),
-                            ),
+                            .on_click(cx.listener(move |this, _, w, cx| {
+                                this.remove_crop(o3.clone(), media_b.clone(), link_page, w, cx)
+                            })),
                     )
                 })
                 .when(is_person, |d| {
                     let o4 = owner.clone();
                     d.child(
-                        Button::new(SharedString::from(format!("untag-{owner}")))
+                        Button::new(SharedString::from(format!("untag-{owner}-{n}")))
                             .xsmall()
                             .ghost()
                             .icon(IconName::Close)
                             .disabled(drawing)
-                            .on_click(
-                                cx.listener(move |this, _, w, cx| this.untag(o4.clone(), media_c.clone(), w, cx)),
-                            ),
+                            .on_click(cx.listener(move |this, _, w, cx| {
+                                this.untag(o4.clone(), media_c.clone(), link_page, w, cx)
+                            })),
                     )
                 })
         });

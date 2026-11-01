@@ -346,7 +346,18 @@ fn family_menu(ws: Ws, x: String, from: From) -> MenuBuilder {
 /// Sources, médias, dépôts, notes.
 fn other_menu(ws: Ws, x: String, kind: RecordKind, from: From) -> MenuBuilder {
     Rc::new(move |menu, _, cx| {
-        let Some(photo) = read(&ws, cx, |this, _| this.photo_file(&x).is_some()) else { return menu };
+        let Some((photo, marked)) = read(&ws, cx, |this, _| {
+            // Médias sélectionnés ensemble (⌘ / Maj + clic) dont celui-ci : on peut les fusionner.
+            let marked = if this.media_marked.len() >= 2 && this.media_marked.contains(&x) {
+                this.media_marked.clone()
+            } else {
+                vec![]
+            };
+            (this.photo_file(&x).is_some(), marked)
+        }) else {
+            return menu;
+        };
+        let (x6, x7) = (x.clone(), x.clone());
         let (x1, x2, x3, x4, x5) = (x.clone(), x.clone(), x.clone(), x.clone(), x.clone());
         menu.item(act(&ws, "Ouvrir la fiche", move |this, w, cx| this.open_in(x1.clone(), CenterTab::Form, w, cx)))
             .when(kind == RecordKind::Source, |m| {
@@ -370,6 +381,18 @@ fn other_menu(ws: Ws, x: String, kind: RecordKind, from: From) -> MenuBuilder {
                             this.tag_person_on_photo(cx)
                         }))
                     })
+                    .separator()
+                    .when(marked.len() >= 2, |m| {
+                        let label = format!("Fusionner les {} médias en un média multipage", marked.len());
+                        let list = marked.clone();
+                        m.item(act(&ws, label, move |this, w, cx| this.merge_media(list.clone(), w, cx)))
+                    })
+                    .when(marked.is_empty(), |m| {
+                        m.item(act(&ws, "Fusionner avec un autre média…", move |this, w, cx| {
+                            this.open_picker(PickPurpose::MergeInto { media: x6.clone() }, w, cx)
+                        }))
+                    })
+                    .item(act(&ws, "Ajouter des pages…", move |this, w, cx| this.choose_pages(x7.clone(), w, cx)))
             })
             .when_some(
                 match &from {
