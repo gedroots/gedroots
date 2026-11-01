@@ -137,7 +137,7 @@ impl Workspace {
         cx.notify();
     }
 
-    fn add_relative(&mut self, indi: String, rel: Relation, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn add_relative(&mut self, indi: String, rel: Relation, window: &mut Window, cx: &mut Context<Self>) {
         self.mutate(window, cx, |g| {
             let name = g.record_label(&indi);
             let x = g.add_relative(&indi, rel, None)?;
@@ -145,7 +145,7 @@ impl Workspace {
         });
     }
 
-    fn add_family_child(&mut self, fam: String, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn add_family_child(&mut self, fam: String, window: &mut Window, cx: &mut Context<Self>) {
         self.mutate(window, cx, |g| {
             let f = g.family(&fam).ok_or("famille introuvable")?;
             let surname = f.husband().and_then(|h| g.individual(h)).map(|h| h.surname()).unwrap_or_default();
@@ -347,7 +347,7 @@ impl Workspace {
         });
     }
 
-    fn choose_files(&mut self, record: String, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn choose_files(&mut self, record: String, window: &mut Window, cx: &mut Context<Self>) {
         let rx = cx.prompt_for_paths(PathPromptOptions {
             files: true,
             directories: false,
@@ -383,34 +383,6 @@ impl Workspace {
         let el = match self.view {
             View::Individuals => {
                 let i = g.individual(&key)?;
-                let (f, m) = g.parents(&key);
-                let has = |r: Relation| match r {
-                    Relation::Father => f.is_some(),
-                    Relation::Mother => m.is_some(),
-                    _ => false,
-                };
-                let add_row = h_flex().flex_wrap().gap_1().children(Relation::ALL.into_iter().map(|r| {
-                    let x = key.clone();
-                    Button::new(SharedString::from(format!("add-{r:?}")))
-                        .xsmall()
-                        .ghost()
-                        .icon(IconName::Plus)
-                        .label(r.label_fr())
-                        .disabled(has(r))
-                        .on_click(cx.listener(move |this, _, w, cx| this.add_relative(x.clone(), r, w, cx)))
-                }));
-                let link_row = h_flex().flex_wrap().gap_1().children(Relation::ALL.into_iter().map(|r| {
-                    let x = key.clone();
-                    Button::new(SharedString::from(format!("link-{r:?}")))
-                        .xsmall()
-                        .ghost()
-                        .icon(IconName::Search)
-                        .label(r.label_fr())
-                        .disabled(has(r))
-                        .on_click(cx.listener(move |this, _, w, cx| {
-                            this.open_picker(PickPurpose::Relative { indi: x.clone(), rel: r }, w, cx)
-                        }))
-                }));
                 // Détacher : famille d'origine et unions.
                 let mut detach: Vec<(String, String)> = i
                     .famc()
@@ -429,11 +401,8 @@ impl Workspace {
                 }
                 let mut media_keys = keywords(&i.surname());
                 media_keys.extend(keywords(&i.given()).into_iter().take(1));
+                // Ajouter ou lier un proche : menu Individu.
                 section()
-                    .child(label_caps("Ajouter un proche"))
-                    .child(add_row)
-                    .child(label_caps("Lier une personne existante"))
-                    .child(link_row)
                     .when(!detach.is_empty(), |d| {
                         d.child(label_caps("Détacher")).children(detach.into_iter().map(|(fam, label)| {
                             let x = key.clone();
@@ -454,46 +423,9 @@ impl Workspace {
                     .filter_map(|(r, x)| x.map(|x| (r, x.to_string())))
                     .chain(fam.children().into_iter().map(|c| ("Enfant", c.to_string())))
                     .collect();
-                let full = fam.husband().is_some() && fam.wife().is_some();
-                let (k1, k2, k3) = (key.clone(), key.clone(), key.clone());
+                // Ajouter un enfant, lier un parent : menu Famille.
                 section()
                     .child(label_caps("Membres"))
-                    .child(
-                        h_flex()
-                            .flex_wrap()
-                            .gap_1()
-                            .child(
-                                Button::new("fam-add-child")
-                                    .xsmall()
-                                    .ghost()
-                                    .icon(IconName::Plus)
-                                    .label("Nouvel enfant")
-                                    .on_click(
-                                        cx.listener(move |this, _, w, cx| this.add_family_child(k1.clone(), w, cx)),
-                                    ),
-                            )
-                            .child(
-                                Button::new("fam-link-child")
-                                    .xsmall()
-                                    .ghost()
-                                    .icon(IconName::Search)
-                                    .label("Enfant existant")
-                                    .on_click(cx.listener(move |this, _, w, cx| {
-                                        this.open_picker(PickPurpose::FamilyChild { fam: k2.clone() }, w, cx)
-                                    })),
-                            )
-                            .child(
-                                Button::new("fam-link-spouse")
-                                    .xsmall()
-                                    .ghost()
-                                    .icon(IconName::Search)
-                                    .label("Parent existant")
-                                    .disabled(full)
-                                    .on_click(cx.listener(move |this, _, w, cx| {
-                                        this.open_picker(PickPurpose::FamilySpouse { fam: k3.clone() }, w, cx)
-                                    })),
-                            ),
-                    )
                     .children(members.into_iter().map(|(role, x)| {
                         let (who, fam) = (x.clone(), key.clone());
                         h_flex()
@@ -524,21 +456,6 @@ impl Workspace {
             View::Sources => {
                 let title = g.record_label(&key);
                 section().child(self.render_media_drop(&key, keywords(&title), cx))
-            }
-            View::Media => {
-                let k = key.clone();
-                section().child(label_caps("Rattacher")).child(
-                    h_flex().child(
-                        Button::new("media-attach")
-                            .xsmall()
-                            .ghost()
-                            .icon(IconName::Search)
-                            .label("Rattacher à une personne, une source…")
-                            .on_click(cx.listener(move |this, _, w, cx| {
-                                this.open_picker(PickPurpose::MediaTo { media: k.clone() }, w, cx)
-                            })),
-                    ),
-                )
             }
             _ => return None,
         };

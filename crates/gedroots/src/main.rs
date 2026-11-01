@@ -1,6 +1,7 @@
 //! GedRoots — logiciel de généalogie libre et local, avec GEDCOM 7 comme format de données.
 
 mod analyses;
+mod commands;
 mod completion;
 mod editor;
 mod entry_form;
@@ -8,10 +9,11 @@ mod map;
 mod theme;
 mod workspace;
 
+use commands::Quit;
 use gpui_kit::*;
 use std::borrow::Cow;
 use std::path::PathBuf;
-use workspace::{EnterRecord, NewFile, OpenAnalyses, OpenFile, Quit, SaveFile, Undo, Workspace};
+use workspace::Workspace;
 
 // Icônes Lucide utilisées en plus du jeu par défaut de gpui-kit.
 gpui_kit::assets::icon_assets!(
@@ -41,30 +43,14 @@ impl AssetSource for AppAssets {
     }
 }
 
-/// Raccourci avec ⌘ sur macOS, Ctrl ailleurs.
-macro_rules! shortcut {
-    ($k:literal) => {
-        if cfg!(target_os = "macos") { concat!("cmd-", $k) } else { concat!("ctrl-", $k) }
-    };
-}
-
 fn main() {
     let path = std::env::args_os().nth(1).map(PathBuf::from);
 
     gpui_kit::application().with_assets(AppAssets).run(move |cx| {
         gpui_kit::init(cx);
         theme::install(cx);
-        cx.bind_keys([
-            KeyBinding::new(shortcut!("o"), OpenFile, None),
-            KeyBinding::new(shortcut!("s"), SaveFile, None),
-            KeyBinding::new(shortcut!("n"), NewFile, None),
-            KeyBinding::new(shortcut!("shift-z"), Undo, Some("Workspace")),
-            KeyBinding::new(shortcut!("q"), Quit, None),
-            // Suggestions de l'éditeur GEDCOM brut à la demande.
-            KeyBinding::new("ctrl-space", component::input::ShowCompletions, Some("Input")),
-            KeyBinding::new(shortcut!("shift-a"), OpenAnalyses, Some("Workspace")),
-            KeyBinding::new(shortcut!("e"), EnterRecord, Some("Workspace")),
-        ]);
+        commands::bind_keys(cx);
+        commands::install_menus(cx);
         cx.on_action(|_: &Quit, cx| cx.quit());
 
         let bounds = Bounds::centered(None, size(px(1440.), px(900.)), cx);

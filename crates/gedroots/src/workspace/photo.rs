@@ -147,7 +147,7 @@ impl Workspace {
         Some((x, y))
     }
 
-    fn start_draw(&mut self, media: String, owner: Option<String>, path: &Path, cx: &mut Context<Self>) {
+    pub(super) fn start_draw(&mut self, media: String, owner: Option<String>, path: &Path, cx: &mut Context<Self>) {
         let Some(size) = image_size(path) else {
             self.set_status("Impossible de lire les dimensions de l'image", true);
             cx.notify();
@@ -329,8 +329,6 @@ impl Workspace {
                     .on_mouse_up_out(MouseButton::Left, cx.listener(|this, _, w, cx| this.finish_draw(w, cx)))
             });
 
-        let media_x = media.to_string();
-        let path_for_btn = path.clone();
         let toolbar = h_flex()
             .gap_2()
             .items_center()
@@ -340,22 +338,16 @@ impl Workspace {
                 format!("Aperçu · {people} personne{} identifiée{}", plural(people), plural(people))
             }))
             .child(div().flex_1())
-            .child(if drawing {
-                Button::new("photo-cancel")
-                    .small()
-                    .ghost()
-                    .icon(IconName::Close)
-                    .label("Annuler le tracé")
-                    .on_click(cx.listener(|this, _, _, cx| this.cancel_draw(cx)))
-            } else {
-                Button::new("photo-tag")
-                    .small()
-                    .primary()
-                    .icon(IconName::UserPlus)
-                    .label("Identifier une personne")
-                    .on_click(
-                        cx.listener(move |this, _, _, cx| this.start_draw(media_x.clone(), None, &path_for_btn, cx)),
-                    )
+            // Identifier une personne : menu Média (le tracé se fait ensuite sur la photo).
+            .when(drawing, |d| {
+                d.child(
+                    Button::new("photo-cancel")
+                        .small()
+                        .ghost()
+                        .icon(IconName::Close)
+                        .label("Annuler le tracé")
+                        .on_click(cx.listener(|this, _, _, cx| this.cancel_draw(cx))),
+                )
             });
 
         let hint = draw.map(|d| {

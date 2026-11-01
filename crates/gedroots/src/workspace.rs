@@ -1,6 +1,7 @@
 //! Fenêtre principale : barre d'activité, liste, zone centrale (arbre, fiche,
 //! GEDCOM brut), panneau de détail et barre d'état — d'après la maquette.
 
+use crate::commands::*;
 use crate::editor::{RecordEditor, Target};
 use crate::entry_form::{EntryForm, EntryFormEvent};
 use crate::map::{MapEvent, MapView};
@@ -9,7 +10,7 @@ use gedcom::*;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::input::{Editor, Input, InputEvent, InputState, Textarea};
-use gpui_kit::component::menu::{DropdownMenu, PopupMenuItem};
+use gpui_kit::component::menu::AppMenuBar;
 use gpui_kit::component::select::Select;
 use gpui_kit::component::{Disableable, Icon, Sizable, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder;
@@ -17,12 +18,11 @@ use gpui_kit::*;
 use std::path::PathBuf;
 use std::rc::Rc;
 
+mod commands;
 mod filters;
 mod photo;
 mod relatives;
 mod tree;
-
-actions!(gedroots, [OpenFile, SaveFile, Undo, NewFile, Quit, OpenAnalyses, EnterRecord]);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum View {
@@ -169,6 +169,12 @@ pub struct Workspace {
     search_help: bool,
     /// Saisie guidée d'un acte en cours (remplace liste, fiche et détail).
     entry_form: Option<(Entity<EntryForm>, Subscription)>,
+    /// Palette de commandes ouverte.
+    palette: Option<commands::Palette>,
+    /// Barre de menus dans la fenêtre (Linux, Windows) ; native sous macOS.
+    menu_bar: Option<Entity<AppMenuBar>>,
+    /// Titre de la fenêtre déjà appliqué.
+    window_title: String,
     /// Cadre en cours de tracé sur une photo.
     photo_draw: Option<photo::PhotoDraw>,
     photo_bounds: photo::PhotoBounds,
@@ -207,6 +213,9 @@ impl Workspace {
             pending_delete: None,
             search_help: false,
             entry_form: None,
+            palette: None,
+            menu_bar: (!cfg!(target_os = "macos")).then(|| AppMenuBar::new(cx)),
+            window_title: String::new(),
             photo_draw: None,
             photo_bounds: Default::default(),
             photo_hover: None,
@@ -448,35 +457,6 @@ impl Workspace {
         cx.write_to_clipboard(ClipboardItem::new_string(xref.to_string()));
         self.set_status(format!("Identifiant {xref} copié"), false);
         cx.notify();
-    }
-
-    /// Bouton « … » : actions avancées sur l'enregistrement (identifiant, racine).
-    fn more_menu(&self, xref: &str, is_individual: bool, cx: &mut Context<Self>) -> impl IntoElement {
-        let entity = cx.entity().downgrade();
-        let xref = xref.to_string();
-        let is_root = self.doc.as_ref().and_then(|d| d.ged.root()).as_deref() == Some(xref.as_str());
-        Button::new("more").ghost().xsmall().icon(IconName::Ellipsis).dropdown_menu_with_anchor(
-            Anchor::TopRight,
-            move |menu, _, _| {
-                let (e1, e2, x1, x2) = (entity.clone(), entity.clone(), xref.clone(), xref.clone());
-                let menu =
-                    menu.item(PopupMenuItem::new("Copier l'ID").icon(IconName::Copy).on_click(move |_, _, cx| {
-                        let _ = e1.update(cx, |this, cx| this.copy_id(&x1, cx));
-                    }));
-                if is_individual {
-                    menu.item(
-                        PopupMenuItem::new(if is_root { "Individu racine" } else { "Définir comme racine" })
-                            .icon(IconName::House)
-                            .disabled(is_root)
-                            .on_click(move |_, _, cx| {
-                                let _ = e2.update(cx, |this, cx| this.set_root(x2.clone(), cx));
-                            }),
-                    )
-                } else {
-                    menu
-                }
-            },
-        )
     }
 
     fn refresh_editor(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -913,7 +893,7 @@ fn avatar(doc: &Document, i: &Individual<'_>, size: f32, ring: Hsla) -> Div {
 }
 
 impl Workspace {
-    fn render_header(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render_header(&self) -> impl IntoElement {
         let file = self
             .doc
             .as_ref()
@@ -925,8 +905,6 @@ impl Workspace {
                     .unwrap_or_else(|| "Nouveau fichier".into())
             })
             .unwrap_or_default();
-        let version = self.doc.as_ref().map(|d| format!("GEDCOM {}", d.ged.version())).unwrap_or_default();
-        let can_undo = self.doc.as_ref().is_some_and(|d| !d.history.is_empty());
         h_flex()
             .h(px(40.))
             .flex_none()
@@ -944,69 +922,10 @@ impl Workspace {
                     .child(Icon::new(IconName::Network).size(px(16.)).text_color(theme::accent()))
                     .child("GedRoots"),
             )
+            // Linux, Windows : menus dans la fenêtre (natifs sous macOS).
+            .children(self.menu_bar.clone().map(|m| div().h_full().child(m)))
             .child(div().text_color(theme::muted()).child(file))
             .child(div().flex_1())
-            .when(!version.is_empty(), |d| {
-                d.child(
-                    div()
-                        .px_2()
-                        .py(px(1.))
-                        .rounded_sm()
-                        .border_1()
-                        .border_color(theme::border_strong())
-                        .child(mono(version)),
-                )
-            })
-            .child(
-                Button::new("open")
-                    .ghost()
-                    .small()
-                    .icon(IconName::FolderOpen)
-                    .label("Ouvrir…")
-                    .on_click(cx.listener(|this, _, w, cx| this.open_file(&OpenFile, w, cx))),
-            )
-            .when(self.doc.is_some(), |d| {
-                d.child(
-                    Button::new("analyses")
-                        .ghost()
-                        .small()
-                        .label("Analyses")
-                        .on_click(cx.listener(|this, _, w, cx| this.open_analyses(&OpenAnalyses, w, cx))),
-                )
-                .child(
-                    Button::new("root")
-                        .ghost()
-                        .small()
-                        .icon(IconName::House)
-                        .label("Racine")
-                        .tooltip("Revenir à l'individu racine")
-                        .on_click(cx.listener(|this, _, w, cx| this.goto_root(w, cx))),
-                )
-                .child(
-                    Button::new("enter-record")
-                        .ghost()
-                        .small()
-                        .label("Saisir un acte")
-                        .on_click(cx.listener(|this, _, w, cx| this.open_entry(&EnterRecord, w, cx))),
-                )
-                .child(
-                    Button::new("undo")
-                        .ghost()
-                        .small()
-                        .icon(IconName::Undo2)
-                        .label("Annuler")
-                        .disabled(!can_undo)
-                        .on_click(cx.listener(|this, _, w, cx| this.undo(&Undo, w, cx))),
-                )
-                .child(
-                    Button::new("save")
-                        .primary()
-                        .small()
-                        .icon(IconName::Save)
-                        .label("Enregistrer")
-                        .on_click(cx.listener(|this, _, w, cx| this.save_file(&SaveFile, w, cx))),
-                )
-            })
     }
 
     fn render_activity_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -1064,7 +983,6 @@ impl Workspace {
         let entity = cx.entity().downgrade();
         let flag = self.flag_label();
         let only = self.only_flagged;
-        let can_create = self.view.kind().is_some() && self.doc.is_some();
         v_flex()
             .w(px(300.))
             .flex_none()
@@ -1080,35 +998,21 @@ impl Workspace {
                     .items_center()
                     .child(div().font_weight(FontWeight::SEMIBOLD).child(self.view.label()))
                     .child(mono(rows.len().to_string()))
-                    .child(div().flex_1())
-                    .when(can_create, |d| {
-                        d.child(
-                            Button::new("create")
-                                .ghost()
-                                .xsmall()
-                                .icon(IconName::Plus)
-                                .label("Nouveau")
-                                .on_click(cx.listener(|this, _, w, cx| this.create_record(w, cx))),
-                        )
-                    }),
+                    .child(div().flex_1()),
             )
             .child(div().px_3().pb_2().child(Input::new(&self.filter).small().cleanable(true)))
             .when(self.view == View::Individuals, |d| d.child(self.render_quick_filters(cx)))
-            .when(!flag.is_empty(), |d| {
-                d.child(
-                    h_flex().px_3().pb_2().gap_1().child(
-                        Button::new("flag")
-                            .xsmall()
-                            .when(only, |b| b.primary())
-                            .when(!only, |b| b.ghost())
-                            .label(flag)
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.only_flagged = !this.only_flagged;
-                                this.rebuild_rows(cx);
-                                cx.notify();
-                            })),
-                    ),
-                )
+            // Filtre actif (Affichage › Filtrer la liste) : rappel, cliquable pour le retirer.
+            .when(only && !flag.is_empty(), |d| {
+                d.child(h_flex().px_3().pb_2().child(
+                    Button::new("flag").xsmall().primary().icon(IconName::Close).label(flag).on_click(cx.listener(
+                        |this, _, _, cx| {
+                            this.only_flagged = false;
+                            this.rebuild_rows(cx);
+                            cx.notify();
+                        },
+                    )),
+                ))
             })
             .child(
                 uniform_list("records", rows.len(), move |range, _window, _cx| {
@@ -1201,7 +1105,15 @@ impl Workspace {
                             .when(active, |d| d.bg(theme::bg()).border_t_2().border_color(theme::accent()))
                             .text_color(if active { theme::text() } else { theme::muted() })
                             .child(icon(t.icon()).text_color(if active { theme::accent() } else { theme::muted() }))
-                            .child(t.label())
+                            .child(match t {
+                                // Vue d'arbre courante, réglable dans Affichage › Arbre.
+                                CenterTab::Tree => {
+                                    let r = self.tree_mode.generations();
+                                    let gens = self.tree_gens.clamp(*r.start(), *r.end());
+                                    format!("{} · {gens} gén.", self.tree_mode.label())
+                                }
+                                _ => t.label().to_string(),
+                            })
                             .when(active && title.is_some(), |d| {
                                 d.child(div().text_color(theme::muted()).child(format!("— {}", title.clone().unwrap())))
                             })
@@ -1319,7 +1231,6 @@ impl Workspace {
 
     fn render_form(&self, ed: &RecordEditor, cx: &mut Context<Self>) -> impl IntoElement {
         let preview = self.media_preview(ed, cx);
-        let can_delete = true;
         let confirm = self.pending_delete.is_some() && self.pending_delete == self.selected;
         div().id("form-scroll").flex_1().overflow_y_scroll().child(
             v_flex()
@@ -1365,16 +1276,22 @@ impl Workspace {
                             },
                         )))
                         .child(div().flex_1())
-                        .when(can_delete, |d| {
-                            d.child(
+                        // Suppression : Édition › Supprimer l'élément, puis confirmation ici.
+                        .when(confirm, |d| {
+                            d.child(Button::new("cancel-delete").ghost().small().label("Garder").on_click(cx.listener(
+                                |this, _, _, cx| {
+                                    this.pending_delete = None;
+                                    cx.notify();
+                                },
+                            )))
+                            .child(
                                 Button::new("delete")
                                     .danger()
                                     .small()
                                     .icon(IconName::Trash)
-                                    .label(match (confirm, &ed.target) {
-                                        (true, _) => "Confirmer la suppression",
-                                        (false, Target::Place(_)) => "Retirer ce lieu partout",
-                                        (false, _) => "Supprimer",
+                                    .label(match &ed.target {
+                                        Target::Place(_) => "Confirmer : retirer ce lieu partout",
+                                        _ => "Confirmer la suppression",
                                     })
                                     .on_click(cx.listener(|this, _, w, cx| this.delete_selected(w, cx))),
                             )
@@ -1627,8 +1544,7 @@ impl Workspace {
                                     .gap_1()
                                     .child(div().text_lg().font_weight(FontWeight::SEMIBOLD).child(g.record_label(key)))
                                     .child(mono(kind.map(|k| k.label_fr()).unwrap_or(""))),
-                            )
-                            .child(self.more_menu(key, false, cx)),
+                            ),
                     )
                     .children(self.render_actions(cx))
                     .children(self.render_unreferenced_files(cx))
@@ -1726,8 +1642,7 @@ impl Workspace {
                             )
                             .child(mono(format!("{sourced}/{total} sourcés"))),
                     ),
-            )
-            .child(self.more_menu(&xref, true, cx));
+            );
 
         let events_el = v_flex()
             .p_4()
@@ -1883,6 +1798,7 @@ impl Workspace {
                 })
             })
             .child(div().flex_1())
+            .when_some(self.doc.as_ref(), |d, doc| d.child(mono(format!("GEDCOM {}", doc.ged.version()))))
             .when_some(self.status.clone(), |d, (msg, err)| {
                 d.child(div().text_color(if err { theme::danger() } else { theme::muted() }).child(msg))
             })
@@ -1925,6 +1841,22 @@ impl Workspace {
 
 impl Render for Workspace {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let title = match &self.doc {
+            Some(d) => format!(
+                "{}{} — GedRoots",
+                d.path
+                    .as_ref()
+                    .and_then(|p| p.file_name())
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_else(|| "Nouveau fichier".into()),
+                if d.dirty { " •" } else { "" }
+            ),
+            None => "GedRoots".into(),
+        };
+        if title != self.window_title {
+            window.set_window_title(&title);
+            self.window_title = title;
+        }
         // Les raccourcis (Enregistrer…) passent par ce nœud : on le garde dans la chaîne de focus.
         if window.focused(cx).is_none() {
             window.focus(&self.focus, cx);
@@ -1955,12 +1887,7 @@ impl Render for Workspace {
             .relative()
             .track_focus(&self.focus)
             .key_context("Workspace")
-            .on_action(cx.listener(Self::open_file))
-            .on_action(cx.listener(Self::save_file))
-            .on_action(cx.listener(Self::undo))
-            .on_action(cx.listener(Self::new_file))
-            .on_action(cx.listener(Self::open_analyses))
-            .on_action(cx.listener(Self::open_entry))
+            .map(|d| self.bind_actions(d, window, cx))
             .on_key_down(cx.listener(|this, ev: &KeyDownEvent, _, cx| {
                 if ev.keystroke.key == "escape" && this.photo_draw.is_some() {
                     this.cancel_draw(cx);
@@ -1969,10 +1896,12 @@ impl Render for Workspace {
             .bg(theme::bg())
             .text_color(theme::text())
             .text_sm()
-            .child(self.render_header(cx))
+            // macOS : menus natifs, et le nom du fichier est dans le titre de la fenêtre.
+            .when(self.menu_bar.is_some(), |d| d.child(self.render_header()))
             .child(body)
             .child(self.render_status())
             .children(self.render_picker(cx))
+            .children(self.render_palette(cx))
     }
 }
 
