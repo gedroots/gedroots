@@ -4,15 +4,19 @@
 //! - [`parse`] : lecture/écriture du texte GEDCOM ;
 //! - [`document`] : un fichier chargé, avec index des identifiants et opérations d'édition ;
 //! - [`model`] : vues typées (individus, familles, sources, lieux, médias…) et formulaires d'édition ;
+//! - [`schema`] : schéma GEDCOM 7 (sous-structures permises, types de valeurs) ;
+//! - [`complete`] : autocomplétion du texte GEDCOM brut ;
 //! - [`geo`] : coordonnées des lieux (`MAP`) et projection de la carte ;
 //! - [`date`] : dates GEDCOM (y compris calendrier républicain) affichées en français.
 
+pub mod complete;
 pub mod date;
 pub mod document;
 pub mod geo;
 pub mod model;
 pub mod node;
 pub mod parse;
+pub mod schema;
 
 pub use date::Date;
 pub use document::{Gedcom, RecordKind};

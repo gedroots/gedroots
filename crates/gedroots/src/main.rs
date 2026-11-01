@@ -1,5 +1,6 @@
 //! GedRoots — logiciel de généalogie libre et local, avec GEDCOM 7 comme format de données.
 
+mod completion;
 mod editor;
 mod map;
 mod theme;
@@ -51,6 +52,8 @@ fn main() {
             KeyBinding::new(shortcut!("n"), NewFile, None),
             KeyBinding::new(shortcut!("shift-z"), Undo, Some("Workspace")),
             KeyBinding::new(shortcut!("q"), Quit, None),
+            // Suggestions de l'éditeur GEDCOM brut à la demande.
+            KeyBinding::new("ctrl-space", component::input::ShowCompletions, Some("Input")),
         ]);
         cx.on_action(|_: &Quit, cx| cx.quit());
 
