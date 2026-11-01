@@ -11,14 +11,19 @@ et suit la maquette « Lignée » (thème sombre, barre d'activité, liste, arbr
 
 ## Fonctionnalités
 
-- **Individus** : liste filtrable (nom, prénom, lieu, `@I…@`), filtre « sans source »,
-  arbre d'ascendance sur 4 générations avec lignées paternelle/maternelle et numéros Sosa,
-  fiche avec événements (dates en français, calendrier républicain compris), sources citées,
+- **Individus** : liste filtrable (nom, prénom, lieu ; `@I…@` en recherche avancée),
+  filtre « sans source », arbre d'ascendance sur 4 générations avec portraits, lignées
+  paternelle/maternelle et numéros Sosa, fiche avec portrait, galerie d'images, événements (dates en français, calendrier républicain compris), sources citées,
   famille (parents, conjoints, enfants) cliquable.
 - **Familles, sources, dépôts, médias, notes partagées** : liste, éditeur visuel,
   et panneau « Utilisé par / Liens » pour naviguer entre les enregistrements.
 - **Lieux** : index de tous les `PLAC` du fichier, renommage global et coordonnées (`MAP`).
-- **Médias / photos** : aperçu des images, chemins relatifs au fichier `.ged`.
+- **Médias / photos** : portraits des individus, images des sources (actes numérisés)
+  dans la fiche et le panneau de détail, chemins relatifs au fichier `.ged`.
+- **Individu racine** : enregistré dans le fichier lui-même (extension `_GR_ROOT`, voir
+  [docs/extensions.md](docs/extensions.md)), jamais dans un fichier annexe.
+- Les identifiants GEDCOM n'apparaissent pas dans l'interface : liens choisis par nom
+  (époux, dépôt…), identifiant accessible via **… → Copier l'ID** et l'onglet GEDCOM.
 - **Éditeur visuel** pour les enregistrements courants (individu, famille, source, dépôt,
   média, note) : seuls les champs affichés sont modifiés, tout le reste est conservé.
 - **Éditeur GEDCOM brut** pour chaque enregistrement, avec validation ; changer un

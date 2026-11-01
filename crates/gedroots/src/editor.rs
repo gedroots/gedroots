@@ -2,6 +2,7 @@
 
 use gedcom::*;
 use gpui_kit::component::input::{EditorState, InputState, TextareaState};
+use gpui_kit::component::select::{SearchableVec, SelectItem, SelectState};
 use gpui_kit::{App, AppContext, Context, Entity, SharedString, Window};
 
 /// Ce qui est sélectionné dans la vue courante.
@@ -17,9 +18,87 @@ pub struct Field {
     pub state: Entity<InputState>,
 }
 
+/// Un enregistrement proposé dans un sélecteur (affiché par son nom, jamais par son identifiant).
+#[derive(Clone)]
+pub struct Pick {
+    xref: String,
+    label: SharedString,
+    search: String,
+}
+
+impl SelectItem for Pick {
+    type Value = String;
+
+    fn title(&self) -> SharedString {
+        self.label.clone()
+    }
+
+    fn value(&self) -> &String {
+        &self.xref
+    }
+
+    /// Recherche sans accents ; `@I12@` permet la recherche avancée par identifiant.
+    fn matches(&self, query: &str) -> bool {
+        let q = query.trim();
+        if q.starts_with('@') {
+            return self.xref.eq_ignore_ascii_case(q.trim_matches('@'));
+        }
+        let q = sort_key(q);
+        q.split_whitespace().all(|w| self.search.contains(w))
+    }
+}
+
+pub type PickerState = SelectState<SearchableVec<Pick>>;
+
+/// Sélecteur d'un enregistrement lié (époux, dépôt…).
+pub struct Picker {
+    pub label: &'static str,
+    pub placeholder: &'static str,
+    pub state: Entity<PickerState>,
+}
+
+fn picks(ged: &Gedcom, kind: RecordKind) -> Vec<Pick> {
+    let mut v: Vec<Pick> = ged
+        .records_of(kind)
+        .filter_map(|r| {
+            let xref = r.xref.clone()?;
+            let label = match kind {
+                RecordKind::Individual => {
+                    let i = Individual::new(r);
+                    let years = i.years();
+                    if years.is_empty() { i.display_name() } else { format!("{} ({years})", i.display_name()) }
+                }
+                _ => ged.record_label(&xref),
+            };
+            Some(Pick { search: sort_key(&label), label: label.into(), xref })
+        })
+        .collect();
+    v.sort_by(|a, b| a.search.cmp(&b.search));
+    v
+}
+
+fn picker<T: 'static>(
+    ged: &Gedcom,
+    kind: RecordKind,
+    selected: &str,
+    window: &mut Window,
+    cx: &mut Context<T>,
+) -> Entity<PickerState> {
+    let items = picks(ged, kind);
+    let selected = selected.trim().trim_matches('@').to_string();
+    cx.new(|cx| {
+        let mut s = SelectState::new(SearchableVec::new(items), None, window, cx).searchable(true);
+        if !selected.is_empty() {
+            s.set_selected_value(&selected, window, cx);
+        }
+        s
+    })
+}
+
 /// États des champs pour l'élément sélectionné.
 pub struct RecordEditor {
     pub target: Target,
+    pub pickers: Vec<Picker>,
     pub fields: Vec<Field>,
     pub long_text: Option<(&'static str, Entity<TextareaState>)>,
     pub raw: Option<Entity<EditorState>>,
@@ -43,6 +122,7 @@ fn get(cx: &App, e: &Entity<InputState>) -> String {
 impl RecordEditor {
     pub fn new<T: 'static>(ged: &Gedcom, target: Target, window: &mut Window, cx: &mut Context<T>) -> Self {
         let mut fields = Vec::new();
+        let mut pickers = Vec::new();
         let mut long_text = None;
         let mut raw = None;
         macro_rules! field {
@@ -63,7 +143,14 @@ impl RecordEditor {
             }
             Target::Record { xref, kind } => {
                 let Some(node) = ged.get(xref) else {
-                    return Self { target, fields, long_text, raw, error: Some("Enregistrement introuvable".into()) };
+                    return Self {
+                        target,
+                        pickers,
+                        fields,
+                        long_text,
+                        raw,
+                        error: Some("Enregistrement introuvable".into()),
+                    };
                 };
                 match kind {
                     RecordKind::Individual => {
@@ -80,8 +167,10 @@ impl RecordEditor {
                     }
                     RecordKind::Family => {
                         let f = FamilyForm::read(node);
-                        field!("Époux (identifiant)", "ex. I00012", f.husband);
-                        field!("Épouse (identifiant)", "ex. I00013", f.wife);
+                        for (label, x) in [("Époux", &f.husband), ("Épouse", &f.wife)] {
+                            let state = picker(ged, RecordKind::Individual, x, window, cx);
+                            pickers.push(Picker { label, placeholder: "Choisir un individu…", state });
+                        }
                         field!("Mariage — date", "", f.marriage.date);
                         field!("Mariage — lieu", "", f.marriage.place);
                     }
@@ -90,8 +179,9 @@ impl RecordEditor {
                         field!("Titre", "", f.title);
                         field!("Auteur", "", f.author);
                         field!("Publication", "", f.publication);
-                        field!("Dépôt (identifiant)", "ex. R00001", f.repository);
                         field!("Cote", "", f.call_number);
+                        let state = picker(ged, RecordKind::Repository, &f.repository, window, cx);
+                        pickers.push(Picker { label: "Dépôt", placeholder: "Choisir un dépôt…", state });
                         long_text = Some(("Texte de la source", textarea(window, cx, &f.text)));
                     }
                     RecordKind::Repository => {
@@ -116,7 +206,11 @@ impl RecordEditor {
                 raw = Some(cx.new(|cx| EditorState::new(window, cx).line_number(true).default_value(text)));
             }
         }
-        Self { target, fields, long_text, raw, error: None }
+        Self { target, pickers, fields, long_text, raw, error: None }
+    }
+
+    fn picked(&self, n: usize, cx: &App) -> String {
+        self.pickers.get(n).and_then(|p| p.state.read(cx).selected_value().cloned()).unwrap_or_default()
     }
 
     fn values(&self, cx: &App) -> Vec<String> {
@@ -137,15 +231,6 @@ impl RecordEditor {
                 Ok(format!("Lieu mis à jour ({n} occurrence{})", if n > 1 { "s" } else { "" }))
             }
             Target::Record { xref, kind } => {
-                if let (RecordKind::Family, Some(bad)) = (
-                    kind,
-                    [&v[0], &v[1]]
-                        .into_iter()
-                        .map(|x| x.trim().trim_matches('@'))
-                        .find(|x| !x.is_empty() && ged.individual(x).is_none()),
-                ) {
-                    return Err(format!("@{bad}@ n'est pas un individu connu"));
-                }
                 let node = ged.get_mut(xref).ok_or("Enregistrement introuvable")?;
                 match kind {
                     RecordKind::Individual => IndividualForm {
@@ -159,17 +244,17 @@ impl RecordEditor {
                     }
                     .apply(node),
                     RecordKind::Family => FamilyForm {
-                        husband: v[0].clone(),
-                        wife: v[1].clone(),
-                        marriage: EventForm { date: v[2].clone(), place: v[3].clone() },
+                        husband: self.picked(0, cx),
+                        wife: self.picked(1, cx),
+                        marriage: EventForm { date: v[0].clone(), place: v[1].clone() },
                     }
                     .apply(node),
                     RecordKind::Source => SourceForm {
                         title: v[0].clone(),
                         author: v[1].clone(),
                         publication: v[2].clone(),
-                        repository: v[3].clone(),
-                        call_number: v[4].clone(),
+                        repository: self.picked(0, cx),
+                        call_number: v[3].clone(),
                         text: note,
                     }
                     .apply(node),
@@ -183,7 +268,7 @@ impl RecordEditor {
                 if *kind == RecordKind::Family {
                     sync_family_links(ged, xref);
                 }
-                Ok(format!("@{xref}@ mis à jour"))
+                Ok(format!("{} : modifications appliquées", ged.record_label(xref)))
             }
         }
     }

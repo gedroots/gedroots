@@ -523,9 +523,41 @@ impl Gedcom {
         out
     }
 
+    /// Portrait d'un individu : le premier média image qui lui est lié,
+    /// en privilégiant ceux rangés dans un dossier « Portraits » ou titrés « Portrait ».
+    pub fn portrait(&self, xref: &str) -> Option<Media<'_>> {
+        let ind = self.individual(xref)?;
+        let images: Vec<Media> = ind
+            .media_xrefs()
+            .into_iter()
+            .filter_map(|m| self.get(m).filter(|n| n.tag == "OBJE").map(Media::new))
+            .filter(|m| m.is_image())
+            .collect();
+        let is_portrait = |m: &Media| {
+            m.file().is_some_and(|f| f.to_lowercase().contains("portrait"))
+                || m.title().to_lowercase().contains("portrait")
+        };
+        images.iter().find(|m| is_portrait(m)).or(images.first()).copied()
+    }
+
+    /// Médias images liés à un enregistrement (source, individu…).
+    pub fn images_of(&self, xref: &str) -> Vec<Media<'_>> {
+        let Some(n) = self.get(xref) else { return vec![] };
+        let mut out: Vec<Media> = Vec::new();
+        for p in n.children_with("OBJE").filter_map(|o| o.pointer()) {
+            if let Some(m) = self.get(p).filter(|m| m.tag == "OBJE").map(Media::new)
+                && m.is_image()
+                && !out.iter().any(|x| x.xref() == m.xref())
+            {
+                out.push(m);
+            }
+        }
+        out
+    }
+
     /// Libellé court d'un enregistrement quelconque, pour les listes et les liens.
     pub fn record_label(&self, xref: &str) -> String {
-        let Some(n) = self.get(xref) else { return format!("@{xref}@ (introuvable)") };
+        let Some(n) = self.get(xref) else { return "(introuvable)".to_string() };
         match n.tag.as_str() {
             "INDI" => Individual::new(n).display_name(),
             "FAM" => {

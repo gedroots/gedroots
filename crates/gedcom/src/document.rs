@@ -252,6 +252,7 @@ impl Gedcom {
         for r in &mut self.records {
             strip(r, &p);
         }
+        strip(&mut self.header, &p);
         self.reindex();
         Some(removed)
     }
@@ -260,4 +261,42 @@ impl Gedcom {
     pub fn referrers(&self, xref: &str) -> Vec<&Node> {
         self.records.iter().filter(|r| r.pointers().iter().any(|p| p == xref)).collect()
     }
+
+    // ------------------------------------------------------------------
+    // Extensions GedRoots (documentées dans docs/extensions.md)
+    // ------------------------------------------------------------------
+
+    /// Individu racine : `HEAD._GR_ROOT`, sinon le Sosa 1 d'Ancestris, sinon le premier individu.
+    pub fn root(&self) -> Option<String> {
+        if let Some(x) = self.header.child(ROOT_TAG).and_then(|n| n.pointer()).filter(|x| self.get(x).is_some()) {
+            return Some(x.to_string());
+        }
+        self.records_of(RecordKind::Individual)
+            .find(|r| crate::model::Individual::new(r).sosa().as_deref() == Some("1"))
+            .or_else(|| self.records_of(RecordKind::Individual).next())
+            .and_then(|r| r.xref.clone())
+    }
+
+    /// Définit l'individu racine dans l'en-tête, et déclare l'extension dans `HEAD.SCHMA`.
+    pub fn set_root(&mut self, xref: &str) {
+        self.declare_extension(ROOT_TAG, ROOT_URI);
+        let v = format!("@{xref}@");
+        match self.header.child_mut(ROOT_TAG) {
+            Some(n) => n.value = Some(v),
+            None => self.header.insert_child(Node::with_value(ROOT_TAG, v)),
+        }
+    }
+
+    /// Déclare une balise d'extension (`HEAD.SCHMA.TAG`), comme l'exige GEDCOM 7.
+    pub fn declare_extension(&mut self, tag: &str, uri: &str) {
+        let schma = self.header.ensure_child("SCHMA");
+        let declared = schma.children_with("TAG").any(|t| t.val().split_whitespace().next() == Some(tag));
+        if !declared {
+            schma.children.push(Node::with_value("TAG", format!("{tag} {uri}")));
+        }
+    }
 }
+
+/// Balise de l'individu racine (dans `HEAD`).
+pub const ROOT_TAG: &str = "_GR_ROOT";
+pub const ROOT_URI: &str = "https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_root";
