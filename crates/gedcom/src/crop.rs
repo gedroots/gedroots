@@ -22,6 +22,7 @@
 //! recadrage.
 
 use crate::document::Gedcom;
+use crate::multipage::{PAGE_TAG, PAGE_URI, page_of_link};
 use crate::node::Node;
 
 /// Zone d'une image, en pixels, telle qu'écrite dans `CROP`.
@@ -102,6 +103,8 @@ pub struct MediaLink {
     /// Balise de cet enregistrement (`INDI`, `FAM`, `SOUR`…).
     pub owner_tag: String,
     pub crop: Option<Crop>,
+    /// Page du média visée par le lien (1 pour la première, voir [`crate::multipage`]).
+    pub page: usize,
 }
 
 fn ptr(x: &str) -> String {
@@ -116,7 +119,12 @@ impl Gedcom {
         for r in &self.records {
             let Some(owner) = r.xref.as_deref() else { continue };
             for l in r.children.iter().filter(|c| c.tag == "OBJE" && c.val() == p) {
-                out.push(MediaLink { owner: owner.to_string(), owner_tag: r.tag.clone(), crop: Crop::from_link(l) });
+                out.push(MediaLink {
+                    owner: owner.to_string(),
+                    owner_tag: r.tag.clone(),
+                    crop: Crop::from_link(l),
+                    page: page_of_link(l),
+                });
             }
         }
         out
@@ -134,31 +142,82 @@ impl Gedcom {
         r.children.iter().find(|c| c.tag == "OBJE" && c.val() == p).and_then(Crop::from_link)
     }
 
+    /// Page visée par le (premier) lien de `owner` vers `media`.
+    pub fn link_page(&self, owner: &str, media: &str) -> usize {
+        let p = ptr(media);
+        self.get(owner)
+            .and_then(|r| r.children.iter().find(|c| c.tag == "OBJE" && c.val() == p))
+            .map(page_of_link)
+            .unwrap_or(1)
+    }
+
     /// Définit (ou retire, avec `None`) le recadrage du lien de `owner` vers
     /// `media`. Le lien est créé s'il n'existe pas encore.
     pub fn set_link_crop(&mut self, owner: &str, media: &str, crop: Option<Crop>) -> Result<(), String> {
+        self.set_link_crop_on(owner, media, 1, crop)
+    }
+
+    /// Comme [`Gedcom::set_link_crop`], pour la page `page` d'un média multipage.
+    pub fn set_link_crop_on(
+        &mut self,
+        owner: &str,
+        media: &str,
+        page: usize,
+        crop: Option<Crop>,
+    ) -> Result<(), String> {
         if self.get(media).is_none_or(|m| m.tag != "OBJE") {
             return Err("média introuvable".into());
         }
+        let page = page.max(1);
         let p = ptr(media);
         let r = self.get_mut(owner).ok_or("enregistrement introuvable")?;
-        let i = match r.children.iter().position(|c| c.tag == "OBJE" && c.val() == p) {
+        let find = |r: &Node| {
+            let link = |c: &Node| c.tag == "OBJE" && c.val() == p;
+            r.children.iter().position(|c| link(c) && page_of_link(c) == page).or_else(|| {
+                // Une zone sur une autre page : le lien vers le document entier la reçoit.
+                crop.and(r.children.iter().position(|c| link(c) && c.children.is_empty()))
+            })
+        };
+        let i = match find(r) {
             Some(i) => i,
             None if crop.is_none() => return Ok(()),
             None => {
                 r.insert_child(Node::with_value("OBJE", p.clone()));
-                r.children.iter().position(|c| c.tag == "OBJE" && c.val() == p).unwrap()
+                r.children.iter().rposition(|c| c.tag == "OBJE" && c.val() == p && c.children.is_empty()).unwrap()
             }
         };
         let link = &mut r.children[i];
         let before = link.clone();
-        link.children.retain(|c| c.tag != "CROP");
+        link.children.retain(|c| c.tag != "CROP" && c.tag != PAGE_TAG);
         if let Some(c) = crop {
             // CROP précède TITL dans l'ordre de la norme.
             link.children.insert(0, c.to_node());
+            if page > 1 {
+                let at = link
+                    .children
+                    .iter()
+                    .position(|c| c.tag != "CROP" && c.tag != "TITL")
+                    .unwrap_or(link.children.len());
+                link.children.insert(at, Node::with_value(PAGE_TAG, page.to_string()));
+            }
         }
-        if *link != before {
+        let changed = *link != before;
+        if changed {
+            // Sans zone, le lien redevient un lien vers le document entier : pas de doublon.
+            if crop.is_none() {
+                let dup = r
+                    .children
+                    .iter()
+                    .enumerate()
+                    .any(|(k, c)| k != i && c.tag == "OBJE" && c.val() == p && c.children.is_empty());
+                if dup && r.children[i].children.is_empty() {
+                    r.children.remove(i);
+                }
+            }
             r.touch();
+            if crop.is_some() && page > 1 {
+                self.declare_extension(PAGE_TAG, PAGE_URI);
+            }
         }
         Ok(())
     }
@@ -169,6 +228,26 @@ impl Gedcom {
             return Err("personne introuvable".into());
         }
         self.set_link_crop(indi, media, Some(crop))
+    }
+
+    /// Identifie une personne sur la page `page` d'un média.
+    pub fn tag_person_on(&mut self, indi: &str, media: &str, page: usize, crop: Crop) -> Result<(), String> {
+        if self.get(indi).is_none_or(|n| n.tag != "INDI") {
+            return Err("personne introuvable".into());
+        }
+        self.set_link_crop_on(indi, media, page, Some(crop))
+    }
+
+    /// Retire l'identification d'une personne sur une page (les liens vers les autres pages restent).
+    pub fn untag_person_on(&mut self, indi: &str, media: &str, page: usize) {
+        let p = ptr(media);
+        if let Some(r) = self.get_mut(indi) {
+            let before = r.children.len();
+            r.children.retain(|c| !(c.tag == "OBJE" && c.val() == p && page_of_link(c) == page));
+            if r.children.len() != before {
+                r.touch();
+            }
+        }
     }
 
     /// Retire l'identification d'une personne sur une photo (supprime le lien).
