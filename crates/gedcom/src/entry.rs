@@ -92,10 +92,13 @@ pub struct Entry {
     pub source: SourceChoice,
     /// Date de l'événement (format GEDCOM : `14 MAR 1912`, `ABT 1850`…).
     pub date: String,
+    /// Phrase de la date (`DATE.PHRASE`), ex. le texte d'origine.
+    pub date_phrase: String,
     /// Lieu de l'événement (au format des lieux du fichier).
     pub place: String,
     /// Date de rédaction de l'acte si elle diffère (`DATA.DATE` de la citation).
     pub record_date: String,
+    pub record_date_phrase: String,
     /// Valeurs des champs de la citation (clé du modèle → valeur).
     pub fields: Vec<(String, String)>,
     /// Transcription (`DATA.TEXT`).
@@ -160,8 +163,10 @@ impl Entry {
             template,
             source,
             date: String::new(),
+            date_phrase: String::new(),
             place: String::new(),
             record_date: String::new(),
+            record_date_phrase: String::new(),
             transcription: String::new(),
             quality: None,
             media: MediaChoice::None,
@@ -286,8 +291,12 @@ impl Entry {
         {
             return Err("le média choisi n'existe plus".into());
         }
-        if !self.date.trim().is_empty() && crate::Date::parse(&self.date).year().is_none() {
-            return Err(format!("date non reconnue : « {} » (ex. 14 MAR 1912, ABT 1850)", self.date.trim()));
+        if !self.date.trim().is_empty() {
+            let d = crate::Date::parse(&self.date);
+            if d.year().is_none() {
+                return Err(format!("date non reconnue : « {} »", self.date.trim()));
+            }
+            d.validate().map_err(|e| format!("date impossible : {e}"))?;
         }
         let mut principal = 0;
         for p in &self.participants {
@@ -620,8 +629,8 @@ impl Entry {
             let occu = p.get(PersonField::Occupation);
             if !occu.is_empty() {
                 let mut n = Node::with_value("OCCU", occu);
-                if !self.date.trim().is_empty() {
-                    n.children.push(Node::with_value("DATE", self.date.trim()));
+                if let Some(d) = self.date_node() {
+                    n.children.push(d);
                 }
                 n.children.push(self.citation(&source, media.as_deref(), Some(role), false));
                 w.add_fact(x, n);
@@ -629,8 +638,8 @@ impl Entry {
             let resi = p.get(PersonField::Residence);
             if !resi.is_empty() {
                 let mut n = Node::new("RESI");
-                if !self.date.trim().is_empty() {
-                    n.children.push(Node::with_value("DATE", self.date.trim()));
+                if let Some(d) = self.date_node() {
+                    n.children.push(d);
                 }
                 n.children.push(Node::with_value("PLAC", resi));
                 n.children.push(self.citation(&source, media.as_deref(), Some(role), false));
@@ -687,6 +696,11 @@ impl Entry {
         Ok(res)
     }
 
+    /// `DATE` (+ `PHRASE`) de l'événement.
+    fn date_node(&self) -> Option<Node> {
+        crate::date::date_node(&self.date, &self.date_phrase)
+    }
+
     /// Nœud de l'événement de l'acte (sans citation).
     fn event_node(&self, age: Option<String>) -> Node {
         let t = &self.template;
@@ -694,8 +708,8 @@ impl Entry {
         if let Some(ty) = &t.event_type {
             ev.children.push(Node::with_value("TYPE", ty));
         }
-        if !self.date.trim().is_empty() {
-            ev.children.push(Node::with_value("DATE", self.date.trim()));
+        if let Some(d) = self.date_node() {
+            ev.children.push(d);
         }
         if !self.place.trim().is_empty() {
             ev.children.push(Node::with_value("PLAC", self.place.trim()));
@@ -714,12 +728,14 @@ impl Entry {
         if !page.is_empty() {
             c.children.push(Node::with_value("PAGE", page));
         }
-        let date = if self.record_date.trim().is_empty() { self.date.trim() } else { self.record_date.trim() };
+        let own = !self.record_date.trim().is_empty() || !self.record_date_phrase.trim().is_empty();
+        let date =
+            if own { crate::date::date_node(&self.record_date, &self.record_date_phrase) } else { self.date_node() };
         let text = self.transcription.trim();
-        if !date.is_empty() || (full && !text.is_empty()) {
+        if date.is_some() || (full && !text.is_empty()) {
             let mut data = Node::new("DATA");
-            if !date.is_empty() {
-                data.children.push(Node::with_value("DATE", date));
+            if let Some(d) = date {
+                data.children.push(d);
             }
             if full && !text.is_empty() {
                 let mut t = Node::new("TEXT");

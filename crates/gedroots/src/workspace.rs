@@ -544,7 +544,7 @@ impl Workspace {
                         cx.notify();
                     }
                 })),
-                FieldState::Choice(_) => None,
+                _ => None,
             })
             .collect();
         self.editor = Some(ed);
@@ -1404,6 +1404,7 @@ impl Workspace {
                         .child(match &f.state {
                             FieldState::Text(e) => Input::new(e).small().into_any_element(),
                             FieldState::Choice(e) => Select::new(e).small().into_any_element(),
+                            FieldState::Date(e) => e.clone().into_any_element(),
                         })
                         .children(match &f.state {
                             FieldState::Text(e) if f.place => self.place_suggestions(e, cx),

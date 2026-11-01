@@ -49,6 +49,7 @@ impl Gedcom {
             tag: e.tag.clone(),
             detail,
             date: e.child_val("DATE").unwrap_or("").to_string(),
+            date_phrase: e.child("DATE").and_then(|d| d.child_val("PHRASE")).unwrap_or("").to_string(),
             place: e.child_val("PLAC").unwrap_or("").to_string(),
             source: e.children_with("SOUR").find_map(|s| s.pointer()).map(str::to_string),
         })
@@ -107,7 +108,7 @@ impl Gedcom {
         }
 
         // Date.
-        node.set_child_val("DATE", &ev.date.trim().to_uppercase());
+        crate::date::write_date(node, &ev.date.trim().to_uppercase(), &ev.date_phrase);
 
         // Lieu : si le nom change, les anciennes coordonnées ne valent plus.
         if place.is_empty() {
