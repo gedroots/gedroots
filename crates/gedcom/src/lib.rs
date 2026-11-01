@@ -6,6 +6,7 @@
 //! - [`model`] : vues typées (individus, familles, sources, lieux, médias…) et formulaires d'édition ;
 //! - [`date`] : dates GEDCOM (y compris calendrier républicain) affichées en français.
 
+pub mod analysis;
 pub mod date;
 pub mod document;
 pub mod model;

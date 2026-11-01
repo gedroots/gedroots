@@ -1,0 +1,458 @@
+//! Contrôle de cohérence de l'arbre, à la manière de l'outil « Vérifier les
+//! données » de Gramps, du « Problem Search » de RootsMagic ou des
+//! « incohérences » de Heredis.
+//!
+//! Les anomalies ne sont signalées que lorsqu'elles sont certaines compte tenu
+//! de l'imprécision des dates (voir [`Span`]). Une anomalie vérifiée peut être
+//! masquée en ajoutant `_GR_IGNORE <code>` sous l'enregistrement concerné.
+
+use super::span::{Age, Span};
+use crate::document::{Gedcom, RecordKind};
+use crate::model::{Individual, event_label};
+use crate::node::Node;
+use std::collections::{HashMap, HashSet};
+
+/// Balise d'extension qui masque une anomalie (valeur = code de l'anomalie).
+pub const IGNORE_TAG: &str = "_GR_IGNORE";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Severity {
+    Error,
+    Warning,
+    Info,
+}
+
+impl Severity {
+    pub fn label(self) -> &'static str {
+        match self {
+            Severity::Error => "Erreur",
+            Severity::Warning => "À vérifier",
+            Severity::Info => "Information",
+        }
+    }
+}
+
+/// Une anomalie détectée.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Issue {
+    pub severity: Severity,
+    /// Identifiant stable du type d'anomalie (sert à `_GR_IGNORE`).
+    pub code: &'static str,
+    /// Enregistrement principal (celui qu'on ouvre en cliquant).
+    pub xref: String,
+    /// Autres enregistrements concernés.
+    pub related: Vec<String>,
+    pub message: String,
+}
+
+/// Seuils utilisés par le contrôle (valeurs par défaut proches de Gramps).
+#[derive(Debug, Clone)]
+pub struct Thresholds {
+    pub max_lifespan: f64,
+    pub min_parent_age: f64,
+    pub max_father_age: f64,
+    pub max_mother_age: f64,
+    pub min_marriage_age: f64,
+    pub max_marriage_age_gap: f64,
+    /// Événements individuels sans source : signalés en simple information.
+    pub report_unsourced: bool,
+}
+
+impl Default for Thresholds {
+    fn default() -> Self {
+        Self {
+            max_lifespan: 110.,
+            min_parent_age: 14.,
+            max_father_age: 80.,
+            max_mother_age: 55.,
+            min_marriage_age: 14.,
+            max_marriage_age_gap: 30.,
+            report_unsourced: false,
+        }
+    }
+}
+
+/// Libellé français d'un code d'anomalie.
+pub fn code_label(code: &str) -> &'static str {
+    match code {
+        "death_before_birth" => "Décès avant la naissance",
+        "burial_before_death" => "Inhumation avant le décès",
+        "event_before_birth" => "Événement avant la naissance",
+        "event_after_death" => "Événement après le décès",
+        "too_old" => "Durée de vie invraisemblable",
+        "parent_too_young" => "Parent trop jeune",
+        "father_too_old" => "Père très âgé",
+        "mother_too_old" => "Mère très âgée",
+        "birth_after_mother_death" => "Naissance après le décès de la mère",
+        "birth_after_father_death" => "Naissance longtemps après le décès du père",
+        "child_before_parent" => "Enfant né avant son parent",
+        "marriage_too_young" => "Mariage très jeune",
+        "marriage_after_death" => "Mariage après un décès",
+        "marriage_age_gap" => "Grand écart d'âge entre époux",
+        "siblings_too_close" => "Naissances trop rapprochées",
+        "husband_not_male" => "Époux de sexe féminin",
+        "wife_not_female" => "Épouse de sexe masculin",
+        "own_ancestor" => "Personne ancêtre d'elle-même",
+        "broken_link" => "Lien vers un enregistrement absent",
+        "missing_backlink" => "Lien familial à sens unique",
+        "unsourced" => "Événement sans source",
+        _ => "Anomalie",
+    }
+}
+
+/// Événements qui peuvent légitimement suivre le décès.
+const POST_MORTEM: &[&str] = &["BURI", "CREM", "PROB", "WILL", "EVEN", "FACT", "RESI", "OCCU", "TITL", "RELI", "NATI"];
+/// Attributs (pas des événements datés au sens strict).
+const ATTRIBUTES: &[&str] = &["OCCU", "RESI", "EDUC", "RELI", "TITL", "NATI", "FACT"];
+
+fn ignored(node: &Node) -> HashSet<String> {
+    let mut out = HashSet::new();
+    node.walk(&mut |n| {
+        if n.tag == IGNORE_TAG {
+            out.insert(n.val().trim().to_string());
+        }
+    });
+    out
+}
+
+struct Life {
+    birth: Option<Span>,
+    death: Option<Span>,
+}
+
+fn span_of(node: &Node, tag: &str) -> Option<Span> {
+    node.children_with(tag).find_map(|e| e.child_val("DATE").and_then(Span::parse))
+}
+
+fn life(ind: &Node) -> Life {
+    Life {
+        birth: span_of(ind, "BIRT").or_else(|| span_of(ind, "CHR")).or_else(|| span_of(ind, "BAPM")),
+        death: span_of(ind, "DEAT").or_else(|| span_of(ind, "BURI")).or_else(|| span_of(ind, "CREM")),
+    }
+}
+
+fn years(x: f64) -> String {
+    if x < 1. { "moins d'un an".into() } else { format!("{} ans", x.floor() as i64) }
+}
+
+/// Lance tous les contrôles sur le fichier.
+pub fn check(g: &Gedcom, t: &Thresholds) -> Vec<Issue> {
+    let mut issues: Vec<Issue> = Vec::new();
+    let name = |x: &str| g.record_label(x);
+    let lives: HashMap<&str, Life> =
+        g.records_of(RecordKind::Individual).filter_map(|r| Some((r.xref.as_deref()?, life(r)))).collect();
+    let mut push = |severity, code, xref: &str, related: Vec<String>, message: String| {
+        issues.push(Issue { severity, code, xref: xref.to_string(), related, message });
+    };
+
+    // Liens cassés (tous enregistrements).
+    for r in &g.records {
+        let Some(x) = r.xref.as_deref() else { continue };
+        let mut seen = HashSet::new();
+        r.walk(&mut |n| {
+            if let Some(p) = n.pointer()
+                && p != "VOID"
+                && g.get(p).is_none()
+                && seen.insert(p.to_string())
+            {
+                push(
+                    Severity::Error,
+                    "broken_link",
+                    x,
+                    vec![],
+                    format!("{} ({}) pointe vers @{p}@, qui n'existe pas", name(x), n.tag),
+                );
+            }
+        });
+    }
+
+    // Individus.
+    for r in g.records_of(RecordKind::Individual) {
+        let Some(x) = r.xref.as_deref() else { continue };
+        let ind = Individual::new(r);
+        let l = &lives[x];
+        let who = ind.display_name();
+
+        if let (Some(b), Some(d)) = (&l.birth, &l.death) {
+            if d.surely_before(b) {
+                push(Severity::Error, "death_before_birth", x, vec![], format!("{who} : décès avant la naissance"));
+            } else if let Some(min) = Age::between(b, d).min_years()
+                && min > t.max_lifespan
+            {
+                push(Severity::Warning, "too_old", x, vec![], format!("{who} aurait vécu au moins {}", years(min)));
+            }
+        }
+        if let (Some(death), Some(buri)) = (span_of(r, "DEAT"), span_of(r, "BURI"))
+            && buri.surely_before(&death)
+        {
+            push(Severity::Error, "burial_before_death", x, vec![], format!("{who} : inhumé(e) avant son décès"));
+        }
+        for e in &r.children {
+            let Some(label) = event_label(&e.tag) else { continue };
+            if matches!(e.tag.as_str(), "BIRT" | "CHR" | "BAPM" | "DEAT" | "BURI" | "CREM") {
+                continue;
+            }
+            let Some(s) = e.child_val("DATE").and_then(Span::parse) else { continue };
+            if let Some(b) = &l.birth
+                && s.surely_before(b)
+            {
+                push(Severity::Error, "event_before_birth", x, vec![], format!("{who} : {label} avant la naissance"));
+            }
+            if let Some(d) = &l.death
+                && d.surely_before(&s)
+                && !POST_MORTEM.contains(&e.tag.as_str())
+            {
+                push(Severity::Error, "event_after_death", x, vec![], format!("{who} : {label} après le décès"));
+            }
+        }
+        if t.report_unsourced {
+            for e in &r.children {
+                if let Some(label) = event_label(&e.tag)
+                    && !ATTRIBUTES.contains(&e.tag.as_str())
+                    && e.child("SOUR").is_none()
+                {
+                    push(Severity::Info, "unsourced", x, vec![], format!("{who} : {label} sans source"));
+                }
+            }
+        }
+        // FAMC/FAMS sans réciproque.
+        for (tag, back) in [("FAMC", "CHIL"), ("FAMS", "HUSB")] {
+            for f in r.children_with(tag).filter_map(|n| n.pointer()) {
+                let Some(fam) = g.get(f) else { continue };
+                let listed = fam
+                    .children
+                    .iter()
+                    .any(|c| (c.tag == back || (back == "HUSB" && c.tag == "WIFE")) && c.pointer() == Some(x));
+                if !listed {
+                    push(
+                        Severity::Warning,
+                        "missing_backlink",
+                        x,
+                        vec![f.to_string()],
+                        format!("{who} se dit membre de la famille {} qui ne le mentionne pas", name(f)),
+                    );
+                }
+            }
+        }
+    }
+
+    // Familles.
+    for r in g.records_of(RecordKind::Family) {
+        let Some(fx) = r.xref.as_deref() else { continue };
+        let husb = r.child("HUSB").and_then(|n| n.pointer()).filter(|p| lives.contains_key(p));
+        let wife = r.child("WIFE").and_then(|n| n.pointer()).filter(|p| lives.contains_key(p));
+        let children: Vec<&str> =
+            r.children_with("CHIL").filter_map(|n| n.pointer()).filter(|p| lives.contains_key(p)).collect();
+
+        if let Some(h) = husb
+            && g.individual(h).is_some_and(|i| i.sex() == "F")
+        {
+            push(
+                Severity::Warning,
+                "husband_not_male",
+                fx,
+                vec![h.into()],
+                format!("{} est HUSB mais de sexe féminin", name(h)),
+            );
+        }
+        if let Some(w) = wife
+            && g.individual(w).is_some_and(|i| i.sex() == "M")
+        {
+            push(
+                Severity::Warning,
+                "wife_not_female",
+                fx,
+                vec![w.into()],
+                format!("{} est WIFE mais de sexe masculin", name(w)),
+            );
+        }
+
+        // Mariage.
+        let marr = span_of(r, "MARR");
+        for p in [husb, wife].into_iter().flatten() {
+            let l = &lives[p];
+            if let Some(m) = &marr {
+                if let Some(b) = &l.birth
+                    && let Some(max) = Age::between(b, m).max_years()
+                    && max < t.min_marriage_age
+                {
+                    let code = if max < 0. { "event_before_birth" } else { "marriage_too_young" };
+                    push(
+                        Severity::Warning,
+                        code,
+                        p,
+                        vec![fx.into()],
+                        format!("{} se marie à {}", name(p), years(max.max(0.))),
+                    );
+                }
+                if let Some(d) = &l.death
+                    && d.surely_before(m)
+                {
+                    push(
+                        Severity::Error,
+                        "marriage_after_death",
+                        fx,
+                        vec![p.into()],
+                        format!("{} : mariage après son décès", name(p)),
+                    );
+                }
+            }
+        }
+        if let (Some(h), Some(w)) = (husb, wife)
+            && let (Some(bh), Some(bw)) = (&lives[h].birth, &lives[w].birth)
+        {
+            // Écart minimal certain entre les deux naissances.
+            let a = Age::between(bh, bw);
+            let gap = match (a.min_years(), a.max_years()) {
+                (Some(min), _) if min > 0. => min,
+                (_, Some(max)) if max < 0. => -max,
+                _ => 0.,
+            };
+            if gap > t.max_marriage_age_gap {
+                push(
+                    Severity::Info,
+                    "marriage_age_gap",
+                    fx,
+                    vec![h.into(), w.into()],
+                    format!("{} : {} d'écart entre les époux", name(fx), years(gap)),
+                );
+            }
+        }
+
+        // Parents / enfants.
+        for &c in &children {
+            let Some(cb) = lives[c].birth else { continue };
+            for (p, is_father) in [(husb, true), (wife, false)] {
+                let Some(p) = p else { continue };
+                let pl = &lives[p];
+                if let Some(pb) = &pl.birth {
+                    let age = Age::between(pb, &cb);
+                    if let Some(max) = age.max_years() {
+                        if max < 0. {
+                            push(
+                                Severity::Error,
+                                "child_before_parent",
+                                c,
+                                vec![p.into()],
+                                format!("{} est né(e) avant son parent {}", name(c), name(p)),
+                            );
+                        } else if max < t.min_parent_age {
+                            push(
+                                Severity::Warning,
+                                "parent_too_young",
+                                c,
+                                vec![p.into()],
+                                format!("{} avait au plus {} à la naissance de {}", name(p), years(max), name(c)),
+                            );
+                        }
+                    }
+                    let limit = if is_father { t.max_father_age } else { t.max_mother_age };
+                    if let Some(min) = age.min_years()
+                        && min > limit
+                    {
+                        let code = if is_father { "father_too_old" } else { "mother_too_old" };
+                        push(
+                            Severity::Warning,
+                            code,
+                            c,
+                            vec![p.into()],
+                            format!("{} avait au moins {} à la naissance de {}", name(p), years(min), name(c)),
+                        );
+                    }
+                }
+                if let Some(pd) = &pl.death {
+                    // La mère doit être vivante ; le père peut être mort jusqu'à ~10 mois avant.
+                    let late =
+                        if is_father { Span { lo: pd.lo.map(|d| d + 300), hi: pd.hi.map(|d| d + 300) } } else { *pd };
+                    if late.surely_before(&cb) {
+                        let code = if is_father { "birth_after_father_death" } else { "birth_after_mother_death" };
+                        push(
+                            Severity::Error,
+                            code,
+                            c,
+                            vec![p.into()],
+                            format!("{} est né(e) après le décès de {}", name(c), name(p)),
+                        );
+                    }
+                }
+            }
+        }
+        // Naissances trop rapprochées (hors jumeaux) chez une même mère.
+        let mut births: Vec<(&str, i64)> = children
+            .iter()
+            .filter_map(|c| {
+                let b = lives[c].birth?;
+                (b.lo? == b.hi?).then_some((*c, b.lo?))
+            })
+            .collect();
+        births.sort_by_key(|b| b.1);
+        for w in births.windows(2) {
+            let gap = w[1].1 - w[0].1;
+            if gap > 2 && gap < 240 {
+                push(
+                    Severity::Warning,
+                    "siblings_too_close",
+                    w[1].0,
+                    vec![w[0].0.into(), fx.into()],
+                    format!("{} et {} sont nés à {gap} jours d'intervalle", name(w[0].0), name(w[1].0)),
+                );
+            }
+        }
+    }
+
+    // Boucles dans l'ascendance.
+    for x in lives.keys() {
+        if is_own_ancestor(g, x) {
+            push(Severity::Error, "own_ancestor", x, vec![], format!("{} figure dans sa propre ascendance", name(x)));
+        }
+    }
+
+    // Anomalies masquées par `_GR_IGNORE`.
+    let mut cache: HashMap<String, HashSet<String>> = HashMap::new();
+    issues.retain(|i| {
+        let ign = cache.entry(i.xref.clone()).or_insert_with(|| g.get(&i.xref).map(ignored).unwrap_or_default());
+        !ign.contains(i.code)
+    });
+    issues.sort_by(|a, b| (a.severity, a.code, &a.message).cmp(&(b.severity, b.code, &b.message)));
+    issues.dedup();
+    issues
+}
+
+fn is_own_ancestor(g: &Gedcom, x: &str) -> bool {
+    let mut stack: Vec<&str> = parents_of(g, x);
+    let mut seen: HashSet<&str> = HashSet::new();
+    while let Some(p) = stack.pop() {
+        if p == x {
+            return true;
+        }
+        if seen.insert(p) {
+            stack.extend(parents_of(g, p));
+        }
+    }
+    false
+}
+
+pub(crate) fn parents_of<'a>(g: &'a Gedcom, x: &str) -> Vec<&'a str> {
+    let Some(ind) = g.get(x) else { return vec![] };
+    ind.children_with("FAMC")
+        .filter_map(|n| n.pointer())
+        .filter_map(|f| g.get(f))
+        .flat_map(|fam| fam.children.iter().filter(|c| c.tag == "HUSB" || c.tag == "WIFE").filter_map(|c| c.pointer()))
+        .filter(|p| g.get(p).is_some())
+        .collect()
+}
+
+impl Gedcom {
+    /// Masque une anomalie : ajoute `_GR_IGNORE <code>` à l'enregistrement et
+    /// déclare l'extension dans l'en-tête. Renvoie `false` si rien n'a changé.
+    pub fn ignore_issue(&mut self, xref: &str, code: &str) -> bool {
+        let Some(r) = self.get_mut(xref) else { return false };
+        if r.children_with(IGNORE_TAG).any(|n| n.val() == code) {
+            return false;
+        }
+        r.insert_child(Node::with_value(IGNORE_TAG, code));
+        r.touch();
+        self.declare_extension(IGNORE_TAG);
+        true
+    }
+}
