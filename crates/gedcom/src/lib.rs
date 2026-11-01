@@ -21,7 +21,7 @@ pub use entry::{Entry, EntryResult, MediaChoice, Participant, PersonChoice, Sour
 pub use model::*;
 pub use node::Node;
 pub use parse::{ParseError, node_from_string, node_to_string};
-pub use template::{FieldDef, PersonField, Relation, RoleDef, Template, builtin_templates};
+pub use template::{FieldDef, PersonField, Relation as RoleRelation, RoleDef, Template, builtin_templates};
 
 /// Charge un fichier GEDCOM depuis le disque.
 pub fn load(path: impl AsRef<std::path::Path>) -> Result<Gedcom, String> {

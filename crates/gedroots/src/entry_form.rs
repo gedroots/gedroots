@@ -937,7 +937,7 @@ impl EntryForm {
                                 this.set_choice(id, PersonChoice::Link(x.clone()), w, cx)
                             }))
                         }))
-                        .when(def.as_ref().is_some_and(|d| d.relation != Relation::Principal), |d| {
+                        .when(def.as_ref().is_some_and(|d| d.relation != RoleRelation::Principal), |d| {
                             d.child(chip(format!("mention-{id}"), "Mentionner sans créer", false).on_click(
                                 cx.listener(move |this, _, w, cx| this.set_choice(id, PersonChoice::Mention, w, cx)),
                             ))
