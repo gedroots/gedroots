@@ -9,6 +9,7 @@
 //! - [`geo`] : coordonnées des lieux (`MAP`) et projection de la carte ;
 //! - [`date`] : dates GEDCOM (y compris calendrier républicain) affichées en français.
 
+pub mod analysis;
 pub mod complete;
 pub mod date;
 pub mod document;

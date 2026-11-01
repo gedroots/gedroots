@@ -38,6 +38,15 @@ et suit la maquette « Lignée » (thème sombre, barre d'activité, liste, arbr
   `Ctrl+Espace` affiche les suggestions à la demande.
 - Créer / supprimer un enregistrement, annuler (50 niveaux), date de modification `CHAN`
   mise à jour comme dans Ancestris.
+- **Analyses** (`⌘⇧A` / `Ctrl+Shift+A`, ou bouton « Analyses ») :
+  - *Cohérence* : dates impossibles, âges invraisemblables, liens cassés ou à sens unique,
+    boucles d'ascendance… Chaque anomalie ouvre la fiche concernée ; « Ignorer » la masque
+    avec l'extension [`_GR_IGNORE`](docs/extensions.md) (annulable).
+  - *Lien de parenté* : « cousine issue de germain », « oncle à la mode de Bretagne »,
+    demi-frère, beau-père… avec le chemin par l'ancêtre commun et le degré civil.
+  - *Chronologie* : âge à chaque événement, avec les naissances, mariages et décès des proches.
+  - *Statistiques* : patronymes et prénoms fréquents, longévité par siècle, âge au mariage,
+    complétude de l'ascendance par génération et implexe.
 - Enregistrement **sans perte** : un fichier relu puis réécrit est identique à l'octet près
   (balises propriétaires `_SOSADABOVILLE`, `_TODO`… comprises). Une copie `.ged.bak` est
   gardée à chaque enregistrement.
@@ -66,13 +75,15 @@ Sous Linux, installer d'abord les dépendances de GPUI :
 
 | Crate | Rôle |
 | --- | --- |
-| [`crates/gedcom`](crates/gedcom) | Lecture/écriture GEDCOM 7 sans perte, vues typées (individus, familles, sources, lieux, médias), formulaires d'édition, dates, coordonnées (`geo.rs`). Sans dépendance. |
-| [`crates/gedroots`](crates/gedroots) | Application GPUI : `workspace.rs` (fenêtre et vues), `editor.rs` (éditeurs visuel et brut), `map.rs` (carte des lieux), `theme.rs` (palette de la maquette). |
+| [`crates/gedcom`](crates/gedcom) | Lecture/écriture GEDCOM 7 sans perte, vues typées (individus, familles, sources, lieux, médias), formulaires d'édition, dates, coordonnées (`geo.rs`), outils d'analyse (`analysis/`). Sans dépendance. |
+| [`crates/gedroots`](crates/gedroots) | Application GPUI : `workspace.rs` (fenêtre et vues), `editor.rs` (éditeurs visuel et brut), `map.rs` (carte des lieux), `theme.rs` (palette de la maquette), `analyses.rs` (fenêtre Analyses). |
 
 ## Tests
 
 ```sh
 cargo test -p gedcom
+# Contrôle de cohérence et statistiques d'un fichier, en ligne de commande :
+cargo run -p gedcom --example analyse -- ~/Genealogie/arbre.ged
 # Vérifier qu'un vrai fichier est relu et réécrit à l'identique :
 GEDROOTS_TEST_GED=~/Genealogie/arbre.ged cargo test -p gedcom real_file -- --nocapture
 ```

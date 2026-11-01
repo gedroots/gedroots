@@ -13,7 +13,7 @@ use gpui_kit::*;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-actions!(gedroots, [OpenFile, SaveFile, Undo, NewFile, Quit]);
+actions!(gedroots, [OpenFile, SaveFile, Undo, NewFile, Quit, OpenAnalyses]);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum View {
@@ -327,7 +327,7 @@ impl Workspace {
     }
 
     /// Ouvre un enregistrement quelconque (lien depuis une fiche).
-    fn goto(&mut self, xref: String, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn goto(&mut self, xref: String, window: &mut Window, cx: &mut Context<Self>) {
         let Some(kind) = self.doc.as_ref().and_then(|d| d.ged.get(&xref)).and_then(|n| RecordKind::from_tag(&n.tag))
         else {
             return;
@@ -729,6 +729,13 @@ impl Workspace {
             )
             .when(self.doc.is_some(), |d| {
                 d.child(
+                    Button::new("analyses")
+                        .ghost()
+                        .small()
+                        .label("Analyses")
+                        .on_click(cx.listener(|this, _, w, cx| this.open_analyses(&OpenAnalyses, w, cx))),
+                )
+                .child(
                     Button::new("undo")
                         .ghost()
                         .small()
@@ -1538,11 +1545,58 @@ impl Render for Workspace {
             .on_action(cx.listener(Self::save_file))
             .on_action(cx.listener(Self::undo))
             .on_action(cx.listener(Self::new_file))
+            .on_action(cx.listener(Self::open_analyses))
             .bg(theme::bg())
             .text_color(theme::text())
             .text_sm()
             .child(self.render_header(cx))
             .child(body)
             .child(self.render_status())
+    }
+}
+
+// ----------------------------------------------------------------------
+// Accès pour la fenêtre Analyses (voir `analyses.rs`).
+// ----------------------------------------------------------------------
+
+impl Workspace {
+    /// Copie du fichier courant, pour les outils d'analyse.
+    pub(crate) fn ged_snapshot(&self) -> Option<Gedcom> {
+        self.doc.as_ref().map(|d| d.ged.clone())
+    }
+
+    /// Individu sélectionné dans la fenêtre principale.
+    pub(crate) fn selected_individual(&self) -> Option<String> {
+        let doc = self.doc.as_ref()?;
+        self.selected.clone().filter(|x| doc.ged.individual(x).is_some())
+    }
+
+    /// Applique une modification au fichier, avec point d'annulation.
+    pub(crate) fn edit_ged(
+        &mut self,
+        f: impl FnOnce(&mut Gedcom) -> bool,
+        msg: impl Into<SharedString>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.doc.is_none() {
+            return;
+        }
+        self.checkpoint();
+        if f(&mut self.doc.as_mut().unwrap().ged) {
+            self.rebuild_rows(cx);
+            self.refresh_editor(window, cx);
+            self.set_status(msg, false);
+        } else {
+            self.drop_checkpoint();
+        }
+        cx.notify();
+    }
+
+    fn open_analyses(&mut self, _: &OpenAnalyses, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(ged) = self.ged_snapshot() {
+            let person = self.selected_individual();
+            crate::analyses::open(cx.entity(), window.window_handle(), ged, person, cx);
+        }
     }
 }
