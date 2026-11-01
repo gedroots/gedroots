@@ -155,7 +155,7 @@ impl Workspace {
         });
     }
 
-    fn unlink(&mut self, indi: String, fam: String, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn unlink(&mut self, indi: String, fam: String, window: &mut Window, cx: &mut Context<Self>) {
         self.mutate(window, cx, |g| {
             let (who, from) = (g.record_label(&indi), g.record_label(&fam));
             g.unlink_from_family(&indi, &fam);
@@ -447,8 +447,15 @@ impl Workspace {
                     }))
                     .children(members.into_iter().map(|(role, x)| {
                         let (who, fam) = (x.clone(), key.clone());
+                        let open = x.clone();
                         h_flex()
+                            .id(SharedString::from(format!("member-{x}")))
                             .gap_2()
+                            .px_2()
+                            .py_0p5()
+                            .rounded_sm()
+                            .cursor_pointer()
+                            .hover(|d| d.bg(theme::hover()))
                             .items_center()
                             .child(div().w(px(52.)).text_xs().text_color(theme::muted()).child(role))
                             .child(
@@ -465,10 +472,13 @@ impl Workspace {
                                     .ghost()
                                     .icon(IconName::Close)
                                     .tooltip("Retirer de la famille")
-                                    .on_click(
-                                        cx.listener(move |this, _, w, cx| this.unlink(who.clone(), fam.clone(), w, cx)),
-                                    ),
+                                    .on_click(cx.listener(move |this, _, w, cx| {
+                                        cx.stop_propagation();
+                                        this.unlink(who.clone(), fam.clone(), w, cx)
+                                    })),
                             )
+                            .on_click(cx.listener(move |this, _, w, cx| this.goto(open.clone(), w, cx)))
+                            .with_menu(self.person_menu(&x, super::MenuFrom::Member(key.clone()), cx))
                     }))
                     .child(self.render_media_drop(&key, vec![], cx))
             }

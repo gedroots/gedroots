@@ -1,7 +1,8 @@
 //! Vues en arbre : ascendance, descendance et éventail.
 
 use super::*;
-use std::cell::Cell;
+use gpui_kit::component::menu::ContextMenuExt;
+use std::cell::{Cell, RefCell};
 use std::f32::consts::PI;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -170,9 +171,12 @@ impl Workspace {
     }
 
     fn desc_node(&self, g: &Gedcom, node: &DescNode, depth: usize, cx: &mut Context<Self>) -> AnyElement {
-        let me = self.person_box(g, &node.xref, depth == 0, cx).when(node.truncated, |d| {
-            d.child(div().text_xs().text_color(theme::accent()).child("▸ descendants masqués"))
-        });
+        let me = self
+            .person_box(g, &node.xref, depth == 0, cx)
+            .when(node.truncated, |d| {
+                d.child(div().text_xs().text_color(theme::accent()).child("▸ descendants masqués"))
+            })
+            .with_menu(self.person_menu(&node.xref, MenuFrom::Link, cx));
         h_flex()
             .items_start()
             .gap_3()
@@ -185,7 +189,10 @@ impl Workspace {
                         .child(
                             h_flex().gap_2().items_center().child(div().text_color(theme::muted()).child("∞")).child(
                                 match &u.spouse {
-                                    Some(s) => self.person_box(g, s, false, cx).into_any_element(),
+                                    Some(s) => self
+                                        .person_box(g, s, false, cx)
+                                        .with_menu(self.person_menu(s, MenuFrom::Link, cx))
+                                        .into_any_element(),
                                     None => div()
                                         .text_xs()
                                         .text_color(theme::muted())
@@ -305,8 +312,33 @@ impl Workspace {
             )
         });
 
-        let anc_click = anc.clone();
         let hit_radii = radii.clone();
+        // Personne sous le pointeur (indice Sosa dans `anc`).
+        let hit = Rc::new(move |pos: Point<Pixels>| -> Option<usize> {
+            let b = bounds_cell.get()?;
+            let c = b.origin + center_rel;
+            let (dx, dy) = (f32::from(pos.x - c.x), f32::from(c.y - pos.y));
+            let r = (dx * dx + dy * dy).sqrt();
+            let gn = hit_radii.iter().position(|outer| r <= *outer).map(|i| i + 1)?;
+            if gn == 1 {
+                return Some(1);
+            }
+            let mut a = dy.atan2(dx).to_degrees();
+            if a < FAN_LEFT - FAN_SPAN - 1e-3 {
+                a += 360.;
+            }
+            if !(FAN_LEFT - FAN_SPAN..=FAN_LEFT).contains(&a) {
+                return None;
+            }
+            let n = 1usize << (gn - 1);
+            let i = (((FAN_LEFT - a) / (FAN_SPAN / n as f32)) as usize).min(n - 1);
+            Some(n + i)
+        });
+        let (anc_click, hit_left) = (anc.clone(), hit.clone());
+        // Clic droit : on retient la personne visée, le menu est construit juste après.
+        let target: Rc<RefCell<Option<String>>> = Rc::default();
+        let (t_set, t_get, anc_right) = (target.clone(), target, anc.clone());
+        let ws = cx.entity().downgrade();
         let fan = div()
             .id("fan")
             .relative()
@@ -319,32 +351,21 @@ impl Workspace {
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(move |this, ev: &MouseDownEvent, window, cx| {
-                    let Some(b) = bounds_cell.get() else { return };
-                    let c = b.origin + center_rel;
-                    let (dx, dy) = (f32::from(ev.position.x - c.x), f32::from(c.y - ev.position.y));
-                    let r = (dx * dx + dy * dy).sqrt();
-                    let Some(gn) = hit_radii.iter().position(|outer| r <= *outer).map(|i| i + 1) else { return };
-                    let k = if gn == 1 {
-                        1
-                    } else {
-                        let mut a = dy.atan2(dx).to_degrees();
-                        if a < FAN_LEFT - FAN_SPAN - 1e-3 {
-                            a += 360.;
-                        }
-                        if !(FAN_LEFT - FAN_SPAN..=FAN_LEFT).contains(&a) {
-                            return;
-                        }
-                        let n = 1usize << (gn - 1);
-                        let i = (((FAN_LEFT - a) / (FAN_SPAN / n as f32)) as usize).min(n - 1);
-                        n + i
-                    };
-                    if k > 1
+                    if let Some(k) = hit_left(ev.position)
+                        && k > 1
                         && let Some(Some(x)) = anc_click.get(k)
                     {
                         this.select(x.clone(), window, cx);
                     }
                 }),
-            );
+            )
+            .on_mouse_down(MouseButton::Right, move |ev: &MouseDownEvent, _, _| {
+                *t_set.borrow_mut() = hit(ev.position).and_then(|k| anc_right.get(k).cloned().flatten());
+            })
+            .context_menu(move |menu, w, cx| match t_get.borrow().clone() {
+                Some(x) => menus::person_menu(ws.clone(), x, MenuFrom::Link)(menu, w, cx),
+                None => menu,
+            });
         div()
             .id("fan-scroll")
             .flex_1()

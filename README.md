@@ -19,6 +19,14 @@ et suit la maquette « Lignée » (thème sombre, barre d'activité, liste, arbr
   sans accents. Raccourcis : `⌘1`…`⌘7` listes, `⌥⌘1`…`⌥⌘3` arbre/fiche/GEDCOM, `⌘F`
   rechercher, `⌘⇧N` nouvel élément, `⌘⇧H` individu racine, `⌘=` / `⌘-` générations,
   `⌘⇧S` enregistrer sous.
+- **Clic droit partout** : lignes des listes (et le fond, pour créer), cases des arbres et de
+  l'éventail, cases vides (nouvelle personne ou personne existante), événements, proches,
+  membres d'une famille, liens et vignettes du panneau de détail, repères et fond de la carte
+  (« Placer ce lieu ici »). Le menu agit sur l'élément cliqué sans le sélectionner, avec les
+  mêmes commandes que la barre de menus.
+- **Événements modifiables** : un clic sur un événement (individu ou famille) le rouvre dans
+  la même fenêtre que l'ajout (type, précision, date, lieu suggéré, source) ; on peut aussi le
+  supprimer. Notes, âge, médias et autres citations de l'événement sont conservés.
 - **Individus** : liste avec recherche sans accents ni casse et critères
   (`né:1800-1850`, `mort:<1900`, `vécu:1870`, `lieu:troyes`, `prof:meunier`, `sexe:f`,
   `sans:source`, `sans:parents`, `avec:média`, `sosa:1-63`…), filtres rapides (Affichage › Filtrer la liste) ;
@@ -124,7 +132,7 @@ Sous Linux, installer d'abord les dépendances de GPUI :
 | Crate | Rôle |
 | --- | --- |
 | [`crates/gedcom`](crates/gedcom) | Lecture/écriture GEDCOM 7 sans perte, vues typées (individus, familles, sources, lieux, médias), recadrage `CROP` (`crop.rs`), formulaires d'édition, dates, coordonnées (`geo.rs`), outils d'analyse (`analysis/`), recherche (`search.rs`), ajout/liaison de proches et médias (`relations.rs`), descendance (`pedigree.rs`), modèles d'actes (`template.rs`) et saisie guidée (`entry.rs`). Sans dépendance. |
-| [`crates/gedroots`](crates/gedroots) | Application GPUI : `commands.rs` (toutes les commandes, raccourcis et menus), `workspace.rs` (fenêtre et vues) et `workspace/` (`commands.rs` commandes et palette, `tree.rs` arbres, `relatives.rs` proches/sélecteur/médias, `photo.rs` recadrage et personnes sur les photos, `filters.rs` filtres rapides), `editor.rs` (éditeurs visuel et brut), `entry_form.rs` (saisie d'acte), `map.rs` (carte des lieux), `theme.rs` (palette de la maquette), `analyses.rs` (fenêtre Analyses). |
+| [`crates/gedroots`](crates/gedroots) | Application GPUI : `commands.rs` (toutes les commandes, raccourcis et menus), `workspace.rs` (fenêtre et vues) et `workspace/` (`commands.rs` commandes et palette, `tree.rs` arbres, `relatives.rs` proches/sélecteur/médias, `add.rs` fenêtres d'ajout et de modification d'événement, `menus.rs` menus du clic droit, `photo.rs` recadrage et personnes sur les photos, `filters.rs` filtres rapides), `editor.rs` (éditeurs visuel et brut), `entry_form.rs` (saisie d'acte), `map.rs` (carte des lieux), `theme.rs` (palette de la maquette), `analyses.rs` (fenêtre Analyses). |
 
 ## Tests
 

@@ -18,6 +18,8 @@ type RowAction = Box<dyn Fn(&mut Workspace, &mut Window, &mut Context<Workspace>
 
 pub(super) struct EventDialog {
     owner: String,
+    /// Événement modifié (position dans l'enregistrement) ; `None` : ajout.
+    editing: Option<usize>,
     kind: Entity<PickerState>,
     detail: Entity<InputState>,
     date: Entity<InputState>,
@@ -28,22 +30,47 @@ pub(super) struct EventDialog {
 }
 
 impl Workspace {
-    /// Ouvre la fenêtre « Nouvel événement » pour un individu ou une famille.
-    pub(super) fn open_event_dialog(&mut self, owner: String, window: &mut Window, cx: &mut Context<Self>) {
+    /// Ouvre la fenêtre « Nouvel événement » pour un individu ou une famille,
+    /// ou la fenêtre de modification de l'événement `editing`.
+    pub(super) fn open_event_dialog(
+        &mut self,
+        owner: String,
+        editing: Option<usize>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let Some(doc) = &self.doc else { return };
         let g = &doc.ged;
+        let current = match editing {
+            Some(ix) => match g.read_event(&owner, ix) {
+                Some(ev) => Some(ev),
+                None => return,
+            },
+            None => None,
+        };
         let family = g.family(&owner).is_some();
         let tags = if family { FAMILY_EVENTS } else { INDIVIDUAL_EVENTS };
-        let options: Vec<(&str, &str)> =
+        let mut options: Vec<(&str, &str)> =
             tags.iter().map(|t| (*t, if *t == "EVEN" { "Autre…" } else { event_label(t).unwrap_or(t) })).collect();
-        let kind = choice(&options, if family { "MARR" } else { "" }, window, cx);
-        let text = |ph: &'static str, window: &mut Window, cx: &mut Context<Self>| {
-            cx.new(|cx| InputState::new(window, cx).placeholder(ph))
+        // Type absent de la liste proposée à l'ajout (CHR, ADOP…) : on le garde.
+        let cur_tag = current.as_ref().map(|e| e.tag.clone()).unwrap_or_default();
+        if !cur_tag.is_empty() && !tags.contains(&cur_tag.as_str()) {
+            options.insert(0, (cur_tag.as_str(), event_label(&cur_tag).unwrap_or(cur_tag.as_str())));
+        }
+        let default_kind = match &current {
+            Some(e) => e.tag.as_str(),
+            None if family => "MARR",
+            None => "",
         };
-        let detail = text("", window, cx);
-        let date = text("ex. 14 MAR 1912, ABT 1850", window, cx);
-        let place = text("Commune…", window, cx);
-        let source = picker(g, RecordKind::Source, "", window, cx);
+        let kind = choice(&options, default_kind, window, cx);
+        let cur = current.clone().unwrap_or_default();
+        let text = |ph: &'static str, value: String, window: &mut Window, cx: &mut Context<Self>| {
+            cx.new(|cx| InputState::new(window, cx).placeholder(ph).default_value(value))
+        };
+        let detail = text("", cur.detail, window, cx);
+        let date = text("ex. 14 MAR 1912, ABT 1850", cur.date, window, cx);
+        let place = text("Commune…", cur.place, window, cx);
+        let source = picker(g, RecordKind::Source, cur.source.as_deref().unwrap_or(""), window, cx);
         let sub = cx.subscribe_in(&place, window, |this, input, ev: &InputEvent, _, cx| {
             if matches!(ev, InputEvent::Focus | InputEvent::Change) {
                 this.place_focus = Some(input.entity_id());
@@ -53,6 +80,7 @@ impl Workspace {
         let sub_kind = cx.observe(&kind, |_, _, cx| cx.notify());
         self.add_dialog = Some(AddDialog::Event(Box::new(EventDialog {
             owner,
+            editing,
             kind,
             detail,
             date,
@@ -90,10 +118,14 @@ impl Workspace {
             place: d.place.read(cx).value().to_string(),
             source: d.source.read(cx).selected_value().cloned(),
         };
-        let owner = d.owner.clone();
+        let (owner, editing) = (d.owner.clone(), d.editing);
         // Vérification avant la modification, pour garder la fenêtre ouverte en cas d'erreur.
         let mut probe = self.doc.as_ref().unwrap().ged.clone();
-        if let Err(e) = probe.add_event(&owner, &ev) {
+        let check = match editing {
+            Some(ix) => probe.update_event(&owner, ix, &ev),
+            None => probe.add_event(&owner, &ev),
+        };
+        if let Err(e) = check {
             d.error = Some(e.into());
             cx.notify();
             return;
@@ -101,8 +133,30 @@ impl Workspace {
         self.add_dialog = None;
         let label = if ev.tag == "EVEN" { ev.detail.clone() } else { event_label(&ev.tag).unwrap_or("").to_string() };
         self.mutate(window, cx, move |g| {
-            g.add_event(&owner, &ev)?;
-            Ok((format!("{label} ajouté(e) à {}", g.record_label(&owner)), None))
+            let who = g.record_label(&owner);
+            match editing {
+                Some(ix) => {
+                    g.update_event(&owner, ix, &ev)?;
+                    Ok((format!("{label} de {who} modifié(e)"), None))
+                }
+                None => {
+                    g.add_event(&owner, &ev)?;
+                    Ok((format!("{label} ajouté(e) à {who}"), None))
+                }
+            }
+        });
+        window.focus(&self.focus, cx);
+    }
+
+    /// Supprime un événement (Annuler pour revenir en arrière).
+    pub(super) fn delete_event(&mut self, owner: String, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
+        if matches!(&self.add_dialog, Some(AddDialog::Event(d)) if d.owner == owner && d.editing == Some(ix)) {
+            self.add_dialog = None;
+        }
+        self.mutate(window, cx, move |g| {
+            let who = g.record_label(&owner);
+            let label = g.delete_event(&owner, ix)?;
+            Ok((format!("{label} retiré(e) de {who} (Annuler pour revenir en arrière)"), None))
         });
         window.focus(&self.focus, cx);
     }
@@ -110,7 +164,13 @@ impl Workspace {
     pub(super) fn render_add_dialog(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let g = &self.doc.as_ref()?.ged;
         let (title, body): (String, AnyElement) = match self.add_dialog.as_ref()? {
-            AddDialog::Event(d) => (format!("Nouvel événement · {}", g.record_label(&d.owner)), self.event_body(d, cx)),
+            AddDialog::Event(d) => {
+                let what = match d.editing.and_then(|ix| g.event_title(&d.owner, ix)) {
+                    Some(t) => t,
+                    None => "Nouvel événement".into(),
+                };
+                (format!("{what} · {}", g.record_label(&d.owner)), self.event_body(d, cx))
+            }
             AddDialog::Relatives { target } => match g.family(target) {
                 Some(_) => (format!("Membres · {}", g.record_label(target)), self.family_body(target, cx)),
                 None => (format!("Proches · {}", g.record_label(target)), self.relatives_body(target, cx)),
@@ -206,14 +266,30 @@ impl Workspace {
             ))
             .when_some(d.error.clone(), |v, e| v.child(div().text_sm().text_color(theme::danger()).child(e)))
             .child(
-                h_flex().gap_2().justify_end().child(
-                    Button::new("add-event-save")
-                        .primary()
-                        .small()
-                        .icon(IconName::Check)
-                        .label("Ajouter")
-                        .on_click(cx.listener(|this, _, w, cx| this.save_event(w, cx))),
-                ),
+                h_flex()
+                    .gap_2()
+                    .when_some(d.editing, |row, ix| {
+                        let owner = d.owner.clone();
+                        row.child(
+                            Button::new("event-delete")
+                                .ghost()
+                                .small()
+                                .icon(IconName::Delete)
+                                .label("Supprimer")
+                                .on_click(
+                                    cx.listener(move |this, _, w, cx| this.delete_event(owner.clone(), ix, w, cx)),
+                                ),
+                        )
+                    })
+                    .child(div().flex_1())
+                    .child(
+                        Button::new("add-event-save")
+                            .primary()
+                            .small()
+                            .icon(IconName::Check)
+                            .label(if d.editing.is_some() { "Enregistrer" } else { "Ajouter" })
+                            .on_click(cx.listener(|this, _, w, cx| this.save_event(w, cx))),
+                    ),
             )
             .into_any_element()
     }
