@@ -157,7 +157,7 @@ impl Workspace {
             .when(indi.is_some() || fam.is_some(), |d| {
                 on!(d, cx, AddEvent, |this, w, cx| {
                     if let Some(x) = this.selected.clone() {
-                        this.open_event_dialog(x, w, cx)
+                        this.open_event_dialog(x, None, w, cx)
                     }
                 })
             })
@@ -205,7 +205,7 @@ impl Workspace {
         media_path(doc, &m).filter(|p| m.is_image() && p.exists())
     }
 
-    fn tag_person_on_photo(&mut self, cx: &mut Context<Self>) {
+    pub(super) fn tag_person_on_photo(&mut self, cx: &mut Context<Self>) {
         let Some(media) = self.selected.clone() else { return };
         let Some(path) = self.photo_file(&media) else { return };
         self.tab = CenterTab::Form;
@@ -265,7 +265,7 @@ impl Workspace {
         cx.notify();
     }
 
-    fn set_query(&mut self, query: String, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn set_query(&mut self, query: String, window: &mut Window, cx: &mut Context<Self>) {
         self.filter.update(cx, |f, cx| f.set_value(query, window, cx));
         self.rebuild_rows(cx);
         cx.notify();
