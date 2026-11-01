@@ -1,0 +1,7 @@
+/target
+# Les arbres généalogiques personnels ne doivent pas être versionnés.
+*.ged
+*.ged.bak
+*.ged.tmp
+!crates/gedcom/tests/fixtures/*.ged
+.DS_Store

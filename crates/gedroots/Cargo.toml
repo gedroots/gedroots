@@ -1,0 +1,9 @@
+[package]
+name = "gedroots"
+version = "0.1.0"
+edition = "2024"
+description = "GedRoots — logiciel de généalogie libre et local, GEDCOM 7"
+
+[dependencies]
+gpui-kit = "=0.8.1"
+gedcom = { path = "../gedcom" }

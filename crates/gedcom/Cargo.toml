@@ -1,0 +1,7 @@
+[package]
+name = "gedcom"
+version = "0.1.0"
+edition = "2024"
+description = "Lecture/écriture GEDCOM 7 sans perte et vues typées pour GedRoots"
+
+[dependencies]
