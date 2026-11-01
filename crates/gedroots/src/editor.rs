@@ -1,9 +1,12 @@
 //! Éditeurs d'un enregistrement : formulaire visuel + éditeur GEDCOM brut.
 
+use crate::completion::GedcomCompletion;
+use gedcom::complete::Catalog;
 use gedcom::*;
 use gpui_kit::component::input::{EditorState, InputState, TextareaState};
 use gpui_kit::component::select::{SearchableVec, SelectItem, SelectState};
-use gpui_kit::{App, AppContext, Context, Entity, SharedString, Window};
+use gpui_kit::{App, AppContext, Context, Entity, SharedString, Window, px};
+use std::rc::Rc;
 
 /// Ce qui est sélectionné dans la vue courante.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -203,7 +206,13 @@ impl RecordEditor {
                     }
                 }
                 let text = node_to_string(node);
-                raw = Some(cx.new(|cx| EditorState::new(window, cx).line_number(true).default_value(text)));
+                let provider = Rc::new(GedcomCompletion::new(Catalog::from_gedcom(ged)));
+                raw = Some(cx.new(|cx| {
+                    let mut state = EditorState::new(window, cx).line_number(true).default_value(text);
+                    state.lsp_mut().completion_provider = Some(provider);
+                    state.lsp_mut().completion_menu.max_width = px(520.);
+                    state
+                }));
             }
         }
         Self { target, pickers, fields, long_text, raw, error: None }
