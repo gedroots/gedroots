@@ -1,0 +1,83 @@
+﻿0 HEAD
+1 GEDC
+2 VERS 7.0.13
+1 SCHMA
+2 TAG _SOSADABOVILLE https://docs.ancestris.org/books/user-guide/page/tags#bkmrk-ancestris-tags
+1 SOUR GEDROOTS
+2 NAME GedRoots
+1 LANG fr
+1 PLAC
+2 FORM Lieudit, Commune, Code_Postal, Département, Région, Pays
+1 NOTE Famille fictive servant aux tests de GedRoots
+0 @I00001@ INDI
+1 NAME Paul Émile /MARCHAND/
+2 GIVN Paul Émile
+2 SURN MARCHAND
+1 _SOSADABOVILLE 1 G1
+1 SEX M
+1 BIRT
+2 DATE 14 MAR 1912
+2 PLAC , Saint-Lô, 50000, Manche, Normandie, France
+3 MAP
+4 LATI N49.1157
+4 LONG W1.0906
+2 SOUR @S00001@
+3 PAGE Acte n° 112, vue 37
+1 DEAT
+2 DATE 1987
+2 PLAC , Caen, 14000, Calvados, Normandie, France
+1 OCCU Instituteur
+1 FAMC @F00001@
+1 OBJE @M00001@
+0 @I00002@ INDI
+1 NAME Émile /MARCHAND/
+2 GIVN Émile
+2 SURN MARCHAND
+1 _SOSADABOVILLE 2 G2
+1 SEX M
+1 BIRT
+2 DATE FRENCH_R 30 GERM 4
+2 PLAC , Agneaux, 50180, Manche, Normandie, France
+1 DEAT
+2 DATE BEF 1944
+1 FAMS @F00001@
+1 _TODO Chercher l'acte de décès
+0 @I00003@ INDI
+1 NAME Jeanne /ROUSSEL/
+2 GIVN Jeanne
+2 SURN ROUSSEL
+1 SEX F
+1 BIRT
+2 DATE ABT 1885
+2 PLAC , Coutances, 50200, Manche, Normandie, France
+1 FAMS @F00001@
+1 NOTE Couturière à Coutances.
+2 CONT Mariée à Saint-Lô.
+0 @F00001@ FAM
+1 HUSB @I00002@
+1 WIFE @I00003@
+1 CHIL @I00001@
+1 MARR
+2 DATE 2 JUN 1910
+2 PLAC , Saint-Lô, 50000, Manche, Normandie, France
+3 MAP
+4 LATI N49.1157
+4 LONG W1.0906
+2 ASSO @I00002@
+3 ROLE WITN
+0 @S00001@ SOUR
+1 TITL Registre des naissances, Saint-Lô, 1912
+1 PUBL Archives départementales de la Manche
+1 REPO @R00001@
+2 CALN 3 E 502/112
+1 OBJE @M00001@
+0 @R00001@ REPO
+1 NAME Archives départementales de la Manche
+1 WWW https://www.archives-manche.fr
+0 @M00001@ OBJE
+1 FILE Actes/naissance_MARCHAND_Paul.jpg
+2 FORM image/jpeg
+2 TITL Acte de naissance de Paul MARCHAND
+0 @N00001@ SNOTE Note partagée
+1 CONT sur deux lignes
+0 TRLR
