@@ -2,6 +2,7 @@
 //! GEDCOM brut), panneau de détail et barre d'état — d'après la maquette.
 
 use crate::editor::{RecordEditor, Target};
+use crate::map::{MapEvent, MapView};
 use crate::theme;
 use gedcom::*;
 use gpui_kit::component::button::{Button, ButtonVariants};
@@ -80,6 +81,7 @@ impl View {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum CenterTab {
     Tree,
+    Map,
     Form,
     Raw,
 }
@@ -88,6 +90,7 @@ impl CenterTab {
     fn label(self) -> &'static str {
         match self {
             CenterTab::Tree => "Arbre",
+            CenterTab::Map => "Carte",
             CenterTab::Form => "Fiche",
             CenterTab::Raw => "GEDCOM",
         }
@@ -124,6 +127,7 @@ pub struct Workspace {
     selected: Option<String>,
     editor: Option<RecordEditor>,
     status: Option<(SharedString, bool)>,
+    map: Entity<MapView>,
     _subs: Vec<Subscription>,
 }
 
@@ -136,6 +140,8 @@ impl Workspace {
                 cx.notify();
             }
         });
+        let map = cx.new(|_| MapView::new());
+        let map_sub = cx.subscribe_in(&map, window, Self::on_map_event);
         let mut this = Self {
             focus: cx.focus_handle(),
             doc: None,
@@ -147,7 +153,8 @@ impl Workspace {
             selected: None,
             editor: None,
             status: None,
-            _subs: vec![sub],
+            map,
+            _subs: vec![sub, map_sub],
         };
         if let Some(p) = path {
             this.load(p, window, cx);
@@ -298,7 +305,11 @@ impl Workspace {
         self.selected = None;
         self.editor = None;
         self.filter.update(cx, |f, cx| f.set_value("", window, cx));
-        self.tab = if view == View::Individuals { CenterTab::Tree } else { CenterTab::Form };
+        self.tab = match view {
+            View::Individuals => CenterTab::Tree,
+            View::Places => CenterTab::Map,
+            _ => CenterTab::Form,
+        };
         self.rebuild_rows(cx);
         if let Some(first) = self.rows.first().map(|r| r.key.clone()) {
             self.select(first, window, cx);
@@ -307,6 +318,9 @@ impl Workspace {
     }
 
     fn select(&mut self, key: String, window: &mut Window, cx: &mut Context<Self>) {
+        if self.view == View::Places {
+            self.map.update(cx, |m, cx| m.set_selected(Some(key.clone()), cx));
+        }
         self.selected = Some(key);
         self.refresh_editor(window, cx);
         cx.notify();
@@ -328,6 +342,28 @@ impl Workspace {
     fn goto_place(&mut self, name: String, window: &mut Window, cx: &mut Context<Self>) {
         self.set_view(View::Places, window, cx);
         self.select(name, window, cx);
+    }
+
+    /// Clic sur un repère, ou coordonnées trouvées / posées sur la carte.
+    fn on_map_event(&mut self, _: &Entity<MapView>, ev: &MapEvent, window: &mut Window, cx: &mut Context<Self>) {
+        match ev {
+            MapEvent::Select(name) => self.select(name.clone(), window, cx),
+            MapEvent::SetCoords { name, lat, lon, checkpoint } => {
+                if *checkpoint {
+                    self.checkpoint();
+                }
+                let Some(doc) = &mut self.doc else { return };
+                doc.dirty = true;
+                let (la, lo) = (geo::format_latitude(*lat), geo::format_longitude(*lon));
+                let n = doc.ged.update_place(name, name, &la, &lo);
+                self.rebuild_rows(cx);
+                if self.selected.as_deref() == Some(name.as_str()) {
+                    self.refresh_editor(window, cx);
+                }
+                self.set_status(format!("{} : {la} {lo} ({n} occurrence(s))", short_place(name)), false);
+                cx.notify();
+            }
+        }
     }
 
     fn refresh_editor(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -561,6 +597,10 @@ impl Workspace {
                 })
                 .collect(),
         };
+        if self.view == View::Places {
+            let places = g.places();
+            self.map.update(cx, |m, cx| m.set_places(&places, cx));
+        }
         if self.only_flagged {
             rows.retain(|r| r.flagged);
         }
@@ -855,7 +895,7 @@ impl Workspace {
     fn render_center(&self, cx: &mut Context<Self>) -> AnyElement {
         let tabs: Vec<CenterTab> = match self.view {
             View::Individuals => vec![CenterTab::Tree, CenterTab::Form, CenterTab::Raw],
-            View::Places => vec![CenterTab::Form],
+            View::Places => vec![CenterTab::Map, CenterTab::Form],
             _ => vec![CenterTab::Form, CenterTab::Raw],
         };
         let tab = if tabs.contains(&self.tab) { self.tab } else { tabs[0] };
@@ -864,6 +904,7 @@ impl Workspace {
             _ => self.doc.as_ref().map(|d| d.ged.record_label(k)).unwrap_or_default(),
         });
         let body: AnyElement = match (tab, &self.editor) {
+            (CenterTab::Map, _) => self.map.clone().into_any_element(),
             (_, None) => self.render_empty_center().into_any_element(),
             (CenterTab::Tree, _) => self.render_tree(cx).into_any_element(),
             (CenterTab::Form, Some(ed)) => self.render_form(ed, cx).into_any_element(),
