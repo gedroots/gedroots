@@ -18,6 +18,8 @@ pub enum Target {
 pub struct Field {
     pub label: &'static str,
     pub state: FieldState,
+    /// Lieu : propose les lieux déjà présents dans le fichier.
+    pub place: bool,
 }
 
 /// Saisie libre, ou choix dans une liste de valeurs fixes (sexe…).
@@ -165,7 +167,16 @@ impl RecordEditor {
         let mut raw = None;
         macro_rules! field {
             ($label:expr, $hint:expr, $v:expr) => {
-                fields.push(Field { label: $label, state: FieldState::Text(input(window, cx, &$v, $hint)) })
+                fields.push(Field {
+                    label: $label,
+                    state: FieldState::Text(input(window, cx, &$v, $hint)),
+                    place: false,
+                })
+            };
+        }
+        macro_rules! place_field {
+            ($label:expr, $v:expr) => {
+                fields.push(Field { label: $label, state: FieldState::Text(input(window, cx, &$v, "")), place: true })
             };
         }
         match &target {
@@ -196,12 +207,12 @@ impl RecordEditor {
                         field!("Prénoms", "", f.given);
                         field!("Nom", "", f.surname);
                         let sex = choice(SEXES, &f.sex, window, cx);
-                        fields.push(Field { label: "Sexe", state: FieldState::Choice(sex) });
+                        fields.push(Field { label: "Sexe", state: FieldState::Choice(sex), place: false });
                         field!("Profession", "", f.occupation);
                         field!("Naissance — date", "ex. 14 MAR 1912, ABT 1850", f.birth.date);
-                        field!("Naissance — lieu", "", f.birth.place);
+                        place_field!("Naissance — lieu", f.birth.place);
                         field!("Décès — date", "", f.death.date);
-                        field!("Décès — lieu", "", f.death.place);
+                        place_field!("Décès — lieu", f.death.place);
                         long_text = Some(("Note", textarea(window, cx, &f.note)));
                     }
                     RecordKind::Family => {
@@ -211,7 +222,7 @@ impl RecordEditor {
                             pickers.push(Picker { label, placeholder: "Choisir un individu…", state });
                         }
                         field!("Mariage — date", "", f.marriage.date);
-                        field!("Mariage — lieu", "", f.marriage.place);
+                        place_field!("Mariage — lieu", f.marriage.place);
                     }
                     RecordKind::Source => {
                         let f = SourceForm::read(node);

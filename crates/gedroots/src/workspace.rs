@@ -187,6 +187,9 @@ pub struct Workspace {
     orphans_open: bool,
     /// Boutons « Détacher » dépliés dans le panneau d'un individu.
     show_detach: bool,
+    /// Champ de lieu en cours de saisie dans la fiche.
+    place_focus: Option<EntityId>,
+    editor_subs: Vec<Subscription>,
     /// Défilement de la liste, pour garder l'élément affiché visible.
     list_scroll: UniformListScrollHandle,
     _subs: Vec<Subscription>,
@@ -232,6 +235,8 @@ impl Workspace {
             orphans_open: false,
             show_detach: false,
             list_scroll: UniformListScrollHandle::new(),
+            place_focus: None,
+            editor_subs: Vec::new(),
             _subs: vec![sub, map_sub],
         };
         if let Some(p) = path {
@@ -504,7 +509,24 @@ impl Workspace {
             },
             None => Target::Place(key.clone()),
         };
-        self.editor = Some(RecordEditor::new(&doc.ged, target, window, cx));
+        let ed = RecordEditor::new(&doc.ged, target, window, cx);
+        // Champs de lieu : suggestions des lieux existants pendant la saisie.
+        self.place_focus = None;
+        self.editor_subs = ed
+            .fields
+            .iter()
+            .filter(|f| f.place)
+            .filter_map(|f| match &f.state {
+                FieldState::Text(e) => Some(cx.subscribe_in(e, window, |this, input, ev: &InputEvent, _, cx| {
+                    if matches!(ev, InputEvent::Focus | InputEvent::Change) {
+                        this.place_focus = Some(input.entity_id());
+                        cx.notify();
+                    }
+                })),
+                FieldState::Choice(_) => None,
+            })
+            .collect();
+        self.editor = Some(ed);
         // Les anciens champs disparaissent : on rend le focus à l'espace de travail
         // pour que les raccourcis clavier restent actifs.
         window.focus(&self.focus, cx);
@@ -1267,10 +1289,18 @@ impl Workspace {
                     })))
                 })
                 .child(div().grid().grid_cols(2).gap_3().children(ed.fields.iter().map(|f| {
-                    v_flex().gap_1().child(label_caps(f.label)).child(match &f.state {
-                        FieldState::Text(e) => Input::new(e).small().into_any_element(),
-                        FieldState::Choice(e) => Select::new(e).small().into_any_element(),
-                    })
+                    v_flex()
+                        .gap_1()
+                        .min_w_0()
+                        .child(label_caps(f.label))
+                        .child(match &f.state {
+                            FieldState::Text(e) => Input::new(e).small().into_any_element(),
+                            FieldState::Choice(e) => Select::new(e).small().into_any_element(),
+                        })
+                        .children(match &f.state {
+                            FieldState::Text(e) if f.place => self.place_suggestions(e, cx),
+                            _ => None,
+                        })
                 })))
                 .when_some(ed.long_text.as_ref(), |d, (label, state)| {
                     d.child(v_flex().gap_1().child(label_caps(*label)).child(Textarea::new(state).h(px(120.))))
@@ -1316,6 +1346,58 @@ impl Workspace {
                 )
                 .when_some(preview, |d, p| d.child(p))
                 .when_some(self.record_images(ed, cx), |d, p| d.child(p)),
+        )
+    }
+
+    /// Lieux existants qui correspondent au champ de lieu en cours de saisie.
+    fn place_suggestions(&self, input: &Entity<InputState>, cx: &mut Context<Self>) -> Option<AnyElement> {
+        if self.place_focus != Some(input.entity_id()) {
+            return None;
+        }
+        let value = input.read(cx).value().to_string();
+        let q = sort_key(value.trim());
+        if q.len() < 2 {
+            return None;
+        }
+        let doc = self.doc.as_ref()?;
+        let mut hits: Vec<(String, String)> = doc
+            .ged
+            .places()
+            .into_iter()
+            .filter(|p| p.name != value && sort_key(&p.name).contains(&q))
+            .map(|p| (short_place(&p.name), p.name))
+            .collect();
+        // Les lieux qui commencent par la saisie d'abord.
+        hits.sort_by_key(|(short, _)| (!sort_key(short).starts_with(&q), short.clone()));
+        hits.truncate(6);
+        if hits.is_empty() {
+            return None;
+        }
+        Some(
+            h_flex()
+                .flex_wrap()
+                .gap_1()
+                .children(hits.into_iter().enumerate().map(|(n, (short, full))| {
+                    let entity = input.clone();
+                    div()
+                        .id(SharedString::from(format!("pl-{}-{n}", input.entity_id())))
+                        .px_2()
+                        .py(px(3.))
+                        .rounded_md()
+                        .border_1()
+                        .border_color(theme::border_strong())
+                        .bg(theme::surface())
+                        .text_xs()
+                        .cursor_pointer()
+                        .hover(|d| d.border_color(theme::accent()))
+                        .child(short)
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            entity.update(cx, |s, cx| s.set_value(full.clone(), window, cx));
+                            this.place_focus = None;
+                            cx.notify();
+                        }))
+                }))
+                .into_any_element(),
         )
     }
 
