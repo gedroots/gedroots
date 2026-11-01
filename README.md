@@ -11,9 +11,17 @@ et suit la maquette « Lignée » (thème sombre, barre d'activité, liste, arbr
 
 ## Fonctionnalités
 
+- **Tout est dans la barre de menus** (Fichier, Édition, Individu, Famille, Source, Média,
+  Affichage, Analyses, Aide) : pas de barre d'outils, l'écran reste aux données. Menus natifs
+  sous macOS ; sous Linux et Windows, les mêmes menus dans le haut de la fenêtre. Les commandes
+  qui ne s'appliquent pas à la sélection sont grisées (macOS) ou sans effet.
+- **Palette de commandes** (`⌘⇧P` / `Ctrl+Maj+P`) : toutes les commandes applicables, recherche
+  sans accents. Raccourcis : `⌘1`…`⌘7` listes, `⌥⌘1`…`⌥⌘3` arbre/fiche/GEDCOM, `⌘F`
+  rechercher, `⌘⇧N` nouvel élément, `⌘⇧H` individu racine, `⌘=` / `⌘-` générations,
+  `⌘⇧S` enregistrer sous.
 - **Individus** : liste avec recherche sans accents ni casse et critères
   (`né:1800-1850`, `mort:<1900`, `vécu:1870`, `lieu:troyes`, `prof:meunier`, `sexe:f`,
-  `sans:source`, `sans:parents`, `avec:média`, `sosa:1-63`…), filtres rapides en un clic ;
+  `sans:source`, `sans:parents`, `avec:média`, `sosa:1-63`…), filtres rapides (Affichage › Filtrer la liste) ;
   fiche avec portrait, galerie d'images, événements (dates en français, calendrier républicain compris), sources citées,
   famille (parents, conjoints, enfants) cliquable.
 - **Arbres** : ascendance (4 générations, portraits, lignées paternelle/maternelle, numéros Sosa),
@@ -39,8 +47,8 @@ et suit la maquette « Lignée » (thème sombre, barre d'activité, liste, arbr
 
 - **Médias / photos** : portraits des individus, images des sources (actes numérisés)
   dans la fiche et le panneau de détail, chemins relatifs au fichier `.ged`.
-- **Recadrage et identification des personnes** : sur la fiche d'une photo, « Identifier une
-  personne » puis tracer un cadre autour du visage et choisir la personne. C'est le `CROP`
+- **Recadrage et identification des personnes** : sur la fiche d'une photo, Média › « Identifier une
+  personne sur la photo » puis tracer un cadre autour du visage et choisir la personne. C'est le `CROP`
   standard de GEDCOM 7 sur le lien `INDI → OBJE` (pas d'extension, lisible par les autres
   logiciels) : la photo de groupe affiche les noms, le portrait et les vignettes de la personne
   sont recadrés sur son visage. Chaque lien vers une image (source, famille…) peut aussi être
@@ -72,7 +80,7 @@ et suit la maquette « Lignée » (thème sombre, barre d'activité, liste, arbr
 - Créer / supprimer un enregistrement (avec confirmation ; un lieu peut être retiré de tous
   les événements), annuler (50 niveaux), date de modification `CHAN`
   mise à jour comme dans Ancestris.
-- **Analyses** (`⌘⇧A` / `Ctrl+Shift+A`, ou bouton « Analyses ») :
+- **Analyses** (`⌘⇧A` / `Ctrl+Shift+A`, ou menu Analyses) :
   - *Cohérence* : dates impossibles, âges invraisemblables, liens cassés ou à sens unique,
     boucles d'ascendance… Chaque anomalie ouvre la fiche concernée ; « Ignorer » la masque
     avec l'extension [`_GR_IGNORE`](docs/extensions.md) (annulable).
@@ -116,7 +124,7 @@ Sous Linux, installer d'abord les dépendances de GPUI :
 | Crate | Rôle |
 | --- | --- |
 | [`crates/gedcom`](crates/gedcom) | Lecture/écriture GEDCOM 7 sans perte, vues typées (individus, familles, sources, lieux, médias), recadrage `CROP` (`crop.rs`), formulaires d'édition, dates, coordonnées (`geo.rs`), outils d'analyse (`analysis/`), recherche (`search.rs`), ajout/liaison de proches et médias (`relations.rs`), descendance (`pedigree.rs`), modèles d'actes (`template.rs`) et saisie guidée (`entry.rs`). Sans dépendance. |
-| [`crates/gedroots`](crates/gedroots) | Application GPUI : `workspace.rs` (fenêtre et vues) et `workspace/` (`tree.rs` arbres, `relatives.rs` proches/sélecteur/médias, `photo.rs` recadrage et personnes sur les photos, `filters.rs` filtres rapides), `editor.rs` (éditeurs visuel et brut), `entry_form.rs` (saisie d'acte), `map.rs` (carte des lieux), `theme.rs` (palette de la maquette), `analyses.rs` (fenêtre Analyses). |
+| [`crates/gedroots`](crates/gedroots) | Application GPUI : `commands.rs` (toutes les commandes, raccourcis et menus), `workspace.rs` (fenêtre et vues) et `workspace/` (`commands.rs` commandes et palette, `tree.rs` arbres, `relatives.rs` proches/sélecteur/médias, `photo.rs` recadrage et personnes sur les photos, `filters.rs` filtres rapides), `editor.rs` (éditeurs visuel et brut), `entry_form.rs` (saisie d'acte), `map.rs` (carte des lieux), `theme.rs` (palette de la maquette), `analyses.rs` (fenêtre Analyses). |
 
 ## Tests
 

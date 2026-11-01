@@ -1,7 +1,6 @@
 //! Vues en arbre : ascendance, descendance et éventail.
 
 use super::*;
-use gpui_kit::component::IconName;
 use std::cell::Cell;
 use std::f32::consts::PI;
 
@@ -13,9 +12,7 @@ pub enum TreeMode {
 }
 
 impl TreeMode {
-    const ALL: [TreeMode; 3] = [TreeMode::Ancestors, TreeMode::Descendants, TreeMode::Fan];
-
-    fn label(self) -> &'static str {
+    pub(super) fn label(self) -> &'static str {
         match self {
             TreeMode::Ancestors => "Ascendance",
             TreeMode::Descendants => "Descendance",
@@ -23,7 +20,7 @@ impl TreeMode {
         }
     }
 
-    fn generations(self) -> std::ops::RangeInclusive<u32> {
+    pub(super) fn generations(self) -> std::ops::RangeInclusive<u32> {
         match self {
             TreeMode::Ancestors => 4..=4,
             TreeMode::Descendants => 2..=8,
@@ -99,59 +96,13 @@ impl Workspace {
     pub(super) fn render_tree_tab(&self, cx: &mut Context<Self>) -> AnyElement {
         let mode = self.tree_mode;
         let gens = self.tree_gens.clamp(*mode.generations().start(), *mode.generations().end());
-        let range = mode.generations();
-        let toolbar = h_flex()
-            .px_4()
-            .pt_3()
-            .gap_2()
-            .items_center()
-            .children(TreeMode::ALL.into_iter().map(|m| {
-                Button::new(SharedString::from(format!("tree-{}", m.label())))
-                    .xsmall()
-                    .when(m == mode, |b| b.primary())
-                    .when(m != mode, |b| b.ghost())
-                    .label(m.label())
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        this.tree_mode = m;
-                        if m == TreeMode::Fan && this.tree_gens < 5 {
-                            this.tree_gens = 5;
-                        }
-                        cx.notify();
-                    }))
-            }))
-            .child(div().flex_1())
-            .when(range.start() != range.end(), |d| {
-                d.child(mono("Générations"))
-                    .child(
-                        Button::new("gens-minus")
-                            .xsmall()
-                            .ghost()
-                            .icon(IconName::Minus)
-                            .disabled(gens <= *range.start())
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                this.tree_gens = gens.saturating_sub(1);
-                                cx.notify();
-                            })),
-                    )
-                    .child(mono(gens.to_string()))
-                    .child(
-                        Button::new("gens-plus")
-                            .xsmall()
-                            .ghost()
-                            .icon(IconName::Plus)
-                            .disabled(gens >= *range.end())
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                this.tree_gens = gens + 1;
-                                cx.notify();
-                            })),
-                    )
-            });
+        // Vue et générations : menu Affichage › Arbre (⌘= / ⌘-).
         let body: AnyElement = match mode {
             TreeMode::Ancestors => self.render_tree(cx).into_any_element(),
             TreeMode::Descendants => self.render_descendants(gens, cx),
             TreeMode::Fan => self.render_fan(gens, cx),
         };
-        v_flex().flex_1().min_h_0().child(toolbar).child(body).into_any_element()
+        v_flex().flex_1().min_h_0().child(body).into_any_element()
     }
 
     // ------------------------------------------------------------------
