@@ -22,7 +22,11 @@ et suit la maquette « Lignée » (thème sombre, barre d'activité, liste, arbr
 - **Éditeur visuel** pour les enregistrements courants (individu, famille, source, dépôt,
   média, note) : seuls les champs affichés sont modifiés, tout le reste est conservé.
 - **Éditeur GEDCOM brut** pour chaque enregistrement, avec validation ; changer un
-  identifiant met à jour tous les pointeurs.
+  identifiant met à jour tous les pointeurs. **Autocomplétion** selon le schéma GEDCOM 7
+  officiel : balises permises à cet endroit (recherche aussi par libellé français,
+  « nais » → `BIRT`), individus/familles/sources pour les pointeurs, valeurs énumérées,
+  mots-clés et mois des dates (calendrier républicain compris), lieux déjà saisis.
+  `Ctrl+Espace` affiche les suggestions à la demande.
 - Créer / supprimer un enregistrement, annuler (50 niveaux), date de modification `CHAN`
   mise à jour comme dans Ancestris.
 - Enregistrement **sans perte** : un fichier relu puis réécrit est identique à l'octet près
