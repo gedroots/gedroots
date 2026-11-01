@@ -3,17 +3,25 @@
 
 use crate::editor::{RecordEditor, Target};
 use crate::entry_form::{EntryForm, EntryFormEvent};
+use crate::map::{MapEvent, MapView};
 use crate::theme;
 use gedcom::*;
+use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::input::{Editor, Input, InputEvent, InputState, Textarea};
-use gpui_kit::component::{Disableable, Sizable, h_flex, v_flex};
+use gpui_kit::component::menu::{DropdownMenu, PopupMenuItem};
+use gpui_kit::component::select::Select;
+use gpui_kit::component::{Disableable, Icon, Sizable, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-actions!(gedroots, [OpenFile, SaveFile, Undo, NewFile, Quit, EnterRecord]);
+mod filters;
+mod relatives;
+mod tree;
+
+actions!(gedroots, [OpenFile, SaveFile, Undo, NewFile, Quit, OpenAnalyses, EnterRecord]);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum View {
@@ -54,6 +62,18 @@ impl View {
         }
     }
 
+    fn icon(self) -> IconName {
+        match self {
+            View::Individuals => IconName::Users,
+            View::Families => IconName::Heart,
+            View::Sources => IconName::BookOpen,
+            View::Places => IconName::MapPin,
+            View::Media => IconName::Image,
+            View::Repositories => IconName::Landmark,
+            View::Notes => IconName::StickyNote,
+        }
+    }
+
     fn kind(self) -> Option<RecordKind> {
         Some(match self {
             View::Individuals => RecordKind::Individual,
@@ -81,6 +101,7 @@ impl View {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum CenterTab {
     Tree,
+    Map,
     Form,
     Raw,
 }
@@ -89,8 +110,18 @@ impl CenterTab {
     fn label(self) -> &'static str {
         match self {
             CenterTab::Tree => "Arbre",
+            CenterTab::Map => "Carte",
             CenterTab::Form => "Fiche",
             CenterTab::Raw => "GEDCOM",
+        }
+    }
+
+    fn icon(self) -> IconName {
+        match self {
+            CenterTab::Tree => IconName::GitFork,
+            CenterTab::Map => IconName::Map,
+            CenterTab::Form => IconName::Pencil,
+            CenterTab::Raw => IconName::Code,
         }
     }
 }
@@ -125,6 +156,16 @@ pub struct Workspace {
     selected: Option<String>,
     editor: Option<RecordEditor>,
     status: Option<(SharedString, bool)>,
+    map: Entity<MapView>,
+    tree_mode: tree::TreeMode,
+    tree_gens: u32,
+    picker: Option<relatives::Picker>,
+    /// Fichiers image/PDF du dossier du `.ged`, pour les suggestions de rattachement.
+    media_files: Rc<Vec<String>>,
+    /// Suppression en attente de confirmation (clé de l'élément).
+    pending_delete: Option<String>,
+    /// Aide de la recherche avancée dépliée.
+    search_help: bool,
     /// Saisie guidée d'un acte en cours (remplace liste, fiche et détail).
     entry_form: Option<(Entity<EntryForm>, Subscription)>,
     _subs: Vec<Subscription>,
@@ -132,13 +173,15 @@ pub struct Workspace {
 
 impl Workspace {
     pub fn new(path: Option<PathBuf>, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let filter = cx.new(|cx| InputState::new(window, cx).placeholder("Nom, prénom, lieu, @I…@"));
+        let filter = cx.new(|cx| InputState::new(window, cx).placeholder("Rechercher un nom, un lieu…"));
         let sub = cx.subscribe_in(&filter, window, |this, _, ev: &InputEvent, _, cx| {
             if matches!(ev, InputEvent::Change) {
                 this.rebuild_rows(cx);
                 cx.notify();
             }
         });
+        let map = cx.new(|_| MapView::new());
+        let map_sub = cx.subscribe_in(&map, window, Self::on_map_event);
         let mut this = Self {
             focus: cx.focus_handle(),
             doc: None,
@@ -150,8 +193,15 @@ impl Workspace {
             selected: None,
             editor: None,
             status: None,
+            map,
+            tree_mode: tree::TreeMode::Ancestors,
+            tree_gens: 4,
+            picker: None,
+            media_files: Rc::new(Vec::new()),
+            pending_delete: None,
+            search_help: false,
             entry_form: None,
-            _subs: vec![sub],
+            _subs: vec![sub, map_sub],
         };
         if let Some(p) = path {
             this.load(p, window, cx);
@@ -170,11 +220,7 @@ impl Workspace {
     fn load(&mut self, path: PathBuf, window: &mut Window, cx: &mut Context<Self>) {
         match gedcom::load(&path) {
             Ok(ged) => {
-                let first = ged
-                    .records_of(RecordKind::Individual)
-                    .find(|r| Individual::new(r).sosa().as_deref() == Some("1"))
-                    .or_else(|| ged.records_of(RecordKind::Individual).next())
-                    .and_then(|r| r.xref.clone());
+                let first = ged.root();
                 let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
                 self.doc = Some(Document {
                     ged,
@@ -185,6 +231,7 @@ impl Workspace {
                 });
                 self.view = View::Individuals;
                 self.selected = None;
+                self.rescan_media();
                 self.rebuild_rows(cx);
                 if let Some(x) = first {
                     self.select(x, window, cx);
@@ -247,6 +294,7 @@ impl Workspace {
             Ok(()) => {
                 doc.path = Some(path.clone());
                 doc.dirty = false;
+                self.rescan_media();
                 self.set_status(format!("Enregistré dans {}", path.display()), false);
             }
             Err(e) => self.set_status(format!("Échec de l'enregistrement : {e}"), true),
@@ -302,7 +350,11 @@ impl Workspace {
         self.selected = None;
         self.editor = None;
         self.filter.update(cx, |f, cx| f.set_value("", window, cx));
-        self.tab = if view == View::Individuals { CenterTab::Tree } else { CenterTab::Form };
+        self.tab = match view {
+            View::Individuals => CenterTab::Tree,
+            View::Places => CenterTab::Map,
+            _ => CenterTab::Form,
+        };
         self.rebuild_rows(cx);
         if let Some(first) = self.rows.first().map(|r| r.key.clone()) {
             self.select(first, window, cx);
@@ -311,13 +363,17 @@ impl Workspace {
     }
 
     fn select(&mut self, key: String, window: &mut Window, cx: &mut Context<Self>) {
+        if self.view == View::Places {
+            self.map.update(cx, |m, cx| m.set_selected(Some(key.clone()), cx));
+        }
         self.selected = Some(key);
+        self.pending_delete = None;
         self.refresh_editor(window, cx);
         cx.notify();
     }
 
     /// Ouvre un enregistrement quelconque (lien depuis une fiche).
-    fn goto(&mut self, xref: String, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn goto(&mut self, xref: String, window: &mut Window, cx: &mut Context<Self>) {
         let Some(kind) = self.doc.as_ref().and_then(|d| d.ged.get(&xref)).and_then(|n| RecordKind::from_tag(&n.tag))
         else {
             return;
@@ -332,6 +388,84 @@ impl Workspace {
     fn goto_place(&mut self, name: String, window: &mut Window, cx: &mut Context<Self>) {
         self.set_view(View::Places, window, cx);
         self.select(name, window, cx);
+    }
+
+    /// Clic sur un repère, ou coordonnées trouvées / posées sur la carte.
+    fn on_map_event(&mut self, _: &Entity<MapView>, ev: &MapEvent, window: &mut Window, cx: &mut Context<Self>) {
+        match ev {
+            MapEvent::Select(name) => self.select(name.clone(), window, cx),
+            MapEvent::SetCoords { name, lat, lon, checkpoint } => {
+                if *checkpoint {
+                    self.checkpoint();
+                }
+                let Some(doc) = &mut self.doc else { return };
+                doc.dirty = true;
+                let (la, lo) = (geo::format_latitude(*lat), geo::format_longitude(*lon));
+                let n = doc.ged.update_place(name, name, &la, &lo);
+                self.rebuild_rows(cx);
+                if self.selected.as_deref() == Some(name.as_str()) {
+                    self.refresh_editor(window, cx);
+                }
+                self.set_status(format!("{} : {la} {lo} ({n} occurrence(s))", short_place(name)), false);
+                cx.notify();
+            }
+        }
+    }
+
+    /// Revient à l'individu racine, dans l'arbre.
+    fn goto_root(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(root) = self.doc.as_ref().and_then(|d| d.ged.root()) else { return };
+        self.set_view(View::Individuals, window, cx);
+        self.select(root, window, cx);
+        self.tab = CenterTab::Tree;
+    }
+
+    /// Enregistre l'individu racine dans l'en-tête du fichier (extension `_GR_ROOT`).
+    fn set_root(&mut self, xref: String, cx: &mut Context<Self>) {
+        if self.doc.as_ref().and_then(|d| d.ged.root()).as_deref() == Some(xref.as_str()) {
+            return;
+        }
+        self.checkpoint();
+        let Some(doc) = &mut self.doc else { return };
+        doc.ged.set_root(&xref);
+        let name = doc.ged.record_label(&xref);
+        self.set_status(format!("{name} est maintenant l'individu racine"), false);
+        cx.notify();
+    }
+
+    fn copy_id(&mut self, xref: &str, cx: &mut Context<Self>) {
+        cx.write_to_clipboard(ClipboardItem::new_string(xref.to_string()));
+        self.set_status(format!("Identifiant {xref} copié"), false);
+        cx.notify();
+    }
+
+    /// Bouton « … » : actions avancées sur l'enregistrement (identifiant, racine).
+    fn more_menu(&self, xref: &str, is_individual: bool, cx: &mut Context<Self>) -> impl IntoElement {
+        let entity = cx.entity().downgrade();
+        let xref = xref.to_string();
+        let is_root = self.doc.as_ref().and_then(|d| d.ged.root()).as_deref() == Some(xref.as_str());
+        Button::new("more").ghost().xsmall().icon(IconName::Ellipsis).dropdown_menu_with_anchor(
+            Anchor::TopRight,
+            move |menu, _, _| {
+                let (e1, e2, x1, x2) = (entity.clone(), entity.clone(), xref.clone(), xref.clone());
+                let menu =
+                    menu.item(PopupMenuItem::new("Copier l'ID").icon(IconName::Copy).on_click(move |_, _, cx| {
+                        let _ = e1.update(cx, |this, cx| this.copy_id(&x1, cx));
+                    }));
+                if is_individual {
+                    menu.item(
+                        PopupMenuItem::new(if is_root { "Individu racine" } else { "Définir comme racine" })
+                            .icon(IconName::House)
+                            .disabled(is_root)
+                            .on_click(move |_, _, cx| {
+                                let _ = e2.update(cx, |this, cx| this.set_root(x2.clone(), cx));
+                            }),
+                    )
+                } else {
+                    menu
+                }
+            },
+        )
     }
 
     fn refresh_editor(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -364,21 +498,44 @@ impl Workspace {
         self.rebuild_rows(cx);
         self.select(x.clone(), window, cx);
         self.tab = CenterTab::Form;
-        self.set_status(format!("{} @{x}@ créé", kind.label_fr()), false);
+        self.set_status(format!("{} créé(e)", kind.label_fr()), false);
     }
 
+    /// Premier clic : demande confirmation ; second clic : supprime.
     fn delete_selected(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let (Some(_), Some(key)) = (self.view.kind(), self.selected.clone()) else { return };
-        self.checkpoint();
-        if let Some(doc) = &mut self.doc {
-            doc.ged.delete(&key);
+        let Some(key) = self.selected.clone() else { return };
+        if self.pending_delete.as_ref() != Some(&key) {
+            self.pending_delete = Some(key);
+            cx.notify();
+            return;
         }
+        self.pending_delete = None;
+        self.checkpoint();
+        let Some(doc) = &mut self.doc else { return };
+        let msg = match self.view.kind() {
+            Some(_) => {
+                let label = doc.ged.record_label(&key);
+                doc.ged.delete_record(&key);
+                format!("« {label} » supprimé (Annuler pour revenir en arrière)")
+            }
+            None => {
+                let n = doc.ged.delete_place(&key);
+                format!(
+                    "Lieu retiré de {n} événement{} (Annuler pour revenir en arrière)",
+                    if n > 1 { "s" } else { "" }
+                )
+            }
+        };
+        let pos = self.rows.iter().position(|r| r.key == key).unwrap_or(0);
         self.selected = None;
         self.editor = None;
         self.rebuild_rows(cx);
-        self.set_status(format!("@{key}@ supprimé (Annuler pour revenir en arrière)"), false);
+        // On sélectionne l'élément voisin pour enchaîner.
+        if let Some(next) = self.rows.get(pos.min(self.rows.len().saturating_sub(1))).map(|r| r.key.clone()) {
+            self.select(next, window, cx);
+        }
+        self.set_status(msg, false);
         cx.notify();
-        let _ = window;
     }
 
     fn apply_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -433,7 +590,7 @@ impl Workspace {
                 self.selected = Some(new_xref.clone());
                 self.rebuild_rows(cx);
                 self.refresh_editor(window, cx);
-                self.set_status(format!("GEDCOM de @{new_xref}@ appliqué"), false);
+                self.set_status("GEDCOM appliqué", false);
             }
             Err(e) => {
                 self.drop_checkpoint();
@@ -622,10 +779,26 @@ impl Workspace {
                 })
                 .collect(),
         };
+        if self.view == View::Places {
+            let places = g.places();
+            self.map.update(cx, |m, cx| m.set_places(&places, cx));
+        }
         if self.only_flagged {
             rows.retain(|r| r.flagged);
         }
-        if !q.is_empty() {
+        if self.view == View::Individuals {
+            // Recherche avec critères (né:, lieu:, sexe:, sans:source…), voir gedcom::search.
+            let query = IndividualQuery::parse(self.filter.read(cx).value().as_ref());
+            if !query.is_empty() {
+                let hits: std::collections::HashSet<String> = g
+                    .records_of(RecordKind::Individual)
+                    .map(Individual::new)
+                    .filter(|i| query.matches(g, i))
+                    .map(|i| i.xref().to_string())
+                    .collect();
+                rows.retain(|r| hits.contains(&r.key));
+            }
+        } else if !q.is_empty() {
             rows.retain(|r| {
                 r.key.to_lowercase().contains(q.trim_matches('@'))
                     || r.title.to_lowercase().contains(&q)
@@ -639,7 +812,7 @@ impl Workspace {
 
     fn flag_label(&self) -> &'static str {
         match self.view {
-            View::Individuals => "Sans source",
+            View::Individuals => "",
             View::Families => "Sans mariage",
             View::Sources => "Sans média",
             View::Places => "Sans coordonnées",
@@ -696,6 +869,33 @@ fn dot(color: Hsla) -> Div {
     div().size(px(7.)).flex_none().rounded_full().bg(color)
 }
 
+fn icon(name: IconName) -> Icon {
+    Icon::new(name).size(px(14.))
+}
+
+/// Portrait de l'individu (premier média image lié), ou ses initiales.
+fn avatar(doc: &Document, i: &Individual<'_>, size: f32, ring: Hsla) -> Div {
+    let base = div()
+        .size(px(size))
+        .flex_none()
+        .rounded_full()
+        .border_2()
+        .border_color(ring)
+        .bg(theme::surface())
+        .overflow_hidden()
+        .flex()
+        .items_center()
+        .justify_center();
+    match doc.ged.portrait(i.xref()).and_then(|m| media_path(doc, &m)).filter(|p| p.exists()) {
+        Some(p) => base.child(img(p).size_full().rounded_full().object_fit(ObjectFit::Cover)),
+        None => {
+            let initials: String =
+                [i.given().chars().next(), i.surname().chars().next()].into_iter().flatten().collect();
+            base.font_weight(FontWeight::SEMIBOLD).when(size < 32., |d| d.text_xs()).child(initials)
+        }
+    }
+}
+
 impl Workspace {
     fn render_header(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let file = self
@@ -725,7 +925,7 @@ impl Workspace {
                     .gap_2()
                     .items_center()
                     .font_weight(FontWeight::SEMIBOLD)
-                    .child(svg().path("icons/network.svg").size(px(16.)).text_color(theme::accent()))
+                    .child(Icon::new(IconName::Network).size(px(16.)).text_color(theme::accent()))
                     .child("GedRoots"),
             )
             .child(div().text_color(theme::muted()).child(file))
@@ -745,11 +945,28 @@ impl Workspace {
                 Button::new("open")
                     .ghost()
                     .small()
+                    .icon(IconName::FolderOpen)
                     .label("Ouvrir…")
                     .on_click(cx.listener(|this, _, w, cx| this.open_file(&OpenFile, w, cx))),
             )
             .when(self.doc.is_some(), |d| {
                 d.child(
+                    Button::new("analyses")
+                        .ghost()
+                        .small()
+                        .label("Analyses")
+                        .on_click(cx.listener(|this, _, w, cx| this.open_analyses(&OpenAnalyses, w, cx))),
+                )
+                .child(
+                    Button::new("root")
+                        .ghost()
+                        .small()
+                        .icon(IconName::House)
+                        .label("Racine")
+                        .tooltip("Revenir à l'individu racine")
+                        .on_click(cx.listener(|this, _, w, cx| this.goto_root(w, cx))),
+                )
+                .child(
                     Button::new("enter-record")
                         .ghost()
                         .small()
@@ -760,6 +977,7 @@ impl Workspace {
                     Button::new("undo")
                         .ghost()
                         .small()
+                        .icon(IconName::Undo2)
                         .label("Annuler")
                         .disabled(!can_undo)
                         .on_click(cx.listener(|this, _, w, cx| this.undo(&Undo, w, cx))),
@@ -768,6 +986,7 @@ impl Workspace {
                     Button::new("save")
                         .primary()
                         .small()
+                        .icon(IconName::Save)
                         .label("Enregistrer")
                         .on_click(cx.listener(|this, _, w, cx| this.save_file(&SaveFile, w, cx))),
                 )
@@ -806,6 +1025,11 @@ impl Workspace {
                     .gap_0p5()
                     .when(active, |d| d.bg(theme::hover()))
                     .hover(|d| d.bg(theme::hover()))
+                    .child(Icon::new(v.icon()).size(px(18.)).text_color(if active {
+                        theme::accent()
+                    } else {
+                        theme::muted()
+                    }))
                     .child(
                         div()
                             .text_xs()
@@ -846,12 +1070,14 @@ impl Workspace {
                             Button::new("create")
                                 .ghost()
                                 .xsmall()
-                                .label("+ Nouveau")
+                                .icon(IconName::Plus)
+                                .label("Nouveau")
                                 .on_click(cx.listener(|this, _, w, cx| this.create_record(w, cx))),
                         )
                     }),
             )
             .child(div().px_3().pb_2().child(Input::new(&self.filter).small().cleanable(true)))
+            .when(self.view == View::Individuals, |d| d.child(self.render_quick_filters(cx)))
             .when(!flag.is_empty(), |d| {
                 d.child(
                     h_flex().px_3().pb_2().gap_1().child(
@@ -923,7 +1149,7 @@ impl Workspace {
     fn render_center(&self, cx: &mut Context<Self>) -> AnyElement {
         let tabs: Vec<CenterTab> = match self.view {
             View::Individuals => vec![CenterTab::Tree, CenterTab::Form, CenterTab::Raw],
-            View::Places => vec![CenterTab::Form],
+            View::Places => vec![CenterTab::Map, CenterTab::Form],
             _ => vec![CenterTab::Form, CenterTab::Raw],
         };
         let tab = if tabs.contains(&self.tab) { self.tab } else { tabs[0] };
@@ -932,8 +1158,9 @@ impl Workspace {
             _ => self.doc.as_ref().map(|d| d.ged.record_label(k)).unwrap_or_default(),
         });
         let body: AnyElement = match (tab, &self.editor) {
+            (CenterTab::Map, _) => self.map.clone().into_any_element(),
             (_, None) => self.render_empty_center().into_any_element(),
-            (CenterTab::Tree, _) => self.render_tree(cx).into_any_element(),
+            (CenterTab::Tree, _) => self.render_tree_tab(cx),
             (CenterTab::Form, Some(ed)) => self.render_form(ed, cx).into_any_element(),
             (CenterTab::Raw, Some(ed)) => self.render_raw(ed, cx).into_any_element(),
         };
@@ -957,6 +1184,7 @@ impl Workspace {
                             .border_color(theme::border())
                             .when(active, |d| d.bg(theme::bg()).border_t_2().border_color(theme::accent()))
                             .text_color(if active { theme::text() } else { theme::muted() })
+                            .child(icon(t.icon()).text_color(if active { theme::accent() } else { theme::muted() }))
                             .child(t.label())
                             .when(active && title.is_some(), |d| {
                                 d.child(div().text_color(theme::muted()).child(format!("— {}", title.clone().unwrap())))
@@ -986,12 +1214,14 @@ impl Workspace {
         let (Some(doc), Some(root)) = (&self.doc, &self.selected) else { return div() };
         let g = &doc.ged;
         let anc = g.ancestry(root, 4);
+        let tree_root = g.root();
         let column = |range: std::ops::Range<usize>, cx: &mut Context<Self>| {
             v_flex().flex_1().min_w(px(140.)).justify_around().gap_2().children(range.map(|k| {
                 match anc[k].as_ref().and_then(|x| g.individual(x)) {
                     Some(i) => {
                         let x = i.xref().to_string();
                         let on = k == 1;
+                        let is_root = tree_root.as_deref() == Some(i.xref());
                         v_flex()
                             .id(SharedString::from(format!("anc-{k}")))
                             .p_2()
@@ -1004,20 +1234,24 @@ impl Workspace {
                             .hover(|d| d.border_color(theme::border_strong()))
                             .child(
                                 h_flex()
-                                    .gap_1p5()
+                                    .gap_2()
                                     .items_center()
-                                    .child(dot(theme::lineage(k)))
+                                    .child(avatar(doc, &i, 28., theme::lineage(k)))
                                     .child(
-                                        div()
+                                        v_flex()
                                             .flex_1()
-                                            .overflow_hidden()
-                                            .whitespace_nowrap()
-                                            .text_ellipsis()
-                                            .child(format!("{} {}", i.surname(), i.given())),
+                                            .min_w_0()
+                                            .child(
+                                                div()
+                                                    .overflow_hidden()
+                                                    .whitespace_nowrap()
+                                                    .text_ellipsis()
+                                                    .child(format!("{} {}", i.surname(), i.given())),
+                                            )
+                                            .child(mono(i.years())),
                                     )
-                                    .child(mono(k.to_string())),
+                                    .when(is_root, |d| d.child(icon(IconName::House).text_color(theme::accent()))),
                             )
-                            .child(mono(i.years()))
                             .on_click(cx.listener(move |this, _, w, cx| this.select(x.clone(), w, cx)))
                             .into_any_element()
                     }
@@ -1069,12 +1303,24 @@ impl Workspace {
 
     fn render_form(&self, ed: &RecordEditor, cx: &mut Context<Self>) -> impl IntoElement {
         let preview = self.media_preview(ed);
-        let can_delete = matches!(ed.target, Target::Record { .. });
+        let can_delete = true;
+        let confirm = self.pending_delete.is_some() && self.pending_delete == self.selected;
         div().id("form-scroll").flex_1().overflow_y_scroll().child(
             v_flex()
                 .p_4()
                 .gap_3()
                 .max_w(px(760.))
+                .when(!ed.pickers.is_empty(), |d| {
+                    d.child(div().grid().grid_cols(2).gap_3().children(ed.pickers.iter().map(|p| {
+                        v_flex().gap_1().child(label_caps(p.label)).child(
+                            Select::new(&p.state)
+                                .small()
+                                .cleanable(true)
+                                .placeholder(p.placeholder)
+                                .search_placeholder("Rechercher…"),
+                        )
+                    })))
+                })
                 .child(div().grid().grid_cols(2).gap_3().children(ed.fields.iter().map(|f| {
                     v_flex()
                         .gap_1()
@@ -1092,6 +1338,7 @@ impl Workspace {
                             Button::new("apply-form")
                                 .primary()
                                 .small()
+                                .icon(IconName::Check)
                                 .label("Appliquer")
                                 .on_click(cx.listener(|this, _, w, cx| this.apply_form(w, cx))),
                         )
@@ -1107,7 +1354,12 @@ impl Workspace {
                                 Button::new("delete")
                                     .danger()
                                     .small()
-                                    .label("Supprimer")
+                                    .icon(IconName::Trash)
+                                    .label(match (confirm, &ed.target) {
+                                        (true, _) => "Confirmer la suppression",
+                                        (false, Target::Place(_)) => "Retirer ce lieu partout",
+                                        (false, _) => "Supprimer",
+                                    })
                                     .on_click(cx.listener(|this, _, w, cx| this.delete_selected(w, cx))),
                             )
                         }),
@@ -1116,7 +1368,112 @@ impl Workspace {
                     "Seuls les champs ci-dessus sont modifiés : les autres structures (citations, \
                      balises propriétaires…) sont conservées. Onglet GEDCOM pour tout le reste.",
                 ))
-                .when_some(preview, |d, p| d.child(p)),
+                .when_some(preview, |d, p| d.child(p))
+                .when_some(self.record_images(ed, cx), |d, p| d.child(p)),
+        )
+    }
+
+    /// Images liées à une source, une famille… affichées en grand sous la fiche.
+    fn record_images(&self, ed: &RecordEditor, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let Target::Record { xref, kind } = &ed.target else { return None };
+        if !matches!(kind, RecordKind::Source | RecordKind::Family) {
+            return None;
+        }
+        let doc = self.doc.as_ref()?;
+        let images = doc.ged.images_of(xref);
+        if images.is_empty() {
+            return None;
+        }
+        Some(
+            v_flex()
+                .gap_2()
+                .child(label_caps(format!("Images · {}", images.len())))
+                .children(images.into_iter().map(|m| {
+                    let target = m.xref().to_string();
+                    let title = m.title();
+                    let body = match media_path(doc, &m).filter(|p| p.exists()) {
+                        Some(p) => {
+                            img(p).max_w_full().max_h(px(640.)).object_fit(ObjectFit::Contain).into_any_element()
+                        }
+                        None => div()
+                            .text_color(theme::warn())
+                            .child(format!("Fichier introuvable : {}", m.file().unwrap_or("")))
+                            .into_any_element(),
+                    };
+                    v_flex()
+                        .id(SharedString::from(format!("img-{target}")))
+                        .gap_1()
+                        .p_2()
+                        .rounded_md()
+                        .border_1()
+                        .border_color(theme::border())
+                        .bg(theme::surface())
+                        .cursor_pointer()
+                        .hover(|d| d.border_color(theme::border_strong()))
+                        .child(body)
+                        .child(div().text_xs().text_color(theme::muted()).child(title))
+                        .on_click(cx.listener(move |this, _, w, cx| this.goto(target.clone(), w, cx)))
+                }))
+                .into_any_element(),
+        )
+    }
+
+    /// Vignettes des images liées, dans le panneau de détail.
+    fn render_gallery(&self, xref: &str, large: bool, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let doc = self.doc.as_ref()?;
+        let images = doc.ged.images_of(xref);
+        if images.is_empty() {
+            return None;
+        }
+        let n = images.len();
+        let tiles = images.into_iter().map(|m| {
+            let target = m.xref().to_string();
+            let path = media_path(doc, &m).filter(|p| p.exists());
+            let tile = div()
+                .id(SharedString::from(format!("thumb-{target}")))
+                .rounded_md()
+                .overflow_hidden()
+                .border_1()
+                .border_color(theme::border())
+                .bg(theme::surface())
+                .cursor_pointer()
+                .hover(|d| d.border_color(theme::accent()))
+                .on_click(cx.listener(move |this, _, w, cx| this.goto(target.clone(), w, cx)));
+            let tile = if large { tile.w_full().h(px(220.)) } else { tile.h(px(96.)) };
+            match path {
+                Some(p) => {
+                    tile.child(img(p).size_full().object_fit(if large { ObjectFit::Contain } else { ObjectFit::Cover }))
+                }
+                None => tile.flex().items_center().justify_center().child(
+                    v_flex()
+                        .items_center()
+                        .gap_1()
+                        .text_xs()
+                        .text_color(theme::warn())
+                        .child(icon(IconName::Image))
+                        .child("Introuvable"),
+                ),
+            }
+        });
+        Some(
+            v_flex()
+                .p_4()
+                .gap_2()
+                .border_b_1()
+                .border_color(theme::border())
+                .child(
+                    h_flex()
+                        .gap_1p5()
+                        .items_center()
+                        .child(icon(IconName::Images))
+                        .child(label_caps(format!("Images · {n}"))),
+                )
+                .child(if large {
+                    v_flex().gap_2().children(tiles).into_any_element()
+                } else {
+                    div().grid().grid_cols(3).gap_2().children(tiles).into_any_element()
+                })
+                .into_any_element(),
         )
     }
 
@@ -1193,7 +1550,10 @@ impl Workspace {
             .text_sm();
         match self.view {
             View::Individuals => match g.individual(key) {
-                Some(i) => panel.child(self.render_individual_card(g, i, cx)).into_any_element(),
+                Some(i) => panel
+                    .child(self.render_individual_card(g, i, cx))
+                    .children(self.render_actions(cx))
+                    .into_any_element(),
                 None => panel.into_any_element(),
             },
             View::Places => {
@@ -1235,19 +1595,32 @@ impl Workspace {
                         v
                     })
                     .unwrap_or_default();
+                let kind = node.and_then(|n| RecordKind::from_tag(&n.tag));
+                let gallery = self.render_gallery(key, kind == Some(RecordKind::Source), cx);
                 panel
                     .child(
-                        v_flex()
+                        h_flex()
                             .p_4()
-                            .gap_1()
+                            .gap_2()
+                            .items_start()
                             .border_b_1()
                             .border_color(theme::border())
-                            .child(div().text_lg().font_weight(FontWeight::SEMIBOLD).child(g.record_label(key)))
-                            .child(mono(format!(
-                                "@{key}@ · {}",
-                                node.and_then(|n| RecordKind::from_tag(&n.tag)).map(|k| k.label_fr()).unwrap_or("")
-                            ))),
+                            .when_some(kind, |d, k| {
+                                d.child(icon(View::for_kind(k).icon()).text_color(theme::accent()).mt_1())
+                            })
+                            .child(
+                                v_flex()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .gap_1()
+                                    .child(div().text_lg().font_weight(FontWeight::SEMIBOLD).child(g.record_label(key)))
+                                    .child(mono(kind.map(|k| k.label_fr()).unwrap_or(""))),
+                            )
+                            .child(self.more_menu(key, false, cx)),
                     )
+                    .children(self.render_actions(cx))
+                    .children(self.render_unreferenced_files(cx))
+                    .when_some(gallery, |d, el| d.child(el))
                     .when(!outgoing.is_empty(), |d| d.child(self.render_links("Liens", outgoing, cx)))
                     .child(self.render_links("Utilisé par", refs, cx))
                     .into_any_element()
@@ -1274,7 +1647,7 @@ impl Workspace {
                     .rounded_sm()
                     .cursor_pointer()
                     .hover(|d| d.bg(theme::hover()))
-                    .child(mono(kind.map(|k| View::for_kind(k).short()).unwrap_or("?")).w(px(36.)))
+                    .children(kind.map(|k| icon(View::for_kind(k).icon()).text_color(theme::muted())))
                     .child(div().flex_1().overflow_hidden().whitespace_nowrap().text_ellipsis().child(label))
                     .on_click(cx.listener(move |this, _, w, cx| this.goto(target.clone(), w, cx)))
             }))
@@ -1284,7 +1657,8 @@ impl Workspace {
         let (sourced, total) = i.sourced_ratio();
         let pct = if total == 0 { 0. } else { sourced as f32 / total as f32 };
         let sosa = i.sosa();
-        let initials: String = [i.given().chars().next(), i.surname().chars().next()].into_iter().flatten().collect();
+        let doc = self.doc.as_ref().unwrap();
+        let is_root = g.root().as_deref() == Some(i.xref());
         let lineage =
             sosa.as_deref().and_then(|s| s.parse().ok()).map(theme::lineage).unwrap_or(theme::border_strong());
         let mut events: Vec<Event> = i.events();
@@ -1297,20 +1671,7 @@ impl Workspace {
             .items_start()
             .border_b_1()
             .border_color(theme::border())
-            .child(
-                div()
-                    .size(px(44.))
-                    .flex_none()
-                    .rounded_full()
-                    .border_2()
-                    .border_color(lineage)
-                    .bg(theme::surface())
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .child(initials),
-            )
+            .child(avatar(doc, &i, 64., lineage))
             .child(
                 v_flex()
                     .flex_1()
@@ -1323,12 +1684,22 @@ impl Workspace {
                             .child(i.given()),
                     )
                     .child(div().text_color(theme::muted()).child(format!(
-                        "{} · {}{} · @{}@",
+                        "{} · {}{}",
                         i.sex_label(),
                         if i.years().is_empty() { "dates inconnues".into() } else { i.years() },
                         sosa.map(|s| format!(" · Sosa {s}")).unwrap_or_default(),
-                        xref
                     )))
+                    .when(is_root, |d| {
+                        d.child(
+                            h_flex()
+                                .gap_1()
+                                .items_center()
+                                .text_xs()
+                                .text_color(theme::accent())
+                                .child(icon(IconName::House))
+                                .child("Individu racine"),
+                        )
+                    })
                     .child(
                         h_flex()
                             .gap_2()
@@ -1343,7 +1714,8 @@ impl Workspace {
                             )
                             .child(mono(format!("{sourced}/{total} sourcés"))),
                     ),
-            );
+            )
+            .child(self.more_menu(&xref, true, cx));
 
         let events_el = v_flex()
             .p_4()
@@ -1431,13 +1803,17 @@ impl Workspace {
                     .on_click(cx.listener(move |this, _, w, cx| this.goto(target.clone(), w, cx)))
             }));
 
-        let media: Vec<String> = i.media_xrefs().iter().map(|s| s.to_string()).collect();
+        let images: Vec<String> = g.images_of(&xref).iter().map(|m| m.xref().to_string()).collect();
+        let media: Vec<String> =
+            i.media_xrefs().iter().map(|s| s.to_string()).filter(|x| !images.contains(x)).collect();
+        let gallery = self.render_gallery(&xref, false, cx);
         let notes = i.notes();
         v_flex()
             .child(header)
+            .when_some(gallery, |d, el| d.child(el))
             .child(events_el)
             .child(family_el)
-            .when(!media.is_empty(), |d| d.child(self.render_links("Médias", media, cx)))
+            .when(!media.is_empty(), |d| d.child(self.render_links("Autres médias", media, cx)))
             .when(!notes.is_empty(), |d| {
                 d.child(
                     v_flex()
@@ -1497,9 +1873,6 @@ impl Workspace {
             .child(div().flex_1())
             .when_some(self.status.clone(), |d, (msg, err)| {
                 d.child(div().text_color(if err { theme::danger() } else { theme::muted() }).child(msg))
-            })
-            .when_some(self.selected.clone().filter(|_| self.view != View::Places), |d, x| {
-                d.child(mono(format!("@{x}@")))
             })
     }
 
@@ -1567,12 +1940,14 @@ impl Render for Workspace {
         };
         v_flex()
             .size_full()
+            .relative()
             .track_focus(&self.focus)
             .key_context("Workspace")
             .on_action(cx.listener(Self::open_file))
             .on_action(cx.listener(Self::save_file))
             .on_action(cx.listener(Self::undo))
             .on_action(cx.listener(Self::new_file))
+            .on_action(cx.listener(Self::open_analyses))
             .on_action(cx.listener(Self::open_entry))
             .bg(theme::bg())
             .text_color(theme::text())
@@ -1580,5 +1955,52 @@ impl Render for Workspace {
             .child(self.render_header(cx))
             .child(body)
             .child(self.render_status())
+            .children(self.render_picker(cx))
+    }
+}
+
+// ----------------------------------------------------------------------
+// Accès pour la fenêtre Analyses (voir `analyses.rs`).
+// ----------------------------------------------------------------------
+
+impl Workspace {
+    /// Copie du fichier courant, pour les outils d'analyse.
+    pub(crate) fn ged_snapshot(&self) -> Option<Gedcom> {
+        self.doc.as_ref().map(|d| d.ged.clone())
+    }
+
+    /// Individu sélectionné dans la fenêtre principale.
+    pub(crate) fn selected_individual(&self) -> Option<String> {
+        let doc = self.doc.as_ref()?;
+        self.selected.clone().filter(|x| doc.ged.individual(x).is_some())
+    }
+
+    /// Applique une modification au fichier, avec point d'annulation.
+    pub(crate) fn edit_ged(
+        &mut self,
+        f: impl FnOnce(&mut Gedcom) -> bool,
+        msg: impl Into<SharedString>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.doc.is_none() {
+            return;
+        }
+        self.checkpoint();
+        if f(&mut self.doc.as_mut().unwrap().ged) {
+            self.rebuild_rows(cx);
+            self.refresh_editor(window, cx);
+            self.set_status(msg, false);
+        } else {
+            self.drop_checkpoint();
+        }
+        cx.notify();
+    }
+
+    fn open_analyses(&mut self, _: &OpenAnalyses, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(ged) = self.ged_snapshot() {
+            let person = self.selected_individual();
+            crate::analyses::open(cx.entity(), window.window_handle(), ged, person, cx);
+        }
     }
 }

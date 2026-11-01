@@ -120,3 +120,27 @@ fn new_fields_go_before_change_date() {
     assert!(text.starts_with("0 @I1@ INDI\n1 NAME Jean /DUPONT/\n1 OCCU Notaire\n1 CHAN\n2 DATE "), "{text}");
     assert!(text.contains("3 TIME "));
 }
+
+#[test]
+fn root_extension() {
+    let mut g = Gedcom::parse(SAMPLE).unwrap();
+    assert_eq!(g.root().as_deref(), Some("I00001"), "Sosa 1 par défaut");
+    g.set_root("I00003");
+    g.set_root("I00003");
+    assert_eq!(g.root().as_deref(), Some("I00003"));
+    let text = g.to_gedcom_string();
+    assert_eq!(text.matches("2 TAG _GR_ROOT ").count(), 1, "extension déclarée une fois");
+    assert!(text.contains("1 _GR_ROOT @I00003@\n"));
+    // Relecture : la racine survit à l'enregistrement.
+    assert_eq!(Gedcom::parse(&text).unwrap().root().as_deref(), Some("I00003"));
+    g.delete("I00003");
+    assert_eq!(g.root().as_deref(), Some("I00001"));
+}
+
+#[test]
+fn portraits_and_images() {
+    let g = Gedcom::parse(SAMPLE).unwrap();
+    assert_eq!(g.portrait("I00001").map(|m| m.xref().to_string()).as_deref(), Some("M00001"));
+    assert!(g.portrait("I00002").is_none());
+    assert_eq!(g.images_of("S00001").len(), 1);
+}
