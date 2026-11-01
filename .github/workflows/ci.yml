@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
@@ -26,8 +27,10 @@ jobs:
       - run: cargo clippy --workspace -- -D warnings
 
   macos-build:
-    # Produit un binaire macOS (Apple Silicon) téléchargeable depuis chaque PR,
-    # pour tester sans compiler localement.
+    # Binaire macOS (Apple Silicon) téléchargeable, pour tester sans compiler.
+    # Les minutes macOS comptent 10× sur un dépôt privé : seulement sur main,
+    # ou à la demande (`gh workflow run ci.yml --ref <branche>`).
+    if: github.event_name != 'pull_request'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
