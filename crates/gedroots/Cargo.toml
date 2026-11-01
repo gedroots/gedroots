@@ -8,6 +8,8 @@ description = "GedRoots — logiciel de généalogie libre et local, GEDCOM 7"
 gpui-kit = "=0.8.1"
 gedcom = { path = "../gedcom" }
 lsp-types = "0.97"
+# Déjà utilisée par GPUI : seulement pour lire les dimensions des images (recadrage).
+image = { version = "0.25.10", default-features = false }
 ureq = { version = "2", features = ["native-certs", "json"] }
 serde_json = "1.0.154"
 imagesize = "0.14"

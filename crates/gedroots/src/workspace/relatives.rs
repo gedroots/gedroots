@@ -14,6 +14,8 @@ pub enum PickPurpose {
     FamilyChild { fam: String },
     /// Le média est rattaché à l'enregistrement choisi.
     MediaTo { media: String },
+    /// La personne choisie est identifiée sur la photo, dans la zone `crop`.
+    TagPerson { media: String, crop: Crop },
 }
 
 impl PickPurpose {
@@ -25,6 +27,7 @@ impl PickPurpose {
             PickPurpose::FamilySpouse { fam } => format!("Choisir un parent pour {}", g.record_label(fam)),
             PickPurpose::FamilyChild { fam } => format!("Choisir un enfant pour {}", g.record_label(fam)),
             PickPurpose::MediaTo { media } => format!("Rattacher « {} » à…", g.record_label(media)),
+            PickPurpose::TagPerson { .. } => "Qui est sur cette zone de la photo ?".into(),
         }
     }
 }
@@ -252,6 +255,16 @@ impl Workspace {
                 }
             }
         }
+        if let PickPurpose::TagPerson { media, .. } = &p.purpose {
+            // D'abord les personnes déjà liées à la photo sans zone, en dernier celles déjà situées.
+            let links = g.media_links(media);
+            let rank = |x: &str| match links.iter().find(|l| l.owner == x) {
+                Some(l) if l.crop.is_none() => 0,
+                None => 1,
+                Some(_) => 2,
+            };
+            people.sort_by_key(|i| rank(i.xref()));
+        }
         out.extend(people.into_iter().map(|i| i.xref().to_string()));
         out.truncate(80);
         out
@@ -281,6 +294,10 @@ impl Workspace {
                 PickPurpose::MediaTo { media } => {
                     g.attach_media(&chosen, &media)?;
                     Ok((format!("Média rattaché à {who}"), None))
+                }
+                PickPurpose::TagPerson { media, crop } => {
+                    g.tag_person(&chosen, &media, crop)?;
+                    Ok((format!("{who} identifié(e) sur la photo"), None))
                 }
             }
         });

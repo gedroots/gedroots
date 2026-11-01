@@ -18,7 +18,7 @@ gpui_kit::assets::icon_assets!(
     ExtraIcons,
     [
         Users, Heart, BookOpen, MapPin, Image, Images, Landmark, StickyNote, FolderOpen, Undo2, Save, Plus, GitFork,
-        Pencil, Code, Ellipsis, Copy, House, Star, Trash, Network, Library,
+        Pencil, Code, Ellipsis, Copy, House, Star, Trash, Network, Library, Crop, UserPlus,
     ]
 );
 
