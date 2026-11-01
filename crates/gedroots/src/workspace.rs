@@ -2,6 +2,7 @@
 //! GEDCOM brut), panneau de détail et barre d'état — d'après la maquette.
 
 use crate::editor::{RecordEditor, Target};
+use crate::entry_form::{EntryForm, EntryFormEvent};
 use crate::theme;
 use gedcom::*;
 use gpui_kit::component::button::{Button, ButtonVariants};
@@ -12,7 +13,7 @@ use gpui_kit::*;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-actions!(gedroots, [OpenFile, SaveFile, Undo, NewFile, Quit]);
+actions!(gedroots, [OpenFile, SaveFile, Undo, NewFile, Quit, EnterRecord]);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum View {
@@ -124,6 +125,8 @@ pub struct Workspace {
     selected: Option<String>,
     editor: Option<RecordEditor>,
     status: Option<(SharedString, bool)>,
+    /// Saisie guidée d'un acte en cours (remplace liste, fiche et détail).
+    entry_form: Option<(Entity<EntryForm>, Subscription)>,
     _subs: Vec<Subscription>,
 }
 
@@ -147,6 +150,7 @@ impl Workspace {
             selected: None,
             editor: None,
             status: None,
+            entry_form: None,
             _subs: vec![sub],
         };
         if let Some(p) = path {
@@ -442,6 +446,63 @@ impl Workspace {
     }
 
     // ------------------------------------------------------------------
+    // Saisie guidée d'un acte
+    // ------------------------------------------------------------------
+
+    fn open_entry(&mut self, _: &EnterRecord, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(doc) = &self.doc else { return };
+        if self.entry_form.is_some() {
+            return;
+        }
+        // Depuis la vue Sources, on part de la source sélectionnée.
+        let source = self.selected.clone().filter(|_| self.view == View::Sources);
+        let (ged, path) = (doc.ged.clone(), doc.path.clone());
+        let form = cx.new(|cx| EntryForm::new(ged, path, source, window, cx));
+        let sub = cx.subscribe_in(&form, window, |this, form, ev: &EntryFormEvent, window, cx| match ev {
+            EntryFormEvent::Close => {
+                this.entry_form = None;
+                window.focus(&this.focus, cx);
+                cx.notify();
+            }
+            EntryFormEvent::Save { entry, next } => this.save_entry(form.clone(), entry, *next, window, cx),
+        });
+        self.entry_form = Some((form, sub));
+        cx.notify();
+    }
+
+    fn save_entry(
+        &mut self,
+        form: Entity<EntryForm>,
+        entry: &gedcom::Entry,
+        next: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.checkpoint();
+        let Some(doc) = &mut self.doc else { return };
+        match entry.apply(&mut doc.ged) {
+            Ok(res) => {
+                let ged = doc.ged.clone();
+                let principal = res.persons.iter().flatten().next().cloned();
+                self.set_status(res.summary(), false);
+                self.rebuild_rows(cx);
+                form.update(cx, |f, cx| f.saved(ged, &res, next, window, cx));
+                if !next {
+                    self.entry_form = None;
+                    if let Some(x) = principal {
+                        self.goto(x, window, cx);
+                    }
+                }
+            }
+            Err(e) => {
+                self.drop_checkpoint();
+                form.update(cx, |f, cx| f.set_error(e, cx));
+            }
+        }
+        cx.notify();
+    }
+
+    // ------------------------------------------------------------------
     // Liste
     // ------------------------------------------------------------------
 
@@ -689,6 +750,13 @@ impl Workspace {
             )
             .when(self.doc.is_some(), |d| {
                 d.child(
+                    Button::new("enter-record")
+                        .ghost()
+                        .small()
+                        .label("Saisir un acte")
+                        .on_click(cx.listener(|this, _, w, cx| this.open_entry(&EnterRecord, w, cx))),
+                )
+                .child(
                     Button::new("undo")
                         .ghost()
                         .small()
@@ -1476,7 +1544,15 @@ impl Render for Workspace {
         if window.focused(cx).is_none() {
             window.focus(&self.focus, cx);
         }
-        let body: AnyElement = if self.doc.is_some() {
+        let body: AnyElement = if let (Some(_), Some((form, _))) = (&self.doc, &self.entry_form) {
+            h_flex()
+                .flex_1()
+                .min_h_0()
+                .items_stretch()
+                .child(self.render_activity_bar(cx))
+                .child(form.clone())
+                .into_any_element()
+        } else if self.doc.is_some() {
             h_flex()
                 .flex_1()
                 .min_h_0()
@@ -1497,6 +1573,7 @@ impl Render for Workspace {
             .on_action(cx.listener(Self::save_file))
             .on_action(cx.listener(Self::undo))
             .on_action(cx.listener(Self::new_file))
+            .on_action(cx.listener(Self::open_entry))
             .bg(theme::bg())
             .text_color(theme::text())
             .text_sm()

@@ -4,19 +4,24 @@
 //! - [`parse`] : lecture/écriture du texte GEDCOM ;
 //! - [`document`] : un fichier chargé, avec index des identifiants et opérations d'édition ;
 //! - [`model`] : vues typées (individus, familles, sources, lieux, médias…) et formulaires d'édition ;
-//! - [`date`] : dates GEDCOM (y compris calendrier républicain) affichées en français.
+//! - [`date`] : dates GEDCOM (y compris calendrier républicain) affichées en français ;
+//! - [`template`] et [`entry`] : modèles d'actes et saisie guidée des sources.
 
 pub mod date;
 pub mod document;
+pub mod entry;
 pub mod model;
 pub mod node;
 pub mod parse;
+pub mod template;
 
 pub use date::Date;
 pub use document::{Gedcom, RecordKind};
+pub use entry::{Entry, EntryResult, MediaChoice, Participant, PersonChoice, SourceChoice, Suggestion};
 pub use model::*;
 pub use node::Node;
 pub use parse::{ParseError, node_from_string, node_to_string};
+pub use template::{FieldDef, PersonField, Relation, RoleDef, Template, builtin_templates};
 
 /// Charge un fichier GEDCOM depuis le disque.
 pub fn load(path: impl AsRef<std::path::Path>) -> Result<Gedcom, String> {

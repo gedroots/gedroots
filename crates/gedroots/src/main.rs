@@ -1,13 +1,14 @@
 //! GedRoots — logiciel de généalogie libre et local, avec GEDCOM 7 comme format de données.
 
 mod editor;
+mod entry_form;
 mod theme;
 mod workspace;
 
 use gpui_kit::*;
 use std::borrow::Cow;
 use std::path::PathBuf;
-use workspace::{NewFile, OpenFile, Quit, SaveFile, Undo, Workspace};
+use workspace::{EnterRecord, NewFile, OpenFile, Quit, SaveFile, Undo, Workspace};
 
 // Icônes Lucide utilisées en plus du jeu par défaut de gpui-kit.
 gpui_kit::assets::icon_assets!(ExtraIcons, [Users, MapPin, Image, Save, Code, Pencil, Library, Landmark, StickyNote]);
@@ -50,6 +51,7 @@ fn main() {
             KeyBinding::new(shortcut!("n"), NewFile, None),
             KeyBinding::new(shortcut!("shift-z"), Undo, Some("Workspace")),
             KeyBinding::new(shortcut!("q"), Quit, None),
+            KeyBinding::new(shortcut!("e"), EnterRecord, Some("Workspace")),
         ]);
         cx.on_action(|_: &Quit, cx| cx.quit());
 

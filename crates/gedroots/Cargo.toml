@@ -7,3 +7,4 @@ description = "GedRoots — logiciel de généalogie libre et local, GEDCOM 7"
 [dependencies]
 gpui-kit = "=0.8.1"
 gedcom = { path = "../gedcom" }
+imagesize = "0.14"

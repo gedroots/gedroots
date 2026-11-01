@@ -23,6 +23,16 @@ et suit la maquette « Lignée » (thème sombre, barre d'activité, liste, arbr
   média, note) : seuls les champs affichés sont modifiés, tout le reste est conservé.
 - **Éditeur GEDCOM brut** pour chaque enregistrement, avec validation ; changer un
   identifiant met à jour tous les pointeurs.
+- **Saisie d'acte guidée** (`⌘E` / `Ctrl+E`), à la manière d'*Ancestral Sources* pour
+  Family Historian : on choisit un modèle (naissance, baptême, mariage, décès, inhumation,
+  recensement, registre matricule), la source et son image, puis on saisit les personnes
+  citées. Pour chacune, GedRoots propose les individus existants qui correspondent (nom,
+  âge, et liens déjà connus : « parent de… », « conjoint de… ») ; on peut lier, créer, ou
+  mentionner sans créer. Un seul enregistrement crée les individus, l'événement, les liens
+  familiaux, les témoins (`ASSO`), les professions et domiciles datés, une naissance estimée
+  d'après l'âge, et toutes les citations avec leur rôle (`EVEN`/`ROLE`). Aperçu du GEDCOM
+  avant d'écrire, et « Enregistrer et acte suivant » pour dépouiller un registre.
+  Les modèles sont des extensions GEDCOM (voir [docs/extensions.md](docs/extensions.md)).
 - Créer / supprimer un enregistrement, annuler (50 niveaux), date de modification `CHAN`
   mise à jour comme dans Ancestris.
 - Enregistrement **sans perte** : un fichier relu puis réécrit est identique à l'octet près
@@ -30,6 +40,8 @@ et suit la maquette « Lignée » (thème sombre, barre d'activité, liste, arbr
   gardée à chaque enregistrement.
 
 ![Éditeur visuel](docs/capture-fiche.png)
+
+![Saisie d'acte](docs/capture-saisie.png)
 
 ## Lancer
 
@@ -39,7 +51,7 @@ cargo run --release -- chemin/vers/arbre.ged
 
 Sans argument, l'app propose d'ouvrir un fichier ou d'en créer un nouveau.
 Raccourcis : `⌘O` / `Ctrl+O` ouvrir, `⌘S` / `Ctrl+S` enregistrer, `⌘N` nouveau,
-`⌘⇧Z` annuler la dernière modification du document.
+`⌘E` saisir un acte, `⌘⇧Z` annuler la dernière modification du document.
 
 Sous Linux, installer d'abord les dépendances de GPUI :
 `libxkbcommon-dev libxkbcommon-x11-dev libfontconfig-dev libwayland-dev libvulkan-dev`.
@@ -48,8 +60,8 @@ Sous Linux, installer d'abord les dépendances de GPUI :
 
 | Crate | Rôle |
 | --- | --- |
-| [`crates/gedcom`](crates/gedcom) | Lecture/écriture GEDCOM 7 sans perte, vues typées (individus, familles, sources, lieux, médias), formulaires d'édition, dates. Sans dépendance. |
-| [`crates/gedroots`](crates/gedroots) | Application GPUI : `workspace.rs` (fenêtre et vues), `editor.rs` (éditeurs visuel et brut), `theme.rs` (palette de la maquette). |
+| [`crates/gedcom`](crates/gedcom) | Lecture/écriture GEDCOM 7 sans perte, vues typées (individus, familles, sources, lieux, médias), formulaires d'édition, dates, modèles d'actes (`template.rs`) et saisie guidée (`entry.rs`). Sans dépendance. |
+| [`crates/gedroots`](crates/gedroots) | Application GPUI : `workspace.rs` (fenêtre et vues), `editor.rs` (éditeurs visuel et brut), `entry_form.rs` (saisie d'acte), `theme.rs` (palette de la maquette). |
 
 ## Tests
 
