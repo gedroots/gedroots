@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dépendances système de GPUI
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-dev libfontconfig-dev libwayland-dev libxcb1-dev libvulkan-dev
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
+      - run: cargo test -p gedcom
+      - run: cargo clippy --workspace -- -D warnings
+
+  macos-build:
+    # Produit un binaire macOS (Apple Silicon) téléchargeable depuis chaque PR,
+    # pour tester sans compiler localement.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release -p gedroots
+      - name: Empaqueter
+        run: tar -czf gedroots-macos-arm64.tar.gz -C target/release gedroots
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gedroots-macos-arm64-${{ github.event.pull_request.number || github.ref_name }}
+          path: gedroots-macos-arm64.tar.gz
+          retention-days: 14
