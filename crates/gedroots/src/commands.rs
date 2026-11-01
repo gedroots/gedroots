@@ -25,6 +25,8 @@ actions!(
         CopyId,
         FocusSearch,
         ToggleFlagged,
+        AddWebLink,
+        ConvertUrlTags,
         // Individu
         NewIndividual,
         AddFather,
@@ -176,6 +178,9 @@ fn model() -> Vec<(&'static str, Vec<Item>)> {
             a("Nouvel élément dans cette liste", NewRecord),
             a("Supprimer l'élément…", DeleteRecord),
             a("Copier l'ID", CopyId),
+            Sep,
+            a("Ajouter un lien web…", AddWebLink),
+            a("Convertir les liens _URL en liens multimédia", ConvertUrlTags),
             Sep,
             a("Rechercher", FocusSearch),
         ],

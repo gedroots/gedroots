@@ -9,6 +9,7 @@
 //! - [`geo`] : coordonnées des lieux (`MAP`) et projection de la carte ;
 //! - [`search`] : recherche et filtres sur les individus ;
 //! - [`relations`] : ajout/liaison/suppression de proches, lieux et médias ;
+//! - [`weblink`] : liens web en GEDCOM 7 standard (`OBJE` dont le `FILE` est une URL) ;
 //! - [`crop`] : recadrage des médias (`CROP`) et personnes identifiées sur les photos ;
 //! - [`pedigree`] : descendance pour les vues en arbre ;
 //! - [`date`] : dates GEDCOM (y compris calendrier républicain) affichées en français ;
@@ -29,6 +30,7 @@ pub mod relations;
 pub mod schema;
 pub mod search;
 pub mod template;
+pub mod weblink;
 
 pub use crop::{Crop, MediaLink, Rect};
 pub use date::Date;
@@ -41,6 +43,7 @@ pub use pedigree::{DescNode, DescUnion};
 pub use relations::{FAMILY_EVENTS, INDIVIDUAL_EVENTS, NewEvent, Relation, is_media_file, mime_for, title_from_file};
 pub use search::{IndividualQuery, has_token, toggle_token};
 pub use template::{FieldDef, PersonField, Relation as RoleRelation, RoleDef, Template, builtin_templates};
+pub use weblink::{WebLink, WebLinkKind, host, is_web_url, normalize_url};
 
 /// Charge un fichier GEDCOM depuis le disque.
 pub fn load(path: impl AsRef<std::path::Path>) -> Result<Gedcom, String> {

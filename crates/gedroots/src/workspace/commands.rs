@@ -48,6 +48,8 @@ impl Workspace {
         let can_undo = doc.is_some_and(|d| !d.history.is_empty());
         let individuals = has_doc && self.view == View::Individuals && self.entry_form.is_none();
         let attachable = matches!(sel_kind, Some(RecordKind::Individual | RecordKind::Family | RecordKind::Source));
+        let web_linkable = sel.as_ref().is_some_and(|x| g.is_some_and(|g| g.can_have_web_links(x)));
+        let legacy_urls = g.is_some_and(|g| g.has_legacy_urls());
 
         let d = on!(d, cx, OpenFile, |this, w, cx| this.open_file(&OpenFile, w, cx));
         let d = on!(d, cx, NewFile, |this, w, cx| this.new_file(&NewFile, w, cx));
@@ -161,6 +163,14 @@ impl Workspace {
                     }
                 })
             })
+            .when(web_linkable, |d| {
+                on!(d, cx, AddWebLink, |this, w, cx| {
+                    if let Some(x) = this.selected.clone() {
+                        this.open_weblink_dialog(x, None, w, cx)
+                    }
+                })
+            })
+            .when(legacy_urls, |d| on!(d, cx, ConvertUrlTags, |this, w, cx| this.migrate_url_tags(w, cx)))
             .when(attachable, |d| {
                 on!(d, cx, AttachFiles, |this, w, cx| {
                     if let Some(x) = this.selected.clone() {

@@ -463,6 +463,8 @@ impl Gedcom {
 
 /// Type MIME d'après l'extension (`FILE.FORM` est obligatoire en GEDCOM 7).
 pub fn mime_for(file: &str) -> &'static str {
+    let web = crate::weblink::is_web_url(file);
+    let file = if web { file.split(['?', '#']).next().unwrap_or(file) } else { file };
     let ext = file.rsplit('.').next().unwrap_or("").to_ascii_lowercase();
     match ext.as_str() {
         "jpg" | "jpeg" => "image/jpeg",
@@ -478,6 +480,8 @@ pub fn mime_for(file: &str) -> &'static str {
         "mp4" => "video/mp4",
         "txt" => "text/plain",
         "htm" | "html" => "text/html",
+        // Page web (« …/ark:47539/s0051b… », « …/fiche.php »).
+        _ if web => crate::weblink::WEB_FORM,
         _ => "application/octet-stream",
     }
 }

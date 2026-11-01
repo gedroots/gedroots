@@ -11,6 +11,7 @@ pub(super) enum AddDialog {
     Relatives {
         target: String,
     },
+    WebLink(Box<super::weblinks::WebLinkDialog>),
 }
 
 /// Action d'une ligne de la fenêtre des proches.
@@ -115,6 +116,7 @@ impl Workspace {
                 Some(_) => (format!("Membres · {}", g.record_label(target)), self.family_body(target, cx)),
                 None => (format!("Proches · {}", g.record_label(target)), self.relatives_body(target, cx)),
             },
+            AddDialog::WebLink(d) => (self.weblink_dialog_title(d), self.weblink_body(d, cx)),
         };
         Some(
             div()
@@ -147,7 +149,16 @@ impl Workspace {
                                 .items_center()
                                 .border_b_1()
                                 .border_color(theme::border())
-                                .child(div().flex_1().font_weight(FontWeight::SEMIBOLD).child(title))
+                                .child(
+                                    div()
+                                        .flex_1()
+                                        .min_w_0()
+                                        .overflow_hidden()
+                                        .whitespace_nowrap()
+                                        .text_ellipsis()
+                                        .font_weight(FontWeight::SEMIBOLD)
+                                        .child(title),
+                                )
                                 .child(
                                     Button::new("add-close")
                                         .xsmall()

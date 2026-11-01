@@ -53,6 +53,11 @@ et suit la maquette « Lignée » (thème sombre, barre d'activité, liste, arbr
   logiciels) : la photo de groupe affiche les noms, le portrait et les vignettes de la personne
   sont recadrés sur son visage. Chaque lien vers une image (source, famille…) peut aussi être
   délimité, par exemple l'extrait utile d'un registre.
+- **Liens web** (page d'un acte aux archives en ligne, fiche Geneanet…) : section « Liens web »
+  du panneau de détail, cliquable (ouverture dans le navigateur), avec « + », modifier et
+  retirer ; aussi Édition › « Ajouter un lien web… ». Stockés en GEDCOM 7 standard : lien
+  multimédia vers un `OBJE` dont le `FILE` est l'URL (`FORM text/html`), et `WWW` pour les
+  dépôts. Édition › « Convertir les liens _URL » remplace les anciens `_URL` (Ancestris…).
 
 ![Personnes identifiées sur une photo](docs/capture-photo.png)
 - **Individu racine** : enregistré dans le fichier lui-même (extension `_GR_ROOT`, voir
@@ -123,7 +128,7 @@ Sous Linux, installer d'abord les dépendances de GPUI :
 
 | Crate | Rôle |
 | --- | --- |
-| [`crates/gedcom`](crates/gedcom) | Lecture/écriture GEDCOM 7 sans perte, vues typées (individus, familles, sources, lieux, médias), recadrage `CROP` (`crop.rs`), formulaires d'édition, dates, coordonnées (`geo.rs`), outils d'analyse (`analysis/`), recherche (`search.rs`), ajout/liaison de proches et médias (`relations.rs`), descendance (`pedigree.rs`), modèles d'actes (`template.rs`) et saisie guidée (`entry.rs`). Sans dépendance. |
+| [`crates/gedcom`](crates/gedcom) | Lecture/écriture GEDCOM 7 sans perte, vues typées (individus, familles, sources, lieux, médias), recadrage `CROP` (`crop.rs`), liens web (`weblink.rs`), formulaires d'édition, dates, coordonnées (`geo.rs`), outils d'analyse (`analysis/`), recherche (`search.rs`), ajout/liaison de proches et médias (`relations.rs`), descendance (`pedigree.rs`), modèles d'actes (`template.rs`) et saisie guidée (`entry.rs`). Sans dépendance. |
 | [`crates/gedroots`](crates/gedroots) | Application GPUI : `commands.rs` (toutes les commandes, raccourcis et menus), `workspace.rs` (fenêtre et vues) et `workspace/` (`commands.rs` commandes et palette, `tree.rs` arbres, `relatives.rs` proches/sélecteur/médias, `photo.rs` recadrage et personnes sur les photos, `filters.rs` filtres rapides), `editor.rs` (éditeurs visuel et brut), `entry_form.rs` (saisie d'acte), `map.rs` (carte des lieux), `theme.rs` (palette de la maquette), `analyses.rs` (fenêtre Analyses). |
 
 ## Tests
