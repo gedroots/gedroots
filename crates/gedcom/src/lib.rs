@@ -7,6 +7,9 @@
 //! - [`schema`] : schéma GEDCOM 7 (sous-structures permises, types de valeurs) ;
 //! - [`complete`] : autocomplétion du texte GEDCOM brut ;
 //! - [`geo`] : coordonnées des lieux (`MAP`) et projection de la carte ;
+//! - [`search`] : recherche et filtres sur les individus ;
+//! - [`relations`] : ajout/liaison/suppression de proches, lieux et médias ;
+//! - [`pedigree`] : descendance pour les vues en arbre ;
 //! - [`date`] : dates GEDCOM (y compris calendrier républicain) affichées en français.
 
 pub mod analysis;
@@ -17,13 +20,19 @@ pub mod geo;
 pub mod model;
 pub mod node;
 pub mod parse;
+pub mod pedigree;
+pub mod relations;
 pub mod schema;
+pub mod search;
 
 pub use date::Date;
 pub use document::{Gedcom, RecordKind};
 pub use model::*;
 pub use node::Node;
 pub use parse::{ParseError, node_from_string, node_to_string};
+pub use pedigree::{DescNode, DescUnion};
+pub use relations::{Relation, is_media_file, mime_for, title_from_file};
+pub use search::{IndividualQuery, has_token, toggle_token};
 
 /// Charge un fichier GEDCOM depuis le disque.
 pub fn load(path: impl AsRef<std::path::Path>) -> Result<Gedcom, String> {
