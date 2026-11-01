@@ -2,7 +2,7 @@
 //! GEDCOM brut), panneau de détail et barre d'état — d'après la maquette.
 
 use crate::commands::*;
-use crate::editor::{RecordEditor, Target};
+use crate::editor::{FieldState, RecordEditor, Target};
 use crate::entry_form::{EntryForm, EntryFormEvent};
 use crate::map::{MapEvent, MapView};
 use crate::theme;
@@ -565,7 +565,7 @@ impl Workspace {
         let doc = self.doc.as_mut().unwrap();
         let result = ed.apply_form(&mut doc.ged, cx);
         let renamed = match &ed.target {
-            Target::Place(_) => Some(ed.fields[0].state.read(cx).value().trim().to_string()),
+            Target::Place(_) => Some(ed.fields[0].state.value(cx).trim().to_string()),
             _ => None,
         };
         self.editor = Some(ed);
@@ -1255,7 +1255,6 @@ impl Workspace {
             v_flex()
                 .p_4()
                 .gap_3()
-                .max_w(px(760.))
                 .when(!ed.pickers.is_empty(), |d| {
                     d.child(div().grid().grid_cols(2).gap_3().children(ed.pickers.iter().map(|p| {
                         v_flex().gap_1().child(label_caps(p.label)).child(
@@ -1267,13 +1266,12 @@ impl Workspace {
                         )
                     })))
                 })
-                .child(
-                    div().grid().grid_cols(2).gap_3().children(
-                        ed.fields
-                            .iter()
-                            .map(|f| v_flex().gap_1().child(label_caps(f.label)).child(Input::new(&f.state).small())),
-                    ),
-                )
+                .child(div().grid().grid_cols(2).gap_3().children(ed.fields.iter().map(|f| {
+                    v_flex().gap_1().child(label_caps(f.label)).child(match &f.state {
+                        FieldState::Text(e) => Input::new(e).small().into_any_element(),
+                        FieldState::Choice(e) => Select::new(e).small().into_any_element(),
+                    })
+                })))
                 .when_some(ed.long_text.as_ref(), |d, (label, state)| {
                     d.child(v_flex().gap_1().child(label_caps(*label)).child(Textarea::new(state).h(px(120.))))
                 })
@@ -1571,6 +1569,13 @@ impl Workspace {
                     && self.tab == CenterTab::Form
                     && self.photo_file(key).is_some()
                     && !refs.is_empty();
+                let actions = self.render_actions(cx);
+                let show_refs = !shown_under_photo && !refs.is_empty();
+                // Rien d'autre que le titre (déjà dans la fiche) : pas de panneau, la
+                // zone centrale prend la place.
+                if actions.is_none() && gallery.is_none() && outgoing.is_empty() && !show_refs {
+                    return div().into_any_element();
+                }
                 panel
                     .child(
                         h_flex()
@@ -1588,13 +1593,11 @@ impl Workspace {
                                 ),
                             ),
                     )
-                    .children(self.render_actions(cx))
+                    .children(actions)
                     .when_some(gallery, |d, el| d.child(el))
                     .when(!outgoing.is_empty(), |d| d.child(self.render_links("Liens", outgoing, cx)))
                     // Photo : la liste « Utilisée par » est sous l'image, avec les cadres.
-                    .when(!shown_under_photo && !refs.is_empty(), |d| {
-                        d.child(self.render_links("Utilisé par", refs, cx))
-                    })
+                    .when(show_refs, |d| d.child(self.render_links("Utilisé par", refs, cx)))
                     .into_any_element()
             }
         }

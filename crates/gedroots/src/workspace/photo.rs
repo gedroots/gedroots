@@ -12,8 +12,8 @@ use std::collections::HashMap;
 use std::path::Path;
 
 /// Taille maximale de l'image dans la fiche d'un média.
-const MAX_W: f32 = 700.;
-const MAX_H: f32 = 600.;
+const MAX_W: f32 = 1600.;
+const MAX_H: f32 = 900.;
 
 thread_local! {
     static SIZES: RefCell<HashMap<PathBuf, Option<(u32, u32)>>> = RefCell::new(HashMap::new());

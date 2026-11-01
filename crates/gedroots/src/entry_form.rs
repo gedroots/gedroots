@@ -43,6 +43,8 @@ struct PersonRow {
     id: u64,
     role: String,
     inputs: Vec<(PersonField, Entity<InputState>)>,
+    /// Sexe choisi par boutons (`Some("")` : à choisir) ; `None` : fixé par le rôle.
+    sex: Option<String>,
     choice: PersonChoice,
     suggestions: Vec<Suggestion>,
 }
@@ -233,8 +235,12 @@ impl EntryForm {
     fn add_row(&mut self, role: &str, window: &mut Window, cx: &mut Context<Self>) {
         let Some(def) = self.template().role(role).cloned() else { return };
         let mut inputs = Vec::new();
+        let mut sex = None;
         for f in &def.fields {
-            if *f == PersonField::Sex && def.sex.is_some() {
+            if *f == PersonField::Sex {
+                if def.sex.is_none() {
+                    sex = Some(String::new());
+                }
                 continue;
             }
             let kind = match f {
@@ -243,7 +249,6 @@ impl EntryForm {
                 _ => Kind::Plain,
             };
             let ph = match f {
-                PersonField::Sex => "M ou F",
                 PersonField::Age => "ex. 32 ans",
                 PersonField::Kinship => "ex. fils, épouse, voisin",
                 _ => "",
@@ -256,6 +261,7 @@ impl EntryForm {
             id: self.next_row_id,
             role: role.to_string(),
             inputs,
+            sex,
             choice: PersonChoice::Create,
             suggestions: Vec::new(),
         });
@@ -299,7 +305,12 @@ impl EntryForm {
             .iter()
             .map(|r| Participant {
                 role: r.role.clone(),
-                values: r.inputs.iter().map(|(f, i)| (*f, v(i))).collect(),
+                values: r
+                    .inputs
+                    .iter()
+                    .map(|(f, i)| (*f, v(i)))
+                    .chain(r.sex.clone().map(|s| (PersonField::Sex, s)))
+                    .collect(),
                 choice: r.choice.clone(),
             })
             .collect();
@@ -330,6 +341,9 @@ impl EntryForm {
                 if input.read(cx).value().trim().is_empty() {
                     input.update(cx, |st, cx| st.set_value(val, window, cx));
                 }
+            }
+            if let Some(s) = self.rows[i].sex.as_mut().filter(|s| s.is_empty() && sex != "U") {
+                *s = sex;
             }
         }
         self.rows[i].choice = choice;
@@ -916,6 +930,23 @@ impl EntryForm {
                     }),
             )
             .child(div().grid().grid_cols(cols).gap_2().children(row.inputs.iter().map(|(f, e)| field(f.label(), e))))
+            .when_some(row.sex.clone(), |d, current| {
+                d.child(h_flex().gap_1().items_center().child(caps("Sexe")).children(
+                    [("M", "Homme"), ("F", "Femme")].into_iter().map(|(v, label)| {
+                        chip(format!("sex-{id}-{v}"), label, current == v).on_click(cx.listener(
+                            move |this, _, _, cx| {
+                                if let Some(r) = this.rows.iter_mut().find(|r| r.id == id) {
+                                    // Second clic : on désélectionne.
+                                    r.sex = Some(if r.sex.as_deref() == Some(v) { String::new() } else { v.into() });
+                                }
+                                this.preview = None;
+                                this.refresh_suggestions(cx);
+                                cx.notify();
+                            },
+                        ))
+                    }),
+                ))
+            })
             .children(place_hints)
             .when(row.choice == PersonChoice::Create, |d| {
                 d.child(

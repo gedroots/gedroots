@@ -17,7 +17,46 @@ pub enum Target {
 
 pub struct Field {
     pub label: &'static str,
-    pub state: Entity<InputState>,
+    pub state: FieldState,
+}
+
+/// Saisie libre, ou choix dans une liste de valeurs fixes (sexe…).
+pub enum FieldState {
+    Text(Entity<InputState>),
+    Choice(Entity<PickerState>),
+}
+
+impl FieldState {
+    pub fn value(&self, cx: &App) -> String {
+        match self {
+            FieldState::Text(e) => e.read(cx).value().to_string(),
+            FieldState::Choice(e) => e.read(cx).selected_value().cloned().unwrap_or_default(),
+        }
+    }
+}
+
+/// Valeurs de `SEX` (GEDCOM 7) et leur libellé.
+const SEXES: &[(&str, &str)] = &[("M", "Homme"), ("F", "Femme"), ("X", "Autre"), ("U", "Inconnu")];
+
+/// Liste déroulante de valeurs fixes (valeur GEDCOM, libellé).
+fn choice<T: 'static>(
+    options: &[(&str, &str)],
+    selected: &str,
+    window: &mut Window,
+    cx: &mut Context<T>,
+) -> Entity<PickerState> {
+    let items: Vec<Pick> = options
+        .iter()
+        .map(|(v, l)| Pick { xref: v.to_string(), label: SharedString::from(l.to_string()), search: sort_key(l) })
+        .collect();
+    let selected = selected.trim().to_uppercase();
+    cx.new(|cx| {
+        let mut s = SelectState::new(SearchableVec::new(items), None, window, cx);
+        if !selected.is_empty() {
+            s.set_selected_value(&selected, window, cx);
+        }
+        s
+    })
 }
 
 /// Un enregistrement proposé dans un sélecteur (affiché par son nom, jamais par son identifiant).
@@ -118,10 +157,6 @@ fn textarea<T: 'static>(window: &mut Window, cx: &mut Context<T>, value: &str) -
     cx.new(|cx| TextareaState::new(window, cx).rows(5).default_value(value))
 }
 
-fn get(cx: &App, e: &Entity<InputState>) -> String {
-    e.read(cx).value().to_string()
-}
-
 impl RecordEditor {
     pub fn new<T: 'static>(ged: &Gedcom, target: Target, window: &mut Window, cx: &mut Context<T>) -> Self {
         let mut fields = Vec::new();
@@ -130,7 +165,7 @@ impl RecordEditor {
         let mut raw = None;
         macro_rules! field {
             ($label:expr, $hint:expr, $v:expr) => {
-                fields.push(Field { label: $label, state: input(window, cx, &$v, $hint) })
+                fields.push(Field { label: $label, state: FieldState::Text(input(window, cx, &$v, $hint)) })
             };
         }
         match &target {
@@ -160,12 +195,13 @@ impl RecordEditor {
                         let f = IndividualForm::read(node);
                         field!("Prénoms", "", f.given);
                         field!("Nom", "", f.surname);
-                        field!("Sexe", "M, F, X ou U", f.sex);
+                        let sex = choice(SEXES, &f.sex, window, cx);
+                        fields.push(Field { label: "Sexe", state: FieldState::Choice(sex) });
+                        field!("Profession", "", f.occupation);
                         field!("Naissance — date", "ex. 14 MAR 1912, ABT 1850", f.birth.date);
                         field!("Naissance — lieu", "", f.birth.place);
                         field!("Décès — date", "", f.death.date);
                         field!("Décès — lieu", "", f.death.place);
-                        field!("Profession", "", f.occupation);
                         long_text = Some(("Note", textarea(window, cx, &f.note)));
                     }
                     RecordKind::Family => {
@@ -223,7 +259,7 @@ impl RecordEditor {
     }
 
     fn values(&self, cx: &App) -> Vec<String> {
-        self.fields.iter().map(|f| get(cx, &f.state)).collect()
+        self.fields.iter().map(|f| f.state.value(cx)).collect()
     }
 
     fn long_value(&self, cx: &App) -> String {
@@ -246,9 +282,9 @@ impl RecordEditor {
                         given: v[0].clone(),
                         surname: v[1].clone(),
                         sex: v[2].clone(),
-                        birth: EventForm { date: v[3].clone(), place: v[4].clone() },
-                        death: EventForm { date: v[5].clone(), place: v[6].clone() },
-                        occupation: v[7].clone(),
+                        occupation: v[3].clone(),
+                        birth: EventForm { date: v[4].clone(), place: v[5].clone() },
+                        death: EventForm { date: v[6].clone(), place: v[7].clone() },
                         note,
                     }
                     .apply(node),
