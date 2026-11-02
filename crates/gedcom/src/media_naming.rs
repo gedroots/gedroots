@@ -8,10 +8,10 @@
 //! 1 _GR_MEDIA Médias
 //! 2 _GR_DIR Actes
 //! 3 _GR_TYPES BIRT, BAPM, MARR, DEAT
-//! 3 _GR_NAME {sosa:6}_{fratrie}_{type:1}_{nom}_{prenom}_{conjoint}_{n}
+//! 3 _GR_NAME {sosa:6}_{branch}_{type:1}_{surname}_{given}_{spouse}_{n}
 //! 2 _GR_DIR Portraits
 //! 3 _GR_TYPES INDI
-//! 3 _GR_NAME {sosa:6}_{nom}_{prenom}
+//! 3 _GR_NAME {sosa:6}_{surname}_{given}
 //! ```
 //!
 //! Le premier dossier dont les types contiennent celui du média l'emporte ; un
@@ -388,10 +388,7 @@ impl Gedcom {
                         .child_val(TYPES_TAG)
                         .map(|v| v.split(',').map(|t| t.trim().to_string()).filter(|t| !t.is_empty()).collect())
                         .unwrap_or_default(),
-                    template: crate::keywords::template_from_french(
-                        d.child_val(NAME_TAG).unwrap_or(""),
-                        crate::keywords::MEDIA_VARIABLES,
-                    ),
+                    template: d.child_val(NAME_TAG).unwrap_or("").to_string(),
                 })
                 .collect(),
         }

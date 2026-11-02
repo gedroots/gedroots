@@ -45,7 +45,6 @@ pub mod gedcom551;
 pub mod gedzip;
 pub mod geo;
 pub mod import;
-pub mod keywords;
 pub mod kinds;
 pub mod media_links;
 pub mod media_naming;

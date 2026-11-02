@@ -1,24 +1,23 @@
-//! Recherches enregistrées (`HEAD._GR_FIND`), affichées dans la barre latérale.
+//! Saved searches (`HEAD._GR_FIND`), shown in the sidebar.
 //!
 //! ```text
 //! 0 HEAD
-//! 1 _GR_FIND Nés vers 1850
-//! 2 _GR_ZONE INDI
-//! 2 _GR_QUERY né:1850±5 sexe:h
-//! 1 _GR_FIND Actes non rattachés
-//! 2 _GR_ZONE OBJE
-//! 2 _GR_QUERY sans:lien
+//! 1 _GR_FIND Born around 1850
+//! 2 _GR_SCOPE INDI
+//! 2 _GR_QUERY born:1850±5 sex:m
+//! 1 _GR_FIND Unattached records
+//! 2 _GR_SCOPE OBJE
+//! 2 _GR_QUERY without:link
 //! 2 _GR_TYPE Actes
 //! ```
 
 use crate::document::Gedcom;
-use crate::keywords::from_french;
 use crate::node::Node;
 use crate::query::{Scope, chip_label, words};
 use rust_i18n::t;
 
 pub const FIND_TAG: &str = "_GR_FIND";
-const ZONE_TAG: &str = "_GR_ZONE";
+const SCOPE_TAG: &str = "_GR_SCOPE";
 const QUERY_TAG: &str = "_GR_QUERY";
 const TYPE_TAG: &str = "_GR_TYPE";
 const URI: &str = "https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_find";
@@ -28,7 +27,7 @@ const URI: &str = "https://github.com/antoninguyot/gedroots/blob/main/docs/exten
 pub struct SavedSearch {
     pub name: String,
     pub scope: Scope,
-    /// Texte de la requête (`né:1850±5 sexe:h`).
+    /// Query text (`born:1850±5 sex:m`).
     pub query: String,
     /// Type de média choisi dans la barre des types (zone Médias).
     pub media_type: Option<String>,
@@ -55,18 +54,18 @@ fn zone(tag: &str) -> Option<Scope> {
 
 impl SavedSearch {
     fn read(n: &Node) -> Option<Self> {
-        let scope = zone(n.child_val(ZONE_TAG)?)?;
+        let scope = zone(n.child_val(SCOPE_TAG)?)?;
         Some(Self {
             name: n.val().trim().to_string(),
             scope,
-            query: n.child_val(QUERY_TAG).map(|q| from_french(scope, q.trim())).unwrap_or_default(),
+            query: n.child_val(QUERY_TAG).map(|q| q.trim().to_string()).unwrap_or_default(),
             media_type: n.child_val(TYPE_TAG).map(str::trim).filter(|t| !t.is_empty()).map(str::to_string),
         })
     }
 
     fn node(&self) -> Node {
         let mut n = Node::with_value(FIND_TAG, self.name.trim());
-        n.children.push(Node::with_value(ZONE_TAG, zone_tag(self.scope)));
+        n.children.push(Node::with_value(SCOPE_TAG, zone_tag(self.scope)));
         if !self.query.trim().is_empty() {
             n.children.push(Node::with_value(QUERY_TAG, self.query.trim()));
         }
@@ -110,7 +109,7 @@ impl Gedcom {
 
     /// Ajoute une recherche à la fin de la liste ; renvoie sa position.
     pub fn save_search(&mut self, s: &SavedSearch) -> usize {
-        for t in [FIND_TAG, ZONE_TAG, QUERY_TAG, TYPE_TAG] {
+        for t in [FIND_TAG, SCOPE_TAG, QUERY_TAG, TYPE_TAG] {
             self.declare_extension(t, URI);
         }
         let n = self.saved_searches().len();
@@ -154,7 +153,7 @@ impl Gedcom {
         let k = self.find_index(i)?;
         let n = self.header.children.remove(k);
         if !self.header.children.iter().any(|c| c.tag == FIND_TAG) {
-            for t in [FIND_TAG, ZONE_TAG, QUERY_TAG, TYPE_TAG] {
+            for t in [FIND_TAG, SCOPE_TAG, QUERY_TAG, TYPE_TAG] {
                 self.undeclare_extension(t);
             }
         }
@@ -197,7 +196,7 @@ mod tests {
         assert_eq!(g.save_search(&m), 1);
         let out = g.to_gedcom_string();
         assert!(out.contains(
-            "1 _GR_FIND Born about 1850 (± 5 years) · “guyot”\n2 _GR_ZONE INDI\n2 _GR_QUERY born:1850±5 guyot\n"
+            "1 _GR_FIND Born about 1850 (± 5 years) · “guyot”\n2 _GR_SCOPE INDI\n2 _GR_QUERY born:1850±5 guyot\n"
         ));
         assert!(out.contains("2 TAG _GR_FIND https://"));
         let g2 = Gedcom::parse(&out).unwrap();
@@ -210,12 +209,5 @@ mod tests {
         assert_eq!(g.delete_search(0).map(|s| s.name).as_deref(), Some("Actes"));
         g.delete_search(0);
         assert!(!g.to_gedcom_string().contains("_GR_"));
-    }
-
-    #[test]
-    fn french_queries_of_earlier_versions_are_read_in_english() {
-        let ged = GED.replace("0 @I1@", "1 _GR_FIND Nés\n2 _GR_ZONE INDI\n2 _GR_QUERY né:1850 sans:source\n0 @I1@");
-        let g = Gedcom::parse(&ged).unwrap();
-        assert_eq!(g.saved_searches()[0].query, "born:1850 without:source");
     }
 }
