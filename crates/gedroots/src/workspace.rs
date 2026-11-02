@@ -38,6 +38,7 @@ mod photo;
 mod places;
 mod quality;
 mod relatives;
+mod saved;
 mod settings;
 mod tree;
 mod weblinks;
@@ -216,6 +217,10 @@ pub struct Workspace {
     search_focused: bool,
     /// Menu d'un jeton de recherche cliqué (marge des dates, variantes des noms).
     chip_menu: Option<filters::ChipMenu>,
+    /// Recherches enregistrées (`HEAD._GR_FIND`) et leur nombre de résultats.
+    saved: Rc<Vec<(gedcom::saved::SavedSearch, usize)>>,
+    /// Recherche enregistrée en cours de renommage.
+    saved_rename: Option<saved::SavedRename>,
     /// Saisie guidée d'un acte en cours (remplace liste, fiche et détail).
     act_editor: Option<(Entity<ActEditor>, Subscription)>,
     /// Actes de la source affichée (relus à chaque rafraîchissement de la fiche).
@@ -307,6 +312,8 @@ impl Workspace {
             suggest_closed: false,
             search_focused: false,
             chip_menu: None,
+            saved: Rc::new(Vec::new()),
+            saved_rename: None,
             act_editor: None,
             source_acts: Vec::new(),
             palette: None,
@@ -964,6 +971,7 @@ impl Workspace {
         self.quality.stale = true;
         self.media_index = None;
         self.refresh_quality();
+        self.refresh_saved();
         self.build_rows(cx);
     }
 
@@ -1398,6 +1406,7 @@ impl Workspace {
                     .children(n.map(|n| div().text_xs().text_color(theme::muted()).child(group_thousands(n))))
                     .on_click(cx.listener(move |this, _, w, cx| this.show_view(v, w, cx)))
             }))
+            .children(self.render_saved(cx))
     }
 
     fn render_list(&self, cx: &mut Context<Self>) -> impl IntoElement {
