@@ -12,7 +12,7 @@ use gedcom::research::{Gap, PersonRef, PersonSheet, current_year};
 use rmcp::handler::server::wrapper::{Json, Parameters};
 use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
 use rmcp::transport::streamable_http_server::{StreamableHttpServerConfig, StreamableHttpService};
-use rmcp::{ServerHandler, tool, tool_handler, tool_router};
+use rmcp::{ServerHandler, prompt_handler, tool, tool_handler, tool_router};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use tokio_util::sync::CancellationToken;
@@ -20,6 +20,7 @@ use tokio_util::sync::CancellationToken;
 #[derive(Clone)]
 pub struct GedrootsMcp {
     bridge: async_channel::Sender<Request>,
+    prompt_router: rmcp::handler::server::router::prompt::PromptRouter<Self>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -115,7 +116,7 @@ type Res<T> = Result<Json<T>, String>;
 #[tool_router]
 impl GedrootsMcp {
     pub fn new(bridge: async_channel::Sender<Request>) -> Self {
-        Self { bridge }
+        Self { bridge, prompt_router: Self::prompt_router() }
     }
 
     async fn snapshot(&self) -> Result<Snapshot, String> {
@@ -289,8 +290,10 @@ app's review page, where the user compares it with the tree before saving it. Li
 only for passing between tools: never show them to the user. To look for records (birth, marriage, \
 death acts), call `research_gaps`, then `person_sheet` on the person to learn their places, dates \
 and the sources already cited. When you find an act, read it, check it matches the person, \
-call `search_sources` to reuse the source or repository, then `propose_act`."
+call `search_sources` to reuse the source or repository, then `propose_act`. The prompts \
+`find_record` and `read_record` give the full method."
 )]
+#[prompt_handler(router = self.prompt_router)]
 impl ServerHandler for GedrootsMcp {}
 
 /// Refuse toute requête sans le bon jeton.
@@ -419,6 +422,29 @@ mod tests {
         let sheet = &call["result"]["structuredContent"];
         assert_eq!(sheet["person"]["name"], "Jean MARCHAND", "{call}");
         assert_eq!(sheet["events"][0]["place"], "Rennes");
+        // Les méthodes de travail sont servies comme prompts, avec ou sans argument.
+        let (_, _, prompts) =
+            post(port, "secret", Some(&sid), serde_json::json!({"jsonrpc":"2.0","id":4,"method":"prompts/list"}));
+        let names: Vec<_> =
+            prompts["result"]["prompts"].as_array().expect("prompts").iter().map(|p| p["name"].clone()).collect();
+        assert_eq!(names.len(), 2, "{prompts}");
+        assert!(names.contains(&"find_record".into()) && names.contains(&"read_record".into()));
+        let (_, _, got) = post(
+            port,
+            "secret",
+            Some(&sid),
+            serde_json::json!({"jsonrpc":"2.0","id":5,"method":"prompts/get",
+            "params":{"name":"find_record","arguments":{"person":"Jean MARCHAND","event":"birth"}}}),
+        );
+        let body = got["result"]["messages"][0]["content"]["text"].as_str().expect("text");
+        assert!(body.contains("the birth of Jean MARCHAND") && !body.contains("{target}"), "{got}");
+        let (_, _, bare) = post(
+            port,
+            "secret",
+            Some(&sid),
+            serde_json::json!({"jsonrpc":"2.0","id":6,"method":"prompts/get","params":{"name":"read_record"}}),
+        );
+        assert!(bare["result"]["messages"][0]["content"]["text"].is_string(), "{bare}");
         cancel.cancel();
     }
 }

@@ -15,6 +15,7 @@
 //! Le réglage et le jeton sont propres à la machine : ils vivent dans le dossier de
 //! configuration de la plateforme, jamais dans le `.ged`.
 
+mod prompts;
 pub mod propose;
 mod tools;
 
