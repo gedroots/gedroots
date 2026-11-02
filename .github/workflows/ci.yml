@@ -1,7 +1,7 @@
 name: CI
 
-# Outils et commandes viennent de mise.toml (et mise.lock) : la CI lance les
-# mêmes tâches qu'en local (`mise run ci`, `mise run bundle`).
+# Tools and commands come from mise.toml (and mise.lock): CI runs the same
+# tasks as a local machine (`mise run ci`, `mise run bundle`).
 
 on:
   push:
@@ -11,8 +11,8 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  # Pas de compilation incrémentale en CI : inutile sur une machine neuve et
-  # elle alourdit le cache de target/.
+  # No incremental compilation in CI: useless on a fresh machine, and it
+  # bloats the target/ cache.
   CARGO_INCREMENTAL: "0"
 
 jobs:
@@ -20,18 +20,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - name: Dépendances système de GPUI
+      - name: GPUI system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-dev libfontconfig-dev libwayland-dev libxcb1-dev libvulkan-dev
-      # mise installe Rust avec rustup : la toolchain va dans le dossier de
-      # données de mise, pour que le cache de mise-action la conserve.
-      - name: Toolchain Rust dans le dossier de mise
+      # mise installs Rust with rustup: the toolchain goes into mise's data
+      # folder, so that the mise-action cache keeps it.
+      - name: Rust toolchain in the mise folder
         run: echo "MISE_RUSTUP_HOME=$HOME/.local/share/mise/rustup" >> "$GITHUB_ENV"
       - uses: jdx/mise-action@v5
         with:
           version: 2026.10.25
-      # Crates téléchargées et compilations : elles suivent Cargo.lock.
+      # Downloaded crates and build outputs: they follow Cargo.lock.
       - uses: actions/cache@v6
         with:
           path: |
@@ -44,14 +44,13 @@ jobs:
       - run: mise run ci
 
   macos-build:
-    # App macOS (Apple Silicon) téléchargeable en .dmg, pour tester sans compiler.
-    # Les minutes macOS comptent 10× sur un dépôt privé : seulement sur main,
-    # ou à la demande (`gh workflow run ci.yml --ref <branche>`).
+    # macOS app (Apple Silicon) downloadable as a .dmg, to test without building.
+    # Only on main, or on demand (`gh workflow run ci.yml --ref <branch>`).
     if: github.event_name != 'pull_request'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v7
-      - name: Toolchain Rust dans le dossier de mise
+      - name: Rust toolchain in the mise folder
         run: echo "MISE_RUSTUP_HOME=$HOME/.local/share/mise/rustup" >> "$GITHUB_ENV"
       - uses: jdx/mise-action@v5
         with:
@@ -65,7 +64,7 @@ jobs:
             target
           key: ${{ github.job }}-${{ runner.os }}-${{ hashFiles('mise.lock', 'Cargo.lock') }}
           restore-keys: ${{ github.job }}-${{ runner.os }}-
-      - name: Construire GEDRoots.app et GEDRoots.dmg
+      - name: Build GEDRoots.app and GEDRoots.dmg
         run: mise run bundle --dmg
       - uses: actions/upload-artifact@v7
         with:
