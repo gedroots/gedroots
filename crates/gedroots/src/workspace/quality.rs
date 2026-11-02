@@ -52,11 +52,6 @@ impl Workspace {
         self.quality.show_ignored || !i.ignored
     }
 
-    /// Nombre d'anomalies à corriger (badge de la barre de gauche).
-    pub(super) fn quality_count(&self) -> usize {
-        self.quality.issues.iter().filter(|i| !i.ignored && quality::category(i.code).group() == Group::Fix).count()
-    }
-
     /// Lignes de la liste : une par catégorie non vide.
     pub(super) fn quality_rows(&self, q: &str) -> Vec<Row> {
         Category::ALL

@@ -52,16 +52,10 @@ pub enum View {
 }
 
 impl View {
-    const ALL: [View; 8] = [
-        View::Individuals,
-        View::Sources,
-        View::Places,
-        View::Media,
-        View::Repositories,
-        View::Notes,
-        View::Quality,
-        View::Stats,
-    ];
+    /// Les zones de la barre latérale. Les autres listes (dépôts, notes) et les
+    /// pages (qualité, statistiques) s'ouvrent depuis le menu Affichage, les liens
+    /// des fiches et la recherche.
+    const SIDEBAR: [View; 4] = [View::Individuals, View::Sources, View::Places, View::Media];
 
     fn label(self) -> &'static str {
         match self {
@@ -73,19 +67,6 @@ impl View {
             View::Notes => "Notes",
             View::Quality => "Qualité",
             View::Stats => "Stats",
-        }
-    }
-
-    fn short(self) -> &'static str {
-        match self {
-            View::Individuals => "IND",
-            View::Sources => "SRC",
-            View::Places => "LIEU",
-            View::Media => "MÉD",
-            View::Repositories => "DÉP",
-            View::Notes => "NOTE",
-            View::Quality => "QUAL",
-            View::Stats => "STAT",
         }
     }
 
@@ -191,6 +172,11 @@ pub struct Workspace {
     map: Entity<MapView>,
     tree_mode: tree::TreeMode,
     tree_gens: u32,
+    /// Barre latérale affichée (Affichage › Masquer ou afficher la barre latérale).
+    sidebar: bool,
+    /// Onglet GEDCOM brut ouvert à la demande (Affichage › GEDCOM brut), refermé
+    /// en changeant de liste.
+    raw_open: bool,
     /// Arbre libre : personne centrale, générations chargées, déplacement.
     chart: std::cell::RefCell<chart::Chart>,
     picker: Option<relatives::Picker>,
@@ -269,6 +255,8 @@ impl Workspace {
             map,
             tree_mode: tree::TreeMode::Chart,
             tree_gens: 5,
+            sidebar: true,
+            raw_open: false,
             chart: Default::default(),
             picker: None,
             media_files: Rc::new(Vec::new()),
@@ -466,6 +454,7 @@ impl Workspace {
         self.view = view;
         self.media_marked.clear();
         self.only_flagged = false;
+        self.raw_open = false;
         self.selected = None;
         self.editor = None;
         self.filter.update(cx, |f, cx| f.set_value("", window, cx));
@@ -563,6 +552,20 @@ impl Workspace {
         doc.ged.set_root(&xref);
         let name = doc.ged.record_label(&xref);
         self.set_status(format!("{name} est maintenant l'individu racine"), false);
+        cx.notify();
+    }
+
+    /// Copie le nom d'un individu, le titre d'un enregistrement ou le nom d'un lieu.
+    fn copy_name(&mut self, key: &str, cx: &mut Context<Self>) {
+        let Some(doc) = &self.doc else { return };
+        let g = &doc.ged;
+        let name = match g.individual(key) {
+            Some(i) => i.display_name(),
+            None if g.get(key).is_some() => g.record_label(key),
+            None => key.to_string(),
+        };
+        cx.write_to_clipboard(ClipboardItem::new_string(name));
+        self.set_status("Nom copié", false);
         cx.notify();
     }
 
@@ -1119,6 +1122,19 @@ fn label_caps(s: impl Into<SharedString>) -> Div {
     div().text_xs().font_weight(FontWeight::SEMIBOLD).text_color(theme::muted()).child(s.into())
 }
 
+/// « 1 284 » : milliers séparés par une espace fine insécable, à la française.
+fn group_thousands(n: usize) -> String {
+    let digits = n.to_string();
+    let mut out = String::new();
+    for (i, c) in digits.chars().enumerate() {
+        if i > 0 && (digits.len() - i).is_multiple_of(3) {
+            out.push('\u{202f}');
+        }
+        out.push(c);
+    }
+    out
+}
+
 fn mono(s: impl Into<SharedString>) -> Div {
     div().font_family("monospace").text_xs().text_color(theme::muted()).child(s.into())
 }
@@ -1217,55 +1233,43 @@ impl Workspace {
             )))
     }
 
-    fn render_activity_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        // Pas de nombre sous Statistiques.
-        let counts: Vec<Option<usize>> = View::ALL
-            .iter()
-            .map(|v| match (&self.doc, v.kind()) {
-                (_, None) if *v == View::Stats => None,
-                (Some(_), None) if *v == View::Quality => Some(self.quality_count()),
-                (Some(d), Some(k)) => Some(d.ged.count(k)),
-                (Some(d), None) => Some(d.ged.places().len()),
-                _ => Some(0),
-            })
-            .collect();
+    /// Barre latérale : les quatre zones, nommées, avec leur effectif. Elle ne
+    /// lance aucune action ; les commandes sont dans les menus.
+    fn render_sidebar(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let doc = self.doc.as_ref();
         v_flex()
-            .w(px(76.))
+            .w(px(184.))
             .flex_none()
-            .py_2()
-            .gap_1()
-            .items_center()
+            .p_2()
+            .pt_3()
+            .gap_0p5()
             .bg(theme::panel())
             .border_r_1()
             .border_color(theme::border())
-            .children(View::ALL.into_iter().zip(counts).map(|(v, n)| {
+            .children(View::SIDEBAR.into_iter().map(|v| {
+                let n = doc.map(|d| match v.kind() {
+                    Some(k) => d.ged.count(k),
+                    None => d.ged.places().len(),
+                });
                 let active = v == self.view;
-                div()
-                    .id(SharedString::from(format!("view-{}", v.short())))
-                    .w(px(68.))
-                    .py_2()
+                h_flex()
+                    .id(SharedString::from(format!("zone-{}", v.label())))
+                    .px_2()
+                    .py_1()
+                    .gap_2()
+                    .items_center()
                     .rounded(theme::RADIUS_SM)
                     .cursor_pointer()
-                    .flex()
-                    .flex_col()
-                    .items_center()
-                    .gap_0p5()
-                    .when(active, |d| d.bg(theme::hover()))
-                    .hover(|d| d.bg(theme::hover()))
-                    .child(Icon::new(v.icon()).size(px(18.)).text_color(if active {
+                    .when(active, |d| d.bg(theme::accent_soft()).font_weight(FontWeight::SEMIBOLD))
+                    .when(!active, |d| d.hover(|d| d.bg(theme::hover())))
+                    .child(Icon::new(v.icon()).size(px(16.)).text_color(if active {
                         theme::accent()
                     } else {
                         theme::muted()
                     }))
-                    .child(
-                        div()
-                            .text_xs()
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .text_color(if active { theme::text() } else { theme::muted() })
-                            .child(v.label()),
-                    )
-                    .children(n.map(|n| mono(n.to_string())))
-                    .on_click(cx.listener(move |this, _, w, cx| this.set_view(v, w, cx)))
+                    .child(div().flex_1().child(v.label()))
+                    .children(n.map(|n| div().text_xs().text_color(theme::muted()).child(group_thousands(n))))
+                    .on_click(cx.listener(move |this, _, w, cx| this.show_view(v, w, cx)))
             }))
     }
 
@@ -1400,11 +1404,16 @@ impl Workspace {
         if self.view == View::Stats {
             return self.render_stats(cx);
         }
-        let tabs: Vec<CenterTab> = match self.view {
-            View::Individuals => vec![CenterTab::Tree, CenterTab::Form, CenterTab::Raw],
+        // GEDCOM brut : onglet seulement quand on l'a demandé. Sans autre vue que la
+        // fiche, pas de barre d'onglets.
+        let mut tabs: Vec<CenterTab> = match self.view {
+            View::Individuals => vec![CenterTab::Tree, CenterTab::Form],
             View::Places => vec![CenterTab::Map, CenterTab::Form],
-            _ => vec![CenterTab::Form, CenterTab::Raw],
+            _ => vec![CenterTab::Form],
         };
+        if self.raw_open && self.view != View::Places {
+            tabs.push(CenterTab::Raw);
+        }
         let tab = if tabs.contains(&self.tab) { self.tab } else { tabs[0] };
         let merging = self.view == View::Media && self.media_marked.len() >= 2;
         let body: AnyElement = match (tab, &self.editor) {
@@ -1415,70 +1424,91 @@ impl Workspace {
             (CenterTab::Form, Some(ed)) => self.render_form(ed, cx).into_any_element(),
             (CenterTab::Raw, Some(ed)) => self.render_raw(ed, cx).into_any_element(),
         };
+        let strip = tabs.len() > 1;
         v_flex()
             .flex_1()
             .min_w_0()
             .bg(theme::bg())
-            .child(
-                // Onglets à la manière de Zed : l'onglet actif prend le fond du contenu et
-                // s'ouvre sur lui (pas de trait du bas) ; les autres restent sur la barre.
-                h_flex()
-                    .h(px(32.))
-                    .flex_none()
-                    .bg(theme::panel())
-                    .children(tabs.into_iter().enumerate().map(|(i, t)| {
-                        let active = t == tab;
-                        div()
-                            .id(SharedString::from(format!("tab-{}", t.label())))
-                            .h_full()
-                            .px_3()
-                            .flex()
-                            .items_center()
-                            .gap_2()
-                            .text_sm()
-                            .cursor_pointer()
-                            .border_color(theme::border())
-                            .border_r_1()
-                            .when(i > 0 && active, |d| d.border_l_1().ml(px(-1.)))
-                            .map(|d| {
-                                if active { d.bg(theme::bg()) } else { d.border_b_1().hover(|d| d.bg(theme::hover())) }
-                            })
-                            .text_color(if active { theme::text() } else { theme::muted() })
-                            // Infobulle : le raccourci de l'onglet.
-                            .tooltip(move |w, cx| {
-                                let tip = Tooltip::new(t.label());
-                                match t {
-                                    CenterTab::Tree => tip.action(&ShowTree, Some("Workspace")),
-                                    CenterTab::Form => tip.action(&ShowForm, Some("Workspace")),
-                                    CenterTab::Raw => tip.action(&ShowRaw, Some("Workspace")),
-                                    CenterTab::Map => tip,
-                                }
-                                .build(w, cx)
-                            })
-                            .child(icon(t.icon()).size(px(14.)).text_color(if active {
-                                theme::text()
-                            } else {
-                                theme::muted()
-                            }))
-                            .child(match t {
-                                // Vue d'arbre courante, réglable dans Affichage › Arbre.
-                                CenterTab::Tree => match self.tree_mode {
-                                    tree::TreeMode::Fan => {
-                                        let r = self.tree_mode.generations();
-                                        let gens = self.tree_gens.clamp(*r.start(), *r.end());
-                                        format!("{} · {gens} gén.", self.tree_mode.label())
+            .when(strip, |d| {
+                d.child(
+                    // Onglets à la manière de Zed : l'onglet actif prend le fond du contenu et
+                    // s'ouvre sur lui (pas de trait du bas) ; les autres restent sur la barre.
+                    h_flex()
+                        .h(px(32.))
+                        .flex_none()
+                        .bg(theme::panel())
+                        .children(tabs.into_iter().enumerate().map(|(i, t)| {
+                            let active = t == tab;
+                            div()
+                                .id(SharedString::from(format!("tab-{}", t.label())))
+                                .h_full()
+                                .px_3()
+                                .flex()
+                                .items_center()
+                                .gap_2()
+                                .text_sm()
+                                .cursor_pointer()
+                                .border_color(theme::border())
+                                .border_r_1()
+                                .when(i > 0 && active, |d| d.border_l_1().ml(px(-1.)))
+                                .map(|d| {
+                                    if active {
+                                        d.bg(theme::bg())
+                                    } else {
+                                        d.border_b_1().hover(|d| d.bg(theme::hover()))
                                     }
-                                    m => m.label().to_string(),
-                                },
-                                _ => t.label().to_string(),
-                            })
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                this.tab = t;
-                                cx.notify();
-                            }))
-                    }))
-                    .child(div().flex_1().h_full().border_b_1().border_color(theme::border())),
-            )
+                                })
+                                .text_color(if active { theme::text() } else { theme::muted() })
+                                // Infobulle : le raccourci de l'onglet.
+                                .tooltip(move |w, cx| {
+                                    let tip = Tooltip::new(t.label());
+                                    match t {
+                                        CenterTab::Tree => tip.action(&ShowTree, Some("Workspace")),
+                                        CenterTab::Form => tip.action(&ShowForm, Some("Workspace")),
+                                        CenterTab::Raw => tip.action(&ShowRaw, Some("Workspace")),
+                                        CenterTab::Map => tip,
+                                    }
+                                    .build(w, cx)
+                                })
+                                .child(icon(t.icon()).size(px(14.)).text_color(if active {
+                                    theme::text()
+                                } else {
+                                    theme::muted()
+                                }))
+                                .child(match t {
+                                    // Vue d'arbre courante, réglable dans Affichage › Arbre.
+                                    CenterTab::Tree => match self.tree_mode {
+                                        tree::TreeMode::Fan => {
+                                            let r = self.tree_mode.generations();
+                                            let gens = self.tree_gens.clamp(*r.start(), *r.end());
+                                            format!("{} · {gens} gén.", self.tree_mode.label())
+                                        }
+                                        m => m.label().to_string(),
+                                    },
+                                    _ => t.label().to_string(),
+                                })
+                                // L'onglet GEDCOM brut se referme.
+                                .when(t == CenterTab::Raw, |d| {
+                                    d.child(
+                                        div()
+                                            .id("close-raw")
+                                            .rounded(theme::RADIUS_SM)
+                                            .hover(|d| d.bg(theme::hover()))
+                                            .child(icon(IconName::Close).size(px(12.)).text_color(theme::muted()))
+                                            .on_click(cx.listener(|this, _, _, cx| {
+                                                cx.stop_propagation();
+                                                this.close_raw(cx);
+                                            })),
+                                    )
+                                })
+                                .on_click(cx.listener(move |this, _, _, cx| {
+                                    this.tab = t;
+                                    cx.notify();
+                                }))
+                        }))
+                        .child(div().flex_1().h_full().border_b_1().border_color(theme::border())),
+                )
+            })
             .child(body)
             .into_any_element()
     }
@@ -2547,7 +2577,7 @@ impl Render for Workspace {
                 .flex_1()
                 .min_h_0()
                 .items_stretch()
-                .child(self.render_activity_bar(cx))
+                .when(self.sidebar, |d| d.child(self.render_sidebar(cx)))
                 .child(self.render_list(cx))
                 .child(editor.clone())
                 .into_any_element()
@@ -2556,7 +2586,7 @@ impl Render for Workspace {
                 .flex_1()
                 .min_h_0()
                 .items_stretch()
-                .child(self.render_activity_bar(cx))
+                .when(self.sidebar, |d| d.child(self.render_sidebar(cx)))
                 .when(self.view != View::Stats, |d| d.child(self.render_list(cx)))
                 .child(self.render_center(cx))
                 .child(self.render_detail(cx))

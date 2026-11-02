@@ -2,11 +2,18 @@
 //!
 //! Chaque menu agit sur l'élément cliqué, sans avoir à le sélectionner
 //! d'abord, et appelle les mêmes fonctions que les commandes de la barre de
-//! menus : mêmes libellés, même comportement. Un menu ne propose que ce qui
-//! s'applique à l'élément (pas de « Père » quand il est déjà connu…).
+//! menus. Règles :
+//! - le clic droit ne crée pas de commande : une action sur l'élément lui-même
+//!   existe aussi dans la barre de menus, sous le même libellé (`commands::label`) ;
+//! - il ne propose que ce qui s'applique à l'élément (pas de « Père » quand il
+//!   est déjà connu…) ;
+//! - exceptions : les actions sur une partie d'une fiche (un événement, un média
+//!   rattaché, un membre de famille), que la barre de menus ne peut pas viser, et
+//!   les liens pour s'y rendre (« Ouvrir la fiche », « Afficher le lieu »…).
 
 use super::relatives::PickPurpose;
 use super::*;
+use crate::commands::label;
 use gpui_kit::component::menu::{ContextMenu, ContextMenuExt, PopupMenu, PopupMenuItem};
 
 /// Fonction de construction d'un menu, pour `.context_menu(…)`.
@@ -83,12 +90,6 @@ impl Workspace {
         self.delete_selected(window, cx);
     }
 
-    fn copy_text(&mut self, text: String, what: &str, cx: &mut Context<Self>) {
-        cx.write_to_clipboard(ClipboardItem::new_string(text));
-        self.set_status(format!("{what} copié"), false);
-        cx.notify();
-    }
-
     fn ws(cx: &Context<Self>) -> Ws {
         cx.entity().downgrade()
     }
@@ -142,9 +143,7 @@ impl Workspace {
                 this.open_event_dialog(o1.clone(), Some(ix), w, cx)
             }))
             .separator()
-            .item(act(&ws, "Rattacher des photos ou documents…", move |this, w, cx| {
-                this.choose_files_for_event(o3.clone(), ix, w, cx)
-            }))
+            .item(act(&ws, label::ATTACH_FILES, move |this, w, cx| this.choose_files_for_event(o3.clone(), ix, w, cx)))
             .item(act(&ws, "Lier un média existant…", move |this, w, cx| {
                 this.open_picker(PickPurpose::MediaToEvent { owner: o4.clone(), ix }, w, cx)
             }))
@@ -188,22 +187,22 @@ impl Workspace {
                 return menu;
             };
             let new = match view.kind() {
-                Some(RecordKind::Individual) => Some("Nouvel individu"),
-                Some(RecordKind::Source) => Some("Nouvelle source"),
-                Some(RecordKind::Media) => Some("Nouveau média"),
-                Some(RecordKind::Repository) => Some("Nouveau dépôt"),
-                Some(RecordKind::SharedNote) => Some("Nouvelle note"),
+                Some(RecordKind::Individual) => Some(label::NEW_INDIVIDUAL),
+                Some(RecordKind::Source) => Some(label::NEW_SOURCE),
+                Some(RecordKind::Media) => Some(label::NEW_MEDIA),
+                Some(RecordKind::Repository) => Some(label::NEW_REPOSITORY),
+                Some(RecordKind::SharedNote) => Some(label::NEW_NOTE),
                 _ => None,
             };
             menu.when_some(new, |m, label| m.item(act(&ws, label, |this, w, cx| this.create_record(w, cx))))
                 .when(view == View::Individuals && root, |m| {
-                    m.item(act(&ws, "Aller à l'individu racine", |this, w, cx| this.goto_root(w, cx)))
+                    m.item(act(&ws, label::GO_TO_ROOT, |this, w, cx| this.goto_root(w, cx)))
                 })
                 .when(view == View::Sources, |m| {
-                    m.item(act(&ws, "Saisir un acte…", |this, w, cx| this.enter_act(w, cx)))
+                    m.item(act(&ws, label::ENTER_ACT, |this, w, cx| this.enter_act(w, cx)))
                 })
                 .when(filtered, |m| {
-                    m.separator().item(act(&ws, "Effacer la recherche", |this, w, cx| {
+                    m.separator().item(act(&ws, label::CLEAR_SEARCH, |this, w, cx| {
                         this.only_flagged = false;
                         this.set_query(String::new(), w, cx)
                     }))
@@ -216,8 +215,8 @@ impl Workspace {
         let (ws, indi) = (Self::ws(cx), indi.to_string());
         Rc::new(move |menu, _, _| {
             let (a, b) = (indi.clone(), indi.clone());
-            menu.item(act(&ws, "Nouvelle personne", move |this, w, cx| this.add_relative(a.clone(), rel, w, cx))).item(
-                act(&ws, "Personne existante…", move |this, w, cx| {
+            menu.item(act(&ws, label::ADD_RELATIVE, move |this, w, cx| this.add_relative(a.clone(), rel, w, cx))).item(
+                act(&ws, format!("{}…", label::LINK_PERSON), move |this, w, cx| {
                     this.open_picker(PickPurpose::Relative { indi: b.clone(), rel }, w, cx)
                 }),
             )
@@ -237,10 +236,9 @@ pub(super) fn place_menu(ws: Ws, name: String, from: From) -> MenuBuilder {
             this.tab = CenterTab::Form;
         }))
         .separator()
-        .item(act(&ws, "Copier le nom du lieu", move |this, _, cx| this.copy_text(n3.clone(), "Nom du lieu", cx)))
+        .item(act(&ws, label::COPY_NAME, move |this, _, cx| this.copy_name(&n3, cx)))
         .when(matches!(from, From::List), |m| {
-            m.separator()
-                .item(act(&ws, "Supprimer le lieu…", move |this, w, cx| this.delete_from_list(n4.clone(), w, cx)))
+            m.item(act(&ws, label::DELETE, move |this, w, cx| this.delete_from_list(n4.clone(), w, cx)))
         })
     })
 }
@@ -265,31 +263,32 @@ fn ellipsize(s: &str, n: usize) -> String {
     if s.chars().count() <= n { s.to_string() } else { format!("{}…", s.chars().take(n - 1).collect::<String>()) }
 }
 
-/// Entrées communes en bas de menu : copier l'identifiant, supprimer (depuis la liste).
+/// Entrées communes en bas de menu, dans l'ordre du menu Édition : copier le
+/// nom, l'identifiant, supprimer (depuis la liste).
 fn tail(menu: PopupMenu, ws: &Ws, xref: &str, from: &From) -> PopupMenu {
-    let (a, b) = (xref.to_string(), xref.to_string());
+    let (a, b, c) = (xref.to_string(), xref.to_string(), xref.to_string());
     menu.separator()
-        .item(act(ws, "Copier l'ID", move |this, _, cx| this.copy_id(&a, cx)))
+        .item(act(ws, label::COPY_NAME, move |this, _, cx| this.copy_name(&c, cx)))
+        .item(act(ws, label::COPY_ID, move |this, _, cx| this.copy_id(&a, cx)))
         .when(matches!(from, From::List), |m| {
-            m.item(act(ws, "Supprimer l'élément…", move |this, w, cx| this.delete_from_list(b.clone(), w, cx)))
+            m.item(act(ws, label::DELETE, move |this, w, cx| this.delete_from_list(b.clone(), w, cx)))
         })
 }
 
 pub(super) fn person_menu(ws: Ws, x: String, from: From) -> MenuBuilder {
     Rc::new(move |menu, window, cx| {
-        let Some((father, mother, is_root, name)) = read(&ws, cx, |_, g| {
+        let Some((father, mother, is_root)) = read(&ws, cx, |_, g| {
             let (f, m) = g.parents(&x);
-            let name = g.individual(&x).map(|i| i.display_name()).unwrap_or_default();
-            (f.is_some(), m.is_some(), g.root().as_deref() == Some(x.as_str()), name)
+            (f.is_some(), m.is_some(), g.root().as_deref() == Some(x.as_str()))
         }) else {
             return menu;
         };
         let rels: Vec<(Relation, &'static str, &'static str)> = [
-            (Relation::Father, "Père", "Père…"),
-            (Relation::Mother, "Mère", "Mère…"),
-            (Relation::Spouse, "Conjoint", "Conjoint…"),
-            (Relation::Child, "Enfant", "Enfant…"),
-            (Relation::Sibling, "Frère ou sœur", "Frère ou sœur…"),
+            (Relation::Father, label::FATHER, label::FATHER_LINK),
+            (Relation::Mother, label::MOTHER, label::MOTHER_LINK),
+            (Relation::Spouse, label::SPOUSE, label::SPOUSE_LINK),
+            (Relation::Child, label::CHILD, label::CHILD_LINK),
+            (Relation::Sibling, label::SIBLING, label::SIBLING_LINK),
         ]
         .into_iter()
         .filter(|(r, _, _)| match r {
@@ -302,25 +301,20 @@ pub(super) fn person_menu(ws: Ws, x: String, from: From) -> MenuBuilder {
         let (x1, x2, x3, x4, x5, x6, x7) =
             (x.clone(), x.clone(), x.clone(), x.clone(), x.clone(), x.clone(), x.clone());
         let (wa, wb) = (ws.clone(), ws.clone());
-        let in_tree = matches!(from, From::Tree);
-        menu.item(act(
-            &ws,
-            if in_tree { "Centrer l'arbre ici" } else { "Afficher dans l'arbre" },
-            move |this, w, cx| {
-                this.act_editor = None;
-                this.goto(x1.clone(), w, cx);
-                this.center_chart_on(x1.clone(), w, cx)
-            },
-        ))
+        menu.item(act(&ws, label::CENTER_TREE, move |this, w, cx| {
+            this.act_editor = None;
+            this.goto(x1.clone(), w, cx);
+            this.center_chart_on(x1.clone(), w, cx)
+        }))
         .item(act(&ws, "Ouvrir la fiche", move |this, w, cx| this.open_in(x2.clone(), CenterTab::Form, w, cx)))
         .separator()
-        .submenu("Ajouter un proche", window, cx, move |m, _, _| {
+        .submenu(label::ADD_RELATIVE, window, cx, move |m, _, _| {
             rels.iter().fold(m, |m, (rel, label, _)| {
                 let (x, rel) = (x3.clone(), *rel);
                 m.item(act(&wa, *label, move |this, w, cx| this.add_relative(x.clone(), rel, w, cx)))
             })
         })
-        .submenu("Lier une personne existante", window, cx, move |m, _, _| {
+        .submenu(label::LINK_PERSON, window, cx, move |m, _, _| {
             rels2.iter().fold(m, |m, (rel, _, label)| {
                 let (indi, rel) = (x4.clone(), *rel);
                 m.item(act(&wb, *label, move |this, w, cx| {
@@ -328,12 +322,12 @@ pub(super) fn person_menu(ws: Ws, x: String, from: From) -> MenuBuilder {
                 }))
             })
         })
-        .item(act(&ws, "Ajouter un événement…", move |this, w, cx| this.open_event_dialog(x5.clone(), None, w, cx)))
-        .item(act(&ws, "Rattacher des photos ou documents…", move |this, w, cx| this.choose_files(x6.clone(), w, cx)))
+        .item(act(&ws, label::ADD_EVENT, move |this, w, cx| this.open_event_dialog(x5.clone(), None, w, cx)))
+        .item(act(&ws, label::ATTACH_FILES, move |this, w, cx| this.choose_files(x6.clone(), w, cx)))
         .separator()
         .when(!is_root, |m| {
             let x = x7.clone();
-            m.item(act(&ws, "Définir comme individu racine", move |this, _, cx| this.set_root(x.clone(), cx)))
+            m.item(act(&ws, label::SET_ROOT, move |this, _, cx| this.set_root(x.clone(), cx)))
         })
         .when_some(
             match &from {
@@ -344,7 +338,6 @@ pub(super) fn person_menu(ws: Ws, x: String, from: From) -> MenuBuilder {
                 m.item(act(&ws, label, move |this, w, cx| this.unlink(indi.clone(), fam.clone(), w, cx)))
             },
         )
-        .item(act(&ws, "Copier le nom", move |this, _, cx| this.copy_text(name.clone(), "Nom", cx)))
         .map(|m| tail(m, &ws, &x, &from))
     })
 }
@@ -389,37 +382,36 @@ fn other_menu(ws: Ws, x: String, kind: RecordKind, from: From) -> MenuBuilder {
         menu.item(act(&ws, "Ouvrir la fiche", move |this, w, cx| this.open_in(x1.clone(), CenterTab::Form, w, cx)))
             .when(kind == RecordKind::Source, |m| {
                 m.separator()
-                    .item(act(&ws, "Saisir un acte…", move |this, w, cx| {
+                    .item(act(&ws, label::ENTER_ACT, move |this, w, cx| {
                         this.goto(x2.clone(), w, cx);
                         this.enter_act(w, cx)
                     }))
-                    .item(act(&ws, "Rattacher des photos ou documents…", move |this, w, cx| {
-                        this.choose_files(x3.clone(), w, cx)
-                    }))
+                    .item(act(&ws, label::ATTACH_FILES, move |this, w, cx| this.choose_files(x3.clone(), w, cx)))
             })
             .when(kind == RecordKind::Media, |m| {
                 m.separator()
-                    .item(act(&ws, "Rattacher ce média à…", move |this, w, cx| {
+                    .item(act(&ws, label::ATTACH_MEDIA_TO, move |this, w, cx| {
                         this.open_picker(PickPurpose::MediaTo { media: x4.clone() }, w, cx)
                     }))
                     .when(photo, |m| {
-                        m.item(act(&ws, "Identifier une personne sur la photo", move |this, w, cx| {
+                        m.item(act(&ws, label::TAG_PERSON, move |this, w, cx| {
                             this.open_in(x5.clone(), CenterTab::Form, w, cx);
                             this.tag_person_on_photo(cx)
                         }))
                     })
                     .separator()
                     .when(marked.len() >= 2, |m| {
-                        let label = format!("Fusionner les {} médias en un média multipage", marked.len());
                         let list = marked.clone();
-                        m.item(act(&ws, label, move |this, w, cx| this.merge_media(list.clone(), w, cx)))
+                        m.item(act(&ws, label::MERGE_SELECTED_MEDIA, move |this, w, cx| {
+                            this.merge_media(list.clone(), w, cx)
+                        }))
                     })
                     .when(marked.is_empty(), |m| {
-                        m.item(act(&ws, "Fusionner avec un autre média…", move |this, w, cx| {
+                        m.item(act(&ws, label::MERGE_WITH_MEDIA, move |this, w, cx| {
                             this.open_picker(PickPurpose::MergeInto { media: x6.clone() }, w, cx)
                         }))
                     })
-                    .item(act(&ws, "Ajouter des pages…", move |this, w, cx| this.choose_pages(x7.clone(), w, cx)))
+                    .item(act(&ws, label::ADD_PAGES, move |this, w, cx| this.choose_pages(x7.clone(), w, cx)))
             })
             .when_some(portrait_of, |m, owner| {
                 let media = x.clone();
