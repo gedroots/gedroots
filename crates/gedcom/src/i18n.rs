@@ -102,6 +102,25 @@ mod tests {
                     while let Some(at) = rest.find("!(") {
                         let name = rest[..at].rsplit(|c: char| !(c.is_alphanumeric() || c == '_')).next().unwrap();
                         rest = &rest[at + 2..];
+                        // `word!` (kinship.rs) names three keys, one per sex.
+                        if name == "word" {
+                            let args = rest.split(')').next().unwrap();
+                            for key in args.split('"').skip(1).step_by(2) {
+                                assert!(catalog.contains_key(key), "{}: « {key} » is not in locales/", path.display());
+                                used.insert(key.to_string());
+                            }
+                            continue;
+                        }
+                        // `pick!` (timeline.rs): the first string is a key with one text per sex.
+                        if name == "pick" {
+                            let key = rest.split('"').nth(1).unwrap();
+                            for s in ["m", "f", "u"] {
+                                let key = format!("{key}.{s}");
+                                assert!(catalog.contains_key(&key), "{}: « {key} » is not in locales/", path.display());
+                                used.insert(key);
+                            }
+                            continue;
+                        }
                         let Some(chunk) = rest.trim_start().strip_prefix('"') else { continue };
                         let key = chunk.split('"').next().unwrap();
                         let keys = match name {

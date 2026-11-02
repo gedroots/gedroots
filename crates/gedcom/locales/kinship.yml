@@ -1,0 +1,240 @@
+_version: 2
+# Kinship names (crates/gedcom/src/analysis/kinship.rs). French and English name
+# cousins differently: kin.fr.* are only used in French, kin.en.* only in English.
+kin.great:
+  en: "great-"
+  fr: "arrière-"
+kin.half:
+  en: "half-"
+  fr: "demi-"
+kin.father:
+  en: "father"
+  fr: "père"
+kin.mother:
+  en: "mother"
+  fr: "mère"
+kin.parent:
+  en: "parent"
+  fr: "parent"
+kin.grandfather:
+  en: "grandfather"
+  fr: "grand-père"
+kin.grandmother:
+  en: "grandmother"
+  fr: "grand-mère"
+kin.grandparent:
+  en: "grandparent"
+  fr: "grand-parent"
+kin.ancestor_n:
+  en: "ancestor, %{n} generations above"
+  fr: "ancêtre, %{n} générations au-dessus"
+kin.son:
+  en: "son"
+  fr: "fils"
+kin.daughter:
+  en: "daughter"
+  fr: "fille"
+kin.child:
+  en: "child"
+  fr: "enfant"
+kin.grandson:
+  en: "grandson"
+  fr: "petit-fils"
+kin.granddaughter:
+  en: "granddaughter"
+  fr: "petite-fille"
+kin.grandchild:
+  en: "grandchild"
+  fr: "petit-enfant"
+kin.descendant_n.m:
+  en: "descendant, %{n} generations below"
+  fr: "descendant, %{n} générations en dessous"
+kin.descendant_n.f:
+  en: "descendant, %{n} generations below"
+  fr: "descendante, %{n} générations en dessous"
+kin.cousin:
+  en: "cousin"
+  fr: "cousin"
+kin.cousin_f:
+  en: "cousin"
+  fr: "cousine"
+kin.cousin_u:
+  en: "cousin"
+  fr: "cousin(e)"
+kin.fr.first_cousin.m:
+  en: "first cousin"
+  fr: "cousin germain"
+kin.fr.first_cousin.f:
+  en: "first cousin"
+  fr: "cousine germaine"
+kin.fr.first_cousin.u:
+  en: "first cousin"
+  fr: "cousin(e) germain(e)"
+kin.fr.second_cousin.m:
+  en: "second cousin"
+  fr: "cousin issu de germain"
+kin.fr.second_cousin.f:
+  en: "second cousin"
+  fr: "cousine issue de germain"
+kin.fr.second_cousin.u:
+  en: "second cousin"
+  fr: "cousin(e) issu(e) de germain"
+kin.fr.canonical_degree:
+  en: " in the %{n}th canonical degree"
+  fr: " au %{n}e degré canonique"
+kin.fr.breton_uncle.m:
+  en: "first cousin once removed"
+  fr: "oncle à la mode de Bretagne"
+kin.fr.breton_uncle.f:
+  en: "first cousin once removed"
+  fr: "tante à la mode de Bretagne"
+kin.fr.breton_uncle.u:
+  en: "first cousin once removed"
+  fr: "oncle ou tante à la mode de Bretagne"
+kin.fr.breton_nephew.m:
+  en: "first cousin once removed"
+  fr: "neveu à la mode de Bretagne"
+kin.fr.breton_nephew.f:
+  en: "first cousin once removed"
+  fr: "nièce à la mode de Bretagne"
+kin.fr.breton_nephew.u:
+  en: "first cousin once removed"
+  fr: "neveu ou nièce à la mode de Bretagne"
+kin.fr.of_a:
+  en: "%{who} of a %{whom}"
+  fr: "%{who} d'un %{whom}"
+kin.en.first:
+  en: "first"
+  fr: "premier"
+kin.en.second:
+  en: "second"
+  fr: "deuxième"
+kin.en.third:
+  en: "third"
+  fr: "troisième"
+kin.en.nth:
+  en: "%{n}th"
+  fr: "%{n}e"
+kin.en.once_removed:
+  en: " once removed"
+  fr: " au degré suivant"
+kin.en.twice_removed:
+  en: " twice removed"
+  fr: " deux degrés plus loin"
+kin.en.times_removed:
+  en: " %{n} times removed"
+  fr: " %{n} degrés plus loin"
+kin.same_person:
+  en: "same person"
+  fr: "même personne"
+kin.brother:
+  en: "brother"
+  fr: "frère"
+kin.sister:
+  en: "sister"
+  fr: "sœur"
+kin.sibling:
+  en: "sibling"
+  fr: "frère ou sœur"
+kin.uncle:
+  en: "uncle"
+  fr: "oncle"
+kin.aunt:
+  en: "aunt"
+  fr: "tante"
+kin.uncle_or_aunt:
+  en: "uncle or aunt"
+  fr: "oncle ou tante"
+kin.granduncle:
+  en: "great-uncle"
+  fr: "grand-oncle"
+kin.grandaunt:
+  en: "great-aunt"
+  fr: "grand-tante"
+kin.granduncle_or_grandaunt:
+  en: "great-uncle or great-aunt"
+  fr: "grand-oncle ou grand-tante"
+kin.nephew:
+  en: "nephew"
+  fr: "neveu"
+kin.niece:
+  en: "niece"
+  fr: "nièce"
+kin.nephew_or_niece:
+  en: "nephew or niece"
+  fr: "neveu ou nièce"
+kin.grandnephew:
+  en: "great-nephew"
+  fr: "petit-neveu"
+kin.grandniece:
+  en: "great-niece"
+  fr: "petite-nièce"
+kin.grandnephew_or_grandniece:
+  en: "great-nephew or great-niece"
+  fr: "petit-neveu ou petite-nièce"
+kin.husband:
+  en: "husband"
+  fr: "époux"
+kin.wife:
+  en: "wife"
+  fr: "épouse"
+kin.spouse:
+  en: "spouse"
+  fr: "conjoint"
+kin.father_in_law:
+  en: "father-in-law"
+  fr: "beau-père"
+kin.mother_in_law:
+  en: "mother-in-law"
+  fr: "belle-mère"
+kin.parent_in_law:
+  en: "parent-in-law"
+  fr: "beau-parent"
+kin.brother_in_law:
+  en: "brother-in-law"
+  fr: "beau-frère"
+kin.sister_in_law:
+  en: "sister-in-law"
+  fr: "belle-sœur"
+kin.sibling_in_law:
+  en: "sibling-in-law"
+  fr: "beau-frère ou belle-sœur"
+kin.of_spouse:
+  en: "spouse's %{who}"
+  fr: "%{who} du conjoint"
+kin.son_in_law:
+  en: "son-in-law"
+  fr: "gendre"
+kin.daughter_in_law:
+  en: "daughter-in-law"
+  fr: "belle-fille"
+kin.child_in_law:
+  en: "child-in-law"
+  fr: "gendre ou belle-fille"
+kin.stepfather:
+  en: "stepfather"
+  fr: "beau-père"
+kin.stepmother:
+  en: "stepmother"
+  fr: "belle-mère"
+kin.stepparent:
+  en: "stepparent"
+  fr: "beau-parent"
+kin.spouse_of:
+  en: "%{who} of a %{whom}"
+  fr: "%{who} d'un(e) %{whom}"
+kin.spouse_m:
+  en: "husband"
+  fr: "conjoint"
+kin.spouse_f:
+  en: "wife"
+  fr: "conjointe"
+kin.spouse_u:
+  en: "spouse"
+  fr: "conjoint(e)"
+kin.en.fourth:
+  en: "fourth"
+  fr: "quatrième"
+kin.en.fifth:
+  en: "fifth"
+  fr: "cinquième"

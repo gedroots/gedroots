@@ -42,7 +42,7 @@ pub struct FileInfo {
 pub struct IgnoredIssue {
     pub xref: String,
     pub code: String,
-    pub label: &'static str,
+    pub label: std::borrow::Cow<'static, str>,
 }
 
 impl Gedcom {
@@ -259,7 +259,7 @@ mod tests {
         let mut g = Gedcom::parse(HEAD).unwrap();
         let ign = g.ignored_issues();
         assert_eq!(ign.len(), 1);
-        assert_eq!(ign[0].label, "Durée de vie invraisemblable");
+        assert_eq!(ign[0].label, "Implausible lifespan");
         assert!(g.unignore_issue("I1", "too_old"));
         assert!(g.ignored_issues().is_empty());
         assert!(g.header.child("SCHMA").is_none());

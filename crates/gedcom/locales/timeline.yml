@@ -1,0 +1,71 @@
+_version: 2
+# Timeline of a person (crates/gedcom/src/analysis/timeline.rs).
+timeline.value:
+  en: "%{label}: %{value}"
+  fr: "%{label} : %{value}"
+timeline.with:
+  en: "%{event} with %{name}"
+  fr: "%{event} avec %{name}"
+timeline.death_parent.m:
+  en: "Death of father %{name}"
+  fr: "Décès de son père, %{name}"
+timeline.death_parent.f:
+  en: "Death of mother %{name}"
+  fr: "Décès de sa mère, %{name}"
+timeline.death_parent.u:
+  en: "Death of parent %{name}"
+  fr: "Décès de son parent, %{name}"
+timeline.birth_sibling.m:
+  en: "Birth of brother %{name}"
+  fr: "Naissance de son frère %{name}"
+timeline.birth_sibling.f:
+  en: "Birth of sister %{name}"
+  fr: "Naissance de sa sœur %{name}"
+timeline.birth_sibling.u:
+  en: "Birth of sibling %{name}"
+  fr: "Naissance de son frère ou sa sœur %{name}"
+timeline.death_sibling.m:
+  en: "Death of brother %{name}"
+  fr: "Décès de son frère %{name}"
+timeline.death_sibling.f:
+  en: "Death of sister %{name}"
+  fr: "Décès de sa sœur %{name}"
+timeline.death_sibling.u:
+  en: "Death of sibling %{name}"
+  fr: "Décès de son frère ou sa sœur %{name}"
+timeline.death_spouse.m:
+  en: "Death of husband %{name}"
+  fr: "Décès de son époux, %{name}"
+timeline.death_spouse.f:
+  en: "Death of wife %{name}"
+  fr: "Décès de son épouse, %{name}"
+timeline.death_spouse.u:
+  en: "Death of spouse %{name}"
+  fr: "Décès de son conjoint, %{name}"
+timeline.birth_child.m:
+  en: "Birth of son %{name}"
+  fr: "Naissance de son fils %{name}"
+timeline.birth_child.f:
+  en: "Birth of daughter %{name}"
+  fr: "Naissance de sa fille %{name}"
+timeline.birth_child.u:
+  en: "Birth of child %{name}"
+  fr: "Naissance de son enfant %{name}"
+timeline.death_child.m:
+  en: "Death of son %{name}"
+  fr: "Décès de son fils %{name}"
+timeline.death_child.f:
+  en: "Death of daughter %{name}"
+  fr: "Décès de sa fille %{name}"
+timeline.death_child.u:
+  en: "Death of child %{name}"
+  fr: "Décès de son enfant %{name}"
+timeline.birth_grandchild.m:
+  en: "Birth of grandson %{name}"
+  fr: "Naissance de son petit-fils %{name}"
+timeline.birth_grandchild.f:
+  en: "Birth of granddaughter %{name}"
+  fr: "Naissance de sa petite-fille %{name}"
+timeline.birth_grandchild.u:
+  en: "Birth of grandchild %{name}"
+  fr: "Naissance de son petit-enfant %{name}"

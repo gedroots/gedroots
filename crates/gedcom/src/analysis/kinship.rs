@@ -72,86 +72,128 @@ fn sex_of(g: &Gedcom, x: &str) -> Sex {
     }
 }
 
-fn pick(s: Sex, m: &str, f: &str, u: &str) -> String {
-    match s {
-        Sex::M => m,
-        Sex::F => f,
-        Sex::U => u,
-    }
-    .to_string()
+/// Mot au genre de la personne, lu dans le catalogue (`kin.father`, `kin.mother`, `kin.parent`).
+macro_rules! word {
+    ($lang:expr, $s:expr, $m:literal, $f:literal, $u:literal) => {
+        match $s {
+            Sex::M => rust_i18n::t!($m, locale = $lang),
+            Sex::F => rust_i18n::t!($f, locale = $lang),
+            Sex::U => rust_i18n::t!($u, locale = $lang),
+        }
+        .into_owned()
+    };
 }
 
-fn arriere(n: u32) -> String {
-    "arrière-".repeat(n as usize)
+/// « arrière- » / « great- », répété.
+fn great(lang: &str, n: u32) -> String {
+    rust_i18n::t!("kin.great", locale = lang).repeat(n as usize)
 }
 
-/// Ascendant à `g` générations : père, grand-mère, arrière-grand-père…
-fn ancestor_name(n: u32, s: Sex) -> String {
+/// « demi- » / « half- ».
+fn half_prefix(lang: &str, half: bool) -> String {
+    if half { rust_i18n::t!("kin.half", locale = lang).into_owned() } else { String::new() }
+}
+
+/// Ascendant à `n` générations : père, grand-mère, arrière-grand-père…
+fn ancestor_name(lang: &str, n: u32, s: Sex) -> String {
     match n {
-        1 => pick(s, "père", "mère", "parent"),
-        2..=5 => arriere(n - 2) + &pick(s, "grand-père", "grand-mère", "grand-parent"),
-        _ => format!("ancêtre, {n} générations au-dessus"),
+        1 => word!(lang, s, "kin.father", "kin.mother", "kin.parent"),
+        2..=5 => great(lang, n - 2) + &word!(lang, s, "kin.grandfather", "kin.grandmother", "kin.grandparent"),
+        _ => rust_i18n::t!("kin.ancestor_n", n = n, locale = lang).into_owned(),
     }
 }
 
-fn descendant_name(n: u32, s: Sex) -> String {
+fn descendant_name(lang: &str, n: u32, s: Sex) -> String {
     match n {
-        1 => pick(s, "fils", "fille", "enfant"),
-        2..=5 => arriere(n - 2) + &pick(s, "petit-fils", "petite-fille", "petit-enfant"),
-        _ => format!("descendant{}, {n} générations en dessous", if s == Sex::F { "e" } else { "" }),
+        1 => word!(lang, s, "kin.son", "kin.daughter", "kin.child"),
+        2..=5 => great(lang, n - 2) + &word!(lang, s, "kin.grandson", "kin.granddaughter", "kin.grandchild"),
+        _ => word!(lang, s, "kin.descendant_n.m", "kin.descendant_n.f", "kin.descendant_n.m")
+            .replace("%{n}", &n.to_string()),
     }
 }
 
-fn cousin_name(n: u32, s: Sex) -> String {
+/// Cousin de même génération (`n` générations jusqu'à l'ancêtre commun), en français.
+fn cousin_fr(lang: &str, n: u32, s: Sex) -> String {
     match n {
-        2 => pick(s, "cousin germain", "cousine germaine", "cousin(e) germain(e)"),
-        3 => pick(s, "cousin issu de germain", "cousine issue de germain", "cousin(e) issu(e) de germain"),
-        _ => format!("{} au {n}e degré canonique", pick(s, "cousin", "cousine", "cousin(e)")),
+        2 => word!(lang, s, "kin.fr.first_cousin.m", "kin.fr.first_cousin.f", "kin.fr.first_cousin.u"),
+        3 => word!(lang, s, "kin.fr.second_cousin.m", "kin.fr.second_cousin.f", "kin.fr.second_cousin.u"),
+        _ => {
+            word!(lang, s, "kin.cousin", "kin.cousin_f", "kin.cousin_u")
+                + &rust_i18n::t!("kin.fr.canonical_degree", n = n, locale = lang)
+        }
     }
+}
+
+/// Cousins, en anglais : « second cousin twice removed ».
+fn cousin_en(lang: &str, a: u32, b: u32, s: Sex, half: bool) -> String {
+    let degree = a.min(b) - 1;
+    let ordinal = match degree {
+        1 => rust_i18n::t!("kin.en.first", locale = lang),
+        2 => rust_i18n::t!("kin.en.second", locale = lang),
+        3 => rust_i18n::t!("kin.en.third", locale = lang),
+        4 => rust_i18n::t!("kin.en.fourth", locale = lang),
+        5 => rust_i18n::t!("kin.en.fifth", locale = lang),
+        n => rust_i18n::t!("kin.en.nth", n = n, locale = lang),
+    };
+    let mut out = format!(
+        "{}{ordinal} {}",
+        half_prefix(lang, half),
+        word!(lang, s, "kin.cousin", "kin.cousin_f", "kin.cousin_u")
+    );
+    match a.abs_diff(b) {
+        0 => {}
+        1 => out += &rust_i18n::t!("kin.en.once_removed", locale = lang),
+        2 => out += &rust_i18n::t!("kin.en.twice_removed", locale = lang),
+        k => out += &rust_i18n::t!("kin.en.times_removed", n = k, locale = lang),
+    }
+    out
 }
 
 /// Nom du lien de sang, `a` = générations de A à l'ancêtre commun, `b` = de B.
 fn blood_label(a: u32, b: u32, s: Sex, half: bool) -> String {
-    let demi = if half { "demi-" } else { "" };
+    blood_label_in(&crate::i18n::language(), a, b, s, half)
+}
+
+fn blood_label_in(lang: &str, a: u32, b: u32, s: Sex, half: bool) -> String {
+    let demi = half_prefix(lang, half);
     match (a, b) {
-        (0, 0) => "même personne".into(),
-        (0, b) => descendant_name(b, s),
-        (a, 0) => ancestor_name(a, s),
-        (1, 1) => format!("{demi}{}", pick(s, "frère", "sœur", "frère ou sœur")),
+        (0, 0) => rust_i18n::t!("kin.same_person", locale = lang).into_owned(),
+        (0, b) => descendant_name(lang, b, s),
+        (a, 0) => ancestor_name(lang, a, s),
+        (1, 1) => demi + &word!(lang, s, "kin.brother", "kin.sister", "kin.sibling"),
+        (2, 1) => demi + &word!(lang, s, "kin.uncle", "kin.aunt", "kin.uncle_or_aunt"),
         (a, 1) => {
-            let base = pick(s, "oncle", "tante", "oncle ou tante");
-            let x = match a {
-                2 => base,
-                _ => format!("{}grand-{base}", arriere(a - 3)),
-            };
-            format!("{demi}{x}")
+            demi + &great(lang, a - 3)
+                + &word!(lang, s, "kin.granduncle", "kin.grandaunt", "kin.granduncle_or_grandaunt")
         }
+        (1, 2) => demi + &word!(lang, s, "kin.nephew", "kin.niece", "kin.nephew_or_niece"),
         (1, b) => {
-            let x = match b {
-                2 => pick(s, "neveu", "nièce", "neveu ou nièce"),
-                _ => arriere(b - 3) + &pick(s, "petit-neveu", "petite-nièce", "petit-neveu ou petite-nièce"),
-            };
-            format!("{demi}{x}")
+            demi + &great(lang, b - 3)
+                + &word!(lang, s, "kin.grandnephew", "kin.grandniece", "kin.grandnephew_or_grandniece")
         }
-        (3, 2) => pick(
-            s,
-            "oncle à la mode de Bretagne",
-            "tante à la mode de Bretagne",
-            "oncle ou tante à la mode de Bretagne",
-        ),
-        (2, 3) => pick(
-            s,
-            "neveu à la mode de Bretagne",
-            "nièce à la mode de Bretagne",
-            "neveu ou nièce à la mode de Bretagne",
-        ),
-        (a, b) if a == b => format!("{demi}{}", cousin_name(a, s)),
-        (a, b) if a > b => format!("{demi}{} d'un {}", cousin_name(b, s), ancestor_name(a - b, Sex::U)),
-        (a, b) => format!("{} d'un {demi}{}", descendant_name(b - a, s), cousin_name(a, Sex::U)),
+        (a, b) if lang != "fr" => cousin_en(lang, a, b, s, half),
+        (3, 2) => word!(lang, s, "kin.fr.breton_uncle.m", "kin.fr.breton_uncle.f", "kin.fr.breton_uncle.u"),
+        (2, 3) => word!(lang, s, "kin.fr.breton_nephew.m", "kin.fr.breton_nephew.f", "kin.fr.breton_nephew.u"),
+        (a, b) if a == b => demi + &cousin_fr(lang, a, s),
+        (a, b) if a > b => rust_i18n::t!(
+            "kin.fr.of_a",
+            who = demi + &cousin_fr(lang, b, s),
+            whom = ancestor_name(lang, a - b, Sex::U),
+            locale = lang
+        )
+        .into_owned(),
+        (a, b) => rust_i18n::t!(
+            "kin.fr.of_a",
+            who = descendant_name(lang, b - a, s),
+            whom = demi + &cousin_fr(lang, a, Sex::U),
+            locale = lang
+        )
+        .into_owned(),
     }
 }
 
-fn blood(g: &Gedcom, a: &str, b: &str) -> Option<Kinship> {
+/// Lien de sang et générations de A et de B jusqu'à l'ancêtre commun.
+fn blood(g: &Gedcom, a: &str, b: &str) -> Option<(Kinship, u32, u32)> {
     let ma = ancestors(g, a);
     let mb = ancestors(g, b);
     let mut common: Vec<(u32, u32, &String)> =
@@ -172,7 +214,11 @@ fn blood(g: &Gedcom, a: &str, b: &str) -> Option<Kinship> {
     };
     let mut path: Vec<String> = side_a.into_iter().rev().collect();
     path.extend(side_b.into_iter().skip(1));
-    Some(Kinship { label: blood_label(da, db, sex_of(g, b), half), degree: Some(da + db), path, common: best })
+    Some((
+        Kinship { label: blood_label(da, db, sex_of(g, b), half), degree: Some(da + db), path, common: best },
+        da,
+        db,
+    ))
 }
 
 fn spouses(g: &Gedcom, x: &str) -> Vec<String> {
@@ -190,14 +236,16 @@ fn spouses(g: &Gedcom, x: &str) -> Vec<String> {
 pub fn relationship(g: &Gedcom, a: &str, b: &str) -> Option<Kinship> {
     g.individual(a)?;
     g.individual(b)?;
-    if let Some(k) = blood(g, a, b) {
+    if let Some((k, _, _)) = blood(g, a, b) {
         return Some(k);
     }
     let sb = sex_of(g, b);
+    let lang = crate::i18n::language();
+    let lang = &*lang;
     // Conjoint.
     if spouses(g, a).iter().any(|s| s == b) {
         return Some(Kinship {
-            label: pick(sb, "époux", "épouse", "conjoint"),
+            label: word!(lang, sb, "kin.husband", "kin.wife", "kin.spouse"),
             degree: None,
             path: vec![a.into(), b.into()],
             common: vec![],
@@ -205,14 +253,11 @@ pub fn relationship(g: &Gedcom, a: &str, b: &str) -> Option<Kinship> {
     }
     // Parent par alliance du côté du conjoint de A.
     for s in spouses(g, a) {
-        if let Some(k) = blood(g, &s, b) {
-            let sibling = k.degree == Some(2) && (k.label.ends_with("frère") || k.label.ends_with("sœur"));
-            let label = if k.degree == Some(1) && parents_of(g, &s).contains(&b) {
-                pick(sb, "beau-père", "belle-mère", "beau-parent")
-            } else if sibling {
-                pick(sb, "beau-frère", "belle-sœur", "beau-frère ou belle-sœur")
-            } else {
-                format!("{} du conjoint", k.label)
+        if let Some((k, da, db)) = blood(g, &s, b) {
+            let label = match (da, db) {
+                (1, 0) => word!(lang, sb, "kin.father_in_law", "kin.mother_in_law", "kin.parent_in_law"),
+                (1, 1) => word!(lang, sb, "kin.brother_in_law", "kin.sister_in_law", "kin.sibling_in_law"),
+                _ => rust_i18n::t!("kin.of_spouse", who = k.label, locale = lang).into_owned(),
             };
             let mut path = vec![a.to_string()];
             path.extend(k.path);
@@ -221,15 +266,18 @@ pub fn relationship(g: &Gedcom, a: &str, b: &str) -> Option<Kinship> {
     }
     // Conjoint d'un parent de sang de A.
     for s in spouses(g, b) {
-        if let Some(k) = blood(g, a, &s) {
-            let label = if k.label.starts_with("fils") || k.label.starts_with("fille") || k.label == "enfant" {
-                pick(sb, "gendre", "belle-fille", "gendre ou belle-fille")
-            } else if k.degree == Some(2) && (k.label.ends_with("frère") || k.label.ends_with("sœur")) {
-                pick(sb, "beau-frère", "belle-sœur", "beau-frère ou belle-sœur")
-            } else if k.degree == Some(1) {
-                pick(sb, "beau-père", "belle-mère", "beau-parent")
-            } else {
-                format!("{} d'un(e) {}", pick(sb, "conjoint", "conjointe", "conjoint(e)"), k.label)
+        if let Some((k, da, db)) = blood(g, a, &s) {
+            let label = match (da, db) {
+                (0, 1) => word!(lang, sb, "kin.son_in_law", "kin.daughter_in_law", "kin.child_in_law"),
+                (1, 1) => word!(lang, sb, "kin.brother_in_law", "kin.sister_in_law", "kin.sibling_in_law"),
+                (1, 0) => word!(lang, sb, "kin.stepfather", "kin.stepmother", "kin.stepparent"),
+                _ => rust_i18n::t!(
+                    "kin.spouse_of",
+                    who = word!(lang, sb, "kin.spouse_m", "kin.spouse_f", "kin.spouse_u"),
+                    whom = k.label,
+                    locale = lang
+                )
+                .into_owned(),
             };
             let mut path = k.path;
             path.push(b.to_string());
@@ -245,15 +293,35 @@ mod tests {
 
     #[test]
     fn labels() {
-        assert_eq!(blood_label(2, 2, Sex::F, false), "cousine germaine");
-        assert_eq!(blood_label(3, 3, Sex::M, false), "cousin issu de germain");
-        assert_eq!(blood_label(1, 1, Sex::M, true), "demi-frère");
-        assert_eq!(blood_label(3, 1, Sex::F, false), "grand-tante");
-        assert_eq!(blood_label(1, 3, Sex::M, false), "petit-neveu");
-        assert_eq!(blood_label(0, 3, Sex::F, false), "arrière-petite-fille");
-        assert_eq!(blood_label(4, 0, Sex::M, false), "arrière-arrière-grand-père");
-        assert_eq!(blood_label(3, 2, Sex::M, false), "oncle à la mode de Bretagne");
-        assert_eq!(blood_label(4, 2, Sex::M, false), "cousin germain d'un grand-parent");
-        assert_eq!(blood_label(2, 4, Sex::F, false), "petite-fille d'un cousin(e) germain(e)");
+        let fr = |a, b, s, half| blood_label_in("fr", a, b, s, half);
+        assert_eq!(fr(2, 2, Sex::F, false), "cousine germaine");
+        assert_eq!(fr(3, 3, Sex::M, false), "cousin issu de germain");
+        assert_eq!(fr(4, 4, Sex::F, false), "cousine au 4e degré canonique");
+        assert_eq!(fr(1, 1, Sex::M, true), "demi-frère");
+        assert_eq!(fr(3, 1, Sex::F, false), "grand-tante");
+        assert_eq!(fr(4, 1, Sex::M, false), "arrière-grand-oncle");
+        assert_eq!(fr(1, 3, Sex::M, false), "petit-neveu");
+        assert_eq!(fr(0, 3, Sex::F, false), "arrière-petite-fille");
+        assert_eq!(fr(0, 7, Sex::F, false), "descendante, 7 générations en dessous");
+        assert_eq!(fr(4, 0, Sex::M, false), "arrière-arrière-grand-père");
+        assert_eq!(fr(3, 2, Sex::M, false), "oncle à la mode de Bretagne");
+        assert_eq!(fr(4, 2, Sex::M, false), "cousin germain d'un grand-parent");
+        assert_eq!(fr(2, 4, Sex::F, false), "petite-fille d'un cousin(e) germain(e)");
+    }
+
+    #[test]
+    fn english_labels() {
+        let en = |a, b, s, half| blood_label_in("en", a, b, s, half);
+        assert_eq!(en(2, 2, Sex::F, false), "first cousin");
+        assert_eq!(en(3, 3, Sex::M, false), "second cousin");
+        assert_eq!(en(1, 1, Sex::M, true), "half-brother");
+        assert_eq!(en(3, 1, Sex::F, false), "great-aunt");
+        assert_eq!(en(4, 1, Sex::M, false), "great-great-uncle");
+        assert_eq!(en(1, 3, Sex::M, false), "great-nephew");
+        assert_eq!(en(0, 3, Sex::F, false), "great-granddaughter");
+        assert_eq!(en(4, 0, Sex::M, false), "great-great-grandfather");
+        assert_eq!(en(3, 2, Sex::M, false), "first cousin once removed");
+        assert_eq!(en(2, 4, Sex::F, false), "first cousin twice removed");
+        assert_eq!(en(5, 5, Sex::U, false), "fourth cousin");
     }
 }

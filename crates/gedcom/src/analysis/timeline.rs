@@ -30,12 +30,16 @@ pub struct Entry {
     sort: (i32, u8, u8),
 }
 
-fn pick(sex: &str, m: &'static str, f: &'static str, u: &'static str) -> &'static str {
-    match sex {
-        "M" => m,
-        "F" => f,
-        _ => u,
-    }
+/// Texte au genre du proche : la clé donnée suivie de `.m`, `.f` ou `.u`.
+macro_rules! pick {
+    ($sex:expr, $key:literal, $name:expr) => {
+        match $sex {
+            "M" => rust_i18n::t!(concat!($key, ".m"), name = $name),
+            "F" => rust_i18n::t!(concat!($key, ".f"), name = $name),
+            _ => rust_i18n::t!(concat!($key, ".u"), name = $name),
+        }
+        .into_owned()
+    };
 }
 
 /// Construit la chronologie de `xref`, triée par date.
@@ -76,7 +80,7 @@ pub fn timeline(g: &Gedcom, xref: &str) -> Vec<Entry> {
 
     for e in me.events() {
         let label = match e.value().filter(|v| !v.trim().is_empty() && *v != "Y") {
-            Some(v) => format!("{} : {v}", e.label()),
+            Some(v) => rust_i18n::t!("timeline.value", label = e.label(), value = v).into_owned(),
             None => e.label(),
         };
         add(EntryKind::Own, label, e.node, None);
@@ -85,22 +89,36 @@ pub fn timeline(g: &Gedcom, xref: &str) -> Vec<Entry> {
     let name = |x: &str| g.record_label(x);
     // Parents.
     let (father, mother) = g.parents(xref);
-    for (p, rel) in [(father, "son père"), (mother, "sa mère")] {
+    for (p, sex) in [(father, "M"), (mother, "F")] {
         if let Some(p) = p
             && let Some(d) = p.death()
         {
-            add(EntryKind::Relative, format!("Décès de {rel}, {}", p.display_name()), d.node, Some(p.xref().into()));
+            add(
+                EntryKind::Relative,
+                pick!(sex, "timeline.death_parent", p.display_name()),
+                d.node,
+                Some(p.xref().into()),
+            );
         }
     }
     // Frères et sœurs.
     if let Some(fam) = me.famc().first().and_then(|f| g.family(f)) {
         for s in fam.children().into_iter().filter(|s| *s != xref).filter_map(|s| g.individual(s)) {
-            let rel = pick(s.sex(), "son frère", "sa sœur", "son frère ou sa sœur");
             if let Some(b) = s.event("BIRT") {
-                add(EntryKind::Relative, format!("Naissance de {rel} {}", s.given()), b.node, Some(s.xref().into()));
+                add(
+                    EntryKind::Relative,
+                    pick!(s.sex(), "timeline.birth_sibling", s.given()),
+                    b.node,
+                    Some(s.xref().into()),
+                );
             }
             if let Some(d) = s.event("DEAT") {
-                add(EntryKind::Relative, format!("Décès de {rel} {}", s.given()), d.node, Some(s.xref().into()));
+                add(
+                    EntryKind::Relative,
+                    pick!(s.sex(), "timeline.death_sibling", s.given()),
+                    d.node,
+                    Some(s.xref().into()),
+                );
             }
         }
     }
@@ -110,7 +128,7 @@ pub fn timeline(g: &Gedcom, xref: &str) -> Vec<Entry> {
         let spouse = [fam.husband(), fam.wife()].into_iter().flatten().find(|x| *x != xref);
         for e in fam.events() {
             let label = match spouse {
-                Some(s) => format!("{} avec {}", e.label(), name(s)),
+                Some(s) => rust_i18n::t!("timeline.with", event = e.label(), name = name(s)).into_owned(),
                 None => e.label(),
             };
             add(EntryKind::Family, label, e.node, spouse.map(str::to_string));
@@ -118,25 +136,37 @@ pub fn timeline(g: &Gedcom, xref: &str) -> Vec<Entry> {
         if let Some(s) = spouse.and_then(|s| g.individual(s))
             && let Some(d) = s.event("DEAT")
         {
-            let rel = pick(s.sex(), "son époux", "son épouse", "son conjoint");
-            add(EntryKind::Relative, format!("Décès de {rel}, {}", s.display_name()), d.node, Some(s.xref().into()));
+            add(
+                EntryKind::Relative,
+                pick!(s.sex(), "timeline.death_spouse", s.display_name()),
+                d.node,
+                Some(s.xref().into()),
+            );
         }
         for c in fam.children().into_iter().filter_map(|c| g.individual(c)) {
-            let rel = pick(c.sex(), "son fils", "sa fille", "son enfant");
             if let Some(b) = c.birth() {
-                add(EntryKind::Relative, format!("Naissance de {rel} {}", c.given()), b.node, Some(c.xref().into()));
+                add(
+                    EntryKind::Relative,
+                    pick!(c.sex(), "timeline.birth_child", c.given()),
+                    b.node,
+                    Some(c.xref().into()),
+                );
             }
             if let Some(d) = c.event("DEAT") {
-                add(EntryKind::Relative, format!("Décès de {rel} {}", c.given()), d.node, Some(c.xref().into()));
+                add(
+                    EntryKind::Relative,
+                    pick!(c.sex(), "timeline.death_child", c.given()),
+                    d.node,
+                    Some(c.xref().into()),
+                );
             }
             // Petits-enfants.
             for gf in c.fams().into_iter().filter_map(|f| g.family(f)) {
                 for gc in gf.children().into_iter().filter_map(|x| g.individual(x)) {
                     if let Some(b) = gc.birth() {
-                        let rel = pick(gc.sex(), "son petit-fils", "sa petite-fille", "son petit-enfant");
                         add(
                             EntryKind::Relative,
-                            format!("Naissance de {rel} {}", gc.display_name()),
+                            pick!(gc.sex(), "timeline.birth_grandchild", gc.display_name()),
                             b.node,
                             Some(gc.xref().into()),
                         );

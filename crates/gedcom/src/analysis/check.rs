@@ -10,6 +10,8 @@ use super::span::{Age, Span};
 use crate::document::{Gedcom, RecordKind};
 use crate::model::{Individual, event_label};
 use crate::node::Node;
+use rust_i18n::t;
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 
 /// Balise d'extension qui masque une anomalie (valeur = code de l'anomalie).
@@ -24,11 +26,11 @@ pub enum Severity {
 }
 
 impl Severity {
-    pub fn label(self) -> &'static str {
+    pub fn label(self) -> Cow<'static, str> {
         match self {
-            Severity::Error => "Erreur",
-            Severity::Warning => "À vérifier",
-            Severity::Info => "Information",
+            Severity::Error => t!("check.severity.error"),
+            Severity::Warning => t!("check.severity.warning"),
+            Severity::Info => t!("check.severity.info"),
         }
     }
 }
@@ -78,52 +80,52 @@ impl Default for Thresholds {
     }
 }
 
-/// Libellé français d'un code d'anomalie.
-pub fn code_label(code: &str) -> &'static str {
+/// Libellé d'un code d'anomalie.
+pub fn code_label(code: &str) -> Cow<'static, str> {
     match code {
-        "death_before_birth" => "Décès avant la naissance",
-        "burial_before_death" => "Inhumation avant le décès",
-        "event_before_birth" => "Événement avant la naissance",
-        "event_after_death" => "Événement après le décès",
-        "too_old" => "Durée de vie invraisemblable",
-        "parent_too_young" => "Parent trop jeune",
-        "father_too_old" => "Père très âgé",
-        "mother_too_old" => "Mère très âgée",
-        "birth_after_mother_death" => "Naissance après le décès de la mère",
-        "birth_after_father_death" => "Naissance longtemps après le décès du père",
-        "child_before_parent" => "Enfant né avant son parent",
-        "marriage_too_young" => "Mariage très jeune",
-        "marriage_after_death" => "Mariage après un décès",
-        "marriage_age_gap" => "Grand écart d'âge entre époux",
-        "siblings_too_close" => "Naissances trop rapprochées",
-        "husband_not_male" => "Époux de sexe féminin",
-        "wife_not_female" => "Épouse de sexe masculin",
-        "own_ancestor" => "Personne ancêtre d'elle-même",
-        "broken_link" => "Lien vers un enregistrement absent",
-        "missing_backlink" => "Lien familial à sens unique",
-        "unsourced" => "Événement sans source",
-        "tag_not_allowed" => "Balise non permise à cet endroit",
-        "missing_required" => "Information obligatoire absente",
-        "too_many" => "Information en trop",
-        "wrong_pointer" => "Lien vers le mauvais type d'enregistrement",
-        "invalid_value" => "Valeur invalide",
-        "empty_fact" => "Événement vide",
-        "empty_note" => "Note vide",
-        "empty_family" => "Famille vide",
-        "unused_record" => "Enregistrement utilisé nulle part",
-        "disconnected" => "Sans lien avec l'individu racine",
-        "missing_file" => "Fichier introuvable",
-        "moved_file" => "Fichier déplacé",
-        "duplicate_media" => "Médias en double",
-        "missing_form" => "Format de fichier absent",
-        "unattached_file" => "Fichier sans média",
-        "missing_coords" => "Lieu sans coordonnées",
-        "bad_coords" => "Coordonnées illisibles",
-        "place_variant" => "Variante d'un autre lieu",
-        "place_hierarchy" => "Rattachement incohérent",
-        "role_sex_mismatch" => "Rôle incohérent avec le sexe",
-        "outside_source_period" => "Acte hors de la période de sa source",
-        _ => "Anomalie",
+        "death_before_birth" => t!("check.code.death_before_birth"),
+        "burial_before_death" => t!("check.code.burial_before_death"),
+        "event_before_birth" => t!("check.code.event_before_birth"),
+        "event_after_death" => t!("check.code.event_after_death"),
+        "too_old" => t!("check.code.too_old"),
+        "parent_too_young" => t!("check.code.parent_too_young"),
+        "father_too_old" => t!("check.code.father_too_old"),
+        "mother_too_old" => t!("check.code.mother_too_old"),
+        "birth_after_mother_death" => t!("check.code.birth_after_mother_death"),
+        "birth_after_father_death" => t!("check.code.birth_after_father_death"),
+        "child_before_parent" => t!("check.code.child_before_parent"),
+        "marriage_too_young" => t!("check.code.marriage_too_young"),
+        "marriage_after_death" => t!("check.code.marriage_after_death"),
+        "marriage_age_gap" => t!("check.code.marriage_age_gap"),
+        "siblings_too_close" => t!("check.code.siblings_too_close"),
+        "husband_not_male" => t!("check.code.husband_not_male"),
+        "wife_not_female" => t!("check.code.wife_not_female"),
+        "own_ancestor" => t!("check.code.own_ancestor"),
+        "broken_link" => t!("check.code.broken_link"),
+        "missing_backlink" => t!("check.code.missing_backlink"),
+        "unsourced" => t!("check.code.unsourced"),
+        "tag_not_allowed" => t!("check.code.tag_not_allowed"),
+        "missing_required" => t!("check.code.missing_required"),
+        "too_many" => t!("check.code.too_many"),
+        "wrong_pointer" => t!("check.code.wrong_pointer"),
+        "invalid_value" => t!("check.code.invalid_value"),
+        "empty_fact" => t!("check.code.empty_fact"),
+        "empty_note" => t!("check.code.empty_note"),
+        "empty_family" => t!("check.code.empty_family"),
+        "unused_record" => t!("check.code.unused_record"),
+        "disconnected" => t!("check.code.disconnected"),
+        "missing_file" => t!("check.code.missing_file"),
+        "moved_file" => t!("check.code.moved_file"),
+        "duplicate_media" => t!("check.code.duplicate_media"),
+        "missing_form" => t!("check.code.missing_form"),
+        "unattached_file" => t!("check.code.unattached_file"),
+        "missing_coords" => t!("check.code.missing_coords"),
+        "bad_coords" => t!("check.code.bad_coords"),
+        "place_variant" => t!("check.code.place_variant"),
+        "place_hierarchy" => t!("check.code.place_hierarchy"),
+        "role_sex_mismatch" => t!("check.code.role_sex_mismatch"),
+        "outside_source_period" => t!("check.code.outside_source_period"),
+        _ => t!("check.code.other"),
     }
 }
 
@@ -159,7 +161,7 @@ fn life(ind: &Node) -> Life {
 }
 
 fn years(x: f64) -> String {
-    if x < 1. { "moins d'un an".into() } else { format!("{} ans", x.floor() as i64) }
+    if x < 1. { t!("check.less_than_a_year").into() } else { tn!("check.years", x.floor() as usize).into() }
 }
 
 /// Lance tous les contrôles de cohérence, sans les anomalies masquées.
@@ -211,7 +213,7 @@ pub(crate) fn check_all(g: &Gedcom, t: &Thresholds) -> Vec<Issue> {
                     "broken_link",
                     x,
                     vec![p.to_string()],
-                    format!("{} ({}) pointe vers @{p}@, qui n'existe pas", name(x), n.tag),
+                    t!("check.msg.broken_link", who = name(x), tag = n.tag, target = format!("@{p}@")).into(),
                 );
             }
         });
@@ -226,17 +228,35 @@ pub(crate) fn check_all(g: &Gedcom, t: &Thresholds) -> Vec<Issue> {
 
         if let (Some(b), Some(d)) = (&l.birth, &l.death) {
             if d.surely_before(b) {
-                push(Severity::Error, "death_before_birth", x, vec![], format!("{who} : décès avant la naissance"));
+                push(
+                    Severity::Error,
+                    "death_before_birth",
+                    x,
+                    vec![],
+                    t!("check.msg.death_before_birth", who = who).into(),
+                );
             } else if let Some(min) = Age::between(b, d).min_years()
                 && min > t.max_lifespan
             {
-                push(Severity::Warning, "too_old", x, vec![], format!("{who} aurait vécu au moins {}", years(min)));
+                push(
+                    Severity::Warning,
+                    "too_old",
+                    x,
+                    vec![],
+                    t!("check.msg.too_old", who = who, years = years(min)).into(),
+                );
             }
         }
         if let (Some(death), Some(buri)) = (span_of(r, "DEAT"), span_of(r, "BURI"))
             && buri.surely_before(&death)
         {
-            push(Severity::Error, "burial_before_death", x, vec![], format!("{who} : inhumé(e) avant son décès"));
+            push(
+                Severity::Error,
+                "burial_before_death",
+                x,
+                vec![],
+                t!("check.msg.burial_before_death", who = who).into(),
+            );
         }
         for e in &r.children {
             let Some(label) = event_label(&e.tag) else { continue };
@@ -247,13 +267,25 @@ pub(crate) fn check_all(g: &Gedcom, t: &Thresholds) -> Vec<Issue> {
             if let Some(b) = &l.birth
                 && s.surely_before(b)
             {
-                push(Severity::Error, "event_before_birth", x, vec![], format!("{who} : {label} avant la naissance"));
+                push(
+                    Severity::Error,
+                    "event_before_birth",
+                    x,
+                    vec![],
+                    t!("check.msg.event_before_birth", who = who, event = label).into(),
+                );
             }
             if let Some(d) = &l.death
                 && d.surely_before(&s)
                 && !POST_MORTEM.contains(&e.tag.as_str())
             {
-                push(Severity::Error, "event_after_death", x, vec![], format!("{who} : {label} après le décès"));
+                push(
+                    Severity::Error,
+                    "event_after_death",
+                    x,
+                    vec![],
+                    t!("check.msg.event_after_death", who = who, event = label).into(),
+                );
             }
         }
         if t.report_unsourced {
@@ -262,7 +294,13 @@ pub(crate) fn check_all(g: &Gedcom, t: &Thresholds) -> Vec<Issue> {
                     && !ATTRIBUTES.contains(&e.tag.as_str())
                     && e.child("SOUR").is_none()
                 {
-                    push(Severity::Info, "unsourced", x, vec![], format!("{who} : {label} sans source"));
+                    push(
+                        Severity::Info,
+                        "unsourced",
+                        x,
+                        vec![],
+                        t!("check.msg.unsourced", who = who, event = label).into(),
+                    );
                 }
             }
         }
@@ -280,7 +318,7 @@ pub(crate) fn check_all(g: &Gedcom, t: &Thresholds) -> Vec<Issue> {
                         "missing_backlink",
                         x,
                         vec![f.to_string()],
-                        format!("{who} se dit membre de la famille {} qui ne le mentionne pas", name(f)),
+                        t!("check.msg.missing_backlink", who = who, family = name(f)).into(),
                     );
                 }
             }
@@ -303,7 +341,7 @@ pub(crate) fn check_all(g: &Gedcom, t: &Thresholds) -> Vec<Issue> {
                 "husband_not_male",
                 fx,
                 vec![h.into()],
-                format!("{} est HUSB mais de sexe féminin", name(h)),
+                t!("check.msg.husband_not_male", who = name(h)).into(),
             );
         }
         if let Some(w) = wife
@@ -314,7 +352,7 @@ pub(crate) fn check_all(g: &Gedcom, t: &Thresholds) -> Vec<Issue> {
                 "wife_not_female",
                 fx,
                 vec![w.into()],
-                format!("{} est WIFE mais de sexe masculin", name(w)),
+                t!("check.msg.wife_not_female", who = name(w)).into(),
             );
         }
 
@@ -333,7 +371,7 @@ pub(crate) fn check_all(g: &Gedcom, t: &Thresholds) -> Vec<Issue> {
                         code,
                         p,
                         vec![fx.into()],
-                        format!("{} se marie à {}", name(p), years(max.max(0.))),
+                        t!("check.msg.marriage_too_young", who = name(p), years = years(max.max(0.))).into(),
                     );
                 }
                 if let Some(d) = &l.death
@@ -344,7 +382,7 @@ pub(crate) fn check_all(g: &Gedcom, t: &Thresholds) -> Vec<Issue> {
                         "marriage_after_death",
                         fx,
                         vec![p.into()],
-                        format!("{} : mariage après son décès", name(p)),
+                        t!("check.msg.marriage_after_death", who = name(p)).into(),
                     );
                 }
             }
@@ -365,7 +403,7 @@ pub(crate) fn check_all(g: &Gedcom, t: &Thresholds) -> Vec<Issue> {
                     "marriage_age_gap",
                     fx,
                     vec![h.into(), w.into()],
-                    format!("{} : {} d'écart entre les époux", name(fx), years(gap)),
+                    t!("check.msg.marriage_age_gap", family = name(fx), years = years(gap)).into(),
                 );
             }
         }
@@ -385,7 +423,7 @@ pub(crate) fn check_all(g: &Gedcom, t: &Thresholds) -> Vec<Issue> {
                                 "child_before_parent",
                                 c,
                                 vec![p.into()],
-                                format!("{} est né(e) avant son parent {}", name(c), name(p)),
+                                t!("check.msg.child_before_parent", child = name(c), parent = name(p)).into(),
                             );
                         } else if max < t.min_parent_age {
                             push(
@@ -393,7 +431,8 @@ pub(crate) fn check_all(g: &Gedcom, t: &Thresholds) -> Vec<Issue> {
                                 "parent_too_young",
                                 c,
                                 vec![p.into()],
-                                format!("{} avait au plus {} à la naissance de {}", name(p), years(max), name(c)),
+                                t!("check.msg.parent_too_young", parent = name(p), years = years(max), child = name(c))
+                                    .into(),
                             );
                         }
                     }
@@ -407,7 +446,8 @@ pub(crate) fn check_all(g: &Gedcom, t: &Thresholds) -> Vec<Issue> {
                             code,
                             c,
                             vec![p.into()],
-                            format!("{} avait au moins {} à la naissance de {}", name(p), years(min), name(c)),
+                            t!("check.msg.parent_too_old", parent = name(p), years = years(min), child = name(c))
+                                .into(),
                         );
                     }
                 }
@@ -422,7 +462,7 @@ pub(crate) fn check_all(g: &Gedcom, t: &Thresholds) -> Vec<Issue> {
                             code,
                             c,
                             vec![p.into()],
-                            format!("{} est né(e) après le décès de {}", name(c), name(p)),
+                            t!("check.msg.birth_after_death", child = name(c), parent = name(p)).into(),
                         );
                     }
                 }
@@ -445,7 +485,7 @@ pub(crate) fn check_all(g: &Gedcom, t: &Thresholds) -> Vec<Issue> {
                     "siblings_too_close",
                     w[1].0,
                     vec![w[0].0.into(), fx.into()],
-                    format!("{} et {} sont nés à {gap} jours d'intervalle", name(w[0].0), name(w[1].0)),
+                    t!("check.msg.siblings_too_close", first = name(w[0].0), second = name(w[1].0), days = gap).into(),
                 );
             }
         }
@@ -471,13 +511,22 @@ pub(crate) fn check_all(g: &Gedcom, t: &Thresholds) -> Vec<Issue> {
                             "role_sex_mismatch",
                             x,
                             vec![src.to_string()],
-                            format!(
-                                "{} : rôle {} dans « {} » mais de sexe {}",
-                                name(x),
-                                role_fr(role),
-                                name(src),
-                                if sex == "F" { "féminin" } else { "masculin" }
-                            ),
+                            if sex == "F" {
+                                t!(
+                                    "check.msg.role_sex_female",
+                                    who = name(x),
+                                    role = role_label(role),
+                                    source = name(src)
+                                )
+                            } else {
+                                t!(
+                                    "check.msg.role_sex_male",
+                                    who = name(x),
+                                    role = role_label(role),
+                                    source = name(src)
+                                )
+                            }
+                            .into(),
                         );
                     }
                 }
@@ -491,13 +540,14 @@ pub(crate) fn check_all(g: &Gedcom, t: &Thresholds) -> Vec<Issue> {
                         "outside_source_period",
                         x,
                         vec![sx.to_string()],
-                        format!(
-                            "{} : acte daté {} dans « {} », qui couvre {}",
-                            name(x),
-                            crate::date::Date::parse(date).display(),
-                            name(sx),
-                            crate::date::Date::parse(period).display()
-                        ),
+                        t!(
+                            "check.msg.outside_source_period",
+                            who = name(x),
+                            date = crate::date::Date::parse(date).display(),
+                            source = name(sx),
+                            period = crate::date::Date::parse(period).display()
+                        )
+                        .into(),
                     );
                 }
             }
@@ -507,7 +557,7 @@ pub(crate) fn check_all(g: &Gedcom, t: &Thresholds) -> Vec<Issue> {
     // Boucles dans l'ascendance.
     for x in lives.keys() {
         if is_own_ancestor(g, x) {
-            push(Severity::Error, "own_ancestor", x, vec![], format!("{} figure dans sa propre ascendance", name(x)));
+            push(Severity::Error, "own_ancestor", x, vec![], t!("check.msg.own_ancestor", who = name(x)).into());
         }
     }
 
@@ -517,13 +567,13 @@ pub(crate) fn check_all(g: &Gedcom, t: &Thresholds) -> Vec<Issue> {
     issues
 }
 
-fn role_fr(role: &str) -> &'static str {
+fn role_label(role: &str) -> Cow<'static, str> {
     match role {
-        "FATH" => "père",
-        "MOTH" => "mère",
-        "HUSB" => "époux",
-        "WIFE" => "épouse",
-        _ => "",
+        "FATH" => t!("check.role.father"),
+        "MOTH" => t!("check.role.mother"),
+        "HUSB" => t!("check.role.husband"),
+        "WIFE" => t!("check.role.wife"),
+        _ => Cow::Borrowed(""),
     }
 }
 
