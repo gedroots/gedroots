@@ -2062,7 +2062,7 @@ impl Workspace {
                             .border_1()
                             .border_color(theme::border())
                             .hover(|d| d.border_color(theme::accent()))
-                            .child(img(p).size_full().object_fit(ObjectFit::Cover))
+                            .child(picture(p, 56., 56., ObjectFit::Cover).size_full())
                             .on_click(open)
                             .with_menu(menu)
                             .into_any_element(),
