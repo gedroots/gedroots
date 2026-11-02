@@ -21,6 +21,8 @@ const START_DOWN: u32 = 1;
 const MAX_GENS: u32 = 200;
 /// Size of the view before the first display.
 const DEFAULT_VIEW: (f32, f32) = (1000., 700.);
+/// Room left around a chart that fits in the view.
+const FRAME_MARGIN: f32 = 16.;
 const MINI_W: f32 = 200.;
 const MINI_H: f32 = 130.;
 /// Movement beyond which a press becomes a drag (and not a click).
@@ -84,6 +86,8 @@ pub(super) struct Chart {
     shown_anchor: Option<String>,
     /// Boxes sliding: start and starting y coordinates.
     glide: Option<(Instant, HashMap<CardKey, f32>)>,
+    /// The chart was just built around a person: frame it once the view size is known.
+    fit: bool,
 }
 
 impl Default for Chart {
@@ -103,6 +107,7 @@ impl Default for Chart {
             shown: HashMap::new(),
             shown_anchor: None,
             glide: None,
+            fit: true,
         }
     }
 }
@@ -119,6 +124,22 @@ impl Chart {
         self.up = START_UP;
         self.down = START_DOWN;
         self.pan = (-CARD_W / 2., -CARD_H / 2.);
+        self.fit = true;
+    }
+
+    /// First framing of a chart, on each axis: the whole chart is centred when it fits in the view;
+    /// otherwise the central person is, so that both their parents and their children stay in
+    /// reach.
+    fn frame(&mut self, l: &Layout) {
+        let (w, h) = self.view_size();
+        let [x0, y0, x1, y1] = l.bounds;
+        if x0 > x1 || y0 > y1 {
+            return;
+        }
+        let axis = |lo: f32, hi: f32, card: f32, view: f32| {
+            if hi - lo <= view - 2. * FRAME_MARGIN { (lo + hi) / 2. } else { card / 2. }
+        };
+        self.pan = (-axis(x0, x1, CARD_W, w), -axis(y0, y1, CARD_H, h));
     }
 
     fn center_on(&mut self, c: &Card) {
@@ -291,6 +312,13 @@ impl Workspace {
                 .size_full()
                 .child(canvas(move |b, w, _| measure(b, w, false), |_, _, _, _| {}).size_full())
                 .into_any_element();
+        }
+        if st.fit {
+            st.fit = false;
+            st.frame(&l);
+            let anchor = st.anchor.clone().unwrap_or_default();
+            (l, shift) = st.layout(g, &anchor);
+            animate = false;
         }
         let (ys, running) = st.glide(&l, shift, animate);
 
@@ -484,9 +512,17 @@ impl Workspace {
                             i.surname(),
                             i.given()
                         )))
-                        .child(mono(i.years())),
+                        // The root's house sits on the dates line: the name keeps the full width.
+                        .child(
+                            h_flex()
+                                .gap_1()
+                                .items_center()
+                                .child(mono(i.years()))
+                                .when(root == Some(xref.as_str()), |d| {
+                                    d.child(icon(IconName::House).size_3().text_color(theme::accent()))
+                                }),
+                        ),
                 )
-                .when(root == Some(xref.as_str()), |d| d.child(icon(IconName::House).text_color(theme::accent())))
                 .on_click(cx.listener(move |this, ev: &ClickEvent, w, cx| {
                     this.chart_click(target.clone(), ev.click_count(), w, cx)
                 }))

@@ -658,7 +658,12 @@ fn caps(s: impl Into<SharedString>) -> Div {
 }
 
 fn mono(s: impl Into<SharedString>) -> Div {
-    div().font_family("monospace").text_xs().text_color(theme::muted()).child(s.into())
+    div()
+        .font_family("monospace")
+        .font_features(theme::tabular_nums())
+        .text_xs()
+        .text_color(theme::muted())
+        .child(s.into())
 }
 
 /// Columns of the grid shared by the “Record” and “People” sections.
@@ -970,10 +975,11 @@ impl ActEditor {
                             ),
                     )
                     .when(free_type, |d| d.child(field(t!("event_dialog.type"), &self.event_type)))
-                    .child(date_cell(t!("event_dialog.date"), &self.date))
-                    .child(date_cell(t!("act.record_date"), &self.record_date))
+                    // Dates take half a row: a full date (“23 sept. 1795”) is never cut.
+                    .child(date_cell(t!("event_dialog.date"), &self.date).col_span(2))
                     .child(field(t!("editor.place"), &self.place).col_span(2))
-                    .child(field(t!("act.reference"), &self.page).col_span(2)),
+                    .child(date_cell(t!("act.record_date"), &self.record_date).col_span(2))
+                    .child(field(t!("act.reference"), &self.page).col_span(GRID)),
             )
             .when_some(place_hints, |d, h| d.child(h))
             .child(h_flex().gap_1().items_center().child(caps(t!("act.quality")).mr_1()).children(
