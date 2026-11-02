@@ -85,6 +85,20 @@ jobs:
         with:
           version: 2026.10.25
           install_args: rust dotnet dotnet:vpk
+      # Downloaded crates and release build outputs, per system: the next release only
+      # recompiles what changed. Unused caches are dropped after 7 days.
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+            !target/dist
+          key: release-${{ runner.os }}-${{ hashFiles('mise.lock', 'Cargo.lock') }}-${{ github.sha }}
+          restore-keys: |
+            release-${{ runner.os }}-${{ hashFiles('mise.lock', 'Cargo.lock') }}-
+            release-${{ runner.os }}-
       - name: Installers and update packages
         shell: bash
         run: mise run package ${{ github.event_name != 'pull_request' && '--upload' || '' }}
