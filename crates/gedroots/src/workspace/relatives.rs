@@ -20,6 +20,8 @@ pub enum PickPurpose {
     MergeInto { media: String },
     /// Le média choisi est lié à l'événement `ix` de `owner`.
     MediaToEvent { owner: String, ix: usize },
+    /// Lien de parenté entre `indi` et la personne choisie (rien n'est modifié).
+    Kinship { indi: String },
 }
 
 impl PickPurpose {
@@ -32,6 +34,7 @@ impl PickPurpose {
             PickPurpose::FamilyChild { fam } => format!("Choisir un enfant pour {}", g.record_label(fam)),
             PickPurpose::MediaTo { media } => format!("Rattacher « {} » à…", g.record_label(media)),
             PickPurpose::TagPerson { .. } => "Qui est sur cette zone de la photo ?".into(),
+            PickPurpose::Kinship { indi } => format!("Lien de parenté de {} avec…", g.record_label(indi)),
             PickPurpose::MergeInto { media } => format!("Ajouter à « {} » les pages du média…", g.record_label(media)),
             PickPurpose::MediaToEvent { owner, ix } => format!(
                 "Lier un média à « {} » · {}",
@@ -209,6 +212,10 @@ impl Workspace {
             PickPurpose::Relative { indi, .. } => Some(indi),
             _ => None,
         };
+        let me: Option<&str> = match &p.purpose {
+            PickPurpose::Kinship { indi } => Some(indi),
+            _ => exclude,
+        };
         // Pour un lien de parenté : sexe compatible, et les dates plausibles en premier.
         let (wrong_sex, expected) = match &p.purpose {
             PickPurpose::Relative { indi, rel } => {
@@ -239,7 +246,7 @@ impl Workspace {
             .records_of(RecordKind::Individual)
             .map(Individual::new)
             .filter(|i| {
-                Some(i.xref()) != exclude && !close.contains(i.xref()) && Some(i.sex()) != wrong_sex && q.matches(g, i)
+                Some(i.xref()) != me && !close.contains(i.xref()) && Some(i.sex()) != wrong_sex && q.matches(g, i)
             })
             .collect();
         people.sort_by_cached_key(|i| {
@@ -309,6 +316,12 @@ impl Workspace {
     fn pick(&mut self, chosen: String, window: &mut Window, cx: &mut Context<Self>) {
         let Some(p) = self.picker.take() else { return };
         window.focus(&self.focus, cx);
+        if let PickPurpose::Kinship { indi } = p.purpose {
+            self.kinship = Some((indi.clone(), chosen));
+            self.open_location(View::Individuals, Some(indi), window, cx);
+            cx.notify();
+            return;
+        }
         self.mutate(window, cx, |g| {
             let who = g.record_label(&chosen);
             match p.purpose {
@@ -345,6 +358,8 @@ impl Workspace {
                     g.tag_person_on(&chosen, &media, page, crop)?;
                     Ok((format!("{who} identifié(e) sur la photo"), None))
                 }
+                // Traité avant : rien à modifier.
+                PickPurpose::Kinship { .. } => Err("lien de parenté".into()),
             }
         });
     }

@@ -60,7 +60,6 @@ impl Workspace {
         let d = on!(d, cx, SaveFile, |this, w, cx| this.save_file(&SaveFile, w, cx));
         let d = on!(d, cx, OpenFileSettings, |this, w, cx| this.open_settings(w, cx));
         let d = on!(d, cx, SaveFileAs, |this, w, cx| this.save_file_as(w, cx));
-        let d = on!(d, cx, OpenAnalyses, |this, w, cx| this.open_analyses(&OpenAnalyses, w, cx));
         let d = on!(d, cx, EnterRecord, |this, w, cx| this.open_entry(&EnterRecord, w, cx));
         let d = on!(d, cx, FocusSearch, |this, w, cx| this.filter.update(cx, |f, cx| f.focus(w, cx)));
         let d = on!(d, cx, ClearSearch, |this, w, cx| this.set_query(String::new(), w, cx));
@@ -85,7 +84,9 @@ impl Workspace {
         let d = on!(d, cx, ShowRepositories, |this, w, cx| this.show_view(View::Repositories, w, cx));
         let d = on!(d, cx, ShowNotes, |this, w, cx| this.show_view(View::Notes, w, cx));
         let d = on!(d, cx, ShowQuality, |this, w, cx| this.show_view(View::Quality, w, cx));
+        let d = on!(d, cx, ShowStats, |this, w, cx| this.show_view(View::Stats, w, cx));
         let d = on!(d, cx, ToggleIgnoredIssues, |this, _w, cx| this.toggle_ignored_issues(cx));
+        let d = on!(d, cx, ToggleRelativeEvents, |this, _w, cx| this.toggle_relative_events(cx));
         let d = on!(d, cx, ShowForm, |this, w, cx| this.show_tab(CenterTab::Form, cx));
         let d = on!(d, cx, ShowUnreferencedFiles, |this, w, cx| {
             this.orphans_open = true;
@@ -159,6 +160,7 @@ impl Workspace {
                 let d = on!(d, cx, LinkSpouse, |this, w, cx| this.relative(Relation::Spouse, true, w, cx));
                 let d = on!(d, cx, LinkChild, |this, w, cx| this.relative(Relation::Child, true, w, cx));
                 let d = on!(d, cx, LinkSibling, |this, w, cx| this.relative(Relation::Sibling, true, w, cx));
+                let d = on!(d, cx, KinshipWith, |this, w, cx| this.ask_kinship(w, cx));
                 d.when(!is_root, |d| {
                     on!(d, cx, SetRoot, |this, w, cx| {
                         if let Some(x) = this.selected.clone() {

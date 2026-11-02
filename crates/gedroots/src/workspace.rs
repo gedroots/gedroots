@@ -7,6 +7,7 @@ use crate::entry_form::{EntryForm, EntryFormEvent};
 use crate::images::picture;
 use crate::map::{MapEvent, MapView};
 use crate::theme;
+use gedcom::analysis::timeline::{self, EntryKind};
 use gedcom::*;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants};
@@ -26,6 +27,7 @@ mod commands;
 mod filters;
 mod history;
 mod import;
+mod insights;
 mod menus;
 mod pages;
 mod photo;
@@ -45,10 +47,11 @@ pub enum View {
     Repositories,
     Notes,
     Quality,
+    Stats,
 }
 
 impl View {
-    const ALL: [View; 8] = [
+    const ALL: [View; 9] = [
         View::Individuals,
         View::Families,
         View::Sources,
@@ -57,6 +60,7 @@ impl View {
         View::Repositories,
         View::Notes,
         View::Quality,
+        View::Stats,
     ];
 
     fn label(self) -> &'static str {
@@ -69,6 +73,7 @@ impl View {
             View::Repositories => "Dépôts",
             View::Notes => "Notes",
             View::Quality => "Qualité",
+            View::Stats => "Stats",
         }
     }
 
@@ -82,6 +87,7 @@ impl View {
             View::Repositories => "DÉP",
             View::Notes => "NOTE",
             View::Quality => "QUAL",
+            View::Stats => "STAT",
         }
     }
 
@@ -95,7 +101,13 @@ impl View {
             View::Repositories => IconName::Landmark,
             View::Notes => IconName::StickyNote,
             View::Quality => IconName::CircleCheck,
+            View::Stats => IconName::ChartPie,
         }
+    }
+
+    /// Pages sans fiche (Qualité, Statistiques).
+    fn page(self) -> Option<View> {
+        matches!(self, View::Quality | View::Stats).then_some(self)
     }
 
     fn kind(self) -> Option<RecordKind> {
@@ -106,7 +118,7 @@ impl View {
             View::Media => RecordKind::Media,
             View::Repositories => RecordKind::Repository,
             View::Notes => RecordKind::SharedNote,
-            View::Places | View::Quality => return None,
+            View::Places | View::Quality | View::Stats => return None,
         })
     }
 
@@ -225,6 +237,12 @@ pub struct Workspace {
     list_scroll: UniformListScrollHandle,
     /// Page Qualité : anomalies du fichier.
     quality: quality::QualityState,
+    /// Lien de parenté affiché dans le panneau de l'individu (A, B).
+    kinship: Option<(String, String)>,
+    /// Fiche : afficher aussi les événements des proches (Affichage › Événements des proches).
+    show_relative_events: bool,
+    /// Statistiques du fichier (page Statistiques).
+    stats: Option<Rc<gedcom::analysis::stats::Stats>>,
     _subs: Vec<Subscription>,
 }
 
@@ -271,6 +289,9 @@ impl Workspace {
             orphans_open: false,
             list_scroll: UniformListScrollHandle::new(),
             quality: quality::QualityState { stale: true, ..Default::default() },
+            kinship: None,
+            show_relative_events: false,
+            stats: None,
             menu_row: Rc::default(),
             place_focus: None,
             editor_subs: Vec::new(),
@@ -536,7 +557,7 @@ impl Workspace {
     }
 
     fn refresh_editor(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let (Some(doc), Some(key), false) = (&self.doc, &self.selected, self.view == View::Quality) else {
+        let (Some(doc), Some(key), None) = (&self.doc, &self.selected, self.view.page()) else {
             self.editor = None;
             return;
         };
@@ -587,7 +608,7 @@ impl Workspace {
 
     /// Premier clic : demande confirmation ; second clic : supprime.
     fn delete_selected(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(key) = self.selected.clone().filter(|_| self.view != View::Quality) else { return };
+        let Some(key) = self.selected.clone().filter(|_| self.view.page().is_none()) else { return };
         if self.pending_delete.as_ref() != Some(&key) {
             self.pending_delete = Some(key);
             cx.notify();
@@ -758,6 +779,20 @@ impl Workspace {
             self.rows = Rc::new(self.quality_rows(q.trim()));
             return;
         }
+        if self.view == View::Stats {
+            // Une seule « ligne », jamais affichée : elle sert à l'historique (⌘[).
+            self.refresh_stats();
+            let row = Row {
+                key: "stats".into(),
+                title: String::new(),
+                strong: String::new(),
+                meta: String::new(),
+                dot: None,
+                flagged: false,
+            };
+            self.rows = Rc::new(vec![row]);
+            return;
+        }
         let Some(doc) = &self.doc else {
             self.rows = Rc::new(Vec::new());
             return;
@@ -876,7 +911,7 @@ impl Workspace {
                     }
                 })
                 .collect(),
-            View::Quality => Vec::new(),
+            View::Quality | View::Stats => Vec::new(),
             View::Notes => g
                 .records_of(RecordKind::SharedNote)
                 .map(|r| {
@@ -1064,13 +1099,15 @@ impl Workspace {
     }
 
     fn render_activity_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let counts: Vec<usize> = View::ALL
+        // Pas de nombre sous Statistiques.
+        let counts: Vec<Option<usize>> = View::ALL
             .iter()
             .map(|v| match (&self.doc, v.kind()) {
-                (Some(_), None) if *v == View::Quality => self.quality_count(),
-                (Some(d), Some(k)) => d.ged.count(k),
-                (Some(d), None) => d.ged.places().len(),
-                _ => 0,
+                (_, None) if *v == View::Stats => None,
+                (Some(_), None) if *v == View::Quality => Some(self.quality_count()),
+                (Some(d), Some(k)) => Some(d.ged.count(k)),
+                (Some(d), None) => Some(d.ged.places().len()),
+                _ => Some(0),
             })
             .collect();
         v_flex()
@@ -1108,7 +1145,7 @@ impl Workspace {
                             .text_color(if active { theme::text() } else { theme::muted() })
                             .child(v.label()),
                     )
-                    .child(mono(n.to_string()))
+                    .children(n.map(|n| mono(n.to_string())))
                     .on_click(cx.listener(move |this, _, w, cx| this.set_view(v, w, cx)))
             }))
     }
@@ -1237,6 +1274,9 @@ impl Workspace {
     fn render_center(&self, cx: &mut Context<Self>) -> AnyElement {
         if self.view == View::Quality {
             return v_flex().flex_1().min_w_0().bg(theme::bg()).child(self.render_quality(cx)).into_any_element();
+        }
+        if self.view == View::Stats {
+            return self.render_stats(cx);
         }
         let tabs: Vec<CenterTab> = match self.view {
             View::Individuals => vec![CenterTab::Tree, CenterTab::Form, CenterTab::Raw],
@@ -1668,7 +1708,7 @@ impl Workspace {
     }
 
     fn render_detail(&self, cx: &mut Context<Self>) -> AnyElement {
-        let Some(doc) = &self.doc.as_ref().filter(|_| self.view != View::Quality) else {
+        let Some(doc) = &self.doc.as_ref().filter(|_| self.view.page().is_none()) else {
             return div().into_any_element();
         };
         let Some(key) = &self.selected else { return div().into_any_element() };
@@ -1711,6 +1751,7 @@ impl Workspace {
             View::Individuals => match g.individual(key) {
                 Some(i) => panel
                     .child(self.render_individual_card(g, i, cx))
+                    .children(self.render_kinship(key, cx))
                     .children(self.render_actions(cx))
                     .into_any_element(),
                 None => panel.into_any_element(),
@@ -1852,20 +1893,25 @@ impl Workspace {
             v.sort_by_key(|e| e.event.date().map(|d| d.sort_key()).unwrap_or((i32::MAX, 0, 0)));
             v
         };
+        let person = g.individual(owner);
+        // Événements des proches pendant la vie de la personne (naissance d'un
+        // enfant, décès d'un parent…), affichés à la demande.
+        let relatives: Vec<timeline::Entry> = match person {
+            Some(_) => timeline::timeline(g, owner).into_iter().filter(|e| e.kind == EntryKind::Relative).collect(),
+            None => Vec::new(),
+        };
+        let show_relatives = self.show_relative_events;
         let x = owner.to_string();
-        v_flex()
-            .p_4()
-            .gap_1()
-            .border_b_1()
-            .border_color(theme::border())
-            .child(section_header("Événements", {
-                let x = x.clone();
-                add::plus_button("add-event")
-                    .tooltip("Ajouter un événement")
-                    .on_click(cx.listener(move |this, _, w, cx| this.open_event_dialog(x.clone(), None, w, cx)))
-            }))
-            .children(events.into_iter().map(|pe| {
+        let mut rows: Vec<((i32, u8, u8), AnyElement)> = events
+            .into_iter()
+            .map(|pe| {
                 let PersonEvent { owner: ev_owner, index: ix, event: e, family, spouse } = pe;
+                let sort = e.date().map(|d| d.sort_key()).unwrap_or((i32::MAX, 0, 0));
+                // Âge de la personne à la date de l'événement (sauf sa naissance).
+                let age = person
+                    .as_ref()
+                    .filter(|_| family || e.tag() != "BIRT")
+                    .and_then(|p| e.date_raw().and_then(|d| timeline::age_at(p, d)));
                 let place = e.place().map(|p| p.to_string());
                 let sources: Vec<String> = e.source_xrefs().iter().map(|s| s.to_string()).collect();
                 let label = match e.value() {
@@ -1876,7 +1922,7 @@ impl Workspace {
                 let (o1, o2) = (ev_owner.clone(), ev_owner.clone());
                 // Déposer des fichiers sur l'événement : médias de l'événement.
                 let (drop_owner, entity) = (ev_owner.clone(), cx.entity().downgrade());
-                v_flex()
+                let row = v_flex()
                     .id(SharedString::from(format!("ev-{key}")))
                     .gap_0p5()
                     .px_2()
@@ -1905,7 +1951,13 @@ impl Workspace {
                                     // Point orange : événement sans source.
                                     .when(sources.is_empty(), |d| d.child(dot(theme::warn()))),
                             )
-                            .child(mono(e.date().map(|d| d.to_french()).unwrap_or_default())),
+                            .child(
+                                h_flex()
+                                    .gap_2()
+                                    .flex_none()
+                                    .when_some(age, |d, a| d.child(div().text_xs().text_color(theme::muted()).child(a)))
+                                    .child(mono(e.date().map(|d| d.to_french()).unwrap_or_default())),
+                            ),
                     )
                     // Événement d'une union : avec qui.
                     .when_some(spouse.filter(|_| family), |d, s| {
@@ -1952,7 +2004,76 @@ impl Workspace {
                     }))
                     .children(self.render_event_media(&ev_owner, ix, &e, cx))
                     .on_click(cx.listener(move |this, _, w, cx| this.open_event_dialog(o1.clone(), Some(ix), w, cx)))
-                    .with_menu(self.event_menu(o2, ix, cx))
+                    .with_menu(self.event_menu(o2, ix, cx));
+                (sort, row.into_any_element())
+            })
+            .collect();
+        if show_relatives {
+            for (n, r) in relatives.iter().enumerate() {
+                let sort = r.date.as_ref().map(|d| d.sort_key()).unwrap_or((i32::MAX, 0, 0));
+                rows.push((sort, self.render_relative_event(n, r, cx)));
+            }
+            // Tri stable : à date égale, l'événement de la personne d'abord.
+            rows.sort_by_key(|r| r.0);
+        }
+        let toggle = (!relatives.is_empty()).then(|| {
+            Button::new("relative-events")
+                .xsmall()
+                .icon(IconName::Users)
+                .when(show_relatives, |b| b.primary())
+                .when(!show_relatives, |b| b.ghost())
+                .tooltip("Événements des proches")
+                .on_click(cx.listener(|this, _, _, cx| this.toggle_relative_events(cx)))
+        });
+        v_flex()
+            .p_4()
+            .gap_1()
+            .border_b_1()
+            .border_color(theme::border())
+            .child(section_header(
+                "Événements",
+                h_flex().gap_1().children(toggle).child(
+                    add::plus_button("add-event")
+                        .tooltip("Ajouter un événement")
+                        .on_click(cx.listener(move |this, _, w, cx| this.open_event_dialog(x.clone(), None, w, cx))),
+                ),
+            ))
+            .children(rows.into_iter().map(|r| r.1))
+            .into_any_element()
+    }
+
+    /// Affichage › Événements des proches.
+    pub(super) fn toggle_relative_events(&mut self, cx: &mut Context<Self>) {
+        self.show_relative_events = !self.show_relative_events;
+        cx.notify();
+    }
+
+    /// Ligne discrète d'un événement d'un proche ; un clic ouvre ce proche.
+    fn render_relative_event(&self, n: usize, r: &timeline::Entry, cx: &mut Context<Self>) -> AnyElement {
+        let target = r.related.clone();
+        h_flex()
+            .id(("rel-ev", n))
+            .justify_between()
+            .gap_2()
+            .px_2()
+            .py_1()
+            .rounded_sm()
+            .text_sm()
+            .text_color(theme::muted())
+            .cursor_pointer()
+            .hover(|d| d.bg(theme::hover()))
+            .child(div().min_w_0().child(r.label.clone()))
+            .child(
+                h_flex()
+                    .gap_2()
+                    .flex_none()
+                    .when_some(r.age.clone(), |d, a| d.child(div().text_xs().child(a)))
+                    .child(mono(r.date.as_ref().map(|d| d.to_french()).unwrap_or_default())),
+            )
+            .on_click(cx.listener(move |this, _, w, cx| {
+                if let Some(x) = target.clone() {
+                    this.goto(x, w, cx)
+                }
             }))
             .into_any_element()
     }
@@ -2278,7 +2399,7 @@ impl Render for Workspace {
                 .min_h_0()
                 .items_stretch()
                 .child(self.render_activity_bar(cx))
-                .child(self.render_list(cx))
+                .when(self.view != View::Stats, |d| d.child(self.render_list(cx)))
                 .child(self.render_center(cx))
                 .child(self.render_detail(cx))
                 .into_any_element()
@@ -2321,15 +2442,10 @@ impl Render for Workspace {
 }
 
 // ----------------------------------------------------------------------
-// Accès pour la fenêtre Analyses (voir `analyses.rs`).
+// Accès pour les autres fenêtres.
 // ----------------------------------------------------------------------
 
 impl Workspace {
-    /// Copie du fichier courant, pour les outils d'analyse.
-    pub(crate) fn ged_snapshot(&self) -> Option<Gedcom> {
-        self.doc.as_ref().map(|d| d.ged.clone())
-    }
-
     /// Individu sélectionné dans la fenêtre principale.
     pub(crate) fn selected_individual(&self) -> Option<String> {
         let doc = self.doc.as_ref()?;
@@ -2356,12 +2472,5 @@ impl Workspace {
             self.drop_checkpoint();
         }
         cx.notify();
-    }
-
-    fn open_analyses(&mut self, _: &OpenAnalyses, window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(ged) = self.ged_snapshot() {
-            let person = self.selected_individual();
-            crate::analyses::open(cx.entity(), window.window_handle(), ged, person, cx);
-        }
     }
 }
