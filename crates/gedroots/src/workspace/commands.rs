@@ -48,6 +48,8 @@ impl Workspace {
         let web_linkable = sel.as_ref().is_some_and(|x| g.is_some_and(|g| g.can_have_web_links(x)));
 
         let d = on!(d, cx, OpenFile, |this, w, cx| this.open_file(&OpenFile, w, cx));
+        let d = d.on_action(cx.listener(|this, a: &OpenRecent, w, cx| this.load(a.path.clone(), w, cx)));
+        let d = on!(d, cx, ClearRecent, |_this, w, cx| crate::recent::clear(cx));
         let d = on!(d, cx, ImportFile, |this, w, cx| this.import_file(w, cx));
         let d = on!(d, cx, NewFile, |this, w, cx| this.new_file(&NewFile, w, cx));
         let d = on!(d, cx, CommandPalette, |this, w, cx| this.toggle_palette(w, cx));

@@ -225,6 +225,8 @@ pub struct Workspace {
     show_relative_events: bool,
     /// Statistiques du fichier (page Statistiques).
     stats: Option<Rc<gedcom::analysis::stats::Stats>>,
+    /// Version de la liste des fichiers récents connue de la barre de menus de la fenêtre.
+    recent_gen: u64,
     _subs: Vec<Subscription>,
 }
 
@@ -278,6 +280,7 @@ impl Workspace {
             kinship: None,
             show_relative_events: false,
             stats: None,
+            recent_gen: crate::recent::generation(),
             menu_row: Rc::default(),
             place_focus: None,
             editor_subs: Vec::new(),
@@ -311,6 +314,7 @@ impl Workspace {
     fn load(&mut self, path: PathBuf, window: &mut Window, cx: &mut Context<Self>) {
         match gedcom::load(&path) {
             Ok(ged) => {
+                crate::recent::add(&path, cx);
                 let first = ged.root();
                 self.doc = Some(Document {
                     ged,
@@ -386,6 +390,9 @@ impl Workspace {
         doc.ged.stamp_header();
         match gedcom::save(&doc.ged, &path) {
             Ok(()) => {
+                if doc.path.as_ref() != Some(&path) {
+                    crate::recent::add(&path, cx);
+                }
                 doc.path = Some(path.clone());
                 doc.dirty = false;
                 self.rescan_media();
@@ -2541,9 +2548,36 @@ impl Workspace {
                             .on_click(cx.listener(|this, _, w, cx| this.new_file(&NewFile, w, cx))),
                     ),
             )
+            .children(self.render_recents(cx))
             .when_some(self.status.clone().filter(|s| s.1), |d, (msg, _)| {
                 d.child(div().text_color(theme::danger()).child(msg))
             })
+    }
+
+    /// Fichiers récents de la page d'accueil : nom et dossier, un clic pour rouvrir.
+    fn render_recents(&self, cx: &mut Context<Self>) -> Option<impl IntoElement> {
+        let paths = crate::recent::list();
+        if paths.is_empty() {
+            return None;
+        }
+        // Le dossier est affiché à droite : le nom du fichier suffit à gauche.
+        Some(v_flex().w(px(440.)).gap_1().child(div().px_3().child(label_caps("Récents"))).children(
+            paths.into_iter().enumerate().map(|(i, path)| {
+                let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+                let folder = crate::recent::folder(&path);
+                h_flex()
+                    .id(("recent", i))
+                    .px_3()
+                    .py_2()
+                    .gap_3()
+                    .rounded(theme::RADIUS_SM)
+                    .cursor_pointer()
+                    .hover(|d| d.bg(theme::hover()))
+                    .child(div().flex_none().child(name))
+                    .child(div().flex_1().min_w_0().truncate().text_right().text_color(theme::muted()).child(folder))
+                    .on_click(cx.listener(move |this, _, w, cx| this.load(path.clone(), w, cx)))
+            }),
+        ))
     }
 }
 
@@ -2566,6 +2600,13 @@ impl Render for Workspace {
             // macOS : point dans le bouton de fermeture tant que le fichier n'est pas enregistré.
             window.set_window_edited(self.doc.as_ref().is_some_and(|d| d.dirty));
             self.window_title = title;
+        }
+        // Fichiers récents changés (ici ou dans une autre fenêtre) : la barre de menus les reprend.
+        if self.recent_gen != crate::recent::generation() {
+            self.recent_gen = crate::recent::generation();
+            if let Some(bar) = &self.menu_bar {
+                bar.update(cx, |bar, cx| bar.reload(cx));
+            }
         }
         // Les raccourcis (Enregistrer…) passent par ce nœud : on le garde dans la chaîne de focus.
         if window.focused(cx).is_none() {

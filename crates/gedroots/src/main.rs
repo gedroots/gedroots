@@ -10,6 +10,7 @@ mod date_field;
 mod editor;
 mod images;
 mod map;
+mod recent;
 mod theme;
 mod workspace;
 
