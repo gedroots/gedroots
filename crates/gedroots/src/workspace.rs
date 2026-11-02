@@ -14,6 +14,7 @@ use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::input::{Editor, Input, InputEvent, InputState, Textarea};
 use gpui_kit::component::menu::AppMenuBar;
 use gpui_kit::component::select::Select;
+use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::{Disableable, Icon, Sizable, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
@@ -258,6 +259,8 @@ impl Workspace {
         });
         let map = cx.new(|_| MapView::new());
         let map_sub = cx.subscribe_in(&map, window, Self::on_map_event);
+        // Clair / sombre : suit l'apparence du système.
+        let appearance_sub = cx.observe_window_appearance(window, |_, window, cx| theme::sync(window, cx));
         let mut this = Self {
             focus: cx.focus_handle(),
             doc: None,
@@ -297,7 +300,7 @@ impl Workspace {
             place_focus: None,
             editor_subs: Vec::new(),
             add_dialog: None,
-            _subs: vec![sub, map_sub],
+            _subs: vec![sub, map_sub, appearance_sub],
         };
         if let Some(p) = path {
             this.load(p, window, cx);
@@ -327,7 +330,6 @@ impl Workspace {
         match gedcom::load(&path) {
             Ok(ged) => {
                 let first = ged.root();
-                let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
                 self.doc = Some(Document {
                     ged,
                     path: Some(path),
@@ -343,7 +345,7 @@ impl Workspace {
                 if let Some(x) = first {
                     self.select(x, window, cx);
                 }
-                self.set_status(format!("{name} ouvert"), false);
+                self.status = None;
             }
             Err(e) => self.set_status(format!("Impossible d'ouvrir {} : {e}", path.display()), true),
         }
@@ -860,7 +862,7 @@ impl Workspace {
                     .gap_2()
                     .px_2()
                     .py_1()
-                    .rounded_sm()
+                    .rounded(theme::RADIUS_SM)
                     .cursor_pointer()
                     .hover(|d| d.bg(theme::hover()))
                     .child(
@@ -1114,9 +1116,9 @@ fn add_slot(id: impl Into<SharedString>, label: &'static str) -> Stateful<Div> {
     h_flex()
         .id(ElementId::Name(id.into()))
         .p_2()
-        .gap_1p5()
+        .gap_2()
         .items_center()
-        .rounded_md()
+        .rounded(theme::RADIUS_SM)
         .border_1()
         .border_dashed()
         .border_color(theme::border_strong())
@@ -1175,39 +1177,59 @@ fn avatar(doc: &Document, i: &Individual<'_>, size: f32, ring: Hsla) -> Div {
 }
 
 impl Workspace {
+    /// Barre du haut. Sous macOS elle remplace la barre de titre : les feux tricolores y sont
+    /// posés (voir `main.rs`) et elle sert à déplacer la fenêtre. Le nom du fichier n'apparaît
+    /// qu'ici, centré, suivi d'un point tant qu'il reste des modifications à enregistrer.
     fn render_header(&self) -> impl IntoElement {
-        let file = self
-            .doc
-            .as_ref()
-            .map(|d| {
-                d.path
-                    .as_ref()
-                    .and_then(|p| p.file_name())
-                    .map(|n| n.to_string_lossy().to_string())
-                    .unwrap_or_else(|| "Nouveau fichier".into())
-            })
-            .unwrap_or_default();
+        let mac = cfg!(target_os = "macos");
+        let title = self.doc.as_ref().map(|d| {
+            let name = d
+                .path
+                .as_ref()
+                .and_then(|p| p.file_name())
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| "Nouveau fichier".into());
+            if d.dirty { format!("{name} •") } else { name }
+        });
         h_flex()
+            .id("header")
             .h(px(40.))
             .flex_none()
             .px_3()
-            .gap_3()
+            .when(mac, |d| {
+                d.pl(px(80.)).on_mouse_down(MouseButton::Left, |e, window, _| {
+                    if e.click_count == 2 {
+                        window.titlebar_double_click();
+                    } else {
+                        window.start_window_move();
+                    }
+                })
+            })
             .items_center()
             .bg(theme::panel())
             .border_b_1()
             .border_color(theme::border())
             .child(
                 h_flex()
-                    .gap_2()
+                    .flex_1()
+                    .min_w_0()
+                    .gap_3()
                     .items_center()
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .child(Icon::new(IconName::Network).size(px(16.)).text_color(theme::accent()))
-                    .child("GEDRoots"),
+                    .child(
+                        h_flex()
+                            .gap_2()
+                            .items_center()
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .child(img("brand/icon-micro.svg").size(px(16.)))
+                            .when(!mac, |d| d.child("GEDRoots")),
+                    )
+                    // Linux, Windows : menus dans la fenêtre (natifs sous macOS).
+                    .children(self.menu_bar.clone().map(|m| div().h_full().child(m))),
             )
-            // Linux, Windows : menus dans la fenêtre (natifs sous macOS).
-            .children(self.menu_bar.clone().map(|m| div().h_full().child(m)))
-            .child(div().text_color(theme::muted()).child(file))
-            .child(div().flex_1())
+            .children(title.map(|t| div().flex_none().text_sm().font_weight(FontWeight::MEDIUM).child(t)))
+            .child(h_flex().flex_1().min_w_0().justify_end().text_xs().children(self.status.clone().map(
+                |(msg, err)| div().truncate().text_color(if err { theme::danger() } else { theme::muted() }).child(msg),
+            )))
     }
 
     fn render_activity_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -1236,8 +1258,8 @@ impl Workspace {
                 div()
                     .id(SharedString::from(format!("view-{}", v.short())))
                     .w(px(68.))
-                    .py_1p5()
-                    .rounded_md()
+                    .py_2()
+                    .rounded(theme::RADIUS_SM)
                     .cursor_pointer()
                     .flex()
                     .flex_col()
@@ -1337,10 +1359,13 @@ impl Workspace {
                                                 .text_ellipsis()
                                                 .when(!r.strong.is_empty(), |d| {
                                                     d.child(
-                                                        div().font_weight(FontWeight::SEMIBOLD).child(r.strong.clone()),
+                                                        div()
+                                                            .flex_none()
+                                                            .font_weight(FontWeight::SEMIBOLD)
+                                                            .child(r.strong.clone()),
                                                     )
                                                 })
-                                                .child(r.title.clone()),
+                                                .child(div().min_w_0().truncate().child(r.title.clone())),
                                         )
                                         .child(
                                             mono(r.meta_display().to_string())
@@ -1410,22 +1435,46 @@ impl Workspace {
             .min_w_0()
             .bg(theme::bg())
             .child(
-                h_flex().h(px(34.)).flex_none().bg(theme::panel()).border_b_1().border_color(theme::border()).children(
-                    tabs.into_iter().map(|t| {
+                // Onglets à la manière de Zed : l'onglet actif prend le fond du contenu et
+                // s'ouvre sur lui (pas de trait du bas) ; les autres restent sur la barre.
+                h_flex()
+                    .h(px(32.))
+                    .flex_none()
+                    .bg(theme::panel())
+                    .children(tabs.into_iter().enumerate().map(|(i, t)| {
                         let active = t == tab;
                         div()
                             .id(SharedString::from(format!("tab-{}", t.label())))
                             .h_full()
-                            .px_4()
+                            .px_3()
                             .flex()
                             .items_center()
                             .gap_2()
+                            .text_sm()
                             .cursor_pointer()
-                            .border_r_1()
                             .border_color(theme::border())
-                            .when(active, |d| d.bg(theme::bg()).border_t_2().border_color(theme::accent()))
+                            .border_r_1()
+                            .when(i > 0 && active, |d| d.border_l_1().ml(px(-1.)))
+                            .map(|d| {
+                                if active { d.bg(theme::bg()) } else { d.border_b_1().hover(|d| d.bg(theme::hover())) }
+                            })
                             .text_color(if active { theme::text() } else { theme::muted() })
-                            .child(icon(t.icon()).text_color(if active { theme::accent() } else { theme::muted() }))
+                            // Infobulle : le raccourci de l'onglet.
+                            .tooltip(move |w, cx| {
+                                let tip = Tooltip::new(t.label());
+                                match t {
+                                    CenterTab::Tree => tip.action(&ShowTree, Some("Workspace")),
+                                    CenterTab::Form => tip.action(&ShowForm, Some("Workspace")),
+                                    CenterTab::Raw => tip.action(&ShowRaw, Some("Workspace")),
+                                    CenterTab::Map => tip,
+                                }
+                                .build(w, cx)
+                            })
+                            .child(icon(t.icon()).size(px(14.)).text_color(if active {
+                                theme::text()
+                            } else {
+                                theme::muted()
+                            }))
                             .child(match t {
                                 // Vue d'arbre courante, réglable dans Affichage › Arbre.
                                 CenterTab::Tree => match self.tree_mode {
@@ -1442,20 +1491,15 @@ impl Workspace {
                                 this.tab = t;
                                 cx.notify();
                             }))
-                    }),
-                ),
+                    }))
+                    .child(div().flex_1().h_full().border_b_1().border_color(theme::border())),
             )
             .child(body)
             .into_any_element()
     }
 
     fn render_empty_center(&self) -> impl IntoElement {
-        v_flex()
-            .flex_1()
-            .items_center()
-            .justify_center()
-            .text_color(theme::muted())
-            .child("Sélectionnez un élément dans la liste")
+        div().flex_1()
     }
 
     fn render_form(&self, ed: &RecordEditor, cx: &mut Context<Self>) -> impl IntoElement {
@@ -1581,7 +1625,7 @@ impl Workspace {
                         .id(SharedString::from(format!("pl-{}-{n}", input.entity_id())))
                         .px_2()
                         .py(px(3.))
-                        .rounded_md()
+                        .rounded(theme::RADIUS_SM)
                         .border_1()
                         .border_color(theme::border_strong())
                         .bg(theme::surface())
@@ -1640,7 +1684,7 @@ impl Workspace {
                         .id(SharedString::from(format!("img-{target}")))
                         .gap_1()
                         .p_2()
-                        .rounded_md()
+                        .rounded(theme::RADIUS_SM)
                         .border_1()
                         .border_color(theme::border())
                         .bg(theme::surface())
@@ -1671,7 +1715,7 @@ impl Workspace {
             let tile = div()
                 .relative()
                 .id(SharedString::from(format!("thumb-{target}")))
-                .rounded_md()
+                .rounded(theme::RADIUS_SM)
                 .overflow_hidden()
                 .border_1()
                 .border_color(theme::border())
@@ -1688,10 +1732,10 @@ impl Workspace {
                     .right(px(4.))
                     .bottom(px(4.))
                     .px_1()
-                    .rounded_sm()
-                    .bg(gpui_kit::hsla(0., 0., 0., 0.7))
+                    .rounded(theme::RADIUS_SM)
+                    .bg(theme::image_label_bg())
                     .text_xs()
-                    .text_color(theme::text())
+                    .text_color(theme::image_text())
                     .child(format!("{page_count} p."))
             });
             let tile = match path {
@@ -1725,7 +1769,7 @@ impl Workspace {
                 .border_color(theme::border())
                 .child(
                     h_flex()
-                        .gap_1p5()
+                        .gap_2()
                         .items_center()
                         .child(icon(IconName::Images))
                         .child(label_caps(format!("Images · {n}"))),
@@ -1885,7 +1929,7 @@ impl Workspace {
                             .gap_1()
                             .border_b_1()
                             .border_color(theme::border())
-                            .child(div().text_lg().font_weight(FontWeight::SEMIBOLD).child(short_place(key)))
+                            .child(div().text_xl().font_weight(FontWeight::SEMIBOLD).child(short_place(key)))
                             .children(place.iter().map(|p| {
                                 mono(match (&p.latitude, &p.longitude) {
                                     (Some(a), Some(b)) => format!("{a} · {b} · {} occurrence(s)", p.uses),
@@ -1949,7 +1993,7 @@ impl Workspace {
                             })
                             .child(
                                 v_flex().flex_1().min_w_0().gap_1().child(
-                                    div().text_lg().font_weight(FontWeight::SEMIBOLD).child(g.record_label(key)),
+                                    div().text_xl().font_weight(FontWeight::SEMIBOLD).child(g.record_label(key)),
                                 ),
                             ),
                     )
@@ -1977,7 +2021,7 @@ impl Workspace {
                     .gap_2()
                     .px_2()
                     .py_1()
-                    .rounded_sm()
+                    .rounded(theme::RADIUS_SM)
                     .cursor_pointer()
                     .hover(|d| d.bg(theme::hover()))
                     .children(kind.map(|k| icon(View::for_kind(k).icon()).text_color(theme::muted())))
@@ -2046,7 +2090,7 @@ impl Workspace {
                     .gap_0p5()
                     .px_2()
                     .py_1()
-                    .rounded_sm()
+                    .rounded(theme::RADIUS_SM)
                     .cursor_pointer()
                     .hover(|d| d.bg(theme::hover()))
                     .drag_over::<ExternalPaths>(|d, _, _, _| d.bg(theme::accent_soft()))
@@ -2064,7 +2108,7 @@ impl Workspace {
                             .gap_2()
                             .child(
                                 h_flex()
-                                    .gap_1p5()
+                                    .gap_2()
                                     .items_center()
                                     .child(div().font_weight(FontWeight::MEDIUM).child(label))
                                     // Point orange : événement sans source.
@@ -2176,7 +2220,7 @@ impl Workspace {
             .gap_2()
             .px_2()
             .py_1()
-            .rounded_sm()
+            .rounded(theme::RADIUS_SM)
             .text_sm()
             .text_color(theme::muted())
             .cursor_pointer()
@@ -2231,7 +2275,7 @@ impl Workspace {
                         Some(p) => div()
                             .id(id)
                             .size(px(56.))
-                            .rounded_sm()
+                            .rounded(theme::RADIUS_SM)
                             .overflow_hidden()
                             .border_1()
                             .border_color(theme::border())
@@ -2245,9 +2289,9 @@ impl Workspace {
                             .gap_1()
                             .items_center()
                             .max_w(px(220.))
-                            .px_1p5()
+                            .px_2()
                             .py_0p5()
-                            .rounded_sm()
+                            .rounded(theme::RADIUS_SM)
                             .border_1()
                             .border_color(theme::border())
                             .text_xs()
@@ -2286,13 +2330,16 @@ impl Workspace {
             .child(
                 v_flex()
                     .flex_1()
+                    .min_w_0()
                     .gap_1()
+                    // Les noms longs passent à la ligne plutôt que d'être coupés.
                     .child(
                         h_flex()
-                            .gap_1()
-                            .text_lg()
+                            .flex_wrap()
+                            .gap_x_1()
+                            .text_xl()
                             .child(div().font_weight(FontWeight::SEMIBOLD).child(i.surname()))
-                            .child(i.given()),
+                            .child(div().min_w_0().max_w_full().child(i.given())),
                     )
                     .child(div().text_color(theme::muted()).child(format!(
                         "{} · {}{}",
@@ -2380,7 +2427,7 @@ impl Workspace {
                     .gap_2()
                     .px_2()
                     .py_1()
-                    .rounded_sm()
+                    .rounded(theme::RADIUS_SM)
                     .items_center()
                     .cursor_pointer()
                     .hover(|d| d.bg(theme::hover()))
@@ -2420,45 +2467,20 @@ impl Workspace {
             })
     }
 
-    fn render_status(&self) -> impl IntoElement {
-        let saved = self.doc.as_ref().is_none_or(|d| !d.dirty);
-        h_flex()
-            .h(px(26.))
-            .flex_none()
-            .px_3()
-            .gap_4()
-            .items_center()
-            .text_xs()
-            .bg(theme::panel())
-            .border_t_1()
-            .border_color(theme::border())
-            .text_color(theme::muted())
-            .when(self.doc.is_some(), |d| {
-                d.child(
-                    h_flex()
-                        .gap_1p5()
-                        .items_center()
-                        .child(dot(if saved { theme::ok() } else { theme::warn() }))
-                        .child(if saved { "Enregistré" } else { "Modifications non enregistrées" }),
-                )
-            })
-            .child(div().flex_1())
-            .when_some(self.status.clone(), |d, (msg, err)| {
-                d.child(div().text_color(if err { theme::danger() } else { theme::muted() }).child(msg))
-            })
-    }
-
     fn render_welcome(&self, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .flex_1()
             .items_center()
             .justify_center()
-            .gap_4()
-            .child(div().text_2xl().font_weight(FontWeight::SEMIBOLD).child("GEDRoots"))
+            .gap_8()
             .child(
-                div()
-                    .text_color(theme::muted())
-                    .child("Logiciel de généalogie libre et local. Vos données restent dans un fichier GEDCOM 7."),
+                img(if theme::is_dark() {
+                    "brand/logo-horizontal-dark.svg"
+                } else {
+                    "brand/logo-horizontal-light.svg"
+                })
+                .w(px(272.))
+                .h(px(78.)),
             )
             .child(
                 h_flex()
@@ -2498,6 +2520,8 @@ impl Render for Workspace {
         };
         if title != self.window_title {
             window.set_window_title(&title);
+            // macOS : point dans le bouton de fermeture tant que le fichier n'est pas enregistré.
+            window.set_window_edited(self.doc.as_ref().is_some_and(|d| d.dirty));
             self.window_title = title;
         }
         // Les raccourcis (Enregistrer…) passent par ce nœud : on le garde dans la chaîne de focus.
@@ -2530,6 +2554,7 @@ impl Render for Workspace {
         v_flex()
             .size_full()
             .relative()
+            .font_features(theme::tabular_nums())
             .track_focus(&self.focus)
             .key_context("Workspace")
             .map(|d| self.bind_actions(d, window, cx))
@@ -2551,10 +2576,8 @@ impl Render for Workspace {
             .bg(theme::bg())
             .text_color(theme::text())
             .text_sm()
-            // macOS : menus natifs, et le nom du fichier est dans le titre de la fenêtre.
-            .when(self.menu_bar.is_some(), |d| d.child(self.render_header()))
+            .child(self.render_header())
             .child(body)
-            .child(self.render_status())
             .children(self.render_picker(cx))
             .children(self.render_add_dialog(cx))
             .children(self.render_palette(cx))

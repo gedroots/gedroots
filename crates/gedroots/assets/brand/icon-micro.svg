@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-label="GEDRoots"><defs>
+  <linearGradient id="branch" x1="0" x2="1" y1="1" y2="0" gradientUnits="objectBoundingBox"><stop stop-color="#A979EA"/><stop offset=".45" stop-color="#8650D8"/><stop offset="1" stop-color="#7233C6"/></linearGradient>
+  <linearGradient id="n-top" x1="0" y1="0" x2=".8" y2="1"><stop stop-color="#CFAEFF"/><stop offset="1" stop-color="#8C53E1"/></linearGradient>
+  <linearGradient id="n-upper" x1="0" y1="0" x2=".85" y2="1"><stop stop-color="#BD93FF"/><stop offset="1" stop-color="#7441C7"/></linearGradient>
+  <linearGradient id="n-center" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#B68BFF"/><stop offset="1" stop-color="#5E2BAA"/></linearGradient>
+  <linearGradient id="n-lower" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#E0C7FF"/><stop offset="1" stop-color="#A476E5"/></linearGradient>
+  <linearGradient id="app-bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#6B39B8"/><stop offset=".62" stop-color="#352065"/><stop offset="1" stop-color="#1B1133"/></linearGradient>
+  <linearGradient id="app-bg-light" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#FFFFFF"/><stop offset="1" stop-color="#F3EDFF"/></linearGradient>
+</defs><path d="M 57 53 C 69 57 75 69 87 85 M 28 101 C 49 99 57 89 87 85" stroke="#6D3DF0" fill="none" stroke-width="12" stroke-linecap="round"/>
+<circle cx="101" cy="24" r="20" fill="#6D3DF0"/>
+<circle cx="57" cy="54" r="17.5" fill="#6D3DF0"/>
+<circle cx="87" cy="85" r="20" fill="#6D3DF0"/>
+<circle cx="27" cy="101" r="18.5" fill="#6D3DF0"/></svg>

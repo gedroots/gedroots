@@ -572,7 +572,7 @@ fn chip(id: impl Into<SharedString>, label: impl Into<SharedString>, on: bool) -
         .id(ElementId::Name(id.into()))
         .px_2()
         .py(px(3.))
-        .rounded_md()
+        .rounded(theme::RADIUS_SM)
         .border_1()
         .text_xs()
         .cursor_pointer()
@@ -584,7 +584,14 @@ fn chip(id: impl Into<SharedString>, label: impl Into<SharedString>, on: bool) -
 }
 
 fn section(title: impl Into<SharedString>) -> Div {
-    v_flex().gap_2().p_3().rounded_md().border_1().border_color(theme::border()).bg(theme::panel()).child(caps(title))
+    v_flex()
+        .gap_2()
+        .p_3()
+        .rounded(theme::RADIUS_SM)
+        .border_1()
+        .border_color(theme::border())
+        .bg(theme::panel())
+        .child(caps(title))
 }
 
 impl ActEditor {
@@ -640,7 +647,7 @@ impl ActEditor {
                 .flex_1()
                 .min_h_0()
                 .overflow_scroll()
-                .bg(theme::c(0x0c0e11))
+                .bg(theme::viewer())
                 .child({
                     // À 100 % l'image tient dans le panneau ; au-delà on la grossit et on fait défiler.
                     let (w, h) =
@@ -841,7 +848,7 @@ impl ActEditor {
         v_flex()
             .gap_2()
             .p_3()
-            .rounded_md()
+            .rounded(theme::RADIUS_SM)
             .border_1()
             .border_color(match row.choice {
                 PersonChoice::Link(_) => theme::ok(),
@@ -963,7 +970,7 @@ impl ActEditor {
         v_flex()
             .gap_2()
             .p_3()
-            .rounded_md()
+            .rounded(theme::RADIUS_SM)
             .border_1()
             .border_color(theme::border())
             .bg(theme::panel())

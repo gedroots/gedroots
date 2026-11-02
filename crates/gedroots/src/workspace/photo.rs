@@ -213,9 +213,9 @@ impl Workspace {
             let hovered = self.photo_hover.as_deref() == Some(l.owner.as_str());
             let editing = draw.is_some_and(|d| d.owner.as_deref() == Some(l.owner.as_str()));
             let color = match (hovered, person) {
-                (true, _) => theme::accent(),
-                (false, true) => theme::text(),
-                (false, false) => theme::muted(),
+                (true, _) => theme::image_accent(),
+                (false, true) => theme::image_text(),
+                (false, false) => theme::image_muted(),
             };
             let target = l.owner.clone();
             let hover_key = l.owner.clone();
@@ -229,7 +229,7 @@ impl Workspace {
                     .h(px(h as f32 * scale))
                     .border_2()
                     .when(!person, |d| d.border_dashed())
-                    .rounded_sm()
+                    .rounded(theme::RADIUS_SM)
                     .border_color(color.opacity(if editing { 0.3 } else { 0.9 }))
                     .when(!drawing, |d| {
                         d.cursor_pointer()
@@ -246,8 +246,8 @@ impl Workspace {
                             .top_full()
                             .mt_0p5()
                             .px_1()
-                            .rounded_sm()
-                            .bg(gpui_kit::hsla(0., 0., 0., 0.7))
+                            .rounded(theme::RADIUS_SM)
+                            .bg(theme::image_label_bg())
                             .text_xs()
                             .text_color(color)
                             .whitespace_nowrap()
@@ -264,8 +264,8 @@ impl Workspace {
                 .w(px(w as f32 * scale))
                 .h(px(h as f32 * scale))
                 .border_2()
-                .border_color(theme::accent())
-                .bg(theme::accent().opacity(0.15))
+                .border_color(theme::image_accent())
+                .bg(theme::image_accent().opacity(0.15))
         });
 
         let canvas_el = canvas(move |b, _, _| bounds.set(Some(b)), |_, _, _, _| {}).absolute().inset_0();
@@ -348,7 +348,7 @@ impl Workspace {
                 .gap_2()
                 .px_2()
                 .py_1()
-                .rounded_sm()
+                .rounded(theme::RADIUS_SM)
                 .items_center()
                 .when(hovered, |d| d.bg(theme::hover()))
                 .on_hover(cx.listener(move |this, h: &bool, _, cx| {
@@ -434,7 +434,7 @@ impl Workspace {
             .child(toolbar)
             .child(
                 div()
-                    .rounded_md()
+                    .rounded(theme::RADIUS_SM)
                     .border_1()
                     .border_color(if drawing { theme::accent() } else { theme::border() })
                     .bg(theme::surface())

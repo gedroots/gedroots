@@ -135,7 +135,7 @@ impl Workspace {
                 .gap_2()
                 .px_2()
                 .py_1()
-                .rounded_sm()
+                .rounded(theme::RADIUS_SM)
                 .items_center()
                 .cursor_pointer()
                 .hover(|d| d.bg(theme::hover()))

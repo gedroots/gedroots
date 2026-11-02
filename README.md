@@ -5,7 +5,7 @@ Logiciel de généalogie **libre et local**, écrit en Rust avec [GPUI](https://
 sur votre disque : pas de base de données, pas de compte, pas de cloud.
 
 L'interface reprend les fonctions principales d'[Ancestris](https://www.ancestris.org)
-et suit la maquette « Lignée » (thème sombre, barre d'activité, liste, arbre, fiche).
+et suit le [design system GEDRoots](design.md) (fonds neutres et touches de violet, police Inter, clair ou sombre selon le système).
 
 ![Arbre d'ascendance](docs/capture-arbre.png)
 

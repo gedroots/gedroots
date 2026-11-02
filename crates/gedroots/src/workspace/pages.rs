@@ -26,7 +26,7 @@ impl Render for PagePreview {
         let tile = div()
             .w(px(THUMB_W))
             .h(px(THUMB_H))
-            .rounded_md()
+            .rounded(theme::RADIUS_SM)
             .overflow_hidden()
             .border_2()
             .border_color(theme::accent())
@@ -223,7 +223,7 @@ impl Workspace {
             .w(px(w))
             .h(px(h))
             .flex_none()
-            .rounded_md()
+            .rounded(theme::RADIUS_SM)
             .overflow_hidden()
             .border_1()
             .border_color(theme::border())
@@ -266,7 +266,7 @@ impl Workspace {
                 .child(mono(page.to_string()).when(on, |d| d.text_color(theme::accent())))
                 .on_click(cx.listener(move |this, _, _, cx| this.show_page(page, cx)))
                 .on_drag(drag, |d, _, _, cx| cx.new(|_| PagePreview(d.path.clone())))
-                .drag_over::<DraggedPage>(|d, _, _, _| d.bg(theme::accent_soft()).rounded_md())
+                .drag_over::<DraggedPage>(|d, _, _, _| d.bg(theme::accent_soft()).rounded(theme::RADIUS_SM))
                 .on_drop(cx.listener(move |this, d: &DraggedPage, w, cx| {
                     if d.media == target {
                         this.move_page(target.clone(), d.page, page, w, cx);
@@ -333,7 +333,7 @@ impl Workspace {
                     .gap_3()
                     .p_2()
                     .items_center()
-                    .rounded_md()
+                    .rounded(theme::RADIUS_SM)
                     .border_1()
                     .border_color(theme::border())
                     .bg(theme::surface())

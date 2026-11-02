@@ -269,14 +269,14 @@ impl Workspace {
                             .text_color(theme::muted())
                             .child(
                                 h_flex()
-                                    .gap_1p5()
+                                    .gap_2()
                                     .items_center()
                                     .child(dot(theme::paternal()))
                                     .child("Lignée paternelle"),
                             )
                             .child(
                                 h_flex()
-                                    .gap_1p5()
+                                    .gap_2()
                                     .items_center()
                                     .child(dot(theme::maternal()))
                                     .child("Lignée maternelle"),
