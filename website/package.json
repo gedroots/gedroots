@@ -10,5 +10,15 @@
   },
   "devDependencies": {
     "blume": "2.2.6"
+  },
+  "overrides": {
+    "filelist": "^2.0.2",
+    "glob": "^14.0.2",
+    "minimatch": "^11.0.1",
+    "postcss-selector-parser": "^6.1.5",
+    "zod": "^4.6.6",
+    "@vercel/routing-utils": {
+      "path-to-regexp": "6.3.0"
+    }
   }
 }
