@@ -1,45 +1,47 @@
-# Instructions pour les agents
+# Instructions for agents
 
-GEDRoots est un logiciel de généalogie libre et local (Rust, GPUI via gpui-kit) dont les données
-restent dans un fichier **GEDCOM 7**. Ces règles valent pour tout agent qui travaille dans ce
-dépôt (Claude Code, Codex, Copilot…). Antonin écrit en français : l'interface, les messages de
-commit, les PR et les réponses sont en français.
+GEDRoots is free, local genealogy software (Rust, GPUI through gpui-kit) whose data stays in
+a **GEDCOM 7** file. These rules apply to every agent working in this repository (Claude Code,
+Codex, Copilot…).
 
-## Design : à lire avant toute interface
+**Language.** Everything technical is in English: code, comments, documentation, GEDCOM
+extension tags, search keywords, commit messages and pull requests. The interface is written in
+English and translated into French. Antonin writes in French: replies to him are in French.
 
-[`design.md`](design.md) est la référence unique : démarche de recherche, principes, jetons
-(`crates/gedroots/src/theme.rs`), règles d'interaction et différences entre macOS, Windows et
-Linux. Le lire **en entier** avant de proposer une maquette ou de toucher à une vue.
+## Design: read before any interface work
 
-Avant toute proposition de design ou maquette, sans attendre qu'on le demande :
+[`design.md`](design.md) is the single reference: research process, principles, tokens
+(`crates/gedroots/src/theme.rs`), interaction rules and the differences between macOS, Windows
+and Linux. Read it **in full** before proposing a mockup or touching a view.
 
-1. regarder comment les meilleurs logiciels de généalogie traitent le sujet ;
-2. regarder comment les meilleures apps en général traitent le même motif ;
-3. confronter le résultat aux HIG Apple, GNOME et Windows et à `design.md` ;
-4. présenter cette recherche (courte, avec liens ou captures) avec la maquette.
+Before any design proposal or mockup, without waiting to be asked:
 
-Le détail (quelles apps, quoi rendre) est dans [design.md › Avant toute maquette](design.md#avant-toute-maquette).
+1. look at how the best genealogy software handles the subject;
+2. look at how the best apps in general handle the same pattern;
+3. check the result against the Apple, GNOME and Windows HIGs and against `design.md`;
+4. present this research (short, with links or screenshots) with the mockup.
 
-## Règles du projet
+The details (which apps, what to hand in) are in [design.md › Before any mockup](design.md#before-any-mockup).
 
-- **GEDCOM 7 standard d'abord.** Ce que l'app doit retenir (individu racine, réglages du
-  fichier…) va dans le `.ged` sous forme de balises `_GR_*` déclarées dans `HEAD.SCHMA` et
-  documentées dans [`docs/extensions.md`](docs/extensions.md), jamais dans un fichier annexe.
-  Pas de GEDCOM X.
-- **Fonctions génériques.** Rien n'est taillé pour un fichier particulier : les corrections de
-  données passent par l'assistant d'import (`crates/gedcom/src/import.rs`, contrôles
-  enfichables).
-- **Multiplateforme** (macOS, Windows, Linux) : préférer les solutions qui marchent partout.
-- **Commandes** : chaque commande vit dans le modèle de menus (`crates/gedroots/src/commands.rs`)
-  et donc dans la palette `⌘⇧P` ; pas de barre d'outils (voir `design.md`).
-- **Textes de l'interface traduits** : l'app est écrite en anglais et traduite en français. Aucun
-  texte affiché en dur dans le code : une clé dans `crates/gedroots/locales/*.yml` avec `en` et
-  `fr`, lue par `t!("…")` (voir [`docs/localization.md`](docs/localization.md)). Le français
-  reste celui de l'interface actuelle.
-- **Identifiants GEDCOM cachés** dans l'interface, sauf Édition › Copier l'ID et la recherche
-  avancée.
-- **Tester sur une copie** d'un vrai fichier, jamais sur l'original. Ne jamais committer de `.ged`
-  contenant des personnes vivantes.
-- **Une PR à la fois**, propre, fusionnée seulement quand Antonin l'approuve.
-- Outils et CI : `mise` (`mise.toml`). Avant de pousser : `mise run ci` (formatage, tests,
-  clippy) ; `mise run app fichier.ged` lance l'app.
+## Project rules
+
+- **Standard GEDCOM 7 first.** What the app must remember (root person, file settings…) goes
+  in the `.ged` as `_GR_*` tags declared in `HEAD.SCHMA` and documented in
+  [`docs/extensions.md`](docs/extensions.md), never in a sidecar file. No GEDCOM X.
+- **Generic features.** Nothing is tailored to a particular file: data fixes go through the
+  import wizard (`crates/gedcom/src/import.rs`, pluggable checks).
+- **Cross-platform** (macOS, Windows, Linux): prefer solutions that work everywhere.
+- **Commands**: every command lives in the menu model (`crates/gedroots/src/commands.rs`) and
+  therefore in the `⌘⇧P` palette; no toolbar (see `design.md`).
+- **Translated interface text**: the app is written in English and translated into French. No
+  displayed text is hardcoded: a key in `crates/*/locales/*.yml` with `en` and `fr`, read with
+  `t!("…")` (see [`docs/localization.md`](docs/localization.md)). Search keywords
+  (`born:`, `without:source`…) are a technical language and stay in English; only their labels
+  are translated.
+- **GEDCOM identifiers hidden** in the interface, except Edit › Copy ID and the advanced
+  search.
+- **Test on a copy** of a real file, never on the original. Never commit a `.ged` containing
+  living people.
+- **One PR at a time**, clean, merged only when Antonin approves it.
+- Tools and CI: `mise` (`mise.toml`). Before pushing: `mise run ci` (formatting, tests,
+  clippy); `mise run app file.ged` launches the app.

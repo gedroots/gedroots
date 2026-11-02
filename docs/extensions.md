@@ -1,8 +1,7 @@
-# Extensions GEDCOM de GEDRoots
+# GEDRoots GEDCOM extensions
 
-GEDRoots stocke ses propres données **dans le fichier `.ged`**, jamais dans un fichier
-annexe. Toutes ses balises commencent par `_GR_` et sont déclarées dans l'en-tête, comme
-l'exige GEDCOM 7 :
+GEDRoots stores its own data **in the `.ged` file**, never in a sidecar file. All its tags
+start with `_GR_` and are declared in the header, as GEDCOM 7 requires:
 
 ```
 0 HEAD
@@ -16,17 +15,16 @@ l'exige GEDCOM 7 :
 2 TAG _GR_WEB https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_web
 ```
 
-Les autres logiciels ignorent ces balises sans perte de données.
+Other software ignores these tags without losing data.
 
 ## `_GR_ROOT`
 
-Individu racine de l'arbre : celui qu'ouvre GEDRoots au chargement du fichier et vers
-lequel ramène **Individu › Aller à l'individu racine**. Se définit dans
-**Réglages du fichier › Général**.
+Root person of the tree: the one GEDRoots opens when the file loads and the one
+**Person › Go to Root Person** brings you back to. Set in **File Settings › General**.
 
-- **Sous** : `HEAD`, au niveau 1. Une seule occurrence.
-- **Valeur** : pointeur vers un `INDI` (`@I1@`).
-- **Sous-structures** : aucune.
+- **Under**: `HEAD`, at level 1. A single occurrence.
+- **Value**: pointer to an `INDI` (`@I1@`).
+- **Substructures**: none.
 
 ```
 0 HEAD
@@ -35,25 +33,24 @@ lequel ramène **Individu › Aller à l'individu racine**. Se définit dans
 1 _GR_ROOT @I00001@
 ```
 
-Sans cette balise (ou si elle pointe vers un individu supprimé), GEDRoots prend le Sosa 1
-déclaré par Ancestris (`_SOSADABOVILLE 1`), sinon le premier individu du fichier.
-Supprimer l'individu racine retire aussi la balise.
+Without this tag (or if it points to a deleted person), GEDRoots takes the Sosa 1 declared
+by Ancestris (`_SOSADABOVILLE 1`), otherwise the first person in the file. Deleting the root
+person also removes the tag.
 
 ## `_GR_EVEN`
 
-Type d'événement personnalisé (**Fichier › Réglages du fichier… › Événements**). Un type
-personnalisé est un `EVEN` standard avec un `TYPE` : ceux qui figurent déjà dans le fichier
-sont déduits de leurs `TYPE` et n'ont pas besoin de cette balise. Elle ne sert qu'à proposer
-un type pas encore utilisé dans **Ajouter un événement…**, ou à afficher un type sous un
-autre libellé que son `TYPE`.
+Custom event type (**File › File Settings… › Events**). A custom type is a standard `EVEN`
+with a `TYPE`: those already in the file are inferred from their `TYPE` and do not need this
+tag. It is only used to offer a type not yet used in **Add Event…**, or to show a type under
+a label other than its `TYPE`.
 
-- **Sous** : `HEAD`, au niveau 1. Une occurrence par type déclaré.
-- **Valeur** : le `TYPE` des événements de ce type, tel qu'il est écrit dans le fichier.
-- **Sous-structures** :
-  - `_GR_REC FAM` pour un événement familial (sous `FAM`) ; absent, le type concerne
-    les individus.
-  - `_GR_LABEL <libellé>` : libellé affiché par GEDRoots à la place du `TYPE`. Les
-    événements gardent leur `TYPE`.
+- **Under**: `HEAD`, at level 1. One occurrence per declared type.
+- **Value**: the `TYPE` of the events of this type, as written in the file.
+- **Substructures**:
+  - `_GR_REC FAM` for a family event (under `FAM`); when absent, the type applies to
+    individuals.
+  - `_GR_LABEL <label>`: label GEDRoots shows instead of the `TYPE`. The events keep their
+    `TYPE`.
 
 ```
 0 HEAD
@@ -72,32 +69,32 @@ autre libellé que son `TYPE`.
 2 DATE FROM 1914 TO 1918
 ```
 
-Renommer un `TYPE` dans les réglages réécrit tous les `TYPE` correspondants (renommer vers
-un type existant les fusionne) et garde son libellé ; un type déclaré et inutilisé peut être
-retiré. Une déclaration devenue inutile (type utilisé, sans libellé) est retirée.
+Renaming a `TYPE` in the settings rewrites every matching `TYPE` (renaming to an existing
+type merges them) and keeps its label; a declared, unused type can be removed. A declaration
+that is no longer needed (type in use, no label) is removed.
 
-À l'import (**Fichier › Importer un GEDCOM…**), les événements à balise d'extension d'autres
-logiciels (`_MILT`, `_MILI`, `_DEG`, `_FUN`…, ou toute balise `_XXX` datée ou localisée
-sous un individu ou une famille) deviennent des `EVEN` + `TYPE`.
+On import (**File › Import GEDCOM…**), events with extension tags from other software
+(`_MILT`, `_MILI`, `_DEG`, `_FUN`…, or any dated or located `_XXX` tag under an individual or
+a family) become `EVEN` + `TYPE`.
 
 ## `_GR_MEDIA`
 
-Rangement des fichiers médias (**Fichier › Réglages du fichier… › Médias**) : le dossier
-des médias, puis des sous-dossiers, chacun avec les événements qu'il reçoit et son modèle
-de nom. Les chemins restent des `FILE` standard, relatifs au dossier du `.ged`.
+Filing of media files (**File › File Settings… › Media**): the media folder, then
+subfolders, each with the events it receives and its naming template. Paths stay standard
+`FILE`s, relative to the `.ged` folder.
 
-- **Sous** : `HEAD`, au niveau 1, une seule occurrence.
-- **Valeur** : le dossier des médias, relatif au `.ged` (peut être vide).
-- **Sous-structures** : un `_GR_DIR <sous-dossier>` par sous-dossier, dans l'ordre :
-  - `_GR_TYPES <liste>` : ce que le dossier reçoit, séparé par des virgules — balises
-    d'événements (`BIRT`, `MARR`…), types personnalisés (le `TYPE` d'un `EVEN`), `INDI`
-    (média rattaché directement à un individu : portrait) ou `FAM`. Absent : tout le reste.
-  - `_GR_NAME <modèle>` : nom des fichiers. Absent : le nom d'origine est gardé.
+- **Under**: `HEAD`, at level 1, a single occurrence.
+- **Value**: the media folder, relative to the `.ged` (may be empty).
+- **Substructures**: one `_GR_DIR <subfolder>` per subfolder, in order:
+  - `_GR_TYPES <list>`: what the folder receives, comma-separated: event tags (`BIRT`,
+    `MARR`…), custom types (the `TYPE` of an `EVEN`), `INDI` (media attached directly to an
+    individual: portrait) or `FAM`. When absent: everything else.
+  - `_GR_NAME <template>`: file names. When absent: the original name is kept.
 
-Un média va dans le sous-dossier qui nomme son type ; si plusieurs le nomment, le plus précis
-(le moins de types) l'emporte, puis le premier. À défaut, il va dans le premier sous-dossier
-sans type ; sans sous-dossier qui le reçoive, il reste où il est. Dans les réglages, cocher un
-type pour un sous-dossier le retire des autres.
+A media goes into the subfolder that names its type; if several name it, the most specific
+one (fewest types) wins, then the first. Otherwise it goes into the first subfolder without
+types; if no subfolder receives it, it stays where it is. In the settings, checking a type
+for one subfolder removes it from the others.
 
 ```
 0 HEAD
@@ -119,37 +116,35 @@ type pour un sous-dossier le retire des autres.
 2 _GR_DIR Divers
 ```
 
-Variables du modèle (`/` crée un sous-dossier) :
+Template variables (`/` creates a subfolder):
 
-| Variable | Valeur |
+| Variable | Value |
 |---|---|
-| `{type}` | type de l'événement (« Naissance », ou le `TYPE` d'un `EVEN`) |
-| `{date}`, `{year}`, `{place}` | date (AAAA-MM-JJ), année et commune de l'événement |
-| `{surname}`, `{given}`, `{given_names}` | nom, premier prénom, tous les prénoms ; pour un couple, le mari |
-| `{spouse}` | pour un couple, le nom de l'épouse |
-| `{sosa}`, `{branch}` | numéro Sosa-d'Aboville calculé depuis l'individu racine : `58` et `2` pour le 2e enfant du Sosa 58, `B1` pour le 1er enfant de sa 2e union, `2.3` pour un petit-enfant |
-| `{source}`, `{page}`, `{title}` | titre de la source, cote (`PAGE`), titre du média |
-| `{n}` | numéro de page d'un média à plusieurs fichiers (sinon « p2 », « p3 »… en fin de nom) |
+| `{type}` | event type ("Birth", or the `TYPE` of an `EVEN`), in the interface language |
+| `{date}`, `{year}`, `{place}` | date (YYYY-MM-DD), year and town of the event |
+| `{surname}`, `{given}`, `{given_names}` | surname, first given name, all given names; for a couple, the husband |
+| `{spouse}` | for a couple, the wife's surname |
+| `{sosa}`, `{branch}` | Sosa-d'Aboville number computed from the root person: `58` and `2` for the 2nd child of Sosa 58, `B1` for the 1st child of their 2nd union, `2.3` for a grandchild |
+| `{source}`, `{page}`, `{title}` | source title, reference (`PAGE`), media title |
+| `{n}` | page number of a media with several files (otherwise "p2", "p3"… at the end of the name) |
 
-Options : `{sosa:6}` complète un nombre par des zéros, `{type:1}` garde les premières
-lettres (N, M, D…), `{surname:simple}` retire accents, espaces et apostrophes. Les variables sont en anglais ;
-celles des versions précédentes, en français (`{nom}`, `{prenom}`…), sont converties à la lecture. Une variable
-vide disparaît avec le séparateur qui la précède.
+Options: `{sosa:6}` pads a number with zeros, `{type:1}` keeps the first letters (B, M,
+D…), `{surname:simple}` removes accents, spaces and apostrophes. Variables are in English
+whatever the interface language. An empty variable disappears along with the separator before it.
 
-Les variables sont tirées de l'événement qui porte le média (`2 OBJE`), le cite, ou cite une
-source qui le porte : de
-préférence celui que la source décrit (`DATA.EVEN`) ou que son titre nomme (« Acte de
-naissance… »), plutôt qu'un attribut (profession, résidence) ; à égalité, celui que le
-premier sous-dossier reçoit. À défaut, de la source qui porte le média, puis de la personne ou
-de la famille liée. Un fichier importé par **Édition › Médias…** (⌘⇧M) est déplacé (ou copié,
-au choix) sous ce nom, l'aperçu montrant le nom avant l'import ; un nom déjà pris reçoit
-« (2) », « (3) »… **Média › Renommer selon le modèle…** déplace les fichiers d'un média
-existant après confirmation.
+Variables are taken from the event that carries the media (`2 OBJE`), cites it, or cites a
+source that carries it: preferably the one the source describes (`DATA.EVEN`) or its title
+names ("Birth record…"), rather than an attribute (occupation, residence); on a tie, the one
+the first subfolder receives. Otherwise from the source that carries the media, then from
+the linked person or family. A file imported through **Edit › Media…** (⌘⇧M) is moved (or
+copied, as chosen) under this name, the preview showing the name before import; a name
+already taken gets "(2)", "(3)"… **Media › Rename Using Template…** moves the files of an
+existing media after confirmation.
 
 ## `_GR_FILE`
 
-Page d'un média à plusieurs pages visée par un lien. Un média multipage est un
-enregistrement `OBJE` standard avec plusieurs `FILE`, un par page, dans l'ordre :
+Page of a multi-page media targeted by a link. A multi-page media is a standard `OBJE`
+record with several `FILE`s, one per page, in order:
 
 ```
 0 @M1@ OBJE
@@ -160,13 +155,12 @@ enregistrement `OBJE` standard avec plusieurs `FILE`, un par page, dans l'ordre 
 2 FORM image/jpeg
 ```
 
-GEDCOM 7 applique le `CROP` d'un lien au premier fichier seulement. Pour situer une
-personne sur une autre page (cadre tracé sur la page 2 d'un acte), GEDRoots ajoute
-`_GR_FILE` au lien :
+GEDCOM 7 applies a link's `CROP` to the first file only. To locate a person on another page
+(a frame drawn on page 2 of a record), GEDRoots adds `_GR_FILE` to the link:
 
-- **Sous** : un lien vers un média (`n OBJE @M@`), à côté de `CROP`.
-- **Valeur** : numéro de la page (du `FILE`), à partir de 1. Jamais écrit pour la page 1.
-- **Sous-structures** : aucune.
+- **Under**: a link to a media (`n OBJE @M@`), next to `CROP`.
+- **Value**: page number (of the `FILE`), starting at 1. Never written for page 1.
+- **Substructures**: none.
 
 ```
 0 @I1@ INDI
@@ -179,23 +173,23 @@ personne sur une autre page (cadre tracé sur la page 2 d'un acte), GEDRoots ajo
 2 _GR_FILE 2
 ```
 
-Un lien sans `CROP` ni `_GR_FILE` concerne le document entier. Un logiciel qui ignore
-l'extension applique le cadre à la première page.
+A link with neither `CROP` nor `_GR_FILE` covers the whole document. Software that ignores
+the extension applies the frame to the first page.
 
-Fusionner des médias (menu **Média › Fusionner…**, ou ⌘ / Maj + clic dans la liste des
-médias puis clic droit), ajouter, déplacer, retirer ou séparer une page (**Média › Pages**)
-met à jour `_GR_FILE` et tous les pointeurs du fichier, citations comprises.
+Merging media (**Media** menu, or ⌘ / Shift + click in the media list then right click),
+adding, moving, removing or splitting a page (**Media › Pages**) updates `_GR_FILE` and every
+pointer in the file, citations included.
 
 ## `_GR_IGNORE`
 
-Masque une anomalie de la page **Qualité des données** que l'utilisateur a vérifiée et
-jugée correcte, par exemple un mariage réellement célébré très jeune (clic droit sur
-l'anomalie › **Masquer** ; **Affichage › Filtrer la liste › Anomalies masquées** les
-réaffiche, et **Ne plus masquer** retire la balise).
+Hides an issue on the **Data Quality** page that the user has checked and found correct, for
+instance a marriage really celebrated very young (right click on the issue › **Hide**;
+**View › Filter List › Ignored Issues** shows them again, and **Stop Hiding** removes the
+tag).
 
-- **Sous** : n'importe quel enregistrement (`INDI`, `FAM`…), au niveau 1.
-- **Valeur** : le code de l'anomalie (voir ci-dessous). Une ligne par anomalie masquée.
-- **Sous-structures** : aucune.
+- **Under**: any record (`INDI`, `FAM`…), at level 1.
+- **Value**: the issue code (see below). One line per hidden issue.
+- **Substructures**: none.
 
 ```
 0 @I263@ INDI
@@ -203,179 +197,167 @@ réaffiche, et **Ne plus masquer** retire la balise).
 1 _GR_IGNORE marriage_too_young
 ```
 
-Les anomalies masquées se retrouvent dans **Fichier › Réglages du fichier…**, d'où on peut les
-réafficher (la balise est retirée, et sa déclaration aussi quand il n'en reste plus).
+Hidden issues are listed in **File › File Settings…**, where they can be shown again (the tag
+is removed, and its declaration too when none is left).
 
-L'anomalie est masquée lorsque son enregistrement principal (celui qu'ouvre un clic dans
-la liste) porte la balise avec le bon code.
+The issue is hidden when its main record (the one a click in the list opens) carries the tag
+with the right code.
 
-| Code | Anomalie |
+| Code | Issue |
 | --- | --- |
-| `death_before_birth` | Décès avant la naissance |
-| `burial_before_death` | Inhumation avant le décès |
-| `event_before_birth` | Événement avant la naissance |
-| `event_after_death` | Événement après le décès |
-| `too_old` | Durée de vie supérieure à 110 ans |
-| `parent_too_young` | Parent de moins de 14 ans à la naissance de l'enfant |
-| `father_too_old` | Père de plus de 80 ans à la naissance |
-| `mother_too_old` | Mère de plus de 55 ans à la naissance |
-| `birth_after_mother_death` | Naissance après le décès de la mère |
-| `birth_after_father_death` | Naissance plus de 10 mois après le décès du père |
-| `child_before_parent` | Enfant né avant son parent |
-| `marriage_too_young` | Mariage avant 14 ans |
-| `marriage_after_death` | Mariage après le décès d'un époux |
-| `marriage_age_gap` | Plus de 30 ans d'écart entre époux |
-| `siblings_too_close` | Deux naissances (hors jumeaux) à moins de 8 mois |
-| `husband_not_male` / `wife_not_female` | Sexe incohérent avec le rôle dans la famille |
-| `own_ancestor` | Personne présente dans sa propre ascendance |
-| `broken_link` | Pointeur vers un enregistrement absent |
-| `missing_backlink` | `FAMC`/`FAMS` sans le `CHIL`/`HUSB`/`WIFE` correspondant |
-| `unsourced` | Événement sans source |
-| `tag_not_allowed` | Balise standard non permise à cet endroit par le schéma GEDCOM 7 |
-| `missing_required` | Sous-structure obligatoire absente (ex. `NAME` d'un dépôt) |
-| `too_many` | Sous-structure présente plusieurs fois alors qu'une seule est permise |
-| `wrong_pointer` | Pointeur vers un enregistrement du mauvais type |
-| `invalid_value` | Valeur invalide : date illisible ou inexistante, valeur énumérée inconnue… |
-| `empty_fact` | Événement sans aucune donnée (ni valeur ni sous-structure) |
-| `empty_note` | Note vide (`NOTE` sans texte, ou note partagée `SNOTE` vide) |
-| `empty_family` | Famille sans aucun membre |
-| `unused_record` | Média, source, dépôt ou note partagée cité nulle part |
-| `disconnected` | Individu (ou groupe d'individus) sans aucun lien familial ni `ASSO` avec l'individu racine |
-| `role_sex_mismatch` | Rôle `FATH`/`HUSB` d'une femme ou `MOTH`/`WIFE` d'un homme dans une citation |
-| `outside_source_period` | Acte daté hors de la période que sa source déclare pour ce type d'acte |
-| `missing_file` | Fichier d'un média introuvable sur le disque |
-| `moved_file` | Fichier introuvable à son chemin, mais un seul fichier du même nom existe dans le dossier du `.ged` |
-| `duplicate_media` | Deux médias désignent exactement les mêmes fichiers |
-| `missing_form` | `FILE` sans `FORM` (remplace `missing_required` pour ce cas) |
-| `unattached_file` | Fichier du dossier du `.ged` qu'aucun média ne désigne (ne peut pas être masqué : il n'a pas d'enregistrement) |
-| `missing_coords` | Lieu sans coordonnées (`PLAC.MAP`) |
-| `bad_coords` | Coordonnées illisibles ou incomplètes |
-| `place_variant` | Même lieu écrit autrement (casse, accents, « St »/« Saint », codes), ou forme abrégée d'un seul autre lieu |
-| `place_hierarchy` | Une même division rattachée à deux divisions supérieures (« Loire » en « Rhône-Alpes » et en « Auvergne-Rhône-Alpes ») ; « Harmoniser » reprend la plus fréquente |
+| `death_before_birth` | Death before birth |
+| `burial_before_death` | Burial before death |
+| `event_before_birth` | Event before birth |
+| `event_after_death` | Event after death |
+| `too_old` | Lifespan over 110 years |
+| `parent_too_young` | Parent under 14 at the child's birth |
+| `father_too_old` | Father over 80 at the birth |
+| `mother_too_old` | Mother over 55 at the birth |
+| `birth_after_mother_death` | Birth after the mother's death |
+| `birth_after_father_death` | Birth more than 10 months after the father's death |
+| `child_before_parent` | Child born before their parent |
+| `marriage_too_young` | Marriage before 14 |
+| `marriage_after_death` | Marriage after a spouse's death |
+| `marriage_age_gap` | More than 30 years between spouses |
+| `siblings_too_close` | Two births (twins aside) less than 8 months apart |
+| `husband_not_male` / `wife_not_female` | Sex inconsistent with the role in the family |
+| `own_ancestor` | Person in their own ancestry |
+| `broken_link` | Pointer to a missing record |
+| `missing_backlink` | `FAMC`/`FAMS` without the matching `CHIL`/`HUSB`/`WIFE` |
+| `unsourced` | Event without a source |
+| `tag_not_allowed` | Standard tag not allowed here by the GEDCOM 7 schema |
+| `missing_required` | Required substructure missing (e.g. a repository's `NAME`) |
+| `too_many` | Substructure present several times where only one is allowed |
+| `wrong_pointer` | Pointer to a record of the wrong type |
+| `invalid_value` | Invalid value: unreadable or non-existent date, unknown enumerated value… |
+| `empty_fact` | Event with no data at all (no value, no substructure) |
+| `empty_note` | Empty note (`NOTE` without text, or empty shared note `SNOTE`) |
+| `empty_family` | Family with no members |
+| `unused_record` | Media, source, repository or shared note cited nowhere |
+| `disconnected` | Individual (or group of individuals) with no family link or `ASSO` to the root person |
+| `role_sex_mismatch` | `FATH`/`HUSB` role of a woman or `MOTH`/`WIFE` role of a man in a citation |
+| `outside_source_period` | Record dated outside the period its source declares for that record type |
+| `missing_file` | A media's file not found on disk |
+| `moved_file` | File not found at its path, but exactly one file with the same name exists in the `.ged` folder |
+| `duplicate_media` | Two media point to exactly the same files |
+| `missing_form` | `FILE` without `FORM` (replaces `missing_required` for this case) |
+| `unattached_file` | File in the `.ged` folder that no media points to (cannot be hidden: it has no record) |
+| `missing_coords` | Place without coordinates (`PLAC.MAP`) |
+| `bad_coords` | Unreadable or incomplete coordinates |
+| `place_variant` | Same place written differently (case, accents, "St"/"Saint", codes), or a shortened form of exactly one other place |
+| `place_hierarchy` | The same division attached to two higher divisions ("Loire" in "Rhône-Alpes" and in "Auvergne-Rhône-Alpes"); "Harmonize" keeps the most frequent |
 
-Les anomalies de fichiers et de lieux ne peuvent pas être masquées : elles ne portent sur
-aucun enregistrement où écrire `_GR_IGNORE`.
+File and place issues cannot be hidden: they concern no record where `_GR_IGNORE` could be
+written.
 
-Le contrôle du schéma GEDCOM 7 ne s'applique qu'aux fichiers en version 7 ; les balises
-d'extension (`_XXX`) ne sont jamais signalées.
+The GEDCOM 7 schema check only applies to version 7 files; extension tags (`_XXX`) are never
+reported.
 
-Les dates imprécises (`ABT`, `BEF`, `BET … AND …`, année seule) sont traitées comme des
-intervalles : une anomalie n'est signalée que si elle est certaine pour toutes les dates
-possibles. Les dates « vers » ont une marge de 5 ans.
+Imprecise dates (`ABT`, `BEF`, `BET … AND …`, year only) are treated as ranges: an issue is
+only reported if it holds for every possible date. "About" dates have a 5-year margin.
 
-## Types des sources et des médias (sans extension)
+## Source and media types (no extension)
 
-GEDRoots type les sources et les médias avec les structures standard de GEDCOM 7,
-que les autres logiciels lisent :
+GEDRoots types sources and media with GEDCOM 7's standard structures, which other software
+reads:
 
-| Donnée | GEDCOM écrit |
+| Data | GEDCOM written |
 | --- | --- |
-| Contenu d'une source : types d'actes, période (fiche source, champs **Actes** et **Période**) | `SOUR` / `DATA` / `EVEN BIRT, DEAT` + `DATE FROM 1793 TO 1802` (+ `PLAC`) |
-| Support d'un média (fiche média, liste **Support**) | `OBJE` / `FILE` / `FORM` / `MEDI PHOTO`, `MANUSCRIPT`, `TOMBSTONE`… |
-| Portrait d'un individu (clic droit sur une image › **Définir comme portrait**) | son lien `OBJE` passe en tête de ses médias ; le média devient `MEDI PHOTO` s'il n'avait pas de support |
+| Content of a source: record types, period (source record, **Records** and **Period** fields) | `SOUR` / `DATA` / `EVEN BIRT, DEAT` + `DATE FROM 1793 TO 1802` (+ `PLAC`) |
+| Medium of a media (media record, **Medium** list) | `OBJE` / `FILE` / `FORM` / `MEDI PHOTO`, `MANUSCRIPT`, `TOMBSTONE`… |
+| Portrait of an individual (right click on an image › **Set as Portrait**) | their `OBJE` link moves to the top of their media; the media becomes `MEDI PHOTO` if it had no medium |
 
-La saisie d'un acte ajoute son type au contenu de la source et élargit la période à
-l'année de l'acte ; l'image d'un acte saisi est un `MANUSCRIPT`.
+Entering a record adds its type to the source's content and widens the period to the
+record's year; the image of an entered record is a `MANUSCRIPT`.
 
-Portrait affiché : la première photo (`MEDI PHOTO`) de l'individu, sinon une image sans
-support rangée dans un dossier « Portraits » ou titrée « Portrait », sinon une image sans
-support qui n'est pas le scan d'une source, sinon sa première image.
+Portrait shown: the individual's first photo (`MEDI PHOTO`), otherwise an image without a
+medium filed in a "Portraits" folder or titled "Portrait", otherwise an image without a
+medium that is not a source scan, otherwise their first image.
 
-L'assistant d'import convertit `_PRIM Y` (photo principale de Family Tree Maker, Legacy,
-MyHeritage…) : le lien marqué passe en tête des médias et la balise est retirée.
+The import wizard converts `_PRIM Y` (main photo in Family Tree Maker, Legacy,
+MyHeritage…): the marked link moves to the top of the media and the tag is removed.
 
-## Actes des sources (sans extension)
+## Source records (no extension)
 
-Un acte se saisit dans la fiche de sa source (« + » à côté de **Actes**, ou **Saisir un acte**,
-`⌘E` / `Ctrl+E`). Il n'y a pas de modèle : on choisit l'événement, puis les personnes avec leur
-rôle GEDCOM 7. L'enregistrement produit uniquement des structures standard :
+A record (a civil or church act) is entered in its source's page ("+" next to **Records**,
+or **Enter Record…**, `⌘E` / `Ctrl+E`). There is no template: you pick the event, then the
+people with their GEDCOM 7 role. Saving writes only standard structures:
 
-| Donnée saisie | GEDCOM écrit |
+| Data entered | GEDCOM written |
 | --- | --- |
-| Événement de l'acte | n'importe quel événement : `BIRT`, `BAPM`, `DEAT`, `CENS`… sur chaque personne principale, `MARR`, `DIV`… sur la famille des époux, `EVEN` + `TYPE` |
-| Référence (n° d'acte, vue…) | `SOUR @S@` / `PAGE` |
-| Date de l'acte, transcription | `SOUR` / `DATA` / `DATE`, `TEXT` |
-| Rôle de chaque personne | `SOUR` / `EVEN <tag>` / `ROLE CHIL, FATH, MOTH, HUSB, WIFE, SPOU, WITN, GODP, OFFICIATOR, CLERGY, NGHBR, FRIEND, OTHER` (+ `PHRASE` : « Parrain », « Père de l'épouse », lien déclaré) |
-| Témoins, parrains, déclarants… | `ASSO @I@` / `ROLE` sur l'événement principal |
-| Âge déclaré | `AGE` (`32y`), `HUSB`/`WIFE` / `AGE` pour un mariage ; naissance estimée `BIRT` / `DATE EST 1880` |
-| Profession, domicile, lieu de naissance déclaré | `OCCU`, `RESI` datés et `BIRT` / `PLAC`, chacun sourcé |
-| Qualité | `QUAY` 0 à 3 |
-| Image de l'acte | `OBJE` lié à la source et à chaque citation |
-| Personne simplement mentionnée | `NOTE` de la citation principale (`Témoin : Jean DUPONT, 32 ans`) |
+| Event of the record | any event: `BIRT`, `BAPM`, `DEAT`, `CENS`… on each principal person, `MARR`, `DIV`… on the spouses' family, `EVEN` + `TYPE` |
+| Reference (record number, image…) | `SOUR @S@` / `PAGE` |
+| Record date, transcription | `SOUR` / `DATA` / `DATE`, `TEXT` |
+| Role of each person | `SOUR` / `EVEN <tag>` / `ROLE CHIL, FATH, MOTH, HUSB, WIFE, SPOU, WITN, GODP, OFFICIATOR, CLERGY, NGHBR, FRIEND, OTHER` (+ `PHRASE`: "Godfather", "Bride's father", stated relationship) |
+| Witnesses, godparents, informants… | `ASSO @I@` / `ROLE` on the main event |
+| Stated age | `AGE` (`32y`), `HUSB`/`WIFE` / `AGE` for a marriage; estimated birth `BIRT` / `DATE EST 1880` |
+| Occupation, residence, stated birthplace | dated `OCCU`, `RESI` and `BIRT` / `PLAC`, each sourced |
+| Quality | `QUAY` 0 to 3 |
+| Record image | `OBJE` linked to the source and to each citation |
+| Person only mentioned | `NOTE` of the main citation (`Witness: Jean DUPONT, 32 years old`) |
 
-Les liens familiaux découlent des rôles : `FATH` / `MOTH` d'une personne principale la
-rattachent à leur famille, `SPOU` forme un couple, et dans un ménage (plusieurs personnes
-principales, ex. un recensement) le lien déclaré (« épouse », « fils »…) relie chacun à la
-première.
+Family links follow from the roles: `FATH` / `MOTH` of a principal person attach them to
+their family, `SPOU` forms a couple, and in a household (several principal people, e.g. a
+census) the stated relationship ("wife", "son"…) links each person to the first.
 
-**Liste des actes d'une source.** GEDRoots la reconstitue à partir des citations des individus
-et des familles qui désignent la source, regroupées par `PAGE` et `DATA.DATE` : la personne
-principale est celle dont l'événement porte la citation, les autres sont lues dans leur
-`ROLE`. Les citations écrites par d'autres logiciels apparaissent donc aussi. Rouvrir un acte
-remplace ses citations ; le supprimer retire ses citations et ses `ASSO`, en laissant les
-événements et les individus.
+**List of a source's records.** GEDRoots rebuilds it from the citations of individuals and
+families that point to the source, grouped by `PAGE` and `DATA.DATE`: the principal person
+is the one whose event carries the citation, the others are read from their `ROLE`.
+Citations written by other software therefore show up too. Reopening a record replaces its
+citations; deleting it removes its citations and its `ASSO`s, leaving the events and the
+individuals.
 
-### Anciennes balises `_GR_TPL`, `_GR_FLD`…
-
-Les versions précédentes de GEDRoots décrivaient des modèles d'actes (`0 @T1@ _GR_TPL`,
-`1 _GR_TPL` sur une source) et recopiaient les champs d'un acte dans ses citations
-(`_GR_FLD`), avec un rôle non standard `PRIN`. Elles ne sont plus écrites. L'assistant d'import
-(**Fichier › Importer un GEDCOM…**) les propose au nettoyage : les modèles et ces balises sont
-retirés, ainsi que leur déclaration dans `HEAD.SCHMA` ; les données de l'acte restent dans
-`PAGE`, `EVEN` et `DATA`.
+The texts GEDRoots writes into the file (`PHRASE`, mention notes, record titles) follow the
+interface language.
 
 ## `_GR_FIND`
 
-Recherche enregistrée, affichée dans la section **Recherches** de la barre latérale avec
-son nombre de résultats. S'enregistre avec le « + » de la section ou **Affichage ›
-Enregistrer la recherche** ; se renomme (double-clic, clic droit ou **Affichage ›
-Renommer la recherche**) et se supprime de la même façon.
+Saved search, shown in the **Searches** section of the sidebar with its number of results.
+Saved with the section's "+" or **View › Save Search**; renamed (double click, right click
+or **View › Rename Search**) and deleted the same way.
 
-- **Sous** : `HEAD`, au niveau 1. Une occurrence par recherche, dans l'ordre de la barre
-  latérale.
-- **Valeur** : nom de la recherche.
-- **Sous-structures** :
-  - `_GR_ZONE <zone>` (obligatoire) : `INDI`, `SOUR`, `PLAC` ou `OBJE` ;
-  - `_GR_QUERY <requête>` : critères et mots, dans la syntaxe du champ de recherche
-    (`born:1850±5 sex:m`, `ancestors:@I1@`). Les mots-clés sont en anglais ; ceux des
-    versions précédentes, en français (`né:1850±5 sexe:h`), sont convertis à la lecture ;
-  - `_GR_TYPE <type>` : type de média choisi dans la zone Médias (sous-dossier des
-    réglages ou du fichier).
+- **Under**: `HEAD`, at level 1. One occurrence per search, in sidebar order.
+- **Value**: name of the search.
+- **Substructures**:
+  - `_GR_SCOPE <scope>` (required): `INDI`, `SOUR`, `PLAC` or `OBJE`;
+  - `_GR_QUERY <query>`: criteria and words, in the search field's syntax
+    (`born:1850±5 sex:m`, `ancestors:@I1@`), with English keywords;
+  - `_GR_TYPE <type>`: media type chosen in the Media area (subfolder from the settings or
+    the file).
 
 ```
 0 HEAD
 1 SCHMA
 2 TAG _GR_FIND https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_find
-2 TAG _GR_ZONE https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_find
+2 TAG _GR_SCOPE https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_find
 2 TAG _GR_QUERY https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_find
 2 TAG _GR_TYPE https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_find
-1 _GR_FIND Nés vers 1850
-2 _GR_ZONE INDI
+1 _GR_FIND Born around 1850
+2 _GR_SCOPE INDI
 2 _GR_QUERY born:1850±5
-1 _GR_FIND Actes non rattachés
-2 _GR_ZONE OBJE
+1 _GR_FIND Unattached records
+2 _GR_SCOPE OBJE
 2 _GR_QUERY without:link
 2 _GR_TYPE Actes
 ```
 
-Supprimer la dernière recherche retire aussi les déclarations.
+Deleting the last search also removes the declarations.
 
 ## `_GR_WEB`
 
-Site de recherche en ligne, proposé dans **Individu › Rechercher sur** et au clic droit sur
-une personne. Se règle dans **Fichier › Réglages du fichier… › Recherche**.
+Online search site, offered in **Person › Search On** and when right-clicking a person. Set
+in **File › File Settings… › Search**.
 
-- **Sous** : `HEAD`, au niveau 1. Une occurrence par site, dans l'ordre du menu.
-- **Valeur** : nom du site.
-- **Sous-structures** : `_GR_URL <modèle>` : adresse de la recherche, où chaque variable
-  entre accolades est remplacée par la donnée de la personne, encodée pour l'URL (vide si
-  inconnue) : `{surname}`, `{given}`, `{birth}` et `{death}` (années), `{place}` (commune
-  de naissance), `{father_surname}`, `{father_given}`, `{mother_surname}`, `{mother_given}`,
-  `{spouse_surname}`, `{spouse_given}`. Les variables françaises des versions précédentes
-  (`{nom}`, `{prenom_pere}`…) sont converties à la lecture.
+- **Under**: `HEAD`, at level 1. One occurrence per site, in menu order.
+- **Value**: name of the site.
+- **Substructures**: `_GR_URL <template>`: address of the search, where each variable in
+  braces is replaced by the person's data, URL-encoded (empty if unknown): `{surname}`,
+  `{given}`, `{birth}` and `{death}` (years), `{place}` (town of birth),
+  `{father_surname}`, `{father_given}`, `{mother_surname}`, `{mother_given}`,
+  `{spouse_surname}`, `{spouse_given}`.
 
-Sans `_GR_WEB`, GEDRoots propose Geneanet et FamilySearch. Un `_GR_WEB` seul, sans valeur ni
-`_GR_URL`, indique qu'aucun site n'est voulu.
+Without `_GR_WEB`, GEDRoots offers Geneanet and FamilySearch. A lone `_GR_WEB`, with no value
+and no `_GR_URL`, means no site is wanted.
 
 ```
 0 HEAD

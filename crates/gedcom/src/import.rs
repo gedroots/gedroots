@@ -24,7 +24,6 @@ pub static CHECKS: &[Check] = &[
     Check { id: "url", count: Gedcom::legacy_url_count, fix: Gedcom::migrate_url_tags },
     Check { id: "prim", count: Gedcom::prim_count, fix: Gedcom::migrate_prim_tags },
     Check { id: "events", count: Gedcom::extension_event_count, fix: Gedcom::migrate_extension_events },
-    Check { id: "templates", count: Gedcom::legacy_template_count, fix: Gedcom::migrate_legacy_templates },
 ];
 
 /// Ce qu'un contrôle a trouvé.
@@ -42,8 +41,7 @@ fn texts(id: &str, count: usize) -> (Cow<'static, str>, Cow<'static, str>) {
     match id {
         "url" => (tn!("import.url", count), t!("import.url_into")),
         "prim" => (tn!("import.prim", count), t!("import.prim_into")),
-        "events" => (tn!("import.events", count), t!("import.events_into")),
-        _ => (tn!("import.templates", count), t!("import.templates_into")),
+        _ => (tn!("import.events", count), t!("import.events_into")),
     }
 }
 

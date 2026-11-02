@@ -409,34 +409,6 @@ fn ages() {
 }
 
 #[test]
-fn legacy_templates_are_cleaned_by_import() {
-    french();
-    let text = SAMPLE
-        .replace("1 SCHMA\n", "1 SCHMA\n2 TAG _GR_TPL https://x#_gr_tpl\n2 TAG _GR_FLD https://x#_gr_fld\n")
-        .replace(
-            "3 PAGE Acte n° 112, vue 37\n",
-            "3 PAGE Acte n° 112, vue 37\n3 EVEN BIRT\n4 ROLE PRIN\n5 PHRASE Enfant\n3 _GR_FLD numero 112\n",
-        )
-        .replace("1 CALN 3 E 502/112\n", "")
-        .replace(
-            "1 PUBL Archives départementales de la Manche\n",
-            "1 PUBL Archives départementales de la Manche\n1 _GR_TPL NAISSANCE\n",
-        )
-        .replace("0 @R00001@ REPO", "0 @T1@ _GR_TPL\n1 NAME Décès\n1 _GR_EVT DEAT\n0 @R00001@ REPO");
-    let mut g = Gedcom::parse(&text).unwrap();
-    let found = import::analyze(&g);
-    let f = found.iter().find(|f| f.id == "templates").expect("contrôle proposé");
-    assert_eq!(f.count, 4, "{found:?}");
-    import::apply(&mut g, &["templates"]);
-    let out = g.to_gedcom_string();
-    assert!(!out.contains("_GR_TPL") && !out.contains("_GR_FLD") && !out.contains("PRIN"), "{out}");
-    // Les données de l'acte restent.
-    assert!(out.contains("3 PAGE Acte n° 112, vue 37\n3 EVEN BIRT\n"), "{out}");
-    assert!(g.header.child("SCHMA").unwrap().children.iter().all(|t| !t.val().starts_with("_GR_")));
-    assert_eq!(g.acts("S00001").len(), 1);
-}
-
-#[test]
 fn act_with_several_files_makes_one_paged_media_named_by_template() {
     french();
     let mut g = Gedcom::parse(SAMPLE).unwrap();
