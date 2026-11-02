@@ -588,7 +588,7 @@ impl Workspace {
             v_flex()
                 .gap_1()
                 .p_2()
-                .rounded_md()
+                .rounded(theme::RADIUS_SM)
                 .border_1()
                 .border_color(if i == d.media_active { theme::border_strong() } else { theme::border() })
                 .child(
