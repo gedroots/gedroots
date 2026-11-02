@@ -527,8 +527,11 @@ impl Gedcom {
         out
     }
 
-    /// Portrait d'un individu : le premier média image qui lui est lié,
-    /// en privilégiant ceux rangés dans un dossier « Portraits » ou titrés « Portrait ».
+    /// Portrait d'un individu : sa première photo (`MEDI PHOTO`), dans l'ordre
+    /// de ses liens (« Définir comme portrait » met le lien en tête). À défaut,
+    /// une image sans support déclaré rangée dans un dossier « Portraits » ou
+    /// titrée « Portrait », puis une image sans support qui n'est pas le scan
+    /// d'une source ; sinon sa première image.
     pub fn portrait(&self, xref: &str) -> Option<Media<'_>> {
         let ind = self.individual(xref)?;
         let images: Vec<Media> = ind
@@ -537,11 +540,20 @@ impl Gedcom {
             .filter_map(|m| self.get(m).filter(|n| n.tag == "OBJE").map(Media::new))
             .filter(|m| m.is_image())
             .collect();
+        if let Some(p) = images.iter().find(|m| crate::kinds::medium(m.node) == Some("PHOTO")) {
+            return Some(*p);
+        }
         let is_portrait = |m: &Media| {
             m.file().is_some_and(|f| f.to_lowercase().contains("portrait"))
                 || m.title().to_lowercase().contains("portrait")
         };
-        images.iter().find(|m| is_portrait(m)).or(images.first()).copied()
+        let cited = |m: &Media| {
+            let ptr = format!("@{}@", m.xref());
+            self.records_of(crate::document::RecordKind::Source)
+                .any(|s| s.children.iter().any(|c| c.tag == "OBJE" && c.val() == ptr))
+        };
+        let untyped = || images.iter().filter(|m| crate::kinds::medium(m.node).is_none());
+        untyped().find(|m| is_portrait(m)).or_else(|| untyped().find(|m| !cited(m))).or(images.first()).copied()
     }
 
     /// Médias images liés à un enregistrement (source, individu…).
