@@ -1412,22 +1412,35 @@ impl Workspace {
             .min_w_0()
             .bg(theme::bg())
             .child(
-                h_flex().h(px(34.)).flex_none().bg(theme::panel()).border_b_1().border_color(theme::border()).children(
-                    tabs.into_iter().map(|t| {
+                // Onglets à la manière de Zed : l'onglet actif prend le fond du contenu et
+                // s'ouvre sur lui (pas de trait du bas) ; les autres restent sur la barre.
+                h_flex()
+                    .h(px(32.))
+                    .flex_none()
+                    .bg(theme::panel())
+                    .children(tabs.into_iter().enumerate().map(|(i, t)| {
                         let active = t == tab;
                         div()
                             .id(SharedString::from(format!("tab-{}", t.label())))
                             .h_full()
-                            .px_4()
+                            .px_3()
                             .flex()
                             .items_center()
                             .gap_2()
+                            .text_sm()
                             .cursor_pointer()
-                            .border_r_1()
                             .border_color(theme::border())
-                            .when(active, |d| d.bg(theme::bg()).border_t_2().border_color(theme::accent()))
+                            .border_r_1()
+                            .when(i > 0 && active, |d| d.border_l_1().ml(px(-1.)))
+                            .map(|d| {
+                                if active { d.bg(theme::bg()) } else { d.border_b_1().hover(|d| d.bg(theme::hover())) }
+                            })
                             .text_color(if active { theme::text() } else { theme::muted() })
-                            .child(icon(t.icon()).text_color(if active { theme::accent() } else { theme::muted() }))
+                            .child(icon(t.icon()).size(px(14.)).text_color(if active {
+                                theme::text()
+                            } else {
+                                theme::muted()
+                            }))
                             .child(match t {
                                 // Vue d'arbre courante, réglable dans Affichage › Arbre.
                                 CenterTab::Tree => match self.tree_mode {
@@ -1444,8 +1457,8 @@ impl Workspace {
                                 this.tab = t;
                                 cx.notify();
                             }))
-                    }),
-                ),
+                    }))
+                    .child(div().flex_1().h_full().border_b_1().border_color(theme::border())),
             )
             .child(body)
             .into_any_element()
