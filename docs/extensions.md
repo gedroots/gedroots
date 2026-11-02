@@ -39,29 +39,44 @@ Supprimer l'individu racine retire aussi la balise.
 
 ## `_GR_EVEN`
 
-Type d'événement personnalisé déclaré avant d'être utilisé (**Fichier › Réglages du
-fichier… › Événements**). Un type personnalisé est un `EVEN` standard avec un `TYPE` :
-ceux qui figurent déjà dans le fichier sont déduits de leurs `TYPE` et n'ont pas besoin de
-cette balise. Elle ne sert qu'à proposer un type pas encore utilisé dans **Ajouter un
-événement…**.
+Type d'événement personnalisé (**Fichier › Réglages du fichier… › Événements**). Un type
+personnalisé est un `EVEN` standard avec un `TYPE` : ceux qui figurent déjà dans le fichier
+sont déduits de leurs `TYPE` et n'ont pas besoin de cette balise. Elle ne sert qu'à proposer
+un type pas encore utilisé dans **Ajouter un événement…**, ou à afficher un type sous un
+autre libellé que son `TYPE`.
 
 - **Sous** : `HEAD`, au niveau 1. Une occurrence par type déclaré.
-- **Valeur** : le libellé du type, tel qu'il sera écrit dans `TYPE`.
-- **Sous-structures** : `_GR_REC FAM` pour un événement familial (sous `FAM`) ; absent,
-  le type concerne les individus.
+- **Valeur** : le `TYPE` des événements de ce type, tel qu'il est écrit dans le fichier.
+- **Sous-structures** :
+  - `_GR_REC FAM` pour un événement familial (sous `FAM`) ; absent, le type concerne
+    les individus.
+  - `_GR_LABEL <libellé>` : libellé affiché par GEDRoots à la place du `TYPE`. Les
+    événements gardent leur `TYPE`.
 
 ```
 0 HEAD
 1 SCHMA
 2 TAG _GR_EVEN https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_even
 2 TAG _GR_REC https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_even
+2 TAG _GR_LABEL https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_even
 1 _GR_EVEN Baptême protestant
 1 _GR_EVEN Publication des bans
 2 _GR_REC FAM
+1 _GR_EVEN military service
+2 _GR_LABEL Service militaire
+0 @I1@ INDI
+1 EVEN
+2 TYPE military service
+2 DATE FROM 1914 TO 1918
 ```
 
-Renommer un type dans les réglages réécrit tous les `TYPE` correspondants (renommer vers un
-type existant les fusionne) ; un type déclaré et inutilisé peut être retiré.
+Renommer un `TYPE` dans les réglages réécrit tous les `TYPE` correspondants (renommer vers
+un type existant les fusionne) et garde son libellé ; un type déclaré et inutilisé peut être
+retiré. Une déclaration devenue inutile (type utilisé, sans libellé) est retirée.
+
+À l'import (**Fichier › Importer un GEDCOM…**), les événements à balise d'extension d'autres
+logiciels (`_MILT`, `_MILI`, `_DEG`, `_FUN`…, ou toute balise `_XXX` datée ou localisée
+sous un individu ou une famille) deviennent des `EVEN` + `TYPE`.
 
 ## `_GR_MEDIA`
 

@@ -2,7 +2,8 @@
 //! - Général : auteur, droits, description, langue et individu racine
 //!   (voir `gedcom::settings`) ;
 //! - Lieux : format des lieux (`HEAD.PLAC.FORM`), avec réécriture des lieux ;
-//! - Événements : types d'événements personnalisés (`EVEN` + `TYPE`) ;
+//! - Événements : types d'événements personnalisés (`EVEN` + `TYPE`), avec
+//!   leur libellé affiché ;
 //! - Médias : dossier des médias, sous-dossiers par type et modèles de nom
 //!   (`gedcom::media_naming`).
 //!
@@ -31,9 +32,14 @@ struct PlaceRow {
 
 /// Un type d'événement personnalisé en cours de modification.
 struct EventRow {
+    /// Libellé affiché (vide : le `TYPE`).
     label: Entity<InputState>,
-    /// Libellé actuel (`None` : type ajouté).
+    /// Valeur du `TYPE`.
+    ty: Entity<InputState>,
+    /// `TYPE` actuel (`None` : type ajouté).
     original: Option<String>,
+    /// Libellé actuel (vide : le `TYPE`).
+    original_label: String,
     family: bool,
     uses: usize,
 }
@@ -129,11 +135,16 @@ impl Workspace {
         let events = g
             .event_types()
             .into_iter()
-            .map(|t| EventRow {
-                label: text_input("Libellé", &t.label, window, cx),
-                original: Some(t.label),
-                family: t.family,
-                uses: t.uses,
+            .map(|t| {
+                let label = if t.label == t.ty { String::new() } else { t.label };
+                EventRow {
+                    label: text_input(&t.ty, &label, window, cx),
+                    ty: text_input("TYPE", &t.ty, window, cx),
+                    original: Some(t.ty),
+                    original_label: label,
+                    family: t.family,
+                    uses: t.uses,
+                }
             })
             .collect();
         let naming = g.media_naming();
@@ -200,11 +211,20 @@ impl Workspace {
             .map(|r| Jurisdiction { name: r.name.read(cx).value().trim().to_string(), from: r.from })
             .filter(|j| !j.name.is_empty() || j.from.is_some())
             .collect();
-        // (famille, ancien libellé, nouveau libellé)
-        let events: Vec<(bool, Option<String>, String)> = d
+        // (famille, ancien TYPE, nouveau TYPE, libellé s'il change)
+        let events: Vec<(bool, Option<String>, String, Option<String>)> = d
             .events
             .iter()
-            .map(|r| (r.family, r.original.clone(), r.label.read(cx).value().trim().to_string()))
+            .map(|r| {
+                let label = r.label.read(cx).value().trim().to_string();
+                let ty = r.ty.read(cx).value().trim().to_string();
+                // Nouveau type sans TYPE : le libellé sert de TYPE.
+                if r.original.is_none() && ty.is_empty() {
+                    return (r.family, None, label, None);
+                }
+                let label = (label != r.original_label).then_some(label);
+                (r.family, r.original.clone(), ty, label)
+            })
             .collect();
         let removed = d.removed_events.clone();
         let naming = media_naming(d, cx);
@@ -219,7 +239,9 @@ impl Workspace {
         let format_changed = format.len() != current.len()
             || format.iter().enumerate().any(|(i, j)| j.from != Some(i) || j.name != current[i]);
         changed |= root_changed || format_changed || !removed.is_empty();
-        changed |= events.iter().any(|(_, old, new)| old.as_deref() != Some(new.as_str()) && !new.is_empty());
+        changed |= events
+            .iter()
+            .any(|(_, old, new, label)| !new.is_empty() && (old.as_deref() != Some(new.as_str()) || label.is_some()));
         if changed {
             self.mutate(window, cx, move |g| {
                 g.set_file_settings(&s);
@@ -240,7 +262,7 @@ impl Workspace {
                 for (family, label) in &removed {
                     g.undeclare_event_type(*family, label);
                 }
-                for (family, old, new) in &events {
+                for (family, old, new, label) in events.iter().filter(|e| !e.2.is_empty()) {
                     match old {
                         Some(old) => {
                             g.rename_event_type(*family, old, new);
@@ -248,6 +270,9 @@ impl Workspace {
                         None => {
                             g.declare_event_type(*family, new);
                         }
+                    }
+                    if let Some(label) = label {
+                        g.set_event_type_label(*family, new, label);
                     }
                 }
                 Ok((msg, None))
@@ -430,7 +455,8 @@ impl Workspace {
                 h_flex()
                     .gap_2()
                     .items_center()
-                    .child(div().flex_1().child(Input::new(&r.label).small()))
+                    .child(div().flex_1().min_w_0().child(Input::new(&r.label).small()))
+                    .child(div().flex_1().min_w_0().child(Input::new(&r.ty).small()))
                     .when(r.uses > 0, |h| {
                         h.child(
                             div()
@@ -468,9 +494,17 @@ impl Workspace {
                         .tooltip("Ajouter un type")
                         .on_click(cx.listener(move |this, _, w, cx| {
                             let label = text_input("Libellé", "", w, cx);
+                            let ty = text_input("TYPE", "", w, cx);
                             label.update(cx, |s, cx| s.focus(w, cx));
                             if let Some(d) = this.settings_dialog() {
-                                d.events.push(EventRow { label, original: None, family, uses: 0 });
+                                d.events.push(EventRow {
+                                    label,
+                                    ty,
+                                    original: None,
+                                    original_label: String::new(),
+                                    family,
+                                    uses: 0,
+                                });
                             }
                             cx.notify();
                         })),
@@ -661,7 +695,7 @@ fn type_options(g: &Gedcom) -> Vec<(String, Vec<String>)> {
     out.sort_by_key(|(_, tags)| FIRST.iter().position(|t| *t == tags[0]).unwrap_or(FIRST.len()));
     for t in g.event_types() {
         if !out.iter().any(|(l, _)| *l == t.label) {
-            out.push((t.label.clone(), vec![t.label]));
+            out.push((t.label, vec![t.ty]));
         }
     }
     out.push(("Portrait".into(), vec!["INDI".into()]));

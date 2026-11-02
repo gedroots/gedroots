@@ -71,7 +71,7 @@ impl Workspace {
             types
                 .iter()
                 .filter(|t| t.family == fam)
-                .map(|t| (format!("{prefix}EVEN:{}", t.label), t.label.clone()))
+                .map(|t| (format!("{prefix}EVEN:{}", t.ty), t.label.clone()))
                 .collect()
         };
         let at = options.iter().position(|(t, _)| t == "EVEN").unwrap_or(options.len());
@@ -115,7 +115,7 @@ impl Workspace {
         }
         let custom_kind = current
             .as_ref()
-            .filter(|e| e.tag == "EVEN" && types.iter().any(|t| t.family == family && t.label == e.detail.trim()))
+            .filter(|e| e.tag == "EVEN" && types.iter().any(|t| t.family == family && t.ty == e.detail.trim()))
             .map(|e| format!("EVEN:{}", e.detail.trim()));
         let default_kind = match &current {
             _ if custom_kind.is_some() => custom_kind.as_deref().unwrap_or_default(),
@@ -223,7 +223,11 @@ impl Workspace {
             return;
         }
         self.add_dialog = None;
-        let label = if ev.tag == "EVEN" { ev.detail.clone() } else { event_label(&ev.tag).unwrap_or("").to_string() };
+        let label = if ev.tag == "EVEN" {
+            gedcom::event_type_label(&ev.detail)
+        } else {
+            event_label(&ev.tag).unwrap_or("").to_string()
+        };
         self.mutate(window, cx, move |g| {
             let who = g.record_label(&owner);
             match editing {
@@ -329,12 +333,18 @@ impl Workspace {
 
     fn event_body(&self, d: &EventDialog, cx: &mut Context<Self>) -> AnyElement {
         let tag = d.kind.read(cx).selected_value().cloned().unwrap_or_default();
+        let had_detail = self.doc.as_ref().is_some_and(|doc| {
+            d.editing.and_then(|ix| doc.ged.read_event(&d.owner, ix)).is_some_and(|e| !e.detail.trim().is_empty())
+        });
         let detail_label = match tag.trim_start_matches("FAM:") {
             t if t.starts_with("EVEN:") => None,
             "OCCU" => Some("Profession"),
             "EDUC" => Some("Établissement ou diplôme"),
             "EVEN" => Some("Type d'événement"),
             "RESI" | "" => None,
+            // `TYPE` d'un événement standard (« Naissance » : « à domicile ») : rare, seulement
+            // quand l'événement modifié en a déjà un.
+            _ if !had_detail => None,
             _ => Some("Précision"),
         };
         let field = |label: &'static str, el: AnyElement| v_flex().gap_1().min_w_0().child(label_caps(label)).child(el);
