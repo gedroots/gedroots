@@ -207,9 +207,9 @@ ws.family:
 ws.add_relative:
   en: Add or Link a Relative
   fr: Ajouter ou lier un proche
-ws.open_file:
-  en: Open a GEDCOM File…
-  fr: Ouvrir un fichier GEDCOM…
+ws.untitled:
+  en: Untitled
+  fr: Sans titre
 ws.recent:
   en: Recent
   fr: Récents

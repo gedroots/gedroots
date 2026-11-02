@@ -264,8 +264,10 @@ impl Workspace {
         let view_cell = st.view.clone();
         let measure = move |bounds: Bounds<Pixels>, window: &mut Window, running: bool| {
             if view_cell.get().map(|b| b.size) != Some(bounds.size) {
-                // First measurement, or window resized: lay out again.
-                window.refresh();
+                // First measurement, or window resized: lay out again. A refresh asked while this
+                // frame is being drawn is dropped, so it waits for the next frame (otherwise a tree
+                // shown right after the welcome page stays empty until the next event).
+                window.on_next_frame(|window, _| window.refresh());
             } else if running {
                 window.request_animation_frame();
             }
