@@ -5,3 +5,4 @@
 *.ged.tmp
 !crates/gedcom/tests/fixtures/*.ged
 .DS_Store
+mise.local.toml
