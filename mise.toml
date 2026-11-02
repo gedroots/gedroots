@@ -33,11 +33,8 @@ run = "cargo fmt --all --check"
 description = "Every CI check"
 depends = ["fmt:check", "test", "clippy"]
 
-[tasks.bundle]
-description = "Build GEDRoots.app (macOS); options: --install, --dmg"
-run = "packaging/macos/bundle.sh"
-
+# `bundle` and the platform installers are file tasks in mise-tasks/.
 [tasks.install]
 description = "Install GEDRoots on this machine"
-run = "{% if os() == 'macos' %}packaging/macos/bundle.sh --install{% else %}packaging/linux/install.sh{% endif %}"
+run = [{ task = "install:{{ os() }}" }]
 run_windows = "cargo build --release -p gedroots"

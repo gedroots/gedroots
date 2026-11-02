@@ -273,9 +273,10 @@ mise run install
 
 Builds GEDRoots in release mode, makes `GEDRoots.app` (icon, name in the menu bar and the Dock,
 no Terminal) and copies it to `/Applications`. `.ged` files then open with a double-click or
-with “Open With” in the Finder. Without `--install`, the app stays in
-`target/release/GEDRoots.app` (`mise run bundle`); with `mise run bundle --dmg`, a
-`GEDRoots.dmg` disk image is created next to it (useful for the CI).
+with “Open With” in the Finder. `mise run bundle` only makes `target/release/GEDRoots.app`;
+with `mise run bundle --dmg`, a `GEDRoots.dmg` disk image is created next to it (used by the
+CI). These tasks are scripts in [`mise-tasks/`](mise-tasks), `mise run bundle --help` lists
+their options.
 
 The app is signed “ad hoc”, which is enough on the Mac that built it. A downloaded app (the
 CI's `.dmg`) is blocked by Gatekeeper on first launch: right-click › Open, or

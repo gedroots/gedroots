@@ -33,10 +33,10 @@ dirs = "6"
 tokio-util = "0.7.20"
 hayro = "0.8.0"
 similar = "2.7.0"
-# Lien d'installation de Cursor (configuration en base64).
+# Cursor install link (configuration in base64).
 base64 = "0.22"
 
-# Fichiers récents : liste du système sous macOS (NSDocumentController)…
+# Recent files: the system's list on macOS (NSDocumentController)…
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
 objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "NSDocumentController"] }

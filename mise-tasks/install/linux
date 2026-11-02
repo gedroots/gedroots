@@ -1,10 +1,10 @@
-#!/bin/sh
-# Installs GEDRoots for the current user (applications menu, icon), without root rights.
-set -eu
-cd "$(dirname "$0")/../.."
-CARGO=${CARGO:-cargo}
-$CARGO build --release -p gedroots
-TARGET=$($CARGO metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
+#!/usr/bin/env bash
+#MISE description="Install GEDRoots for the current user (applications menu, icon), without root"
+#MISE hide=true
+set -euo pipefail
+
+cargo build --release -p gedroots
+TARGET=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
 DATA=${XDG_DATA_HOME:-$HOME/.local/share}
 install -Dm755 "$TARGET/release/gedroots" "$HOME/.local/bin/gedroots"
 install -Dm644 packaging/icon.png "$DATA/icons/hicolor/1024x1024/apps/gedroots.png"
