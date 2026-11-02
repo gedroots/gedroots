@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+#MISE description="Tag the merged release and create its draft GitHub release"
+#MISE hide=true
+# Runs in the release workflow when “chore: release X” lands on main. The packages are added to
+# the draft by `mise run package`, then `mise run release:publish` writes the notes and publishes.
+set -euo pipefail
+
+version=$(sed -n 's/^version = "\(.*\)"/\1/p' crates/gedroots/Cargo.toml | head -n 1)
+tag="v$version"
+if ! git ls-remote --exit-code --tags origin "$tag" > /dev/null; then
+	git tag "$tag"
+	git push origin "$tag"
+fi
+if ! gh release view "$tag" > /dev/null 2>&1; then
+	git cliff --latest --strip all | tail -n +3 > "${RUNNER_TEMP:-/tmp}/notes.md"
+	gh release create "$tag" --draft --verify-tag --title "GEDRoots $version" --notes-file "${RUNNER_TEMP:-/tmp}/notes.md"
+fi
+echo "version=$version" >> "${GITHUB_OUTPUT:-/dev/null}"

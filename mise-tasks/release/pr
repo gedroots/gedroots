@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+#MISE description="Open or update the release pull request (version, CHANGELOG.md), like mise's release-plz"
+#MISE hide=true
+# Runs in the release workflow after each merge into main, with MISE_ENV=release and GH_TOKEN.
+# The pull request “chore: release X” bumps the version and adds the changelog entry; merging it
+# publishes the release (mise run release:tag, then the packages).
+set -euo pipefail
+
+git fetch --tags --force origin
+last=$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || true)
+if [[ -z $(git log ${last:+"$last..HEAD"} --format=%s | grep -v '^chore: release') ]]; then
+	echo "Nothing to release since ${last:-the first commit}"
+	exit 0
+fi
+
+version=$(mise run --quiet release:version)
+branch=release
+git config user.name "github-actions[bot]"
+git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+git checkout -B "$branch"
+
+# The app's version (Cargo.toml and Cargo.lock): the About box, Velopack's packages.
+sed -i.bak "0,/^version = \".*\"/s//version = \"$version\"/" crates/gedroots/Cargo.toml
+rm crates/gedroots/Cargo.toml.bak
+cargo update --workspace --offline 2>/dev/null || cargo update --workspace
+[[ -f CHANGELOG.md ]] || printf '# Changelog\n' > CHANGELOG.md
+git cliff --tag "v$version" --unreleased --prepend CHANGELOG.md
+notes=$(git cliff --tag "v$version" --unreleased --strip all | tail -n +3)
+
+git add crates/gedroots/Cargo.toml Cargo.lock CHANGELOG.md
+git commit -m "chore: release $version"
+git push --force origin "$branch"
+
+title="chore: release $version"
+body=$(printf 'Merging this pull request publishes GEDRoots %s: tag, installers for macOS, Windows and Linux, update packages, release notes.\n\n%s\n' "$version" "$notes")
+if gh pr view "$branch" --json state --jq .state 2>/dev/null | grep -q OPEN; then
+	gh pr edit "$branch" --title "$title" --body "$body"
+else
+	gh pr create --head "$branch" --base main --title "$title" --body "$body"
+fi

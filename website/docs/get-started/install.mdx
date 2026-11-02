@@ -1,71 +1,85 @@
 ---
 title: Install GEDRoots
-description: Build and install GEDRoots on macOS, Linux or Windows.
+description: Download GEDRoots for macOS, Windows or Linux, open it the first time, and keep it up to date.
 ---
 
-GEDRoots runs on macOS, Windows and Linux. Until signed installers are published, you build it from its source code. It takes one command once the tools are in place.
-
-## Before you begin
-
-- [Git](https://git-scm.com), to download the source code.
-- [mise](https://mise.jdx.dev), which installs the exact Rust version GEDRoots needs and runs the build. You don't need to install Rust yourself.
-- On Linux, the system libraries for the graphical interface:
-
-  ```sh
-  sudo apt install libxkbcommon-dev libxkbcommon-x11-dev libfontconfig-dev libwayland-dev libvulkan-dev
-  ```
-
-  The package names are for Debian and Ubuntu. Other distributions ship the same libraries under similar names.
-
-## Install
-
-<Steps>
-  <Step title="Download the source code">
-    ```sh
-    git clone https://github.com/gedroots/gedroots.git
-    cd gedroots
-    ```
-  </Step>
-  <Step title="Install the toolchain">
-    ```sh
-    mise trust && mise install
-    ```
-
-    mise reads `mise.toml` and installs the pinned Rust toolchain for this folder only.
-  </Step>
-  <Step title="Build and install the app">
-    ```sh
-    mise run install
-    ```
-
-    The first build takes several minutes.
-  </Step>
-</Steps>
-
-What `mise run install` produces depends on your system:
+GEDRoots runs on macOS, Windows and Linux. Download the file for your system, open it, and GEDRoots then keeps itself up to date.
 
 <Tabs>
   <Tab title="macOS">
-    `GEDRoots.app` is copied to `/Applications`. GEDRoots then appears in Launchpad and the Dock, and `.ged` files open in it with a double-click or **Open With** in the Finder.
-  </Tab>
-  <Tab title="Linux">
-    The `gedroots` command is installed in `~/.local/bin`, with its icon and an entry in your applications menu.
+    **[Download GEDRoots for Mac](https://github.com/gedroots/gedroots/releases/latest/download/GEDRoots.dmg)** (Apple silicon, macOS 11 or later)
+
+    <Steps>
+      <Step title="Copy the app">
+        Open `GEDRoots.dmg` and drag **GEDRoots** onto the **Applications** folder next to it.
+      </Step>
+      <Step title="Open it the first time">
+        Open GEDRoots from the Applications folder. macOS says it can't check the app for malicious software: click **Done**, then open **System Settings › Privacy & Security**, scroll down to **Security** and click **Open Anyway** next to GEDRoots. Confirm with **Open Anyway** and your password.
+
+        macOS asks only once. It asks because GEDRoots is not yet signed with an Apple developer certificate.
+      </Step>
+    </Steps>
+
+    `.ged` files then open in GEDRoots with a double-click or **Open With** in the Finder.
   </Tab>
   <Tab title="Windows">
-    The build produces `target\release\gedroots.exe`. Copy it wherever you like and create a shortcut to it.
+    **[Download GEDRoots for Windows](https://github.com/gedroots/gedroots/releases/latest/download/GEDRoots-win-Setup.exe)** (64-bit, Windows 10 or later)
+
+    <Steps>
+      <Step title="Run the installer">
+        Open `GEDRoots-win-Setup.exe`. If Windows shows **Windows protected your PC**, click **More info**, then **Run anyway**: GEDRoots is not yet signed with a code signing certificate.
+      </Step>
+      <Step title="Open GEDRoots">
+        The installer needs no administrator rights. It installs GEDRoots for your account, opens it, and adds it to the Start menu and the desktop.
+      </Step>
+    </Steps>
+
+    To uninstall GEDRoots, go to **Settings › Apps › Installed apps**.
+  </Tab>
+  <Tab title="Linux">
+    **[Download GEDRoots for Linux](https://github.com/gedroots/gedroots/releases/latest/download/GEDRoots.AppImage)** (x86-64)
+
+    GEDRoots for Linux is an AppImage: a single file that runs on most distributions without installation. Make it executable, then open it:
+
+    ```sh
+    chmod +x GEDRoots.AppImage
+    ./GEDRoots.AppImage
+    ```
+
+    In most file managers, you can instead check **Allow executing file as program** in the file's properties, then double-click it. Keep the file in a folder of your own, such as `~/Applications`: GEDRoots updates it in place.
   </Tab>
 </Tabs>
 
-## Update GEDRoots
+Every version, with its release notes and the other downloads (macOS installer package, portable Windows version), is on the [releases page](https://github.com/gedroots/gedroots/releases).
 
-To get the latest version, download the changes and install again:
+## Updates
+
+GEDRoots checks for a new version when it starts, then twice a day, and downloads it in the background. When it's ready, **Restart to Update** appears on the right of the top bar: click it to restart on the new version right away, or keep working and the update is installed when you quit.
+
+- To check yourself, choose **Check for Updates**, in the **GEDRoots** menu on macOS and the **Help** menu on Windows and Linux.
+- To stop the automatic check, uncheck **Automatic Updates** in the same menu. GEDRoots then goes online for updates only when you choose **Check for Updates**.
+- **Help › Release Notes** shows what changed in your version.
+
+Your family tree files are not affected by an update: they live wherever you saved them, not inside the app.
+
+## Build from the source code
+
+To try changes that are not released yet, or to contribute, build GEDRoots yourself. You need [Git](https://git-scm.com) and [mise](https://mise.jdx.dev), which installs the exact Rust version GEDRoots needs. On Linux, also install the system libraries for the graphical interface:
 
 ```sh
-git pull
+sudo apt install libxkbcommon-dev libxkbcommon-x11-dev libfontconfig-dev libwayland-dev libvulkan-dev
+```
+
+The package names are for Debian and Ubuntu. Other distributions ship the same libraries under similar names.
+
+```sh
+git clone https://github.com/gedroots/gedroots.git
+cd gedroots
+mise trust && mise install
 mise run install
 ```
 
-Your family tree files are not affected: they live wherever you saved them, not inside the app.
+The first build takes several minutes. On macOS, `GEDRoots.app` is copied to `/Applications`; on Linux, the `gedroots` command is installed in `~/.local/bin` with an entry in your applications menu; on Windows, the build produces `target\release\gedroots.exe`. A copy built this way doesn't update itself: run `git pull` and `mise run install` again.
 
 ## Next step
 

@@ -1,0 +1,25 @@
+# Release notes on GitHub, written by communique (https://github.com/jdx/communique) from the
+# history and the pull requests. Needs the ANTHROPIC_API_KEY secret; without it the release
+# workflow falls back to git-cliff's changelog (cliff.toml).
+context = """
+GEDRoots is free, local genealogy software for macOS, Windows and Linux, in English and French. \
+It works directly on a GEDCOM 7 file: the family tree, records, sources, media, places, search, \
+data quality checks, and AI agents that propose records for review.
+"""
+
+system_extra = """
+Write release notes for genealogists, not a commit log. Most readers are not developers.
+
+Start with a short summary only when it adds useful context. For a small release, one sentence
+such as "This is a small release that fixes …" is enough, with no Highlights section.
+
+Use the genealogist's vocabulary and the interface labels in English (Person › Add Event,
+File › Export…), never GEDCOM tags or identifiers (BIRT, FAM, @I1@), except for the raw GEDCOM
+view and the GEDCOM extension tags of the file format. Omit dependency updates, CI, release
+plumbing and other internal work unless they change something for users (installers, updates,
+supported systems). Prefer sections such as Highlights, Added, Fixed, Changed and New
+Contributors. Include pull request links and contributor usernames when available.
+"""
+
+[defaults]
+emoji = false

@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+#MISE description="Build GEDRoots' installers and update packages for this system (Velopack)"
+#USAGE flag "--upload" help="Add them to this version's draft GitHub release"
+#
+# Needs the release tools: `MISE_ENV=release mise run package`. Output in <target>/dist:
+# - macOS: GEDRoots.dmg, GEDRoots-osx-Setup.pkg, GEDRoots-osx-Portable.zip;
+# - Windows: GEDRoots-win-Setup.exe, GEDRoots-win-Portable.zip;
+# - Linux: GEDRoots.AppImage;
+# and the update packages (*.nupkg) with their feed (releases.<channel>.json), which the app reads
+# to update itself (crates/gedroots/src/updates.rs).
+#
+# Not signed with a certificate (Apple Developer ID, Windows code signing): macOS asks to confirm
+# the first launch in System Settings › Privacy & Security, Windows SmartScreen in “More info”.
+set -euo pipefail
+
+ID=GEDRoots
+REPO=$(sed -n 's/^repository = "\(.*\)"/\1/p' Cargo.toml | head -n 1)
+VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' crates/gedroots/Cargo.toml | head -n 1)
+TARGET=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
+DIST="$TARGET/dist"
+NOTES="$DIST/notes.md"
+upload=${usage_upload:-false}
+
+rm -rf "$DIST"
+mkdir -p "$DIST"
+# This version's entry of CHANGELOG.md: shown by Velopack's feed.
+awk '/^## \[/{n++} n==1' CHANGELOG.md > "$NOTES" 2>/dev/null || true
+
+# The previous release, so that vpk makes a delta package (smaller update).
+if [ "$upload" = true ]; then
+	vpk download github --repoUrl "$REPO" --token "$GH_TOKEN" -o "$DIST" || true
+fi
+
+common=(-u "$ID" -v "$VERSION" -o "$DIST" --packTitle GEDRoots --packAuthors "The GEDRoots contributors" --releaseNotes "$NOTES")
+case "$(uname -s)" in
+Darwin)
+	mise run bundle
+	# Ad hoc signature (no Apple Developer ID): vpk signs the bundle again after adding its
+	# updater to it.
+	vpk pack "${common[@]}" -p "$TARGET/release/GEDRoots.app" -e gedroots --signAppIdentity -
+	# Disk image: the app and a link to Applications, to drag one onto the other.
+	STAGE=$(mktemp -d)
+	ditto -x -k "$DIST/$ID-osx-Portable.zip" "$STAGE"
+	codesign --verify --deep --strict "$STAGE/GEDRoots.app"
+	ln -s /Applications "$STAGE/Applications"
+	hdiutil create -volname GEDRoots -srcfolder "$STAGE" -ov -format UDZO "$DIST/GEDRoots.dmg" > /dev/null
+	rm -rf "$STAGE"
+	;;
+MINGW* | MSYS* | CYGWIN*)
+	cargo build --release -p gedroots
+	STAGE=$(mktemp -d)
+	cp "$TARGET/release/gedroots.exe" "$STAGE/"
+	vpk pack "${common[@]}" -p "$STAGE" -e gedroots.exe -i packaging/windows/gedroots.ico
+	;;
+Linux)
+	cargo build --release -p gedroots
+	STAGE=$(mktemp -d)
+	cp "$TARGET/release/gedroots" "$STAGE/"
+	vpk pack "${common[@]}" -p "$STAGE" -e gedroots -i packaging/icon.png --categories "Office;Education"
+	;;
+esac
+ls -l "$DIST"
+
+if [ "$upload" = true ]; then
+	vpk upload github --repoUrl "$REPO" --token "$GH_TOKEN" -o "$DIST" --merge --tag "v$VERSION" --releaseName "GEDRoots $VERSION"
+	if [ -f "$DIST/GEDRoots.dmg" ]; then
+		gh release upload "v$VERSION" "$DIST/GEDRoots.dmg" --clobber
+	fi
+fi

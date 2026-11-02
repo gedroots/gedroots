@@ -1374,11 +1374,53 @@ impl Workspace {
                     .when(!mac, |d| d.child(self.render_history_buttons(cx)))
                     .child(div().text_sm().font_weight(FontWeight::MEDIUM).child(t))
             }))
-            .child(h_flex().flex_1().min_w_0().gap_3().items_center().justify_end().text_xs().children(
-                self.status.clone().map(|(msg, err)| {
-                    div().truncate().text_color(if err { theme::danger() } else { theme::muted() }).child(msg)
+            .child(
+                h_flex()
+                    .flex_1()
+                    .min_w_0()
+                    .gap_3()
+                    .items_center()
+                    .justify_end()
+                    .text_xs()
+                    .children(self.status.clone().map(|(msg, err)| {
+                        div().truncate().text_color(if err { theme::danger() } else { theme::muted() }).child(msg)
+                    }))
+                    .children(self.render_update_notice()),
+            )
+    }
+
+    /// Where the update stands, on the right of the top bar: the answer to Check for Updates, and
+    /// once a new version is downloaded, the button that installs it (like Zed and VS Code).
+    fn render_update_notice(&self) -> Option<impl IntoElement> {
+        use crate::updates::State;
+        let (msg, err, restart): (SharedString, bool, bool) = match crate::updates::state() {
+            State::Idle | State::Downloading { manual: false, .. } => return None,
+            State::Checking => (t!("updates.checking").into(), false, false),
+            State::UpToDate => (t!("updates.up_to_date", version = env!("CARGO_PKG_VERSION")).into(), false, false),
+            State::Downloading { version, percent, .. } => {
+                (t!("updates.downloading", version = version, percent = percent).into(), false, false)
+            }
+            State::Ready { version } => (t!("updates.ready", version = version).into(), false, true),
+            State::Failed => (t!("updates.failed").into(), true, false),
+            State::SaveFirst { .. } => (t!("updates.save_first").into(), true, true),
+        };
+        Some(
+            h_flex()
+                .flex_none()
+                .gap_2()
+                .items_center()
+                .child(div().truncate().text_color(if err { theme::danger() } else { theme::muted() }).child(msg))
+                .when(restart, |d| {
+                    d.child(
+                        Button::new("restart-to-update")
+                            .primary()
+                            .xsmall()
+                            .label(t!("cmd.restart_to_update"))
+                            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                            .on_click(|_, _, cx| crate::updates::check_now(cx)),
+                    )
                 }),
-            ))
+        )
     }
 
     /// “Back / Forward” arrows: go back to the place left (an individual after opening one of their

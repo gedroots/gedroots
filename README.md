@@ -65,17 +65,12 @@ register.
 
 ## Install
 
-GEDRoots is built from source with [mise](https://mise.jdx.dev), which installs the right
-Rust toolchain for you:
+| macOS | Windows | Linux |
+| --- | --- | --- |
+| [**Download for Mac**](https://github.com/gedroots/gedroots/releases/latest/download/GEDRoots.dmg) | [**Download for Windows**](https://github.com/gedroots/gedroots/releases/latest/download/GEDRoots-win-Setup.exe) | [**Download for Linux**](https://github.com/gedroots/gedroots/releases/latest/download/GEDRoots.AppImage) |
+| Apple silicon, macOS 11 or later | 64-bit, Windows 10 or later | AppImage, x86-64 |
 
-```sh
-git clone https://github.com/gedroots/gedroots.git
-cd gedroots
-mise trust && mise install
-mise run install
-```
-
-See the [installation guide](https://gedroots.github.io/gedroots/get-started/install) for
+GEDRoots then keeps itself up to date. See the [installation guide](https://gedroots.github.io/gedroots/get-started/install) for
 the details on each system, then [start your family tree](https://gedroots.github.io/gedroots/get-started/first-tree).
 
 ## Documentation

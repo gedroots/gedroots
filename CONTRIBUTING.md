@@ -62,7 +62,7 @@ git. Never commit a `.ged` file that contains living people.
 
 The CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs the same tasks:
 `mise run ci` on Linux, and `mise run bundle --dmg` on macOS (on `main` or on demand), whose
-`.dmg` can be downloaded from the artifacts. mise-action's cache keeps the toolchain (rustup
+`.dmg` can be downloaded from the artifacts. Releases have their own workflow (see Releases). mise-action's cache keeps the toolchain (rustup
 lives in mise's folder), and a cache keyed on `Cargo.lock` keeps the crates and `target/`.
 
 ## Packaging
@@ -78,7 +78,42 @@ lives in mise's folder), and a cache keyed on `Cargo.lock` keeps the crates and 
   which opens without a console window.
 
 These tasks are scripts in [`mise-tasks/`](mise-tasks); `mise run bundle --help` lists their
-options. The icon (`packaging/icon.png`) comes from the GEDRoots brand kit.
+options. The icon (`packaging/icon.png`, and `packaging/windows/gedroots.ico` built from it)
+comes from the GEDRoots brand kit.
+
+## Releases
+
+Releases follow [mise](https://github.com/jdx/mise)'s format and are fully automated by
+[`.github/workflows/release.yml`](.github/workflows/release.yml):
+
+1. After each merge into `main`, the **`chore: release X`** pull request is opened or updated
+   (`mise run release:pr`). It sets the next version, in calendar versioning like mise
+   (`2026.11.0`, then `2026.11.1`; the month restarts at `.0`), and adds its entry to
+   [`CHANGELOG.md`](CHANGELOG.md) with [git-cliff](https://git-cliff.org) (`cliff.toml`).
+   Pull request titles in [Conventional Commits](https://www.conventionalcommits.org) form
+   (`feat(places): …`, `fix: …`) are grouped by kind; other titles go under “Changed”.
+2. Merging it tags `vX` and creates a draft GitHub release (`mise run release:tag`).
+3. On macOS, Windows and Linux, `mise run package --upload` builds the installers and the update
+   packages with [Velopack](https://velopack.io) and adds them to the draft: `GEDRoots.dmg` and
+   `GEDRoots-osx-Setup.pkg`, `GEDRoots-win-Setup.exe`, `GEDRoots.AppImage`, the `.nupkg`
+   packages and their `releases.<channel>.json` feed.
+4. [communique](https://github.com/jdx/communique) writes the release notes for users
+   (`communique.toml`, `ANTHROPIC_API_KEY` secret; git-cliff's entry otherwise) and the release
+   is published (`mise run release:publish`).
+
+The app reads the feed of the latest release to update itself
+([`crates/gedroots/src/updates.rs`](crates/gedroots/src/updates.rs)). The download links of
+the README and the documentation point to `releases/latest/download/<file>`, so the asset names
+never contain the version.
+
+The release tools are in [`mise.release.toml`](mise.release.toml), loaded with
+`MISE_ENV=release`: `MISE_ENV=release mise install`, then `MISE_ENV=release mise run package`
+builds the packages for your system in `target/dist` without uploading them.
+
+The packages are not signed with a certificate: macOS asks to confirm the first launch in
+System Settings › Privacy & Security, and Windows SmartScreen shows a warning. Signing them needs
+an Apple Developer ID with notarization (`vpk pack --signAppIdentity … --notaryProfile …`) and a
+Windows code signing certificate (`--azureTrustedSignFile` for Azure Artifact Signing).
 
 ## Code layout
 

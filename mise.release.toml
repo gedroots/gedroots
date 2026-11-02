@@ -1,0 +1,11 @@
+# Release tools, loaded with `MISE_ENV=release` (the release workflow): `mise install` for the
+# app's development does not download them.
+[tools]
+# Changelog from the commit history (CHANGELOG.md, release pull request).
+git-cliff = "2.14.2"
+# Release notes written for users (GitHub release), from the history and the pull requests.
+"github:jdx/communique" = "1.8.0"
+# Velopack packager: installers, update packages and their feed. Same version as the
+# `velopack` crate in crates/gedroots/Cargo.toml.
+dotnet = "8"
+"dotnet:vpk" = "1.2.161"

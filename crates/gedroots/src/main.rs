@@ -16,9 +16,10 @@ mod images;
 mod map;
 mod recent;
 mod theme;
+mod updates;
 mod workspace;
 
-use commands::Quit;
+use commands::{CheckForUpdates, Quit, ReleaseNotes, ToggleAutomaticUpdates};
 use gpui_kit::*;
 use std::borrow::Cow;
 use std::path::PathBuf;
@@ -99,6 +100,9 @@ impl AssetSource for AppAssets {
 }
 
 fn main() {
+    // First of all: Velopack may run the app for its install and update hooks, then exit.
+    updates::startup();
+
     // On macOS, an app launched by the Finder can receive a `-psn_…` argument: ignore it.
     let path = std::env::args_os().skip(1).find(|a| !a.to_string_lossy().starts_with("-psn")).map(PathBuf::from);
 
@@ -125,7 +129,17 @@ fn main() {
         commands::bind_keys(cx);
         commands::install_menus(cx);
         agent::install(cx);
-        cx.on_action(|_: &Quit, cx| cx.quit());
+        updates::install(cx);
+        cx.on_action(|_: &Quit, cx| {
+            updates::apply_on_quit();
+            cx.quit()
+        });
+        cx.on_action(|_: &ReleaseNotes, cx| cx.open_url(&updates::release_notes_url()));
+        // Only declared for an installed copy: greyed out otherwise.
+        if updates::available() {
+            cx.on_action(|_: &CheckForUpdates, cx| updates::check_now(cx));
+            cx.on_action(|_: &ToggleAutomaticUpdates, cx| updates::toggle_automatic(cx));
+        }
 
         let main = open_workspace(path, cx);
         cx.activate(true);
@@ -160,7 +174,9 @@ fn open_workspace(path: Option<PathBuf>, cx: &mut App) -> Option<(AnyWindowHandl
         ws
     })
     .ok()?;
-    Some((window, ws.downgrade()))
+    let ws = ws.downgrade();
+    cx.global_mut::<updates::Windows>().0.push(ws.clone());
+    Some((window, ws))
 }
 
 /// Opens a file received from the Finder: in the last window if it has no unsaved changes,
