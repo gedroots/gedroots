@@ -542,19 +542,6 @@ impl Workspace {
         self.tab = CenterTab::Tree;
     }
 
-    /// Enregistre l'individu racine dans l'en-tête du fichier (extension `_GR_ROOT`).
-    fn set_root(&mut self, xref: String, cx: &mut Context<Self>) {
-        if self.doc.as_ref().and_then(|d| d.ged.root()).as_deref() == Some(xref.as_str()) {
-            return;
-        }
-        self.checkpoint();
-        let Some(doc) = &mut self.doc else { return };
-        doc.ged.set_root(&xref);
-        let name = doc.ged.record_label(&xref);
-        self.set_status(format!("{name} est maintenant l'individu racine"), false);
-        cx.notify();
-    }
-
     /// Copie le nom d'un individu, le titre d'un enregistrement ou le nom d'un lieu.
     fn copy_name(&mut self, key: &str, cx: &mut Context<Self>) {
         let Some(doc) = &self.doc else { return };

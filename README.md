@@ -91,7 +91,7 @@ et suit le [design system GEDRoots](design.md) (fonds neutres et touches de viol
   (annulable). Premier contrôle : les balises `_URL` deviennent des liens multimédia (`WWW`
   pour les dépôts). Les contrôles sont dans `crates/gedcom/src/import.rs`.
 - **Réglages du fichier** (⌘ / Ctrl + `,` ; menu GEDRoots sur macOS, Fichier ailleurs) : auteur, e-mail, droits,
-  description, langue et individu racine, plus la liste des anomalies masquées (« Réafficher »).
+  description, langue et individu racine.
   Tout est rangé dans l'en-tête du .ged en GEDCOM 7 standard (`HEAD.SUBM`, `COPR`, `NOTE`,
   `LANG`). À chaque enregistrement, `HEAD.SOUR` et `HEAD.DATE` indiquent GEDRoots et la date.
   - **Lieux** : format des lieux (`HEAD.PLAC.FORM`) — juridictions à renommer, réordonner,

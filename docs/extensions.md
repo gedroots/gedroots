@@ -19,8 +19,8 @@ Les autres logiciels ignorent ces balises sans perte de données.
 ## `_GR_ROOT`
 
 Individu racine de l'arbre : celui qu'ouvre GEDRoots au chargement du fichier et vers
-lequel ramène le bouton **Racine**. Se définit depuis la fiche d'un individu,
-menu **… → Définir comme racine**.
+lequel ramène **Individu › Aller à l'individu racine**. Se définit dans
+**Réglages du fichier › Général**.
 
 - **Sous** : `HEAD`, au niveau 1. Une seule occurrence.
 - **Valeur** : pointeur vers un `INDI` (`@I1@`).

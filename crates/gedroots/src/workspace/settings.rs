@@ -1,6 +1,6 @@
 //! Réglages du fichier (Fichier › Réglages du fichier…), en quatre pages :
-//! - Général : auteur, droits, description, langue, individu racine et
-//!   anomalies masquées (voir `gedcom::settings`) ;
+//! - Général : auteur, droits, description, langue et individu racine
+//!   (voir `gedcom::settings`) ;
 //! - Lieux : format des lieux (`HEAD.PLAC.FORM`), avec réécriture des lieux ;
 //! - Événements : types d'événements personnalisés (`EVEN` + `TYPE`) ;
 //! - Médias : dossier des médias, sous-dossiers par type et modèles de nom
@@ -257,17 +257,9 @@ impl Workspace {
         cx.notify();
     }
 
-    fn unignore(&mut self, xref: String, code: String, window: &mut Window, cx: &mut Context<Self>) {
-        self.mutate(window, cx, move |g| {
-            let who = g.record_label(&xref);
-            g.unignore_issue(&xref, &code);
-            Ok((format!("Anomalie réaffichée pour {who}"), None))
-        });
-    }
-
     pub(super) fn settings_body(&self, d: &SettingsDialog, cx: &mut Context<Self>) -> AnyElement {
         let body = match d.page {
-            SettingsPage::General => self.settings_general(d, cx),
+            SettingsPage::General => self.settings_general(d),
             SettingsPage::Places => self.settings_places(d, cx),
             SettingsPage::Events => self.settings_events(d, cx),
             SettingsPage::Media => self.settings_media(d, cx),
@@ -307,10 +299,9 @@ impl Workspace {
             .into_any_element()
     }
 
-    fn settings_general(&self, d: &SettingsDialog, cx: &mut Context<Self>) -> AnyElement {
+    fn settings_general(&self, d: &SettingsDialog) -> AnyElement {
         let g = &self.doc.as_ref().unwrap().ged;
         let info = g.file_info();
-        let ignored = g.ignored_issues();
 
         // Informations : « GEDCOM 7.0.13 · Ancestris 13, le 1 novembre 2026 ».
         let mut about = format!("GEDCOM {}", info.version);
@@ -358,30 +349,6 @@ impl Workspace {
                 "Individu racine",
                 Select::new(&d.root).small().search_placeholder("Rechercher…").into_any_element(),
             ))
-            .when(!ignored.is_empty(), |v| {
-                v.child(field(
-                    "Anomalies masquées",
-                    v_flex()
-                        .children(ignored.into_iter().enumerate().map(|(i, it)| {
-                            let who = g.record_label(&it.xref);
-                            h_flex()
-                                .gap_2()
-                                .items_center()
-                                .text_sm()
-                                .child(div().flex_1().min_w_0().truncate().child(format!("{} · {who}", it.label)))
-                                .child(
-                                    Button::new(SharedString::from(format!("unignore-{i}")))
-                                        .xsmall()
-                                        .ghost()
-                                        .label("Réafficher")
-                                        .on_click(cx.listener(move |this, _, w, cx| {
-                                            this.unignore(it.xref.clone(), it.code.clone(), w, cx)
-                                        })),
-                                )
-                        }))
-                        .into_any_element(),
-                ))
-            })
             .into_any_element()
     }
 

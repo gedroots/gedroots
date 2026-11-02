@@ -41,7 +41,6 @@ impl Workspace {
         let parents = indi.as_ref().and_then(|x| Some(g?.parents(x))).unwrap_or((None, None));
         let photo = media.as_ref().and_then(|x| self.photo_file(x)).filter(|_| self.photo_draw.is_none());
         let root = g.and_then(|g| g.root());
-        let is_root = indi.is_some() && root == indi;
         let can_undo = doc.is_some_and(|d| !d.history.is_empty());
         let individuals = has_doc && self.view == View::Individuals && self.act_editor.is_none();
         let attachable = matches!(sel_kind, Some(RecordKind::Individual | RecordKind::Source));
@@ -179,17 +178,10 @@ impl Workspace {
                         this.open_picker(PickPurpose::MediaFor { owner, crop: false }, w, cx)
                     }
                 });
-                let d = on!(d, cx, CropMedia, |this, w, cx| {
+                on!(d, cx, CropMedia, |this, w, cx| {
                     if let Some(owner) = this.selected.clone() {
                         this.open_picker(PickPurpose::MediaFor { owner, crop: true }, w, cx)
                     }
-                });
-                d.when(!is_root, |d| {
-                    on!(d, cx, SetRoot, |this, w, cx| {
-                        if let Some(x) = this.selected.clone() {
-                            this.set_root(x, cx)
-                        }
-                    })
                 })
             })
             .when(indi.is_some(), |d| {
