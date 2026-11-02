@@ -60,16 +60,17 @@ git. Never commit a `.ged` file that contains living people.
 
 ## CI
 
-The CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs the same tasks:
-`mise run ci` on Linux, and `mise run bundle --dmg` on macOS (on `main` or on demand), whose
-`.dmg` can be downloaded from the artifacts. Releases have their own workflow (see Releases). mise-action's cache keeps the toolchain (rustup
+The Test workflow ([`.github/workflows/test.yml`](.github/workflows/test.yml)) runs the same
+task as a local machine, `mise run ci`, on Linux. The installers are built by the Release
+workflow (see Releases), also on pull requests that touch packaging, whose packages can be
+downloaded from the artifacts. mise-action's cache keeps the toolchain (rustup
 lives in mise's folder), and a cache keyed on `Cargo.lock` keeps the crates and `target/`.
 
 ## Packaging
 
 - **macOS**: `mise run install` builds `GEDRoots.app` and copies it to `/Applications`.
   `mise run bundle` only makes `target/release/GEDRoots.app`; `mise run bundle --dmg` also
-  makes a disk image (used by the CI). The app is signed ad hoc, which is enough on the Mac
+  makes a disk image. The app is signed ad hoc, which is enough on the Mac
   that built it. Distributing it without a Gatekeeper warning requires a Developer ID
   signature and Apple notarization.
 - **Linux**: `mise run install` installs `~/.local/bin/gedroots`, the icon and the

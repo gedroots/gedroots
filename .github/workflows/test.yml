@@ -1,7 +1,7 @@
-name: CI
+name: Test
 
-# Tools and commands come from mise.toml (and mise.lock): CI runs the same
-# tasks as a local machine (`mise run ci`, `mise run bundle`).
+# Tools and commands come from mise.toml (and mise.lock): the workflow runs the same task as a
+# local machine (`mise run ci`). The installers are built by the Release workflow.
 
 on:
   push:
@@ -16,7 +16,7 @@ env:
   CARGO_INCREMENTAL: "0"
 
 jobs:
-  check:
+  test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -42,32 +42,3 @@ jobs:
           key: ${{ github.job }}-${{ runner.os }}-${{ hashFiles('mise.lock', 'Cargo.lock') }}
           restore-keys: ${{ github.job }}-${{ runner.os }}-
       - run: mise run ci
-
-  macos-build:
-    # macOS app (Apple Silicon) downloadable as a .dmg, to test without building.
-    # Only on main, or on demand (`gh workflow run ci.yml --ref <branch>`).
-    if: github.event_name != 'pull_request'
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v7
-      - name: Rust toolchain in the mise folder
-        run: echo "MISE_RUSTUP_HOME=$HOME/.local/share/mise/rustup" >> "$GITHUB_ENV"
-      - uses: jdx/mise-action@v5
-        with:
-          version: 2026.10.25
-      - uses: actions/cache@v6
-        with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-            target
-          key: ${{ github.job }}-${{ runner.os }}-${{ hashFiles('mise.lock', 'Cargo.lock') }}
-          restore-keys: ${{ github.job }}-${{ runner.os }}-
-      - name: Build GEDRoots.app and GEDRoots.dmg
-        run: mise run bundle --dmg
-      - uses: actions/upload-artifact@v7
-        with:
-          name: GEDRoots-macos-arm64-${{ github.run_number }}
-          path: target/release/GEDRoots.dmg
-          retention-days: 14
