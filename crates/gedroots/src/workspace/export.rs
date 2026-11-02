@@ -83,7 +83,7 @@ impl Workspace {
                     Ok(dest) => {
                         let mut msg = format!("Exporté dans {}", dest.display());
                         if flavor == Flavor::Geneanet {
-                            cx.open_url(gedcom::geneanet::IMPORT_URL);
+                            cx.open_url(gedcom::gedcom551::GENEANET_IMPORT_URL);
                             msg.push_str(" · déposez-le sur la page Geneanet qui vient de s'ouvrir");
                         }
                         this.set_status(msg, false);

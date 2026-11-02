@@ -35,6 +35,9 @@ pub enum Flavor {
     Geneanet,
 }
 
+/// Page d'import d'un fichier GEDCOM sur Geneanet (ouverte après l'export).
+pub const GENEANET_IMPORT_URL: &str = "https://www.geneanet.org/creer-votre-arbre/gedcom";
+
 /// Longueur maximale d'une valeur avant découpe en `CONC` (la norme limite la
 /// ligne entière à 255 caractères).
 const MAX_VALUE: usize = 200;

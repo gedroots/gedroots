@@ -48,7 +48,6 @@ actions!(
         GoToRoot,
         SearchAncestors,
         SearchDescendants,
-        SearchGeneanet,
         AttachFiles,
         LinkMedia,
         CropMedia,
@@ -203,7 +202,6 @@ pub mod label {
     pub const MERGE_SELECTED_MEDIA: &str = "Fusionner les médias sélectionnés";
     pub const ADD_PAGES: &str = "Ajouter des pages…";
     pub const CLEAR_SEARCH: &str = "Effacer la recherche";
-    pub const SEARCH_GENEANET: &str = "Rechercher sur Geneanet";
 }
 
 /// Une entrée de menu.
@@ -328,7 +326,6 @@ fn model_with(recents: &[std::path::PathBuf]) -> Vec<(&'static str, Vec<Item>)> 
             a("Lien de parenté avec…", KinshipWith),
             a("Rechercher ses ascendants", SearchAncestors),
             a("Rechercher ses descendants", SearchDescendants),
-            a(label::SEARCH_GENEANET, SearchGeneanet),
         ],
     ));
     // Dépôts et notes partagées hors de la barre latérale : on les crée depuis le menu Source.
