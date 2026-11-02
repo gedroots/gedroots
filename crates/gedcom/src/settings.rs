@@ -29,7 +29,7 @@ pub struct FileSettings {
 pub struct FileInfo {
     /// `7.0.13`
     pub version: String,
-    /// « Ancestris 13 », « GedRoots 0.1.0 »… (vide si inconnu).
+    /// « Ancestris 13 », « GEDRoots 0.1.0 »… (vide si inconnu).
     pub software: String,
     /// Date (et heure) du dernier enregistrement déclarée dans `HEAD.DATE`, au format GEDCOM.
     pub saved: Option<(String, Option<String>)>,
@@ -137,7 +137,7 @@ impl Gedcom {
         FileInfo { version: self.version().to_string(), software, saved, extensions }
     }
 
-    /// Avant l'enregistrement : GedRoots devient le logiciel qui a produit le
+    /// Avant l'enregistrement : GEDRoots devient le logiciel qui a produit le
     /// fichier (`HEAD.SOUR`), daté du moment présent (`HEAD.DATE`).
     pub fn stamp_header(&mut self) {
         let sour = self.header.ensure_child("SOUR");
@@ -146,7 +146,7 @@ impl Gedcom {
             *sour = Node::with_value("SOUR", "GEDROOTS");
         }
         sour.set_child_val("VERS", env!("CARGO_PKG_VERSION"));
-        sour.set_child_val("NAME", "GedRoots");
+        sour.set_child_val("NAME", "GEDRoots");
         let (date, time) = now_gedcom();
         let d = self.header.ensure_child("DATE");
         d.value = Some(date);
@@ -249,7 +249,7 @@ mod tests {
         let mut g = Gedcom::parse(HEAD).unwrap();
         g.stamp_header();
         let i = g.file_info();
-        assert!(i.software.starts_with("GedRoots "));
+        assert!(i.software.starts_with("GEDRoots "));
         assert!(g.header.child("SOUR").unwrap().child("CORP").is_none());
         assert!(i.saved.is_some_and(|(_, t)| t.is_some()));
     }

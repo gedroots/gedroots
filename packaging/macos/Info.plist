@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleName</key>
+	<string>GEDRoots</string>
+	<key>CFBundleDisplayName</key>
+	<string>GEDRoots</string>
+	<key>CFBundleIdentifier</key>
+	<string>io.github.antoninguyot.gedroots</string>
+	<key>CFBundleExecutable</key>
+	<string>gedroots</string>
+	<key>CFBundleIconFile</key>
+	<string>GEDRoots</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleShortVersionString</key>
+	<string>@VERSION@</string>
+	<key>CFBundleVersion</key>
+	<string>@VERSION@</string>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>fr</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.reference</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>11.0</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSSupportsAutomaticGraphicsSwitching</key>
+	<true/>
+	<key>NSHumanReadableCopyright</key>
+	<string>GEDRoots — logiciel de généalogie libre et local</string>
+	<!-- Fichiers GEDCOM : double-clic dans le Finder, « Ouvrir avec », glisser sur l'icône. -->
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Fichier GEDCOM</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Default</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>org.gedcom.ged</string>
+			</array>
+		</dict>
+	</array>
+	<key>UTImportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>org.gedcom.ged</string>
+			<key>UTTypeDescription</key>
+			<string>Fichier GEDCOM</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.plain-text</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>ged</string>
+					<string>GED</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
+</dict>
+</plist>

@@ -14,7 +14,7 @@
 //!
 //! Les individus et les sources pointent alors vers un seul média. La norme
 //! applique le `CROP` d'un lien au premier fichier ; pour situer une personne
-//! sur une autre page, GedRoots ajoute au lien l'extension `_GR_FILE` (numéro
+//! sur une autre page, GEDRoots ajoute au lien l'extension `_GR_FILE` (numéro
 //! de la page, à partir de 1, voir `docs/extensions.md`) :
 //!
 //! ```text
