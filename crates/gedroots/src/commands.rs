@@ -117,6 +117,7 @@ actions!(
         CheckForUpdates,
         ToggleAutomaticUpdates,
         ReleaseNotes,
+        ReportIssue,
     ]
 );
 
@@ -582,7 +583,12 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
             a(label::delete_search(), DeleteSearch),
         ],
     ));
-    let mut help = vec![a(t!("cmd.all_commands"), CommandPalette), Sep, a(t!("cmd.release_notes"), ReleaseNotes)];
+    let mut help = vec![
+        a(t!("cmd.all_commands"), CommandPalette),
+        Sep,
+        a(t!("cmd.release_notes"), ReleaseNotes),
+        a(t!("cmd.report_issue"), ReportIssue),
+    ];
     if !mac {
         help.push(Sep);
         help.extend(updates());

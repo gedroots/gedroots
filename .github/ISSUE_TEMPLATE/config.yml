@@ -1,0 +1,6 @@
+# Help › Report an Issue… in the app opens a blank issue with its context filled in.
+blank_issues_enabled: true
+contact_links:
+  - name: Documentation
+    url: https://gedroots.github.io/gedroots/
+    about: Guides for each genealogy task.

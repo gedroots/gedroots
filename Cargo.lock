@@ -2001,6 +2001,7 @@ dependencies = [
  "serde_json",
  "similar",
  "sys-locale",
+ "sysinfo",
  "tokio",
  "tokio-util",
  "ureq 2.12.1",

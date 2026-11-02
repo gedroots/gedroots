@@ -482,7 +482,7 @@ impl Workspace {
     /// Searches a place of the file in OpenStreetMap, with all its jurisdictions.
     pub(super) fn start_locate(&mut self, name: String, cx: &mut Context<Self>) {
         if gazetteer::offline() {
-            self.set_status(t!("places.offline"), true);
+            self.set_error("places.offline", t!("places.offline"));
             cx.notify();
             return;
         }

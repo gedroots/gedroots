@@ -41,6 +41,7 @@ mod photo;
 mod places;
 mod quality;
 mod relatives;
+mod report;
 mod review;
 mod saved;
 mod settings;
@@ -261,6 +262,8 @@ pub struct Workspace {
     pending_places: Vec<places::PendingPlace>,
     /// “New Place” window.
     new_place: Option<places::NewPlace>,
+    /// Help › Report an Issue window.
+    report: Option<report::ReportDialog>,
     /// “Locate” on a place's page.
     locate: Option<places::Locate>,
     editor_subs: Vec<Subscription>,
@@ -351,6 +354,7 @@ impl Workspace {
             place_search: Default::default(),
             pending_places: Vec::new(),
             new_place: None,
+            report: None,
             locate: None,
             editor_subs: Vec::new(),
             add_dialog: None,
@@ -406,7 +410,7 @@ impl Workspace {
                 }
                 self.status = None;
             }
-            Err(e) => self.set_status(t!("ws.open_failed", path = path.display(), error = e), true),
+            Err(e) => self.set_error("ws.open_failed", t!("ws.open_failed", path = path.display(), error = e)),
         }
         cx.notify();
     }
@@ -480,7 +484,7 @@ impl Workspace {
                 self.rescan_media();
                 self.set_status(t!("ws.saved", path = path.display()), false);
             }
-            Err(e) => self.set_status(t!("ws.save_failed", error = e), true),
+            Err(e) => self.set_error("ws.save_failed", t!("ws.save_failed", error = e)),
         }
         cx.notify();
     }
@@ -532,6 +536,13 @@ impl Workspace {
 
     fn set_status(&mut self, msg: impl Into<SharedString>, error: bool) {
         self.status = Some((msg.into(), error));
+    }
+
+    /// Shows an error. `key` names it in the context of Help › Report an Issue, which never
+    /// includes the message itself (it can quote a name or a path).
+    fn set_error(&mut self, key: &'static str, msg: impl Into<SharedString>) {
+        crate::report::record_error(key);
+        self.set_status(msg, true);
     }
 
     // ------------------------------------------------------------------
@@ -618,7 +629,7 @@ impl Workspace {
             .map(|f| [f.husband(), f.wife()].into_iter().flatten().chain(f.children()).next().map(str::to_string));
         let xref = match member {
             Some(Some(x)) => x,
-            Some(None) => return self.set_status(t!("ws.empty_family"), true),
+            Some(None) => return self.set_error("ws.empty_family", t!("ws.empty_family")),
             None => xref,
         };
         self.open_location(View::for_kind(kind), Some(xref), window, cx);
@@ -799,7 +810,7 @@ impl Workspace {
             }
             Err(e) => {
                 self.drop_checkpoint();
-                self.set_status(e, true);
+                self.set_error("ws.edit_failed", e);
             }
         }
         cx.notify();
@@ -821,7 +832,7 @@ impl Workspace {
                 self.drop_checkpoint();
                 ed.error = Some(e.clone().into());
                 self.editor = Some(ed);
-                self.set_status(t!("ws.gedcom_invalid", error = e), true);
+                self.set_error("ws.gedcom_invalid", t!("ws.gedcom_invalid", error = e));
             }
         }
         cx.notify();
@@ -2856,6 +2867,7 @@ impl Render for Workspace {
             .children(self.render_media_gallery(cx))
             .children(self.render_add_dialog(cx))
             .children(self.render_new_place(cx))
+            .children(self.render_report(cx))
             .children(self.render_palette(cx))
     }
 }

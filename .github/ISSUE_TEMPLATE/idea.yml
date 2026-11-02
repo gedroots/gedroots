@@ -1,0 +1,18 @@
+name: Idea
+description: Suggest a feature or an improvement.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What would you like to do?
+      description: The genealogy task you are trying to do, and what gets in the way today.
+    validations:
+      required: true
+  - type: textarea
+    id: elsewhere
+    attributes:
+      label: How do other programs do it?
+      description: Optional. Another genealogy program or app that handles it well.
+    validations:
+      required: false

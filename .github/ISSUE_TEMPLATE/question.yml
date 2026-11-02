@@ -1,0 +1,14 @@
+name: Question
+description: Ask how to do something in GEDRoots.
+labels: [question]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The [documentation](https://gedroots.github.io/gedroots/) may already have the answer.
+  - type: textarea
+    id: question
+    attributes:
+      label: Your question
+    validations:
+      required: true
