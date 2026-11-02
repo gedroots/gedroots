@@ -313,12 +313,10 @@ impl Workspace {
             Slot::Person { xref, side } => {
                 let i = doc.ged.individual(xref)?;
                 let on = xref == sel;
+                // Couleur de lignée pour les ancêtres seulement (comme l'éventail) ;
+                // descendants, conjoints et fratrie restent neutres.
                 let ring = match side {
-                    0 => match i.sex() {
-                        "M" => theme::paternal(),
-                        "F" => theme::maternal(),
-                        _ => theme::border_strong(),
-                    },
+                    0 => theme::border_strong(),
                     s => theme::lineage(*s as usize),
                 };
                 let target = xref.clone();
