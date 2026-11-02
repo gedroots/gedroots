@@ -220,10 +220,8 @@ pub struct Workspace {
     list_scroll: UniformListScrollHandle,
     /// Page Qualité : anomalies du fichier.
     quality: quality::QualityState,
-    /// Lien de parenté affiché dans le panneau de l'individu (A, B).
+    /// Lien de parenté affiché dans une fenêtre modale (A, B).
     kinship: Option<(String, String)>,
-    /// Défilement du panneau de détail (remis en haut pour montrer le lien de parenté).
-    detail_scroll: gpui::ScrollHandle,
     /// Fiche : afficher aussi les événements des proches (Affichage › Événements des proches).
     show_relative_events: bool,
     /// Statistiques du fichier (page Statistiques).
@@ -279,7 +277,6 @@ impl Workspace {
             list_scroll: UniformListScrollHandle::new(),
             quality: quality::QualityState { stale: true, ..Default::default() },
             kinship: None,
-            detail_scroll: gpui::ScrollHandle::new(),
             show_relative_events: false,
             stats: None,
             menu_row: Rc::default(),
@@ -1946,7 +1943,6 @@ impl Workspace {
             .w(px(360.))
             .flex_none()
             .overflow_y_scroll()
-            .track_scroll(&self.detail_scroll)
             .bg(theme::panel())
             .border_l_1()
             .border_color(theme::border())
@@ -1977,9 +1973,7 @@ impl Workspace {
         };
         match self.view {
             View::Individuals => match g.individual(key) {
-                // Le lien de parenté demandé passe en tête : sous la fiche, il resterait hors de vue.
                 Some(i) => panel
-                    .children(self.render_kinship(key, cx))
                     .child(self.render_individual_card(g, i, cx))
                     .children(self.render_actions(cx))
                     .into_any_element(),
@@ -2618,8 +2612,12 @@ impl Render for Workspace {
                 cx.listener(|this, _, w, cx| this.go_forward(w, cx)),
             )
             .on_key_down(cx.listener(|this, ev: &KeyDownEvent, _, cx| {
-                if ev.keystroke.key == "escape" && this.photo_draw.is_some() {
-                    this.cancel_draw(cx);
+                if ev.keystroke.key == "escape" {
+                    if this.photo_draw.is_some() {
+                        this.cancel_draw(cx);
+                    } else if this.kinship.take().is_some() {
+                        cx.notify();
+                    }
                 }
             }))
             .bg(theme::bg())
@@ -2628,6 +2626,7 @@ impl Render for Workspace {
             .child(self.render_header())
             .child(body)
             .children(self.render_picker(cx))
+            .children(self.render_kinship(cx))
             .children(self.render_add_dialog(cx))
             .children(self.render_palette(cx))
     }
