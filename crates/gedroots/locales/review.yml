@@ -77,6 +77,9 @@ review:
   event:
     en: Event
     fr: Événement
+  unreadable_image:
+    en: "Cannot show %{file}"
+    fr: "Impossible d’afficher %{file}"
   web_link:
     en: Web Link
     fr: Lien web

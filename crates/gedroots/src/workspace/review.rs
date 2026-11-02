@@ -323,9 +323,24 @@ impl Workspace {
             .items_center()
             .justify_center()
             .p_4()
-            .map(|d| match &pending.image {
+            .map(|d| match pending.preview.as_ref().or(pending.image.as_ref()) {
                 Some(path) => {
-                    d.child(crate::images::picture(path.clone(), 1600., 1600., ObjectFit::Contain).size_full())
+                    let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+                    d.child(
+                        crate::images::picture(path.clone(), 1600., 1600., ObjectFit::Contain)
+                            .size_full()
+                            // Never a silent black viewer: say which file could not be shown.
+                            .with_fallback(move || {
+                                div()
+                                    .size_full()
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .text_color(theme::image_muted())
+                                    .child(t!("review.unreadable_image", file = name.clone()).into_owned())
+                                    .into_any_element()
+                            }),
+                    )
                 }
                 None => d.child(div().text_color(theme::image_muted()).child(t!("review.no_image").into_owned())),
             })
