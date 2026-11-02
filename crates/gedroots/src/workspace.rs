@@ -220,7 +220,7 @@ pub struct Workspace {
     list_scroll: UniformListScrollHandle,
     /// Page Qualité : anomalies du fichier.
     quality: quality::QualityState,
-    /// Lien de parenté affiché dans le panneau de l'individu (A, B).
+    /// Lien de parenté affiché dans une fenêtre modale (A, B).
     kinship: Option<(String, String)>,
     /// Fiche : afficher aussi les événements des proches (Affichage › Événements des proches).
     show_relative_events: bool,
@@ -1971,7 +1971,6 @@ impl Workspace {
             View::Individuals => match g.individual(key) {
                 Some(i) => panel
                     .child(self.render_individual_card(g, i, cx))
-                    .children(self.render_kinship(key, cx))
                     .children(self.render_actions(cx))
                     .into_any_element(),
                 None => panel.into_any_element(),
@@ -2643,8 +2642,12 @@ impl Render for Workspace {
                 cx.listener(|this, _, w, cx| this.go_forward(w, cx)),
             )
             .on_key_down(cx.listener(|this, ev: &KeyDownEvent, _, cx| {
-                if ev.keystroke.key == "escape" && this.photo_draw.is_some() {
-                    this.cancel_draw(cx);
+                if ev.keystroke.key == "escape" {
+                    if this.photo_draw.is_some() {
+                        this.cancel_draw(cx);
+                    } else if this.kinship.take().is_some() {
+                        cx.notify();
+                    }
                 }
             }))
             .bg(theme::bg())
@@ -2653,6 +2656,7 @@ impl Render for Workspace {
             .child(self.render_header())
             .child(body)
             .children(self.render_picker(cx))
+            .children(self.render_kinship(cx))
             .children(self.render_add_dialog(cx))
             .children(self.render_palette(cx))
     }

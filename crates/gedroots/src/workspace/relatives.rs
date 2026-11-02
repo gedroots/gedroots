@@ -383,8 +383,7 @@ impl Workspace {
             return;
         }
         if let PickPurpose::Kinship { indi } = p.purpose {
-            self.kinship = Some((indi.clone(), chosen));
-            self.open_location(View::Individuals, Some(indi), window, cx);
+            self.kinship = Some((indi, chosen));
             cx.notify();
             return;
         }

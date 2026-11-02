@@ -56,12 +56,21 @@ impl Workspace {
         }
     }
 
-    /// Carte du lien de parenté, dans le panneau de l'individu `a`.
-    pub(super) fn render_kinship(&self, a: &str, cx: &mut Context<Self>) -> Option<AnyElement> {
-        let (ka, b) = self.kinship.as_ref()?;
-        if ka != a {
-            return None;
-        }
+    /// Lien vers une personne dans la fenêtre du lien de parenté : la ferme et ouvre sa fiche.
+    fn kinship_link(&self, id: impl Into<ElementId>, x: &str, cx: &mut Context<Self>) -> Stateful<Div> {
+        let name = self.doc.as_ref().map(|d| d.ged.record_label(x)).unwrap_or_default();
+        let target = x.to_string();
+        div().id(id.into()).cursor_pointer().text_color(theme::accent()).hover(|d| d.underline()).child(name).on_click(
+            cx.listener(move |this, _, w, cx| {
+                this.kinship = None;
+                this.goto(target.clone(), w, cx);
+            }),
+        )
+    }
+
+    /// Fenêtre modale du lien de parenté entre A et B (Échap, × ou clic à côté la ferment).
+    pub(super) fn render_kinship(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let (a, b) = self.kinship.as_ref()?;
         let g = &self.doc.as_ref()?.ged;
         let close = Button::new("kinship-close").ghost().xsmall().icon(IconName::Close).on_click(cx.listener(
             |this, _, _, cx| {
@@ -69,7 +78,14 @@ impl Workspace {
                 cx.notify();
             },
         ));
-        let head = h_flex().justify_between().child(label_caps("LIEN DE PARENTÉ")).child(close);
+        let head = h_flex()
+            .p_3()
+            .gap_2()
+            .items_center()
+            .border_b_1()
+            .border_color(theme::border())
+            .child(div().flex_1().font_weight(FontWeight::SEMIBOLD).child("Lien de parenté"))
+            .child(close);
         let body = match kinship::relationship(g, a, b) {
             Some(k) => v_flex()
                 .gap_2()
@@ -77,11 +93,11 @@ impl Workspace {
                     h_flex()
                         .gap_1()
                         .flex_wrap()
-                        .child(self.person_link("k-b", b, cx))
+                        .child(self.kinship_link("k-b", b, cx))
                         .child("est")
                         .child(div().font_weight(FontWeight::SEMIBOLD).child(k.label.clone()))
                         .child("de")
-                        .child(self.person_link("k-a", a, cx)),
+                        .child(self.kinship_link("k-a", a, cx)),
                 )
                 .when_some(k.degree, |d, deg| d.child(mono(format!("Degré civil : {deg}"))))
                 .when(!k.common.is_empty(), |d| {
@@ -89,7 +105,7 @@ impl Workspace {
                         h_flex()
                             .gap_3()
                             .flex_wrap()
-                            .children(k.common.iter().enumerate().map(|(n, c)| self.person_link(("k-c", n), c, cx))),
+                            .children(k.common.iter().enumerate().map(|(n, c)| self.kinship_link(("k-c", n), c, cx))),
                     )
                 })
                 .child(label_caps("CHEMIN"))
@@ -98,19 +114,38 @@ impl Workspace {
                     h_flex()
                         .gap_2()
                         .child(mono(if n == 0 { "  ".to_string() } else { "→ ".to_string() }))
-                        .child(self.person_link(("k-p", n), x, cx))
+                        .child(self.kinship_link(("k-p", n), x, cx))
                         .child(mono(years))
                 })),
-            None => v_flex().child(format!("Aucun lien trouvé avec {}.", g.record_label(b))),
+            None => v_flex().child(format!("Aucun lien trouvé entre {} et {}.", g.record_label(a), g.record_label(b))),
         };
         Some(
-            v_flex()
-                .p_4()
-                .gap_2()
-                .border_b_1()
-                .border_color(theme::border())
-                .child(head)
-                .child(body)
+            div()
+                .absolute()
+                .inset_0()
+                .flex()
+                .justify_center()
+                .items_start()
+                .pt(px(90.))
+                .bg(theme::scrim())
+                .child(
+                    v_flex()
+                        .id("kinship")
+                        .occlude()
+                        .w(px(520.))
+                        .max_h(px(560.))
+                        .rounded(theme::RADIUS_LG)
+                        .border_1()
+                        .border_color(theme::border_strong())
+                        .bg(theme::panel())
+                        .shadow_lg()
+                        .on_mouse_down_out(cx.listener(|this, _, _, cx| {
+                            this.kinship = None;
+                            cx.notify();
+                        }))
+                        .child(head)
+                        .child(div().id("kinship-body").flex_1().min_h_0().overflow_y_scroll().p_4().child(body)),
+                )
                 .into_any_element(),
         )
     }
