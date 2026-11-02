@@ -121,8 +121,8 @@ settings.site_name:
   en: Site Name
   fr: Nom du site
 settings.site_url:
-  en: "https://example.org/search?nom={nom}&prenom={prenom}"
-  fr: "https://exemple.org/recherche?nom={nom}&prenom={prenom}"
+  en: "https://example.org/search?nom={surname}&prenom={given}"
+  fr: "https://exemple.org/recherche?nom={surname}&prenom={given}"
 settings.sites:
   en: Search Sites
   fr: Sites de recherche

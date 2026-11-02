@@ -102,7 +102,7 @@ impl MediaRow {
         let row = MediaRow {
             dir: text_input(&t!("settings.media_dir_placeholder"), &f.dir, window, cx),
             types: f.types.clone(),
-            template: text_input("{annee} {nom} {prenom}", &f.template, window, cx),
+            template: text_input("{year} {surname} {given}", &f.template, window, cx),
         };
         let subs = vec![refresh_on_change(&row.dir, cx), refresh_on_change(&row.template, cx)];
         (row, subs)

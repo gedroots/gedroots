@@ -1,6 +1,6 @@
 //! Recherche en ligne (Individu › Rechercher sur ▸) : des sites de recherche
-//! décrits par un modèle d'URL dont les variables (`{nom}`, `{prenom}`,
-//! `{naissance}`…) sont remplacées par les données de la personne.
+//! décrits par un modèle d'URL dont les variables (`{surname}`, `{given}`,
+//! `{birth}`…) sont remplacées par les données de la personne.
 //!
 //! Les sites sont propres au fichier, rangés dans l'en-tête par l'extension
 //! `_GR_WEB` (voir docs/extensions.md) et réglés dans Réglages du fichier ›
@@ -8,7 +8,7 @@
 //!
 //! ```text
 //! 1 _GR_WEB Geneanet
-//! 2 _GR_URL https://www.geneanet.org/fonds/individus/?go=1&nom={nom}&prenom={prenom}
+//! 2 _GR_URL https://www.geneanet.org/fonds/individus/?go=1&nom={surname}&prenom={given}
 //! ```
 //!
 //! Sans `_GR_WEB`, GEDRoots propose [`DEFAULT_SITES`] ; un `_GR_WEB` vide (sans
@@ -25,24 +25,24 @@ pub const WEB_URI: &str = "https://github.com/antoninguyot/gedroots/blob/main/do
 
 /// Variables proposées par le panneau, dans l'ordre.
 pub const WEB_TOKENS: &[&str] = &[
-    "nom",
-    "prenom",
-    "naissance",
-    "deces",
-    "lieu",
-    "nom_pere",
-    "prenom_pere",
-    "nom_mere",
-    "prenom_mere",
-    "nom_conjoint",
-    "prenom_conjoint",
+    "surname",
+    "given",
+    "birth",
+    "death",
+    "place",
+    "father_surname",
+    "father_given",
+    "mother_surname",
+    "mother_given",
+    "spouse_surname",
+    "spouse_given",
 ];
 
 /// Un site de recherche.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SearchSite {
     pub name: String,
-    /// Modèle d'URL avec ses variables (`{nom}`…).
+    /// Modèle d'URL avec ses variables (`{surname}`…).
     pub url: String,
 }
 
@@ -50,11 +50,11 @@ pub struct SearchSite {
 pub const DEFAULT_SITES: &[(&str, &str)] = &[
     (
         "Geneanet",
-        "https://www.geneanet.org/fonds/individus/?go=1&nom={nom}&prenom={prenom}&type_periode=between&from={naissance}&to={deces}",
+        "https://www.geneanet.org/fonds/individus/?go=1&nom={surname}&prenom={given}&type_periode=between&from={birth}&to={death}",
     ),
     (
         "FamilySearch",
-        "https://www.familysearch.org/search/record/results?q.givenName={prenom}&q.surname={nom}&q.anyDate.from={naissance}&q.anyDate.to={deces}",
+        "https://www.familysearch.org/search/record/results?q.givenName={given}&q.surname={surname}&q.anyDate.from={birth}&q.anyDate.to={death}",
     ),
 ];
 
@@ -66,7 +66,13 @@ impl Gedcom {
         }
         self.header
             .children_with(WEB_TAG)
-            .map(|n| SearchSite { name: n.val().to_string(), url: n.child_val(URL_TAG).unwrap_or("").to_string() })
+            .map(|n| SearchSite {
+                name: n.val().to_string(),
+                url: crate::keywords::template_from_french(
+                    n.child_val(URL_TAG).unwrap_or(""),
+                    crate::keywords::WEB_VARIABLES,
+                ),
+            })
             .filter(|s| !s.url.is_empty())
             .collect()
     }
@@ -150,17 +156,17 @@ impl Gedcom {
         let (nm, pm) = names(mother);
         let (nc, pc) = names(spouse);
         vec![
-            ("nom", p.surname()),
-            ("prenom", p.given()),
-            ("naissance", year(p.birth().and_then(|e| e.date()))),
-            ("deces", year(p.death().and_then(|e| e.date()))),
-            ("lieu", place),
-            ("nom_pere", nf),
-            ("prenom_pere", pf),
-            ("nom_mere", nm),
-            ("prenom_mere", pm),
-            ("nom_conjoint", nc),
-            ("prenom_conjoint", pc),
+            ("surname", p.surname()),
+            ("given", p.given()),
+            ("birth", year(p.birth().and_then(|e| e.date()))),
+            ("death", year(p.death().and_then(|e| e.date()))),
+            ("place", place),
+            ("father_surname", nf),
+            ("father_given", pf),
+            ("mother_surname", nm),
+            ("mother_given", pm),
+            ("spouse_surname", nc),
+            ("spouse_given", pc),
         ]
     }
 
@@ -229,7 +235,7 @@ mod tests {
     fn fills_template() {
         let g = Gedcom::parse(SAMPLE).unwrap();
         let url = g.search_url(
-            "https://x.org/?n={nom}&p={prenom}&b={naissance}&d={deces}&l={lieu}&pp={prenom_pere}&m={nom_mere}&c={prenom_conjoint}&k={inconnu}",
+            "https://x.org/?n={surname}&p={given}&b={birth}&d={death}&l={place}&pp={father_given}&m={mother_surname}&c={spouse_given}&k={inconnu}",
             "I1",
         );
         assert_eq!(
@@ -238,7 +244,7 @@ mod tests {
         );
         // Accolade isolée et individu absent.
         assert_eq!(g.search_url("a{b", "I1"), "a{b");
-        assert_eq!(g.search_url("https://x.org/?n={nom}", "I9"), "https://x.org/?n=");
+        assert_eq!(g.search_url("https://x.org/?n={surname}", "I9"), "https://x.org/?n=");
     }
 
     #[test]
@@ -252,7 +258,7 @@ mod tests {
 
         let mine = vec![
             SearchSite { name: "Geneanet".into(), url: defaults[0].url.clone() },
-            SearchSite { name: " ".into(), url: "https://memoiredeshommes.fr/?nom={nom}".into() },
+            SearchSite { name: " ".into(), url: "https://memoiredeshommes.fr/?nom={surname}".into() },
             SearchSite { name: "Vide".into(), url: "  ".into() },
         ];
         assert!(g.set_search_sites(&mine));
@@ -261,7 +267,7 @@ mod tests {
         assert_eq!(sites[1].name, "memoiredeshommes.fr");
         let text = g.to_gedcom_string();
         assert!(text.contains("2 TAG _GR_WEB "));
-        assert!(text.contains("1 _GR_WEB memoiredeshommes.fr\n2 _GR_URL https://memoiredeshommes.fr/?nom={nom}"));
+        assert!(text.contains("1 _GR_WEB memoiredeshommes.fr\n2 _GR_URL https://memoiredeshommes.fr/?nom={surname}"));
 
         // Plus aucun site : le menu disparaît.
         assert!(g.set_search_sites(&[]));

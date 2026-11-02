@@ -30,3 +30,9 @@ record.new_repository:
 record.new_note:
   en: New Note
   fr: Nouvelle note
+media_naming.portrait:
+  en: portrait
+  fr: portrait
+media_naming.family:
+  en: family
+  fr: famille
