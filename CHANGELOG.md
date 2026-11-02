@@ -1,5 +1,22 @@
 # Changelog
 
+## [2026.11.1](https://github.com/gedroots/gedroots/releases/tag/v2026.11.1) - 2026-11-02
+
+### 🔄 Changed
+
+- Help › Report an Issue… with optional, non-personal context by @antoninguyot in [#81](https://github.com/gedroots/gedroots/pull/81)
+- Simpler events timeline, read-only event window and associations by @antoninguyot in [#84](https://github.com/gedroots/gedroots/pull/84)
+- Zoom and pan on large images, with a minimap by @antoninguyot in [#86](https://github.com/gedroots/gedroots/pull/86)
+- Unload tree generations the view has moved away from by @antoninguyot in [#83](https://github.com/gedroots/gedroots/pull/83)
+- Start a new tree from a pedigree window, welcome page with three choices by @antoninguyot in [#87](https://github.com/gedroots/gedroots/pull/87)
+- Let agents propose custom events with their type by @antoninguyot in [#88](https://github.com/gedroots/gedroots/pull/88)
+- Records open read-first, in one column; Edit Record (⌘L) edits them in place by @antoninguyot in [#85](https://github.com/gedroots/gedroots/pull/85)
+- Import into an unsaved tree, import GEDZIP archives, ask for the root person by @antoninguyot in [#89](https://github.com/gedroots/gedroots/pull/89)
+
+### 🐛 Bug Fixes
+
+- **(docs)** Override vulnerable transitive dependencies of the docs site by @antoninguyot in [#80](https://github.com/gedroots/gedroots/pull/80)
+
 ## [2026.11.0](https://github.com/gedroots/gedroots/releases/tag/v2026.11.0) - 2026-11-02
 
 ### 🔄 Changed
