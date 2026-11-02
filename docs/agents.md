@@ -8,16 +8,21 @@ compares it with the tree and saves it.
 
 ## Connecting
 
-1. File › Connect an AI Agent…, turn on **Allow AI agents**.
-2. Copy the command and run it once in a terminal:
+File › Connect an AI Agent…, turn on **Allow AI agents**, then pick the agent in the list. The
+window gives the shortest way to connect each one (the token is masked on screen, the copy
+buttons give the real value):
 
-   ```sh
-   claude mcp add --transport http gedroots http://127.0.0.1:47280/mcp \
-     --header "Authorization: Bearer <token>"
-   ```
+| Agent | How |
+| --- | --- |
+| Claude Code, Gemini CLI | A command to run once in a terminal (`claude mcp add --transport http …`, `gemini mcp add --transport http …`) |
+| Codex | A block to add to `~/.codex/config.toml` (`url` and `http_headers`) |
+| Claude Desktop | A block for `claude_desktop_config.json`, through `npx mcp-remote` (Node.js), since its connectors cannot reach `127.0.0.1` |
+| Cursor, VS Code | **Add to Cursor / VS Code** opens the editor's install link (`cursor://anysphere.cursor-deeplink/mcp/install`, `vscode:mcp/install`); the `mcp.json` block is there as a fallback |
+| Other MCP client | Address, transport (Streamable HTTP) and `Authorization` header |
 
-The server runs while GEDRoots is open and the setting is on. Any MCP client that speaks
-Streamable HTTP with a header works the same way.
+The server runs while GEDRoots is open and the setting is on. The window shows the last agent
+that connected (the name it gives when it opens its MCP session), and remembers the chosen agent
+in the machine's settings. The commands and blocks are built in `crates/gedroots/src/agent/clients.rs`.
 
 ## Tools
 
@@ -97,6 +102,6 @@ the act editor. Proposals live in memory: they are lost when the app closes.
 - **Local only.** The server listens on `127.0.0.1:47280`, requires the token in the
   `Authorization` header and rejects requests sent by a web page (`Origin` header).
 - **Nothing is written by the agent.** It can only propose; a person reviews, compares and saves.
-- The setting and the token belong to the machine, not to the file: they are kept in
+- The setting, the token and the chosen agent belong to the machine, not to the file: they are kept in
   `GEDRoots/agents` in the platform's configuration folder (`~/Library/Application Support` on
   macOS, `~/.config` on Linux, `%APPDATA%` on Windows), never in the `.ged`.

@@ -225,8 +225,8 @@ et suit le [design system GEDRoots](design.md) (fonds neutres et touches de viol
   fréquents, la longévité par siècle, l'âge au mariage, la complétude de l'ascendance de
   l'individu racine par génération et l'implexe.
 - **Agents IA** (Fichier › Connecter un agent IA…) : un serveur MCP local, sur `127.0.0.1`,
-  laisse un agent comme Claude Code lire le fichier ouvert (fiches, recherche, actes à chercher
-  parmi les ascendants), sans jamais l'écrire : les actes qu'il trouve attendent dans la page
+  laisse un agent (Claude Code, Codex, Gemini CLI, Claude Desktop, Cursor, VS Code ou tout
+  client MCP) lire le fichier ouvert (fiches, recherche, actes à chercher parmi les ascendants), sans jamais l'écrire : les actes qu'il trouve attendent dans la page
   « À relire », où l'on compare ce qui sera écrit avec l'arbre avant d'enregistrer. Les personnes
   vivantes sont masquées. Deux prompts, `find_record` et `read_record`, donnent à l'agent la
   méthode pour chercher un acte puis le proposer. Voir [docs/agents.md](docs/agents.md).

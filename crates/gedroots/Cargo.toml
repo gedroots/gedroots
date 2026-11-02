@@ -31,6 +31,8 @@ dirs = "6"
 tokio-util = "0.7.20"
 hayro = "0.8.0"
 similar = "2.7.0"
+# Lien d'installation de Cursor (configuration en base64).
+base64 = "0.22"
 
 # Fichiers récents : liste du système sous macOS (NSDocumentController)…
 [target.'cfg(target_os = "macos")'.dependencies]

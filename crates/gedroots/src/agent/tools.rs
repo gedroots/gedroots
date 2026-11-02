@@ -294,7 +294,19 @@ call `search_sources` to reuse the source or repository, then `propose_act`. The
 `find_record` and `read_record` give the full method."
 )]
 #[prompt_handler(router = self.prompt_router)]
-impl ServerHandler for GedrootsMcp {}
+impl ServerHandler for GedrootsMcp {
+    async fn initialize(
+        &self,
+        request: rmcp::model::InitializeRequestParams,
+        context: rmcp::service::RequestContext<rmcp::RoleServer>,
+    ) -> Result<rmcp::model::InitializeResult, rmcp::ErrorData> {
+        // La fenêtre « Agents IA » montre le dernier agent connecté.
+        let info = &request.client_info;
+        super::note_client(info.title.as_deref().filter(|t| !t.is_empty()).unwrap_or(&info.name));
+        context.peer.set_peer_info(request.clone());
+        self.negotiate_initialize(&request)
+    }
+}
 
 /// Refuse toute requête sans le bon jeton.
 async fn check_token(
