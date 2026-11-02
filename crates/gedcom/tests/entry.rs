@@ -65,6 +65,11 @@ fn birth_entry_links_existing_and_creates_new() {
     assert!(cite.child("OBJE").is_some());
     assert_eq!(cite.child_val("_GR_FLD"), Some("numero 27"));
     assert!(cite.path_val(&["DATA", "TEXT"]).unwrap().starts_with("L'an"));
+    // Types : la source contient des naissances de 1914, l'image est un manuscrit.
+    let content = SourceContent::read(g.get("S00001").unwrap());
+    assert!(content.events.contains(&"BIRT".to_string()), "{content:?}");
+    assert!(content.period.contains("1914"), "{content:?}");
+    assert_eq!(medium(g.get(res.media.as_deref().unwrap()).unwrap()), Some("MANUSCRIPT"));
     // Témoin associé à l'événement.
     let witness = res.persons[3].clone().unwrap();
     let asso = birt.child("ASSO").unwrap();

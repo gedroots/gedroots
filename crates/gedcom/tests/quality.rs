@@ -128,3 +128,9 @@ fn gedcom_551_skips_schema() {
     let g = Gedcom::parse("0 HEAD\n1 GEDC\n2 VERS 5.5.1\n0 @I1@ INDI\n1 FOO x\n0 TRLR\n").unwrap();
     assert!(!codes(&quality::run(&g)).contains(&"tag_not_allowed"));
 }
+
+#[test]
+fn citation_checks_have_categories() {
+    assert_eq!(quality::category("role_sex_mismatch"), Category::Family);
+    assert_eq!(quality::category("outside_source_period"), Category::Dates);
+}

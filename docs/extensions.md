@@ -160,12 +160,36 @@ la liste) porte la balise avec le bon code.
 | `unused_record` | Média, source, dépôt ou note partagée cité nulle part |
 | `disconnected` | Individu (ou groupe d'individus) sans aucun lien familial ni `ASSO` avec l'individu racine |
 
+| `role_sex_mismatch` | Rôle `FATH`/`HUSB` d'une femme ou `MOTH`/`WIFE` d'un homme dans une citation |
+| `outside_source_period` | Acte daté hors de la période que sa source déclare pour ce type d'acte |
+
 Le contrôle du schéma GEDCOM 7 ne s'applique qu'aux fichiers en version 7 ; les balises
 d'extension (`_XXX`) ne sont jamais signalées.
 
 Les dates imprécises (`ABT`, `BEF`, `BET … AND …`, année seule) sont traitées comme des
 intervalles : une anomalie n'est signalée que si elle est certaine pour toutes les dates
 possibles. Les dates « vers » ont une marge de 5 ans.
+
+## Types des sources et des médias (sans extension)
+
+GedRoots type les sources et les médias avec les structures standard de GEDCOM 7,
+que les autres logiciels lisent :
+
+| Donnée | GEDCOM écrit |
+| --- | --- |
+| Contenu d'une source : types d'actes, période (fiche source, champs **Actes** et **Période**) | `SOUR` / `DATA` / `EVEN BIRT, DEAT` + `DATE FROM 1793 TO 1802` (+ `PLAC`) |
+| Support d'un média (fiche média, liste **Support**) | `OBJE` / `FILE` / `FORM` / `MEDI PHOTO`, `MANUSCRIPT`, `TOMBSTONE`… |
+| Portrait d'un individu (clic droit sur une image › **Définir comme portrait**) | son lien `OBJE` passe en tête de ses médias ; le média devient `MEDI PHOTO` s'il n'avait pas de support |
+
+La saisie d'un acte ajoute son type au contenu de la source et élargit la période à
+l'année de l'acte ; l'image d'un acte saisi est un `MANUSCRIPT`.
+
+Portrait affiché : la première photo (`MEDI PHOTO`) de l'individu, sinon une image sans
+support rangée dans un dossier « Portraits » ou titrée « Portrait », sinon une image sans
+support qui n'est pas le scan d'une source, sinon sa première image.
+
+L'assistant d'import convertit `_PRIM Y` (photo principale de Family Tree Maker, Legacy,
+MyHeritage…) : le lien marqué passe en tête des médias et la balise est retirée.
 
 ## Saisie guidée des actes (`_GR_TPL`, `_GR_FLD`…)
 

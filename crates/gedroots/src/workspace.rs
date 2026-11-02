@@ -815,6 +815,8 @@ impl Workspace {
                         dot: None,
                         flagged: s.media_xrefs().is_empty(),
                     }
+                    // Types d'actes et période : « naissance », « 1795 »…
+                    .with_search(SourceContent::read(r).summary())
                 })
                 .collect(),
             View::Places => g
@@ -850,7 +852,14 @@ impl Workspace {
                         dot: missing.then(theme::warn),
                         flagged: missing,
                     }
-                    .with_search(files.iter().map(|f| f.path).collect::<Vec<_>>().join(" "))
+                    .with_search(
+                        files
+                            .iter()
+                            .map(|f| f.path)
+                            .chain(medium(r).and_then(medium_label))
+                            .collect::<Vec<_>>()
+                            .join(" "),
+                    )
                 })
                 .collect(),
             View::Repositories => g
@@ -1322,7 +1331,9 @@ impl Workspace {
                         .child(label_caps(f.label.clone()))
                         .child(match &f.state {
                             FieldState::Text(e) => Input::new(e).small().into_any_element(),
-                            FieldState::Choice(e) => Select::new(e).small().into_any_element(),
+                            FieldState::Choice(e) => {
+                                Select::new(e).small().cleanable(true).placeholder("Choisir…").into_any_element()
+                            }
                             FieldState::Date(e) => e.clone().into_any_element(),
                         })
                         .children(match &f.state {

@@ -88,7 +88,9 @@ impl Category {
 /// Catégorie d'un code d'anomalie.
 pub fn category(code: &str) -> Category {
     match code {
-        "husband_not_male" | "wife_not_female" | "own_ancestor" | "missing_backlink" => Category::Family,
+        "husband_not_male" | "wife_not_female" | "own_ancestor" | "missing_backlink" | "role_sex_mismatch" => {
+            Category::Family
+        }
         "broken_link" | "tag_not_allowed" | "missing_required" | "too_many" | "wrong_pointer" | "invalid_value" => {
             Category::Structure
         }

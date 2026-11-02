@@ -22,13 +22,22 @@ pub struct Check {
 }
 
 /// Les contrôles, dans l'ordre où l'assistant les présente.
-pub static CHECKS: &[Check] = &[Check {
-    id: "url",
-    what: ("lien _URL", "liens _URL"),
-    into: "liens multimédia GEDCOM 7",
-    count: Gedcom::legacy_url_count,
-    fix: Gedcom::migrate_url_tags,
-}];
+pub static CHECKS: &[Check] = &[
+    Check {
+        id: "url",
+        what: ("lien _URL", "liens _URL"),
+        into: "liens multimédia GEDCOM 7",
+        count: Gedcom::legacy_url_count,
+        fix: Gedcom::migrate_url_tags,
+    },
+    Check {
+        id: "prim",
+        what: ("photo principale _PRIM", "photos principales _PRIM"),
+        into: "premier média de la fiche",
+        count: Gedcom::prim_count,
+        fix: Gedcom::migrate_prim_tags,
+    },
+];
 
 /// Ce qu'un contrôle a trouvé.
 #[derive(Debug, Clone, PartialEq, Eq)]

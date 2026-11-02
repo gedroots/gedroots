@@ -14,6 +14,7 @@
 //! - [`import`] : contrôles de l'assistant d'import (balises non standard → GEDCOM 7) ;
 //! - [`custom`] : format des lieux (`HEAD.PLAC.FORM`) et types d'événements personnalisés ;
 //! - [`settings`] : réglages du fichier (auteur, droits, langue…) dans l'en-tête ;
+//! - [`kinds`] : types des sources (`DATA` / `EVEN`) et des médias (`MEDI`), portrait ;
 //! - [`weblink`] : liens web en GEDCOM 7 standard (`OBJE` dont le `FILE` est une URL) ;
 //! - [`crop`] : recadrage des médias (`CROP`) et personnes identifiées sur les photos ;
 //! - [`multipage`] : médias à plusieurs pages (plusieurs `FILE`), fusion et séparation ;
@@ -31,6 +32,7 @@ pub mod entry;
 pub mod events;
 pub mod geo;
 pub mod import;
+pub mod kinds;
 pub mod model;
 pub mod multipage;
 pub mod node;
@@ -50,6 +52,7 @@ pub use date::{Calendar, Date, DateKind, Parsed as DateInput, SimpleDate, parse_
 pub use document::{Gedcom, RecordKind};
 pub use entry::{Entry, EntryResult, MediaChoice, Participant, PersonChoice, SourceChoice, Suggestion};
 pub use events::PersonEvent;
+pub use kinds::{MEDIUMS, SourceContent, medium, medium_label, parse_event_list, set_medium};
 pub use model::*;
 pub use multipage::{MediaFile, PAGE_TAG, page_of_link, strip_page_suffix};
 pub use node::Node;

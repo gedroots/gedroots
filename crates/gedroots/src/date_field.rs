@@ -40,6 +40,12 @@ pub fn date_field<T: 'static>(
 }
 
 impl DateField {
+    /// Remplace l'exemple grisé du champ vide (ex. une période).
+    pub fn with_placeholder(self, hint: &'static str, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        self.input.update(cx, |s, cx| s.set_placeholder(hint, window, cx));
+        self
+    }
+
     pub fn new(value: &str, phrase: &str, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let parsed = Parsed::from_gedcom(value, phrase);
         let text = parsed.to_input_text();
