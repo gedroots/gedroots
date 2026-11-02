@@ -258,6 +258,8 @@ impl Workspace {
         });
         let map = cx.new(|_| MapView::new());
         let map_sub = cx.subscribe_in(&map, window, Self::on_map_event);
+        // Clair / sombre : suit l'apparence du système.
+        let appearance_sub = cx.observe_window_appearance(window, |_, window, cx| theme::sync(window, cx));
         let mut this = Self {
             focus: cx.focus_handle(),
             doc: None,
@@ -297,7 +299,7 @@ impl Workspace {
             place_focus: None,
             editor_subs: Vec::new(),
             add_dialog: None,
-            _subs: vec![sub, map_sub],
+            _subs: vec![sub, map_sub, appearance_sub],
         };
         if let Some(p) = path {
             this.load(p, window, cx);
@@ -860,7 +862,7 @@ impl Workspace {
                     .gap_2()
                     .px_2()
                     .py_1()
-                    .rounded_sm()
+                    .rounded(theme::RADIUS_SM)
                     .cursor_pointer()
                     .hover(|d| d.bg(theme::hover()))
                     .child(
@@ -1114,9 +1116,9 @@ fn add_slot(id: impl Into<SharedString>, label: &'static str) -> Stateful<Div> {
     h_flex()
         .id(ElementId::Name(id.into()))
         .p_2()
-        .gap_1p5()
+        .gap_2()
         .items_center()
-        .rounded_md()
+        .rounded(theme::RADIUS_SM)
         .border_1()
         .border_dashed()
         .border_color(theme::border_strong())
@@ -1201,7 +1203,7 @@ impl Workspace {
                     .gap_2()
                     .items_center()
                     .font_weight(FontWeight::SEMIBOLD)
-                    .child(Icon::new(IconName::Network).size(px(16.)).text_color(theme::accent()))
+                    .child(img("brand/icon-micro.svg").size(px(16.)))
                     .child("GEDRoots"),
             )
             // Linux, Windows : menus dans la fenêtre (natifs sous macOS).
@@ -1236,8 +1238,8 @@ impl Workspace {
                 div()
                     .id(SharedString::from(format!("view-{}", v.short())))
                     .w(px(68.))
-                    .py_1p5()
-                    .rounded_md()
+                    .py_2()
+                    .rounded(theme::RADIUS_SM)
                     .cursor_pointer()
                     .flex()
                     .flex_col()
@@ -1581,7 +1583,7 @@ impl Workspace {
                         .id(SharedString::from(format!("pl-{}-{n}", input.entity_id())))
                         .px_2()
                         .py(px(3.))
-                        .rounded_md()
+                        .rounded(theme::RADIUS_SM)
                         .border_1()
                         .border_color(theme::border_strong())
                         .bg(theme::surface())
@@ -1640,7 +1642,7 @@ impl Workspace {
                         .id(SharedString::from(format!("img-{target}")))
                         .gap_1()
                         .p_2()
-                        .rounded_md()
+                        .rounded(theme::RADIUS_SM)
                         .border_1()
                         .border_color(theme::border())
                         .bg(theme::surface())
@@ -1671,7 +1673,7 @@ impl Workspace {
             let tile = div()
                 .relative()
                 .id(SharedString::from(format!("thumb-{target}")))
-                .rounded_md()
+                .rounded(theme::RADIUS_SM)
                 .overflow_hidden()
                 .border_1()
                 .border_color(theme::border())
@@ -1688,10 +1690,10 @@ impl Workspace {
                     .right(px(4.))
                     .bottom(px(4.))
                     .px_1()
-                    .rounded_sm()
-                    .bg(gpui_kit::hsla(0., 0., 0., 0.7))
+                    .rounded(theme::RADIUS_SM)
+                    .bg(theme::image_label_bg())
                     .text_xs()
-                    .text_color(theme::text())
+                    .text_color(theme::image_text())
                     .child(format!("{page_count} p."))
             });
             let tile = match path {
@@ -1725,7 +1727,7 @@ impl Workspace {
                 .border_color(theme::border())
                 .child(
                     h_flex()
-                        .gap_1p5()
+                        .gap_2()
                         .items_center()
                         .child(icon(IconName::Images))
                         .child(label_caps(format!("Images · {n}"))),
@@ -1885,7 +1887,7 @@ impl Workspace {
                             .gap_1()
                             .border_b_1()
                             .border_color(theme::border())
-                            .child(div().text_lg().font_weight(FontWeight::SEMIBOLD).child(short_place(key)))
+                            .child(div().text_xl().font_weight(FontWeight::SEMIBOLD).child(short_place(key)))
                             .children(place.iter().map(|p| {
                                 mono(match (&p.latitude, &p.longitude) {
                                     (Some(a), Some(b)) => format!("{a} · {b} · {} occurrence(s)", p.uses),
@@ -1949,7 +1951,7 @@ impl Workspace {
                             })
                             .child(
                                 v_flex().flex_1().min_w_0().gap_1().child(
-                                    div().text_lg().font_weight(FontWeight::SEMIBOLD).child(g.record_label(key)),
+                                    div().text_xl().font_weight(FontWeight::SEMIBOLD).child(g.record_label(key)),
                                 ),
                             ),
                     )
@@ -1977,7 +1979,7 @@ impl Workspace {
                     .gap_2()
                     .px_2()
                     .py_1()
-                    .rounded_sm()
+                    .rounded(theme::RADIUS_SM)
                     .cursor_pointer()
                     .hover(|d| d.bg(theme::hover()))
                     .children(kind.map(|k| icon(View::for_kind(k).icon()).text_color(theme::muted())))
@@ -2046,7 +2048,7 @@ impl Workspace {
                     .gap_0p5()
                     .px_2()
                     .py_1()
-                    .rounded_sm()
+                    .rounded(theme::RADIUS_SM)
                     .cursor_pointer()
                     .hover(|d| d.bg(theme::hover()))
                     .drag_over::<ExternalPaths>(|d, _, _, _| d.bg(theme::accent_soft()))
@@ -2064,7 +2066,7 @@ impl Workspace {
                             .gap_2()
                             .child(
                                 h_flex()
-                                    .gap_1p5()
+                                    .gap_2()
                                     .items_center()
                                     .child(div().font_weight(FontWeight::MEDIUM).child(label))
                                     // Point orange : événement sans source.
@@ -2176,7 +2178,7 @@ impl Workspace {
             .gap_2()
             .px_2()
             .py_1()
-            .rounded_sm()
+            .rounded(theme::RADIUS_SM)
             .text_sm()
             .text_color(theme::muted())
             .cursor_pointer()
@@ -2231,7 +2233,7 @@ impl Workspace {
                         Some(p) => div()
                             .id(id)
                             .size(px(56.))
-                            .rounded_sm()
+                            .rounded(theme::RADIUS_SM)
                             .overflow_hidden()
                             .border_1()
                             .border_color(theme::border())
@@ -2245,9 +2247,9 @@ impl Workspace {
                             .gap_1()
                             .items_center()
                             .max_w(px(220.))
-                            .px_1p5()
+                            .px_2()
                             .py_0p5()
-                            .rounded_sm()
+                            .rounded(theme::RADIUS_SM)
                             .border_1()
                             .border_color(theme::border())
                             .text_xs()
@@ -2290,7 +2292,7 @@ impl Workspace {
                     .child(
                         h_flex()
                             .gap_1()
-                            .text_lg()
+                            .text_xl()
                             .child(div().font_weight(FontWeight::SEMIBOLD).child(i.surname()))
                             .child(i.given()),
                     )
@@ -2380,7 +2382,7 @@ impl Workspace {
                     .gap_2()
                     .px_2()
                     .py_1()
-                    .rounded_sm()
+                    .rounded(theme::RADIUS_SM)
                     .items_center()
                     .cursor_pointer()
                     .hover(|d| d.bg(theme::hover()))
@@ -2436,7 +2438,7 @@ impl Workspace {
             .when(self.doc.is_some(), |d| {
                 d.child(
                     h_flex()
-                        .gap_1p5()
+                        .gap_2()
                         .items_center()
                         .child(dot(if saved { theme::ok() } else { theme::warn() }))
                         .child(if saved { "Enregistré" } else { "Modifications non enregistrées" }),
@@ -2453,12 +2455,15 @@ impl Workspace {
             .flex_1()
             .items_center()
             .justify_center()
-            .gap_4()
-            .child(div().text_2xl().font_weight(FontWeight::SEMIBOLD).child("GEDRoots"))
+            .gap_8()
             .child(
-                div()
-                    .text_color(theme::muted())
-                    .child("Logiciel de généalogie libre et local. Vos données restent dans un fichier GEDCOM 7."),
+                img(if theme::is_dark() {
+                    "brand/logo-horizontal-dark.svg"
+                } else {
+                    "brand/logo-horizontal-light.svg"
+                })
+                .w(px(272.))
+                .h(px(78.)),
             )
             .child(
                 h_flex()
@@ -2530,6 +2535,7 @@ impl Render for Workspace {
         v_flex()
             .size_full()
             .relative()
+            .font_features(theme::tabular_nums())
             .track_focus(&self.focus)
             .key_context("Workspace")
             .map(|d| self.bind_actions(d, window, cx))

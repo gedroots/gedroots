@@ -233,7 +233,7 @@ impl Workspace {
                     .items_center()
                     .border_b_1()
                     .border_color(theme::border())
-                    .child(div().text_lg().font_weight(FontWeight::SEMIBOLD).child(cat.label()))
+                    .child(div().text_xl().font_weight(FontWeight::SEMIBOLD).child(cat.label()))
                     .child(mono(shown.len().to_string()))
                     .child(div().flex_1())
                     .children(batches.into_iter().map(|(code, label, n)| {

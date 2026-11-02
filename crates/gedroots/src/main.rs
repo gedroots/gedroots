@@ -30,8 +30,19 @@ gpui_kit::assets::icon_assets!(
 
 struct AppAssets;
 
+/// Marque GEDRoots (sources SVG du kit de marque), affichée avec `img("brand/…")`.
+const BRAND: [(&str, &[u8]); 4] = [
+    ("brand/logo-horizontal-light.svg", include_bytes!("../assets/brand/logo-horizontal-light.svg")),
+    ("brand/logo-horizontal-dark.svg", include_bytes!("../assets/brand/logo-horizontal-dark.svg")),
+    ("brand/icon-primary.svg", include_bytes!("../assets/brand/icon-primary.svg")),
+    ("brand/icon-micro.svg", include_bytes!("../assets/brand/icon-micro.svg")),
+];
+
 impl AssetSource for AppAssets {
     fn load(&self, path: &str) -> Result<Option<Cow<'static, [u8]>>> {
+        if let Some((_, bytes)) = BRAND.iter().find(|(p, _)| *p == path) {
+            return Ok(Some(Cow::Borrowed(*bytes)));
+        }
         if let Some(bytes) = ExtraIcons.load(path)? {
             return Ok(Some(bytes));
         }
@@ -41,6 +52,7 @@ impl AssetSource for AppAssets {
     fn list(&self, path: &str) -> Result<Vec<SharedString>> {
         let mut paths = gpui_kit::assets::Assets.list(path)?;
         paths.extend(ExtraIcons.list(path)?);
+        paths.extend(BRAND.iter().filter(|(p, _)| p.starts_with(path)).map(|(p, _)| SharedString::from(*p)));
         paths.sort();
         paths.dedup();
         Ok(paths)

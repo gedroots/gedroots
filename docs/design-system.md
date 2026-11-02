@@ -1,0 +1,110 @@
+# Design system GEDRoots
+
+Tiré du kit de marque GEDRoots v1.0 (« graphe organique, minimaliste, violet »). Le code
+de référence est [`crates/gedroots/src/theme.rs`](../crates/gedroots/src/theme.rs) : les vues
+n'écrivent jamais de couleur, de rayon ni de police en dur, elles passent par ses jetons.
+
+| Clair | Sombre |
+|---|---|
+| ![Thème clair](capture-theme-clair.png) | ![Thème sombre](capture-theme-sombre.png) |
+
+## Principes
+
+- **Sobre** : une seule couleur forte, le violet primaire, réservée aux actions, liens et
+  sélections. Pas de dégradé sur les composants ; les grands aplats de violet sont évités.
+- **Commandes dans les menus** : pas de barre d'outils. Les seuls boutons visibles sont les
+  petits « + » des en-têtes de section et les emplacements pointillés de l'arbre.
+- **Pas de texte explicatif** : un titre par élément ; les exemples de format vont dans le
+  placeholder des champs ; les sections vides sont masquées.
+- **Jamais la couleur seule** : lignées, états et sélections ont aussi une forme (point,
+  contour, icône, texte). Les couleurs restent lisibles par les daltoniens.
+
+## Couleurs
+
+Le mode suit l'apparence du système et change à chaud. `GEDROOTS_APPEARANCE=light|dark` le
+force (captures, tests).
+
+| Jeton (`theme::`) | Rôle | Clair | Sombre |
+|---|---|---|---|
+| `bg()` | Canevas principal | `#FFFFFF` | `#160E2B` |
+| `panel()` | Barres, panneaux latéraux | `#FAF7FF` | `#1B1133` |
+| `surface()` | Cartes, champs | `#F3EDFF` | `#251545` |
+| `hover()` | Survol, sélection discrète | `#EEE5FF` | `#301D57` |
+| `border()` | Séparateurs | `#E7DDF6` | `#3A2858` |
+| `border_strong()` | Contours de champs, cases | `#D3C3EC` | `#493266` |
+| `text()` | Texte principal (Ink) | `#1B1133` | `#F7F1FF` |
+| `muted()` | Texte secondaire | `#625878` | `#C8B7DF` |
+| `accent()` | Primaire : actions, liens, sélection | `#6D3DF0` | `#B997FF` |
+| — survol / pressé | Boutons primaires | `#5B2BDD` / `#4C21B8` | `#C8AAFF` / `#A77CF6` |
+| `on_accent()` | Texte sur le primaire | `#FFFFFF` | `#1B1133` |
+| `accent_soft()` | Ligne sélectionnée | primaire 12 % | primaire 18 % |
+| `paternal()` | Lignée paternelle | `#3F5BD8` | `#8FA2FF` |
+| `maternal()` | Lignée maternelle | `#9C36B5` | `#E39BF0` |
+| `ok()` | Succès, « sourcé » | `#1A7346` | `#6FD3A0` |
+| `warn()` | À vérifier | `#9A5B00` | `#F0B35A` |
+| `danger()` | Erreur, suppression | `#C42B48` | `#F2828E` |
+| `scrim()` | Voile sous les modales | Ink 40 % | Ink 60 % |
+| `viewer()` | Fond des visionneuses d'actes | `#120B24` | `#120B24` |
+| `image_*()` | Cadres et étiquettes posés sur une photo | couleurs sombres, fond Ink 75 % | idem |
+
+Le de cujus (Sosa 1) prend le primaire ; les deux lignées restent dans la gamme violette
+(indigo côté père, orchidée côté mère) au lieu d'introduire d'autres couleurs fortes.
+
+Contrastes (WCAG) : tout texte courant dépasse 4,5:1 sur `bg`, `panel` et `surface` dans les
+deux modes (primaire sur blanc 5,9:1 ; muted 6,6:1 ; texte sombre 16,8:1). Les couleurs d'état
+et de lignée dépassent aussi 4,5:1 sur `bg`.
+
+Le thème des composants gpui-component (boutons, listes, menus, tableaux, champs) est rempli
+à partir de ces jetons dans `theme::apply`.
+
+## Typographie
+
+- **Inter**, embarquée dans l'app (Regular, Medium, SemiBold, Bold ; licence SIL OFL dans
+  `crates/gedroots/assets/fonts/OFL.txt`). Le rendu est le même sur macOS, Linux et Windows.
+- **Chiffres tabulaires** activés sur toute la fenêtre (`theme::tabular_nums()`), pour aligner
+  dates et effectifs.
+- Graisses : 400 texte, 500 libellés, 600 titres et noms, 700 réservé.
+- Échelle (px) : 12 `text_xs` (métadonnées, listes denses) · 14 `text_sm` (texte courant) ·
+  16 base · 20 `text_xl` (titres de fiche) · 24 `text_2xl`. Pas de 18 px.
+- Libellés en casse de phrase, courts.
+
+## Espacements
+
+Pas de 4 px : 4, 8, 12, 16, 24, 32, 48, 64 — soit `gap_1`, `gap_2`, `gap_3`, `gap_4`, `gap_6`,
+`gap_8`… (idem `p_*`, `px_*`, `py_*`). `0p5` (2 px) est toléré pour un écart vertical entre deux
+lignes de texte ; pas de `1p5` ni de `2p5`.
+
+## Rayons
+
+| Jeton | Valeur | Usage |
+|---|---|---|
+| `RADIUS_SM` | 8 px | Champs, puces, vignettes, cases de l'arbre, cartes de section (aussi `Theme.radius`) |
+| `RADIUS_MD` | 12 px | Boutons, menus, popovers (`Theme.radius_lg`) |
+| `RADIUS_LG` | 20 px | Fenêtres modales (palette de commandes, ajout d'un proche…) |
+
+Le kit prévoit aussi 28 px pour de grands panneaux superposés : à introduire si l'app en a un.
+Bordures 1 px `border()` ; focus : anneau `accent()`.
+
+## Icônes
+
+- **Interface** : icônes Lucide (jeu de gpui-kit + `ExtraIcons` dans `main.rs`), 16 px dans les
+  listes et en-têtes, 14 px dans le texte, couleur `muted()` ou `accent()` quand actif.
+- **Marque** : sources SVG du kit dans `crates/gedroots/assets/brand/`, chargées par
+  `img("brand/…")`.
+  - `icon-micro.svg` : symbole simplifié pour 16–32 px (barre du haut) ;
+  - `icon-primary.svg` : symbole détaillé dès 48 px ;
+  - `logo-horizontal-light.svg` / `-dark.svg` : écran d'accueil, selon le mode.
+- Ne jamais redessiner, recolorer ni entourer le symbole d'une forme ajoutée.
+- L'icône d'application (`.icns`, `.ico`, PNG) relève de `packaging/`.
+
+## Graphes (arbre, éventail, carte)
+
+- Lien de parenté proche : trait plein ; ascendants colorés par lignée, descendants et
+  collatéraux neutres (`border_strong()`).
+- Sélection : contour `accent()` + fond `accent_soft()`, jamais une simple teinte.
+- Liens : courbes ou coudes discrets, épaisseur homogène.
+
+## Ajouter un jeton
+
+Ajouter le rôle dans `Palette` (valeurs claire **et** sombre), une fonction d'accès, puis le
+documenter ici. Vérifier le contraste à 4,5:1 sur `bg`, `panel` et `surface`.
