@@ -540,7 +540,7 @@ impl Workspace {
             });
 
         let transcription = p.act.transcription.trim().to_string();
-        let url = item.pending.url.trim().to_string();
+        let url = item.pending.proposal.url.trim().to_string();
         let can_save = problem.is_none();
         v_flex()
             .w(px(500.))

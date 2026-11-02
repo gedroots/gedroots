@@ -69,7 +69,7 @@ pub struct ProposeParams {
     pub file: Option<String>,
     /// For a PDF of several pages: page of the act (from 1).
     pub pdf_page: Option<usize>,
-    /// Web page where the act was found.
+    /// Permanent address of the act's page in the archive's viewer; kept as a web link of the source.
     pub url: Option<String>,
 }
 
@@ -83,7 +83,6 @@ pub struct Pending {
     pub pdf_page: Option<usize>,
     /// Image affichée et jointe (celle de l'agent, ou la page extraite du PDF).
     pub image: Option<PathBuf>,
-    pub url: String,
 }
 
 fn role(s: &str) -> Result<ActRole, String> {
@@ -158,7 +157,7 @@ pub fn to_proposal(p: &ProposeParams) -> Result<Proposal, String> {
             call_number: opt(&s.call_number).to_string(),
         }),
     };
-    Ok(Proposal { source, act })
+    Ok(Proposal { source, act, url: opt(&p.url).to_string() })
 }
 
 /// Les actes déjà joints aux sources du fichier sont-ils plutôt des images que des PDF ?
