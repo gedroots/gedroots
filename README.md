@@ -278,9 +278,15 @@ with “Open With” in the Finder. Without `--install`, the app stays in
 `GEDRoots.dmg` disk image is created next to it (useful for the CI).
 
 The app is signed “ad hoc”, which is enough on the Mac that built it. A downloaded app (the
-CI's `.dmg`) is blocked by Gatekeeper on first launch: right-click › Open, or
-`xattr -dr com.apple.quarantine /Applications/GEDRoots.app`. To distribute it without this
-warning, it would have to be signed with a Developer ID certificate and notarized by Apple
+CI's `.dmg`) is blocked by Gatekeeper: on recent macOS it may not even show a warning, the
+icon just bounces in the Dock forever (the process stays stuck before `main`). Remove the
+quarantine once after installing it:
+
+```sh
+xattr -dr com.apple.quarantine /Applications/GEDRoots.app
+```
+
+or use System Settings › Privacy & Security › Open Anyway. To distribute it without this step, it would have to be signed with a Developer ID certificate and notarized by Apple
 (paid Apple Developer account).
 
 ### Linux
