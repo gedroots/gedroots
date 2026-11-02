@@ -156,7 +156,12 @@ struct Document {
     path: Option<PathBuf>,
     dirty: bool,
     dirty_before_checkpoint: bool,
+    /// États précédents, pour Annuler (le dernier est le plus récent).
     history: Vec<Gedcom>,
+    /// États annulés, pour Rétablir ; vidés par toute nouvelle modification.
+    future: Vec<Gedcom>,
+    /// `future` tel qu'avant le dernier point de restauration, rendu s'il est abandonné.
+    future_before_checkpoint: Vec<Gedcom>,
 }
 
 pub struct Workspace {
@@ -323,6 +328,8 @@ impl Workspace {
                     dirty: false,
                     dirty_before_checkpoint: false,
                     history: Vec::new(),
+                    future: Vec::new(),
+                    future_before_checkpoint: Vec::new(),
                 });
                 self.view = View::Individuals;
                 self.selected = None;
@@ -342,7 +349,15 @@ impl Workspace {
     fn new_file(&mut self, _: &NewFile, window: &mut Window, cx: &mut Context<Self>) {
         let mut ged = Gedcom::new();
         let x = ged.create(RecordKind::Individual);
-        self.doc = Some(Document { ged, path: None, dirty: true, dirty_before_checkpoint: true, history: Vec::new() });
+        self.doc = Some(Document {
+            ged,
+            path: None,
+            dirty: true,
+            dirty_before_checkpoint: true,
+            history: Vec::new(),
+            future: Vec::new(),
+            future_before_checkpoint: Vec::new(),
+        });
         self.view = View::Individuals;
         self.selected = None;
         self.reset_history();
@@ -407,7 +422,7 @@ impl Workspace {
     fn undo(&mut self, _: &Undo, window: &mut Window, cx: &mut Context<Self>) {
         let Some(doc) = &mut self.doc else { return };
         if let Some(prev) = doc.history.pop() {
-            doc.ged = prev;
+            doc.future.push(std::mem::replace(&mut doc.ged, prev));
             doc.dirty = true;
             self.rebuild_rows(cx);
             self.refresh_editor(window, cx);
@@ -416,9 +431,22 @@ impl Workspace {
         cx.notify();
     }
 
+    fn redo(&mut self, _: &Redo, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(doc) = &mut self.doc else { return };
+        if let Some(next) = doc.future.pop() {
+            doc.history.push(std::mem::replace(&mut doc.ged, next));
+            doc.dirty = true;
+            self.rebuild_rows(cx);
+            self.refresh_editor(window, cx);
+            self.set_status("Modification rétablie", false);
+        }
+        cx.notify();
+    }
+
     fn checkpoint(&mut self) {
         if let Some(doc) = &mut self.doc {
             doc.history.push(doc.ged.clone());
+            doc.future_before_checkpoint = std::mem::take(&mut doc.future);
             doc.dirty_before_checkpoint = doc.dirty;
             if doc.history.len() > 50 {
                 doc.history.remove(0);
@@ -431,6 +459,7 @@ impl Workspace {
     fn drop_checkpoint(&mut self) {
         if let Some(doc) = &mut self.doc {
             doc.history.pop();
+            doc.future = std::mem::take(&mut doc.future_before_checkpoint);
             doc.dirty = doc.dirty_before_checkpoint;
         }
     }

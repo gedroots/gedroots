@@ -261,7 +261,8 @@ mise run app chemin/vers/arbre.ged
 
 Sans argument, l'app propose d'ouvrir un fichier ou d'en créer un nouveau.
 Raccourcis : `⌘O` / `Ctrl+O` ouvrir, `⌘S` / `Ctrl+S` enregistrer, `⌘N` nouveau,
-`⌘E` saisir un acte, `⌘⇧Z` annuler la dernière modification du document.
+`⌘E` saisir un acte, `⌘Z` / `Ctrl+Z` annuler la dernière modification du document, `⌘⇧Z` /
+`Ctrl+Y` (Windows) / `Ctrl+Maj+Z` (Linux) la rétablir, `⌘[` / `Alt+←` revenir à la fiche précédente.
 
 Variables d'environnement facultatives pour la carte : `GEDROOTS_OFFLINE=1` (démarrer hors ligne),
 `GEDROOTS_TILE_URL` (autre serveur de tuiles, `{z}/{x}/{y}`), `GEDROOTS_TILE_CACHE` (dossier du

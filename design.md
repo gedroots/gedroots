@@ -266,9 +266,8 @@ l'apparence de chaque système, mais le comportement suit la plateforme.
 
 État au 2 novembre 2026, à résorber au fil des PR :
 
-- Annuler est sur `⌘⇧Z` / `Ctrl+Maj+Z` au lieu de `⌘Z` / `Ctrl+Z`, et Rétablir n'existe pas.
-- Pas de boutons précédent / suivant visibles ; hors macOS, retour / suivant sont sur
-  `Ctrl+[` / `Ctrl+]` au lieu de `Alt+←` / `Alt+→`.
+- Pas de boutons précédent / suivant visibles dans la barre du haut (seulement clavier, menu
+  et boutons de la souris).
 - Hors macOS, les menus n'ont pas de lettres soulignées et Réglages ne porte pas le nom de la
   plateforme (Paramètres, Préférences).
 
