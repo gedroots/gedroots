@@ -90,10 +90,12 @@ et suit la maquette « Lignée » (thème sombre, barre d'activité, liste, arbr
   - **Événements** : types d'événements personnalisés (`EVEN` + `TYPE`), déduits du fichier,
     à renommer ou fusionner ; un nouveau type est déclaré par l'extension
     [`_GR_EVEN`](docs/extensions.md#_gr_even). Ils sont proposés dans « Ajouter un événement… ».
-  - **Médias** : dossier de rangement et modèle de nom des fichiers (`{type}/{annee} {nom}
-    {prenom}`…, extension [`_GR_MEDIA`](docs/extensions.md#_gr_media)) avec un exemple en
-    direct. Un fichier rattaché depuis l'extérieur est copié dans ce dossier ; Média ›
-    « Renommer selon le modèle… » range les fichiers d'un média existant.
+  - **Médias** : dossier racine et dossiers de rangement (Actes, Portraits…), chacun avec
+    les types qu'il reçoit et son modèle de nom (`{sosa:6}_{fratrie}_{type:1}_{nom}_{prenom}`…,
+    numéros Sosa-d'Aboville calculés depuis la racine), extension
+    [`_GR_MEDIA`](docs/extensions.md#_gr_media), avec un exemple par dossier. Un fichier
+    rattaché depuis l'extérieur est copié à sa place ; Média › « Renommer selon le modèle… »
+    range les fichiers d'un média existant.
 - **Médias à plusieurs pages** : un acte sur deux feuillets est un seul média (`OBJE` avec un
   `FILE` par page, standard GEDCOM 7). Visionneuse page par page (miniatures, ⇞ / ⇟), pages
   ajoutées par glisser-déposer ou Média › Pages, réordonnées en glissant les miniatures, retirées
