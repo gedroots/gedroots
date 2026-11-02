@@ -1,0 +1,72 @@
+---
+title: Search criteria
+description: Every keyword the search fields understand, for people, sources, places and media.
+---
+
+Each list has its own search field. Plain words search names and titles; criteria are written `keyword:value`. Criteria combine with **and**: `born:1850-1860 place:agneaux` finds the people born in the 1850s and linked to Agneaux. Write a value with spaces in quotes: `place:"saint-lô"`.
+
+Keywords are in English whatever the interface language. You rarely type them: the [suggestions](/workflows/search) write them for you and show them as tokens.
+
+## Years
+
+Criteria that take years accept:
+
+| Value | Means |
+| --- | --- |
+| `1850` | In 1850 |
+| `1850-1860` | From 1850 to 1860 |
+| `<1900`, `>1900` | Before or after 1900 |
+| `1850±5` or `1850~5` | Within 5 years of 1850 |
+
+## People
+
+| Criterion | Finds |
+| --- | --- |
+| `born:1850`, `b:1850` | People born in that year or range |
+| `died:<1900`, `d:<1900` | People who died in that year or range |
+| `alive:1870` | People alive in that year |
+| `name:marchand` | A surname, with its spelling variants |
+| `name:=marchand` | That exact surname |
+| `place:agneaux` | People with an event in that place |
+| `occupation:miller` | People with that occupation |
+| `sex:m`, `sex:f` | Men, women |
+| `sosa:1-63` | Ancestors of the root person by Sosa number |
+| `ancestors:@I1@`, `descendants:@I1@` | Ancestors or descendants of a person |
+| `parents:@I1@`, `children:@I1@`, `spouses:@I1@`, `siblings:@I1@` | Close relatives of a person |
+| `without:source`, `with:source` | People with or without a sourced event |
+| `without:parents`, `with:parents` | People with or without known parents |
+| `without:date`, `with:date` | People with or without any date |
+| `without:spouse`, `with:spouse` | People with or without a union |
+| `without:marriage`, `with:marriage` | Unions without a marriage event, or married people |
+| `without:media`, `with:media` | People with or without media |
+| `without:note`, `with:note` | People with or without a note |
+
+Kinship criteria take a person's identifier. You don't need to know it: type the person's name, such as `louis marchand`, and pick **Ancestors of Louis MARCHAND** in the suggestions.
+
+## Sources
+
+| Criterion | Finds |
+| --- | --- |
+| `type:birth` | Sources that hold records of that event type |
+| `repository:archives`, `repo:archives` | Sources kept in a repository whose name contains the word |
+| `without:media`, `with:media` | Sources with or without an image |
+| `without:citation`, `with:citation` | Sources cited nowhere, or cited |
+
+## Places
+
+| Criterion | Finds |
+| --- | --- |
+| `in:manche` | Places within that jurisdiction |
+| `without:coordinates`, `with:coordinates` | Places not yet located on the map, or located |
+
+## Media
+
+| Criterion | Finds |
+| --- | --- |
+| `event:birth` | Media attached to an event of that type |
+| `person:marchand` | Media linked to a person whose name contains the word |
+| `format:image`, `format:pdf`, `format:web` | Images, PDF files or web links |
+| `medium:photo` | Media of that GEDCOM medium: photo, manuscript, tombstone… |
+| `without:link`, `with:link` | Media attached to nothing, or attached |
+
+In the **Media** list, the row of types above the list (**All**, **Records**, **Portraits**…) narrows the search to a subfolder of your [media settings](/workflows/media#file-images-automatically).

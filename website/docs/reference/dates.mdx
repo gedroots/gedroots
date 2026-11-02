@@ -1,0 +1,59 @@
+---
+title: Dates
+description: How to type dates in GEDRoots, from exact days to approximate years, ranges and French Republican, Julian and Hebrew calendars.
+---
+
+Every date field takes a date written in plain words, in English or in French, whatever the language of the interface. GEDRoots converts it to a GEDCOM 7 date and shows it back in your language. Numbers are read day first: `14/03/1912` is 14 March 1912.
+
+## Exact and partial dates
+
+| You type | Stored as |
+| --- | --- |
+| `14 March 1912`, `March 14th, 1912`, `14/03/1912` | `14 MAR 1912` |
+| `March 1912` | `MAR 1912` |
+| `1912` | `1912` |
+
+## Approximate dates
+
+| You type | Means | Stored as |
+| --- | --- | --- |
+| `about 1850`, `circa 1850`, `~1850` | Around that date | `ABT 1850` |
+| `estimated 1850` | Estimated from other facts, such as an age | `EST 1850` |
+| `calculated 1850` | Calculated with a formula | `CAL 1850` |
+| `before 23 May 1809` | Before that date | `BEF 23 MAY 1809` |
+| `after 1900` | After that date | `AFT 1900` |
+| `between 1820 and 1825`, `1820-1825` | At some point in that range | `BET 1820 AND 1825` |
+| `1820 or 1821` | One or the other | `BET 1820 AND 1821`, with your text kept as the date's phrase |
+
+## Periods
+
+For something that lasted, such as a residence or an occupation:
+
+| You type | Stored as |
+| --- | --- |
+| `from 1850 to 1860` | `FROM 1850 TO 1860` |
+| `from 10 May to 12 Jun 1926` | `FROM 10 MAY 1926 TO 12 JUN 1926` |
+| `since 1850` | `FROM 1850` |
+| `until 1860` | `TO 1860` |
+
+## Other calendars
+
+| You type | Calendar | Stored as |
+| --- | --- | --- |
+| `15 Brumaire year XII` | French Republican | `FRENCH_R 15 BRUM 12` |
+| `3 complementary days year III` | French Republican | `FRENCH_R 3 COMP 3` |
+| `3 Mar 1700 Julian`, `3 Mar 1700 old style` | Julian | `JULIAN 3 MAR 1700` |
+| `15 Nisan 5784 Hebrew` | Hebrew | `HEBREW 15 NSN 5784` |
+| `44 BC` | Before the common era | `44 BCE` |
+
+French Republican dates are shown in the Republican calendar, as the records write them.
+
+## Notes about a date
+
+Text in parentheses at the end is kept as the date's phrase, the GEDCOM 7 way to explain a date: `about 1850 (from the age at death)`. Text that isn't a date at all, such as `during the war`, is kept as a phrase alone.
+
+## Mistakes GEDRoots catches
+
+GEDRoots refuses impossible dates and tells you why: `30 February 1900` (February 1900 only has 28 days), `between 1860 and 1850` (the first date must come before the second), `15 Brumaire 1803` (a Republican year is expected).
+
+GEDCOM keywords, such as `ABT 1850` or `FRENCH_R 15 BRUM 12`, are understood too.

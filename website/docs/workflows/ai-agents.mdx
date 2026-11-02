@@ -1,0 +1,94 @@
+---
+title: Research with an AI agent
+description: Connect an AI agent such as Claude Code to your tree. It finds the gaps, searches online archives, and proposes records that you review before anything is saved.
+---
+
+Searching a parish register image by image is slow. An AI agent can do the legwork: pick an ancestor whose birth record is missing, find the right register in the right archive, read it, and propose the record. GEDRoots makes sure **you stay in charge**: the agent can read your tree but never write to it. Everything it finds waits in a **To Review** page until you compare it with your tree and save it.
+
+## How it works
+
+GEDRoots runs a small server on your computer, using the [Model Context Protocol](https://modelcontextprotocol.io) (MCP), that AI agents know how to talk to. Through it, the agent can:
+
+- read the file open in GEDRoots: people, events, sources, places;
+- list the gaps among the root person's direct ancestors: births, marriages and deaths missing or without a source, with the places where each person lived;
+- propose a record it found.
+
+Living people are hidden from the agent. Only your computer can reach the server.
+
+## Before you begin
+
+You need an AI agent that supports MCP servers, such as Claude Code, Codex, Gemini CLI, Claude Desktop, Cursor or VS Code. To search online archives, the agent also needs a way to browse the web.
+
+## Connect the agent
+
+1. In GEDRoots, select **File › Connect an AI Agent…**.
+2. Turn on **Allow AI agents**.
+3. Pick your agent in the list. GEDRoots shows the shortest way to connect it:
+
+| Agent | How |
+| --- | --- |
+| Claude Code, Gemini CLI | A command to run once **In a terminal**, such as `claude mcp add --transport http gedroots …` |
+| Codex | A block to add to `~/.codex/config.toml` |
+| Claude Desktop | A block for its configuration file. It requires Node.js. |
+| Cursor, VS Code | **Add to Cursor** or **Add to VS Code** installs the server in one click |
+| Other MCP Client | The **Address**, the **Transport** (Streamable HTTP) and the **Header** with the token |
+
+The token is masked on screen; the **Copy** buttons copy the real value. The window shows whether the server is running and when an agent last connected.
+
+The server runs while GEDRoots is open and the setting is on. The setting and its token belong to your computer, not to your `.ged` file.
+
+## Ask the agent to find a record
+
+GEDRoots gives the agent two ready-made methods, which appear as commands in Claude Code:
+
+- **`find_record`** picks a gap in your tree, finds the archive and register that should hold the record, searches it at a human pace, downloads the record and goes on with `read_record`.
+- **`read_record`** reads a record you already downloaded, transcribes it, checks it against the person's details, and proposes it.
+
+For example, in Claude Code:
+
+```text
+/mcp__gedroots__find_record "Jean MARCHAND" birth
+/mcp__gedroots__read_record ~/Downloads/record.pdf
+```
+
+Both arguments are optional: without them, the agent chooses a gap itself. You can also just ask in your own words, such as *find the marriage of my great-grandparents*.
+
+The methods tell the agent never to bypass a login or a captcha.
+
+## Review a proposal
+
+When the agent proposes a record, GEDRoots tells you that it's waiting in **To Review**. Open it from the sidebar or with **Source › Review Agent Proposals**.
+
+For each proposal, you see:
+
+- the image of the record;
+- a comparison of what your tree holds and what is proposed, person by person: **= same**, **+ Add**, **≠ More precise**, **≠ Different**, **+ Create**, **+ Link**;
+- where it will be attached: repository, source, file, event;
+- the agent's transcription;
+- on request, the exact GEDCOM lines that will change.
+
+Clear a person's checkbox to leave them out. Then choose:
+
+| Action | Shortcut (macOS / Windows and Linux) | Result |
+| --- | --- | --- |
+| **Save to Tree** | <kbd>⌘↩</kbd> / <kbd>Ctrl+Enter</kbd> | Writes everything as a single change, and stores the record's image next to your `.ged` file, named after your [media settings](/workflows/media#file-images-automatically). |
+| **Reject** | <kbd>⌘⌫</kbd> / <kbd>Ctrl+Backspace</kbd> | Drops the proposal. Nothing is written. |
+| **Edit in Record Entry…** | | Opens the proposal in the [record editor](/workflows/records), to correct it before saving. |
+
+Proposals are kept in memory: they are lost if you quit GEDRoots before reviewing them. Save your `.ged` file first, so the record's image has a folder to go to.
+
+## What the agent can't do
+
+GEDRoots checks every proposal before it reaches you, and sends it back to the agent with the reason when it doesn't fit your tree. A proposal is refused when:
+
+- its source doesn't exist, and it doesn't name the new register;
+- it doesn't follow your file's habit for that register: one source per record, or one per register with the record's reference;
+- it gives a person a different parent than the one in your tree;
+- it links a living person or a person who doesn't exist, or has an invalid date.
+
+Places named like a place of your tree are matched to it. A record found as a page of a PDF register is extracted as an image, in the format your other records use.
+
+## Related pages
+
+- [MCP server reference](/reference/mcp-server)
+- [Privacy and network use](/concepts/privacy)

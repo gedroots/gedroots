@@ -1,0 +1,53 @@
+---
+title: Sources and citations
+description: How GEDRoots models repositories, sources, records and citations, and how to choose between one source per register and one source per record.
+---
+
+Genealogy is a chain of evidence: a person's birth is known because a record says so, the record is in a register, the register is kept in an archive. GEDRoots stores each link of that chain with standard GEDCOM 7 structures.
+
+## The chain of evidence
+
+| Level | Example | In GEDCOM |
+| --- | --- | --- |
+| **Repository**: where the original is kept | Departmental Archives of the Manche | `REPO` |
+| **Source**: a document or a register | Saint-Lô, Births 1910–1919, call number 5 Mi 431 | `SOUR`, linked to its repository with the call number |
+| **Record**: one entry of the source | Record no. 112, image 37 | The `PAGE` of the citations |
+| **Citation**: the record, attached to what it proves | Paul's birth cites the source, page *Record no. 112*, with the role *child* | `SOUR` under the event, with `PAGE`, `ROLE` and `DATA` |
+
+GEDRoots has no separate “record” object. A record is the set of citations that point to the same source with the same reference. That's why a source's page can list its records even when they were entered in other software: GEDRoots rebuilds the list from the citations.
+
+## Roles
+
+A record names several people, each in a role: the child and the parents of a birth, the spouses and witnesses of a marriage. GEDRoots writes the role on each person's citation (`ROLE CHIL`, `FATH`, `MOTH`, `HUSB`, `WIFE`, `WITN`, `GODP`…), using the standard GEDCOM 7 roles. A role with no standard value, such as *bride's father*, is written as the closest role with a phrase.
+
+Witnesses, godparents and informants are also linked to the main event as associates, so you see on the godfather's record that he was godfather at that baptism.
+
+## One source per register, or per record?
+
+There are two schools, and GEDRoots supports both.
+
+**One source per register** (`Saint-Lô, Births 1910–1919`, reference `Record no. 112`)
+
+- Fewer sources, which mirror how archives are organized.
+- The source's page lists all the records you've extracted from the register: useful when you go through a register systematically.
+- The call number and repository are entered once.
+
+**One source per record** (`Birth record of Paul MARCHAND`)
+
+- Each record has its own source, with its own title and image.
+- Common in files that come from other programs.
+
+When GEDRoots adds a record to a register you already cite one way, such as an AI agent's proposal, it follows the habit of your file for that register. Mixing both habits in one register makes the record list harder to read, so pick one per register.
+
+## Quality of a citation
+
+Each record can carry a quality, from **Unreliable** to **Primary**, stored as GEDCOM's `QUAY` (0 to 3). Use it to tell apart a birth date read in the birth record itself from one deduced from an age on a death record.
+
+## Mentioned people
+
+A record often names people you don't want in your tree: a neighbor who witnessed a marriage, the mayor. **Mention Without Creating** keeps their name, role and details in a note of the citation, such as `Witness: Jean DUPONT, 32 years old`. Nothing is lost, and your list of people stays focused.
+
+## Related pages
+
+- [Record what a source says](/workflows/records)
+- [Your tree is a GEDCOM 7 file](/concepts/gedcom-7)

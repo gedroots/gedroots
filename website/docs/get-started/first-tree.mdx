@@ -1,0 +1,73 @@
+---
+title: Start your family tree
+description: A ten-minute tutorial. Create a file, add yourself and your parents, then enter a birth record from its source.
+---
+
+In this tutorial, you create a new family tree, add three people, and enter a birth record that names all three. By the end, you'll know the habit GEDRoots is built around: **enter what a record says, in the record's source**.
+
+You need GEDRoots [installed](/get-started/install). Have one real document at hand if you can, such as a birth certificate. If not, follow along with invented names.
+
+<Steps titleSize="h3">
+  <Step title="Create a file">
+    Open GEDRoots and click **New File**, or select **File › New File**.
+
+    GEDRoots creates a tree with one empty person and opens their details. This first person is the **root person**: the one the tree opens on, and the starting point of Sosa numbers.
+
+    Select **File › Save** and choose where to keep your `.ged` file. A folder of its own is a good idea: GEDRoots stores record images next to the file.
+  </Step>
+
+  <Step title="Describe yourself">
+    In the **Details** tab, enter your **Given Names**, your **Name** (surname), your **Sex**, and your birth date and place. Click **Apply**.
+
+    Dates are typed the way you say them: `14 March 1952`, `March 1952`, `about 1952`, `before 1952`. Places are suggested as you type, from your file and, when you're online, from OpenStreetMap.
+  </Step>
+
+  <Step title="Add your parents">
+    In the panel on the right, click **+** next to **Family**. In the **Relatives** window, click **New Person** on the **Father** row.
+
+    GEDRoots creates your father, links him to you, and opens his details. Fill them in and click **Apply**. Then go back to yourself with **View › Back** (<kbd>⌘[</kbd> on macOS, <kbd>Alt+←</kbd> on Windows and Linux) and add your mother the same way.
+
+    When both parents are entered, GEDRoots joins them in a single family, with you as their child.
+  </Step>
+
+  <Step title="Create the source">
+    Select **Source › New Source**. GEDRoots opens a new source on an empty record.
+
+    In the source's details, give it a **Title** that says what the document is, such as `Birth certificate of Paul Martin`. If you got it from an archive or a town hall, create the **Repository** too: that's where you or someone else would find the original again.
+  </Step>
+
+  <Step title="Enter the record">
+    In the record editor:
+
+    1. Under **Event**, choose **Birth**. Enter the **Date** and the **Place** of the birth, and a **Reference** if the document has one, such as `Record no. 112`.
+    2. Under **People**, the record already has a **Child**, a **Father** and a **Mother**. Type the names as the document writes them.
+    3. As you type, GEDRoots looks for matching people in your tree: **Link to Paul MARTIN · parent of …**. Click the suggestion to link each person to the one you created earlier.
+
+    ![The record editor suggesting the existing parents of the child](../images/record-matches.png)
+
+    If the document mentions a stated age, an occupation or a residence, enter them in the person's fields: GEDRoots records each one as a dated, sourced fact.
+  </Step>
+
+  <Step title="Attach the image and save">
+    Drag the scan or photo of the document onto the editor, or click **Other File…**. Then click **Save**.
+
+    GEDRoots writes the birth event, cites the source on each person with their role, and attaches the image. Open your own details: the birth now shows the source under it, and the progress bar under your name counts it as sourced.
+  </Step>
+</Steps>
+
+## What you've learned
+
+- A tree is a single `.ged` file. **File › Save** writes it; GEDRoots keeps the previous version as a `.ged.bak` copy next to it.
+- You add relatives from a person, with the **+** next to **Family**.
+- You enter a record **once, in its source**. GEDRoots turns it into events, family links and citations for everyone it names.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Find your way around" href="/get-started/workspace" icon="layout">
+    The sidebar, the three views of a record, and the command palette.
+  </Card>
+  <Card title="Record what a source says" href="/workflows/records" icon="book-open">
+    Roles, witnesses, censuses, and going through a whole register.
+  </Card>
+</CardGroup>

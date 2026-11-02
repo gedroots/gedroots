@@ -1,0 +1,43 @@
+---
+title: Your tree is a GEDCOM 7 file
+description: Why GEDRoots keeps your research in a standard GEDCOM 7 file instead of a database, and what that means for your data.
+---
+
+Most genealogy software keeps your tree in its own database and offers GEDCOM as an export. GEDRoots does the opposite: **the GEDCOM file is the tree**. When you open a `.ged` file, you work on that file; when you save, you write that file.
+
+## Why GEDCOM 7
+
+[GEDCOM](https://gedcom.io) is the format every genealogy program can exchange. Version 7, published by FamilySearch in 2021, fixed what made earlier versions lossy: it has a precise specification, a registry of extensions, standard structures for multi-page media, photo crops, citation roles and web links, and a ZIP format to ship media with the tree.
+
+Building on it means:
+
+- **No lock-in.** Your research is readable by other software today, and by whatever comes in thirty years. You never depend on GEDRoots to get your data out.
+- **Nothing hidden.** What you see in GEDRoots is what is in the file. The **Raw GEDCOM** view shows the exact lines of each record.
+- **Plain files you control.** Back it up, sync it, put it under version control, compare two versions with any tool.
+
+## Nothing is lost
+
+GEDRoots reads a file and writes it back byte for byte. Lines it doesn't understand, tags written by other software (`_SOSADABOVILLE`, `_TODO`…), comments of other programs: all are kept exactly, in their place. The visual editor changes only the fields it shows.
+
+When you save, GEDRoots updates two lines of the header: the software that saved the file, and the date. Each record you change also gets its change date, as GEDCOM requires.
+
+## Safety nets
+
+- **Undo.** Every change, including bulk fixes and imports, can be undone, up to 50 steps.
+- **Backup copy.** Each time you save, the previous version is kept as `yourtree.ged.bak` next to the file.
+- **Validation.** The raw GEDCOM editor checks what you type against the official GEDCOM 7 schema before applying it. The [Data Quality](/workflows/quality) page checks the whole file.
+
+## When GEDCOM 7 has no field
+
+GEDRoots stores everything in standard structures whenever GEDCOM 7 has one: crops, multi-page media, roles, web links, source contents. For the few things GEDCOM 7 has no field for, such as your media naming templates or your saved searches, GEDRoots uses extension tags that start with `_GR_`. They are declared in the file's header, as the standard requires, and documented in [GEDCOM extensions](/reference/gedcom-extensions). Other software ignores them without losing anything.
+
+GEDRoots never writes a sidecar file next to your tree. Settings that belong to your computer rather than to the tree, such as the AI agent token or recent files, are kept in your system's settings folder.
+
+## Media stay files
+
+Images and documents are not copied into the `.ged` file. A media record points to a file by its path, relative to the `.ged` folder when the file is inside it. Keep your media folder next to your `.ged` file, and you can move the whole folder anywhere. To send the tree with its media in a single file, [export a GEDZIP](/workflows/share#send-the-complete-tree-with-its-media).
+
+## Related pages
+
+- [Bring in a tree from other software](/workflows/import)
+- [GEDCOM extensions](/reference/gedcom-extensions)

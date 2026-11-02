@@ -1,0 +1,14 @@
+{
+  "name": "gedroots-docs",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "blume dev",
+    "build": "blume build",
+    "preview": "blume preview",
+    "check": "blume validate --strict"
+  },
+  "devDependencies": {
+    "blume": "2.2.6"
+  }
+}

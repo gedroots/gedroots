@@ -1,0 +1,21 @@
+---
+title: Environment variables
+description: Optional environment variables that change where GEDRoots gets its maps, its place search and its language.
+---
+
+GEDRoots needs no configuration. These variables are for special setups, such as a computer without internet access or a private map server. Set them before starting GEDRoots.
+
+| Variable | Effect | Default |
+| --- | --- | --- |
+| `GEDROOTS_OFFLINE=1` | Starts with the map offline: only tiles already on disk are shown | Online |
+| `GEDROOTS_TILE_URL` | Another map tile server, with `{z}/{x}/{y}` in the address | OpenStreetMap |
+| `GEDROOTS_TILE_CACHE` | Folder where map tiles are kept | `~/Library/Caches/GEDRoots/tiles` on macOS, `~/.cache/gedroots/tiles` on Linux, `%LOCALAPPDATA%\GEDRoots\tiles` on Windows |
+| `GEDROOTS_GEOCODER` | Another [Photon](https://github.com/komoot/photon) instance for place suggestions | `photon.komoot.io` |
+| `GEDROOTS_LANG` | Forces the interface language: `en` or `fr` | The system's preferred language |
+| `GEDROOTS_APPEARANCE` | Forces the appearance: `light` or `dark` | The system's appearance |
+
+For example, on macOS or Linux:
+
+```sh
+GEDROOTS_LANG=fr GEDROOTS_OFFLINE=1 gedroots ~/Genealogy/tree.ged
+```
