@@ -13,7 +13,7 @@
 //! | --- | --- |
 //! | Sources | `type:naissance` (type d'acte), `dépôt:…`, `sans:média`, `avec:média`, `sans:citation` |
 //! | Lieux | `dans:aube` (juridiction), `sans:coordonnées`, `avec:coordonnées` |
-//! | Médias | `événement:naissance`, `pour:marchand` (personne liée), `format:image\|pdf\|web`, `sans:lien` |
+//! | Médias | `événement:naissance`, `pour:marchand` (personne liée), `format:image\|pdf\|web`, `support:photo` (`MEDI`), `sans:lien` |
 //!
 //! Partout : `id:…` (identifiant GEDCOM, jamais suggéré) et les mots libres
 //! (titre, nom, fichier…).
@@ -104,6 +104,8 @@ enum Crit {
     Event(String),
     Person(String),
     Format(Format),
+    /// Support GEDCOM 7 (`MEDI`) : balise ou libellé, normalisé.
+    Medium(String),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -162,6 +164,7 @@ fn parse_crit(scope: Scope, key: &str, val: &str) -> Option<Crit> {
         (Scope::Media, "evenement" | "acte" | "fait") => nonempty(val).map(Crit::Event),
         (Scope::Media, "pour" | "personne" | "nom") => nonempty(val).map(Crit::Person),
         (Scope::Media, "format") => Format::parse(val).map(Crit::Format),
+        (Scope::Media, "support" | "medi") => nonempty(val).map(Crit::Medium),
         (Scope::Media, "sans" | "avec") => present(val, &["lien", "rattachement"]).then(|| Crit::Linked(key == "avec")),
         _ => None,
     }
@@ -217,7 +220,9 @@ fn is_key(scope: Scope, key: &str) -> bool {
         Scope::Individuals => &[],
         Scope::Sources => &["type", "acte", "depot", "archive", "archives", "sans", "avec"],
         Scope::Places => &["dans", "en", "sans", "avec"],
-        Scope::Media => &["evenement", "acte", "fait", "pour", "personne", "nom", "format", "sans", "avec"],
+        Scope::Media => {
+            &["evenement", "acte", "fait", "pour", "personne", "nom", "format", "support", "medi", "sans", "avec"]
+        }
     };
     key == "id" || keys.contains(&key)
 }
@@ -569,6 +574,8 @@ fn media_matches(q: &RecordQuery, r: &Node, info: Option<&MediaInfo>) -> bool {
         Crit::Person(p) => info.is_some_and(|i| p.split_whitespace().all(|w| i.people.contains(w))),
         Crit::Format(f) => info.is_some_and(|i| i.format == Some(*f)),
         Crit::Linked(on) => info.is_some_and(|i| i.linked == *on),
+        Crit::Medium(v) => medium(r)
+            .is_some_and(|m| sort_key(m) == *v || medium_label(m).is_some_and(|l| sort_key(l).starts_with(v.as_str()))),
         _ => true,
     })
 }
@@ -645,6 +652,7 @@ pub fn chip_label(scope: Scope, word: &str) -> Option<String> {
         Crit::Event(_) => format!("Événement {}", capitalize(v)),
         Crit::Person(_) => format!("Lié à {v}"),
         Crit::Format(f) => f.label().into(),
+        Crit::Medium(_) => format!("Support {}", v.to_lowercase()),
     })
 }
 
@@ -845,6 +853,19 @@ impl Gedcom {
                     for v in top(names, 3) {
                         out.push(sugg("Personne", v.clone(), criterion("pour", &v)));
                     }
+                    // Support GEDCOM (`MEDI`) : premier mot du libellé (« manuscrit », « photo »).
+                    let mut mediums: HashMap<String, usize> = HashMap::new();
+                    for r in self.records_of(RecordKind::Media) {
+                        if let Some(l) = medium(r).and_then(medium_label)
+                            && matches_word(l, &p)
+                        {
+                            *mediums.entry(l.to_string()).or_default() += 1;
+                        }
+                    }
+                    for v in top(mediums, 3) {
+                        let key = v.split([',', ' ']).next().unwrap_or(&v).to_lowercase();
+                        out.push(sugg("Support", v.clone(), criterion("support", &key)));
+                    }
                 }
             }
         }
@@ -951,6 +972,9 @@ mod tests {
         assert_eq!(g.search(Scope::Media, "sans:lien", Some(&index), None).len(), 2);
         assert_eq!(g.search(Scope::Media, "pour:marchand", Some(&index), None).len(), 2);
         assert_eq!(g.search(Scope::Media, "événement:naissance", Some(&index), None).len(), 1);
+        assert_eq!(g.search(Scope::Media, "support:photo", Some(&index), None).len(), 1);
+        assert_eq!(chip_label(Scope::Media, "support:photo").as_deref(), Some("Support photo"));
+        assert!(g.suggest(Scope::Media, "pho", Some(&index)).iter().any(|s| s.insert == "support:photo"));
     }
 
     #[test]

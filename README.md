@@ -47,7 +47,7 @@ et suit le [design system GEDRoots](design.md) (fonds neutres et touches de viol
   `nom:guyot`, `prof:meunier`, `sexe:f`, `sans:source`, `sans:parents`, `sans:mariage`,
   `avec:média`, `sosa:1-63`… ; des sources : `type:naissance`, `dépôt:…`, `sans:média`,
   `sans:citation` ; des lieux : `dans:aube`, `sans:coordonnées` ; des médias :
-  `événement:naissance`, `pour:guyot`, `format:pdf`, `sans:lien`. Une valeur avec des espaces
+  `événement:naissance`, `pour:guyot`, `format:pdf`, `support:photo` (`MEDI`), `sans:lien`. Une valeur avec des espaces
   s'écrit entre guillemets. Dans la zone Médias, une ligne de types (Tous · Actes ·
   Portraits…) reprend les sous-dossiers des réglages, sinon les dossiers des fichiers, sinon
   le support GEDCOM (`MEDI`) ; les liens web ont leur type.

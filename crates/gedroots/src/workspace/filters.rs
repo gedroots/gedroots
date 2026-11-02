@@ -314,6 +314,7 @@ fn group_icon(s: &Suggestion) -> IconName {
         "Dépôt" => IconName::Landmark,
         "Juridiction" => IconName::Map,
         "Dates" | "Événement" => IconName::Calendar,
+        "Support" => IconName::Image,
         _ => IconName::Search,
     }
 }
