@@ -27,6 +27,11 @@ et suit la maquette « Lignée » (thème sombre, barre d'activité, liste, arbr
 - **Événements modifiables** : un clic sur un événement (individu ou famille) le rouvre dans
   la même fenêtre que l'ajout (type, précision, date, lieu suggéré, source) ; on peut aussi le
   supprimer. Notes, âge, médias et autres citations de l'événement sont conservés.
+- **Chronologie unifiée** : la fiche d'un individu montre ses événements et ceux de ses unions
+  (mariage, divorce… « avec » le conjoint) dans une seule liste par date ; on y ajoute aussi un
+  mariage directement. Chaque événement affiche ses médias (`2 OBJE`, GEDCOM 7 standard) :
+  déposer des fichiers sur l'événement les y rattache, le clic droit permet d'en rattacher,
+  de lier un média existant ou d'en détacher.
 - **Individus** : liste avec recherche sans accents ni casse et critères
   (`né:1800-1850`, `mort:<1900`, `vécu:1870`, `lieu:troyes`, `prof:meunier`, `sexe:f`,
   `sans:source`, `sans:parents`, `avec:média`, `sosa:1-63`…), filtres rapides (Affichage › Filtrer la liste) ;

@@ -89,6 +89,10 @@ impl<'a> Event<'a> {
         self.node.children_with("SOUR").filter_map(|s| s.pointer()).collect()
     }
 
+    /// Médias liés à l'événement (`2 OBJE @M1@` : acte de mariage, faire-part…).
+    pub fn media_xrefs(&self) -> Vec<&'a str> {
+        self.node.children_with("OBJE").filter_map(|n| n.pointer()).collect()
+    }
     pub fn is_sourced(&self) -> bool {
         self.node.child("SOUR").is_some()
     }
@@ -257,6 +261,10 @@ impl<'a> Family<'a> {
     }
     pub fn marriage(&self) -> Option<Event<'a>> {
         self.node.child("MARR").map(|node| Event { node })
+    }
+    /// Fin de l'union : divorce ou annulation.
+    pub fn separation(&self) -> Option<Event<'a>> {
+        self.node.children.iter().find(|c| c.tag == "DIV" || c.tag == "ANUL").map(|node| Event { node })
     }
 }
 
@@ -458,7 +466,7 @@ impl Gedcom {
     /// Renomme un lieu partout et met à jour ses coordonnées. Renvoie le nombre d'occurrences modifiées.
     pub fn update_place(&mut self, old: &str, new: &str, lat: &str, long: &str) -> usize {
         let mut count = 0;
-        for r in &mut self.records {
+        for r in self.records_where_mut(|r| r.any(&|n| n.tag == "PLAC" && n.val() == old)) {
             r.walk_mut(&mut |n| {
                 if n.tag == "PLAC" && n.val() == old {
                     count += 1;

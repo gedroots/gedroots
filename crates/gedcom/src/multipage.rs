@@ -167,7 +167,8 @@ impl Gedcom {
             uses_pages |= l.child(PAGE_TAG).is_some() || extra.iter().any(|e| e.child(PAGE_TAG).is_some());
             extra
         };
-        for r in self.records.iter_mut() {
+        let linked = |r: &Node| r.children.iter().any(|c| c.any(&|n| n.tag == "OBJE" && n.val() == p));
+        for r in self.records_where_mut(linked) {
             if for_links(r, &p, &mut wrap) {
                 for d in dedupe {
                     dedupe_links(r, &ptr(d));
