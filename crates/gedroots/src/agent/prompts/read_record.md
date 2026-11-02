@@ -7,7 +7,8 @@ How to work:
 1. Open the file and read the act itself (for a PDF register, find the page of the act). Write a
    faithful transcription: keep the spelling of names and places as written, mark doubtful
    readings with [?] and illegible words with [...]. Never fill in what you cannot read.
-2. From the act, note: the event and its date (a French Republican date stays in that calendar,
+2. From the act, note: the event (an event without its own GEDCOM tag, such as military service,
+   is `EVEN` with its `event_type`) and its date (a French Republican date stays in that calendar,
    in GEDCOM 7 form such as `FRENCH_R 30 GERM 4`; otherwise `14 MAR 1912`), the place, the
    reference (act number, page or image), and every person with their role in the act (principal,
    father, mother, spouse, witness, godfather, godmother, declarant, officiator…), age,
