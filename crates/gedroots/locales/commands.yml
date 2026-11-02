@@ -348,6 +348,18 @@ cmd:
   all_commands:
     en: All Commands…
     fr: Toutes les commandes…
+  release_notes:
+    en: Release Notes
+    fr: Notes de version
+  check_for_updates:
+    en: Check for Updates
+    fr: Rechercher les mises à jour
+  restart_to_update:
+    en: Restart to Update
+    fr: Redémarrer pour mettre à jour
+  automatic_updates:
+    en: Automatic Updates
+    fr: Mises à jour automatiques
 context.edit_act:
   en: Edit Record
   fr: "Modifier l'acte"

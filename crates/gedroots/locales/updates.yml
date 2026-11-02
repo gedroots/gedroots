@@ -1,0 +1,22 @@
+_version: 2
+# Updates (crates/gedroots/src/updates.rs), shown on the right of the top bar.
+
+updates:
+  checking:
+    en: Checking for updates…
+    fr: Recherche des mises à jour…
+  up_to_date:
+    en: GEDRoots %{version} is up to date
+    fr: GEDRoots %{version} est à jour
+  downloading:
+    en: Downloading GEDRoots %{version}… %{percent}%
+    fr: Téléchargement de GEDRoots %{version}… %{percent} %
+  ready:
+    en: GEDRoots %{version} is ready
+    fr: GEDRoots %{version} est prêt
+  failed:
+    en: Couldn’t check for updates. Check your internet connection.
+    fr: Impossible de rechercher les mises à jour. Vérifiez votre connexion à Internet.
+  save_first:
+    en: Save your changes before restarting
+    fr: Enregistrez vos modifications avant de redémarrer

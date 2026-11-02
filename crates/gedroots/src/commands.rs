@@ -114,6 +114,9 @@ actions!(
         ClearSearch,
         // Help
         CommandPalette,
+        CheckForUpdates,
+        ToggleAutomaticUpdates,
+        ReleaseNotes,
     ]
 );
 
@@ -329,6 +332,8 @@ enum Item {
     Recent(String, Box<dyn Action>),
     /// Standard system action (copy, paste…): macOS wires it to text fields.
     Os(SharedString, Box<dyn Action>, OsAction),
+    /// Setting with a check mark.
+    Check(SharedString, Box<dyn Action>, bool),
     Sub(SharedString, Vec<Item>),
     Separator,
 }
@@ -339,6 +344,7 @@ impl Item {
         match self {
             Item::Action(name, action) => Some((name.to_string(), action)),
             Item::Recent(name, action) => Some((name, action)),
+            Item::Check(name, action, _) => Some((name.to_string(), action)),
             Item::Os(..) | Item::Sub(..) | Item::Separator => None,
         }
     }
@@ -359,12 +365,28 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
     use Item::{Separator as Sep, Sub};
     let mac = cfg!(target_os = "macos");
     let mut menus = Vec::new();
+    // Updates: in the application menu on macOS (like Sparkle apps), in Help elsewhere (like
+    // Windows apps, Zed, VS Code). Once an update is downloaded, the command restarts on it.
+    let updates = || {
+        let check = if matches!(crate::updates::state(), crate::updates::State::Ready { .. }) {
+            t!("cmd.restart_to_update")
+        } else {
+            t!("cmd.check_for_updates")
+        };
+        vec![
+            a(check, CheckForUpdates),
+            Item::Check(
+                t!("cmd.automatic_updates").into(),
+                Box::new(ToggleAutomaticUpdates),
+                crate::updates::load().automatic,
+            ),
+        ]
+    };
     if mac {
         // On macOS, settings go where they usually are: the application menu, ⌘,.
-        menus.push((
-            "GEDRoots".into(),
-            vec![a(t!("cmd.file_settings"), OpenFileSettings), Sep, a(t!("cmd.quit_app"), Quit)],
-        ));
+        let mut app = updates();
+        app.extend([Sep, a(t!("cmd.file_settings"), OpenFileSettings), Sep, a(t!("cmd.quit_app"), Quit)]);
+        menus.push(("GEDRoots".into(), app));
     }
     let mut file = vec![a(t!("cmd.new_file"), NewFile), a(t!("cmd.open"), OpenFile)];
     // Submenu hidden until a file has been opened.
@@ -560,7 +582,12 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
             a(label::delete_search(), DeleteSearch),
         ],
     ));
-    menus.push((t!("menu.help").into(), vec![a(t!("cmd.all_commands"), CommandPalette)]));
+    let mut help = vec![a(t!("cmd.all_commands"), CommandPalette), Sep, a(t!("cmd.release_notes"), ReleaseNotes)];
+    if !mac {
+        help.push(Sep);
+        help.extend(updates());
+    }
+    menus.push((t!("menu.help").into(), help));
     menus
 }
 
@@ -576,6 +603,9 @@ fn to_menu_items(items: Vec<Item>) -> Vec<MenuItem> {
             }
             Item::Os(name, action, os) => {
                 MenuItem::Action { name, action, os_action: Some(os), checked: false, disabled: false }
+            }
+            Item::Check(name, action, checked) => {
+                MenuItem::Action { name, action, os_action: None, checked, disabled: false }
             }
             Item::Sub(name, items) => MenuItem::submenu(Menu::new(name).items(to_menu_items(items))),
             Item::Separator => MenuItem::separator(),
@@ -607,7 +637,7 @@ pub fn palette_entries() -> Vec<PaletteEntry> {
     fn walk(prefix: &str, items: Vec<Item>, out: &mut Vec<PaletteEntry>) {
         for i in items {
             match i {
-                i @ (Item::Action(..) | Item::Recent(..)) => {
+                i @ (Item::Action(..) | Item::Recent(..) | Item::Check(..)) => {
                     let Some((name, action)) = i.into_command() else { continue };
                     let path = format!("{prefix} › {}", name.trim_end_matches('…'));
                     if !out.iter().any(|e| e.action.partial_eq(action.as_ref())) {
@@ -638,7 +668,7 @@ mod tests {
         fn walk(path: &str, items: Vec<Item>, seen: &mut Vec<(String, Box<dyn Action>)>) {
             for i in items {
                 match i {
-                    i @ (Item::Action(..) | Item::Recent(..)) => {
+                    i @ (Item::Action(..) | Item::Recent(..) | Item::Check(..)) => {
                         let Some((name, action)) = i.into_command() else { continue };
                         let here = format!("{path} › {name}");
                         if let Some((other, _)) = seen.iter().find(|(_, a)| a.partial_eq(action.as_ref())) {

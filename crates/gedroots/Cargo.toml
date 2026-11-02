@@ -35,9 +35,15 @@ hayro = "0.8.0"
 similar = "2.7.0"
 # Cursor install link (configuration in base64).
 base64 = "0.22"
+# Updates from the GitHub releases. Same version as the `vpk` packager in mise.release.toml.
+velopack = "=1.2.161"
 
 # Recent files: the system's list on macOS (NSDocumentController)…
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
 objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "NSDocumentController"] }
 objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSArray", "NSString", "NSURL"] }
+
+# Windows: icon of the executable (build.rs).
+[target.'cfg(windows)'.build-dependencies]
+winresource = "0.1.34"

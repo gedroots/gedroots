@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+#MISE description="Write the release notes with communique and publish the draft release"
+#MISE hide=true
+# Without the ANTHROPIC_API_KEY secret, the notes stay those of git-cliff (CHANGELOG.md).
+set -euo pipefail
+
+version=$(sed -n 's/^version = "\(.*\)"/\1/p' crates/gedroots/Cargo.toml | head -n 1)
+tag="v$version"
+notes="${RUNNER_TEMP:-/tmp}/notes.md"
+if [[ -n ${ANTHROPIC_API_KEY:-} ]] && communique generate "$tag" --tag-pattern 'v[0-9]*' -o "$notes"; then
+	# communique's first line is a title: it becomes the release's name.
+	title=$(head -n 1 "$notes" | sed 's/^#* //; s/^v\{0,1\}'"$version"': //')
+	tail -n +2 "$notes" | sed '/./,$!d' > "$notes.body"
+	gh release edit "$tag" --title "GEDRoots $version: $title" --notes-file "$notes.body"
+else
+	echo "::warning::release notes from git-cliff (no ANTHROPIC_API_KEY, or communique failed)"
+fi
+gh release edit "$tag" --draft=false --latest
