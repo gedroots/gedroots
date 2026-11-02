@@ -29,6 +29,9 @@ actions!(
         CopyId,
         CopyName,
         FocusSearch,
+        SaveSearch,
+        RenameSearch,
+        DeleteSearch,
         ToggleFlagged,
         AddWebLink,
         // Individu
@@ -200,6 +203,9 @@ pub mod label {
     pub const MERGE_SELECTED_MEDIA: &str = "Fusionner les médias sélectionnés";
     pub const ADD_PAGES: &str = "Ajouter des pages…";
     pub const CLEAR_SEARCH: &str = "Effacer la recherche";
+    pub const SAVE_SEARCH: &str = "Enregistrer la recherche";
+    pub const RENAME_SEARCH: &str = "Renommer la recherche";
+    pub const DELETE_SEARCH: &str = "Supprimer la recherche";
 }
 
 /// Une entrée de menu.
@@ -411,6 +417,10 @@ fn model_with(recents: &[std::path::PathBuf]) -> Vec<(&'static str, Vec<Item>)> 
                     a(label::CLEAR_SEARCH, ClearSearch),
                 ],
             ),
+            Sep,
+            a(label::SAVE_SEARCH, SaveSearch),
+            a(label::RENAME_SEARCH, RenameSearch),
+            a(label::DELETE_SEARCH, DeleteSearch),
         ],
     ));
     menus.push(("Aide", vec![a("Toutes les commandes…", CommandPalette)]));
