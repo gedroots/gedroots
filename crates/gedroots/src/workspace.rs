@@ -627,10 +627,7 @@ impl Workspace {
         self.checkpoint();
         let doc = self.doc.as_mut().unwrap();
         let result = ed.apply_form(&mut doc.ged, cx);
-        let renamed = match &ed.target {
-            Target::Place(_) => Some(ed.fields[0].state.value(cx).trim().to_string()),
-            _ => None,
-        };
+        let renamed = ed.place_name(cx);
         self.editor = Some(ed);
         let unchanged =
             self.doc.as_ref().is_some_and(|d| d.history.last().is_some_and(|prev| prev.records == d.ged.records));
@@ -765,6 +762,8 @@ impl Workspace {
             self.rows = Rc::new(Vec::new());
             return;
         };
+        // Libellés courts des lieux selon le format du fichier (Réglages du fichier › Lieux).
+        gedcom::set_place_layout(&doc.ged.place_form());
         let g = &doc.ged;
         let mut rows: Vec<Row> = match self.view {
             View::Individuals => {
@@ -1320,7 +1319,7 @@ impl Workspace {
                     v_flex()
                         .gap_1()
                         .min_w_0()
-                        .child(label_caps(f.label))
+                        .child(label_caps(f.label.clone()))
                         .child(match &f.state {
                             FieldState::Text(e) => Input::new(e).small().into_any_element(),
                             FieldState::Choice(e) => Select::new(e).small().into_any_element(),
