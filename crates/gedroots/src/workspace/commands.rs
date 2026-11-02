@@ -42,6 +42,7 @@ impl Workspace {
         let photo = media.as_ref().and_then(|x| self.photo_file(x)).filter(|_| self.photo_draw.is_none());
         let root = g.and_then(|g| g.root());
         let can_undo = doc.is_some_and(|d| !d.history.is_empty());
+        let can_redo = doc.is_some_and(|d| !d.future.is_empty());
         let individuals = has_doc && self.view == View::Individuals && self.act_editor.is_none();
         let attachable = matches!(sel_kind, Some(RecordKind::Individual | RecordKind::Source));
         let web_linkable = sel.as_ref().is_some_and(|x| g.is_some_and(|g| g.can_have_web_links(x)));
@@ -104,6 +105,7 @@ impl Workspace {
         d.when(self.history.can_back(), |d| on!(d, cx, GoBack, |this, w, cx| this.go_back(w, cx)))
             .when(self.history.can_forward(), |d| on!(d, cx, GoForward, |this, w, cx| this.go_forward(w, cx)))
             .when(can_undo, |d| on!(d, cx, Undo, |this, w, cx| this.undo(&Undo, w, cx)))
+            .when(can_redo, |d| on!(d, cx, Redo, |this, w, cx| this.redo(&Redo, w, cx)))
             .when(sel.is_some(), |d| {
                 on!(d, cx, DeleteRecord, |this, w, cx| {
                     this.tab = CenterTab::Form;
