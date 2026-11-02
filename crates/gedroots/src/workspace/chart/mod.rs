@@ -1,9 +1,10 @@
 //! Free chart: move around by dragging or with the wheel, in every direction. Generations of
-//! ancestors and descendants load as you get close to them; a minimap shows where you are.
+//! ancestors and descendants load as you get close to them, and unload once you have moved well away
+//! from them; a minimap shows where you are.
 //!
-//! When a generation is added, the compact layout tightens or spreads the boxes already shown: they
-//! then slide to their new place instead of jumping there, and the person at the center of the view
-//! does not move.
+//! When a generation is added or removed, the compact layout tightens or spreads the boxes already
+//! shown: they then slide to their new place instead of jumping there, and the person at the center
+//! of the view does not move.
 
 pub(super) mod layout;
 
@@ -29,6 +30,9 @@ const GLIDE: Duration = Duration::from_millis(180);
 /// Margin around the view where boxes are already built: their portraits load before they enter the
 /// view.
 const PRELOAD: f32 = COL;
+/// Distance beyond the view, in addition to the loading threshold, at which a generation unloads:
+/// moving back and forth near the edge of the view does not load and unload it in a loop.
+const UNLOAD_MARGIN: f32 = COL;
 
 /// Identity of a box from one layout to the next: what it shows, its column, and its rank among
 /// identical boxes of the column (pedigree collapse).
@@ -129,8 +133,9 @@ impl Chart {
         sx >= 0. && sy >= 0. && sx + CARD_W <= w && sy + CARD_H <= h
     }
 
-    /// Builds the chart, loading the generations the view gets close to. When a generation is
-    /// added, boxes can shift: the person closest to the center of the view stays in place on
+    /// Builds the chart, loading the generations the view gets close to and unloading those it has
+    /// moved well away from (never below the starting generations). When a generation is added or
+    /// removed, boxes can shift: the person closest to the center of the view stays in place on
     /// screen. Also returns the vertical shift of the view this required.
     fn layout(&mut self, g: &Gedcom, anchor: &str) -> (Layout, f32) {
         let before = self.pan.1;
@@ -142,12 +147,17 @@ impl Chart {
             let right = -self.pan.0 + w / 2.;
             let need_up = l.more_up && right > self.up as f32 * COL && self.up < MAX_GENS;
             let need_down = l.more_down && left < -(self.down as f32) * COL + CARD_W && self.down < MAX_GENS;
-            if !need_up && !need_down {
+            // Mirror of the loading: the last column goes away once the view is past the point where
+            // it would load again, plus a margin.
+            let drop_up = !need_up && self.up > START_UP && right < (self.up - 1) as f32 * COL - UNLOAD_MARGIN;
+            let drop_down =
+                !need_down && self.down > START_DOWN && left > -((self.down - 1) as f32) * COL + CARD_W + UNLOAD_MARGIN;
+            if !need_up && !need_down && !drop_up && !drop_down {
                 break;
             }
             let focus = l.nearest(-self.pan.0, -self.pan.1).map(|c| (c.xref().unwrap_or("").to_string(), c.y));
-            self.up += need_up as u32;
-            self.down += need_down as u32;
+            self.up = self.up + need_up as u32 - drop_up as u32;
+            self.down = self.down + need_down as u32 - drop_down as u32;
             l = layout::build(g, anchor, self.up, self.down);
             if let Some((x, old)) = focus
                 && let Some(c) = l.find(&x)
@@ -562,5 +572,74 @@ impl Workspace {
                 )
                 .into_any_element(),
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{COL, Chart, START_DOWN, START_UP, UNLOAD_MARGIN};
+    use gedcom::Gedcom;
+
+    /// A line of `n` generations of fathers above `@I0@`, and of sons below it.
+    fn line(n: usize) -> Gedcom {
+        let mut text = String::from("0 HEAD\n1 GEDC\n2 VERS 7.0\n");
+        let n = n as i32;
+        for i in -n..=n {
+            text += &format!("0 @I{i}@ INDI\n1 NAME P{i} /L/\n1 SEX M\n");
+            if i < n {
+                text += &format!("1 FAMC @F{i}@\n");
+            }
+            if i > -n {
+                text += &format!("1 FAMS @F{}@\n", i - 1);
+            }
+        }
+        for i in -n..n {
+            text += &format!("0 @F{i}@ FAM\n1 HUSB @I{}@\n1 CHIL @I{i}@\n", i + 1);
+        }
+        text += "0 TRLR\n";
+        Gedcom::parse(&text).unwrap()
+    }
+
+    #[test]
+    fn generations_unload_behind_the_view() {
+        let g = line(12);
+        // What a fresh chart loads around the person.
+        let mut fresh = Chart::default();
+        fresh.reanchor("I0");
+        fresh.layout(&g, "I0");
+        let mut c = Chart::default();
+        c.reanchor("I0");
+        // Far among the ancestors: their generations load.
+        c.pan.0 = -8. * COL;
+        c.layout(&g, "I0");
+        assert!(c.up > 8, "{}", c.up);
+        // Back to the person: they unload, up to one generation of margin.
+        c.pan.0 = fresh.pan.0;
+        c.layout(&g, "I0");
+        assert!(c.up >= START_UP && c.up <= fresh.up + 1, "{} / {}", c.up, fresh.up);
+        // Same on the descendants' side.
+        c.pan.0 = 8. * COL;
+        c.layout(&g, "I0");
+        assert!(c.down > 8, "{}", c.down);
+        c.pan.0 = fresh.pan.0;
+        c.layout(&g, "I0");
+        assert!(c.down >= START_DOWN && c.down <= fresh.down + 1, "{} / {}", c.down, fresh.down);
+    }
+
+    #[test]
+    fn no_flicker_at_the_edge() {
+        let g = line(12);
+        let mut c = Chart::default();
+        c.reanchor("I0");
+        c.pan.0 = -6. * COL;
+        c.layout(&g, "I0");
+        let loaded = c.up;
+        // Moving back by less than the margin keeps what is loaded.
+        c.pan.0 += UNLOAD_MARGIN / 2.;
+        c.layout(&g, "I0");
+        assert_eq!(c.up, loaded);
+        c.pan.0 -= UNLOAD_MARGIN / 2.;
+        c.layout(&g, "I0");
+        assert_eq!(c.up, loaded);
     }
 }
