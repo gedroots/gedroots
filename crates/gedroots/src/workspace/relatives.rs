@@ -385,6 +385,7 @@ impl Workspace {
         if let PickPurpose::Kinship { indi } = p.purpose {
             self.kinship = Some((indi.clone(), chosen));
             self.open_location(View::Individuals, Some(indi), window, cx);
+            self.detail_scroll.set_offset(gpui::point(gpui::px(0.), gpui::px(0.)));
             cx.notify();
             return;
         }
