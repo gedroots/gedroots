@@ -268,6 +268,7 @@ impl Workspace {
 
     pub(super) fn render_add_dialog(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let g = &self.doc.as_ref()?.ged;
+        let agent = matches!(self.add_dialog, Some(AddDialog::Agent(_)));
         let (title, body): (String, AnyElement) = match self.add_dialog.as_ref()? {
             AddDialog::Event(d) => {
                 let what = match d.editing.and_then(|ix| g.event_title(&d.owner, ix)) {
@@ -304,7 +305,7 @@ impl Workspace {
                     v_flex()
                         .id("add-dialog")
                         .occlude()
-                        .w(px(520.))
+                        .w(px(if agent { super::agent::WIDTH } else { 520. }))
                         .rounded(theme::RADIUS_LG)
                         .border_1()
                         .border_color(theme::border_strong())
@@ -340,7 +341,7 @@ impl Workspace {
                                         .on_click(cx.listener(|this, _, w, cx| this.close_add_dialog(w, cx))),
                                 ),
                         )
-                        .child(div().p_3().child(body)),
+                        .child(div().when(!agent, |d| d.p_3()).child(body)),
                 )
                 .into_any_element(),
         )

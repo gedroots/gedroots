@@ -61,6 +61,9 @@ gpui_kit::assets::icon_assets!(
         Calendar,
         Upload,
         Link,
+        AppWindow,
+        Plug,
+        Bot,
     ]
 );
 

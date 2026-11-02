@@ -7,12 +7,87 @@ agent:
   allow:
     en: Allow AI agents
     fr: Autoriser les agents IA
-  copy_command:
-    en: Copy Command
-    fr: Copier la commande
-  command_copied:
-    en: Command copied
-    fr: Commande copiée
+  running:
+    en: "Running · %{address}"
+    fr: "Actif · %{address}"
+  group:
+    terminal:
+      en: Terminal
+      fr: Terminal
+    app:
+      en: App
+      fr: Application
+    editor:
+      en: Editor
+      fr: Éditeur
+    other:
+      en: Other
+      fr: Autre
+  other_client:
+    en: Other MCP Client
+    fr: Autre client MCP
+  streamable_http:
+    en: Streamable HTTP
+    fr: HTTP Streamable
+  in_terminal:
+    en: In a terminal
+    fr: Dans un terminal
+  add_to:
+    en: Add to
+    fr: Ajouter à
+  install_in:
+    en: "Add to %{app}"
+    fr: "Ajouter à %{app}"
+  manual:
+    en: Manual setup ·
+    fr: Configuration manuelle ·
+  show_file:
+    en: Show File
+    fr: Afficher le fichier
+  needs_node:
+    en: Requires Node.js
+    fr: Node.js requis
+  commands:
+    en: Commands
+    fr: Commandes
+  address:
+    en: Address
+    fr: Adresse
+  transport:
+    en: Transport
+    fr: Transport
+  header:
+    en: Header
+    fr: En-tête
+  show_token:
+    en: Show token
+    fr: Afficher le jeton
+  hide_token:
+    en: Hide token
+    fr: Masquer le jeton
+  copy:
+    en: Copy
+    fr: Copier
+  copied:
+    en: Copied
+    fr: Copié
+  connected_now:
+    en: Connected just now
+    fr: Connecté à l’instant
+  connected_min:
+    one:
+      en: "Connected %{n} minute ago"
+      fr: "Connecté il y a %{n} minute"
+    other:
+      en: "Connected %{n} minutes ago"
+      fr: "Connecté il y a %{n} minutes"
+  connected_hours:
+    one:
+      en: "Connected %{n} hour ago"
+      fr: "Connecté il y a %{n} heure"
+    other:
+      en: "Connected %{n} hours ago"
+      fr: "Connecté il y a %{n} heures"
   port_unavailable:
     en: "Port %{port} is unavailable: %{error}"
     fr: "Port %{port} indisponible : %{error}"

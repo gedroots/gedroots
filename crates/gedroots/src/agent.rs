@@ -15,6 +15,7 @@
 //! Le réglage et le jeton sont propres à la machine : ils vivent dans le dossier de
 //! configuration de la plateforme, jamais dans le `.ged`.
 
+pub mod clients;
 mod prompts;
 pub mod propose;
 mod tools;
@@ -33,16 +34,13 @@ pub fn url() -> String {
     format!("http://127.0.0.1:{PORT}/mcp")
 }
 
-/// Commande à coller dans un terminal pour brancher Claude Code.
-pub fn claude_command(token: &str) -> String {
-    format!("claude mcp add --transport http gedroots {} --header \"Authorization: Bearer {token}\"", url())
-}
-
 /// Ce que l'app demande au document affiché, depuis le fil du serveur.
 pub enum Request {
     Snapshot(tokio::sync::oneshot::Sender<Option<Snapshot>>),
     /// Proposition d'acte : ajoutée à la page « À relire » de la fenêtre, ou refusée.
     Propose(Box<propose::Pending>, tokio::sync::oneshot::Sender<Result<usize, String>>),
+    /// Un agent vient d'ouvrir une session : la fenêtre « Agents IA » se met à jour.
+    Connected,
 }
 
 /// Copie du document de la fenêtre active.
@@ -62,6 +60,8 @@ impl Global for Target {}
 pub struct Settings {
     pub enabled: bool,
     pub token: String,
+    /// Agent choisi dans la fenêtre « Agents IA » (`clients::Client::id`).
+    pub client: String,
 }
 
 /// État du serveur, pour la fenêtre de connexion.
@@ -81,6 +81,21 @@ static SERVER: Mutex<Option<Running>> = Mutex::new(None);
 static STATUS: Mutex<Status> = Mutex::new(Status::Off);
 /// File vers la boucle de l'app, créée au démarrage.
 static BRIDGE: Mutex<Option<async_channel::Sender<Request>>> = Mutex::new(None);
+/// Dernier agent connecté depuis le lancement : nom donné par le client, et quand.
+static LAST: Mutex<Option<(String, std::time::Instant)>> = Mutex::new(None);
+
+/// Dernier agent connecté (`clientInfo` de la session MCP) et depuis combien de temps.
+pub fn last_client() -> Option<(String, std::time::Duration)> {
+    LAST.lock().unwrap_or_else(|e| e.into_inner()).as_ref().map(|(n, t)| (n.clone(), t.elapsed()))
+}
+
+/// Note l'agent qui ouvre une session (fil du serveur).
+pub(crate) fn note_client(name: &str) {
+    *LAST.lock().unwrap_or_else(|e| e.into_inner()) = Some((name.to_string(), std::time::Instant::now()));
+    if let Some(tx) = BRIDGE.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
+        let _ = tx.try_send(Request::Connected);
+    }
+}
 
 pub fn status() -> Status {
     STATUS.lock().unwrap_or_else(|e| e.into_inner()).clone()
@@ -115,6 +130,7 @@ pub fn install(cx: &mut App) {
                     });
                     let _ = reply.send(res);
                 }
+                Request::Connected => cx.update(|cx| cx.refresh_windows()),
             }
         }
     })
@@ -128,6 +144,13 @@ pub fn install(cx: &mut App) {
 /// Note la fenêtre que l'agent doit lire.
 pub fn set_target(ws: WeakEntity<crate::workspace::Workspace>, cx: &mut App) {
     cx.set_global(Target(Some(ws)));
+}
+
+/// Retient l'agent choisi dans la fenêtre.
+pub fn set_client(client: clients::Client) {
+    let mut s = load();
+    s.client = client.id().to_string();
+    save(&s);
 }
 
 /// Active ou désactive le serveur, et enregistre le choix.
@@ -194,11 +217,12 @@ pub fn load() -> Settings {
 }
 
 fn parse(text: &str) -> Settings {
-    let mut s = Settings { enabled: false, token: String::new() };
+    let mut s = Settings { enabled: false, token: String::new(), client: String::new() };
     for line in text.lines() {
         match line.split_once('=') {
             Some(("enabled", v)) => s.enabled = v.trim() == "1",
             Some(("token", v)) => s.token = v.trim().to_string(),
+            Some(("client", v)) => s.client = v.trim().to_string(),
             _ => {}
         }
     }
@@ -210,7 +234,7 @@ fn save(s: &Settings) {
     if let Some(dir) = path.parent() {
         let _ = std::fs::create_dir_all(dir);
     }
-    let _ = std::fs::write(&path, format!("enabled={}\ntoken={}\n", u8::from(s.enabled), s.token));
+    let _ = std::fs::write(&path, format!("enabled={}\ntoken={}\nclient={}\n", u8::from(s.enabled), s.token, s.client));
 }
 
 /// Jeton aléatoire de 128 bits (clés aléatoires du système, via `RandomState`).
@@ -230,8 +254,8 @@ mod tests {
 
     #[test]
     fn settings_round_trip() {
-        let s = parse("enabled=1\ntoken=abc\n");
-        assert_eq!(s, Settings { enabled: true, token: "abc".into() });
+        let s = parse("enabled=1\ntoken=abc\nclient=cursor\n");
+        assert_eq!(s, Settings { enabled: true, token: "abc".into(), client: "cursor".into() });
         assert!(!parse("").enabled);
         assert_eq!(new_token().len(), 32);
         assert_ne!(new_token(), new_token());
