@@ -1,4 +1,4 @@
-//! File › Connect an AI Agent…: turns on the local MCP server and gives, for each agent, the
+//! Source › Connect an AI Agent…: turns on the local MCP server and gives, for each agent, the
 //! shortest way to connect it.
 
 use super::add::AddDialog;

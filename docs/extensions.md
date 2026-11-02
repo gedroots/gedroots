@@ -136,7 +136,7 @@ Variables are taken from the event that carries the media (`2 OBJE`), cites it, 
 source that carries it: preferably the one the source describes (`DATA.EVEN`) or its title
 names ("Birth record…"), rather than an attribute (occupation, residence); on a tie, the one
 the first subfolder receives. Otherwise from the source that carries the media, then from
-the linked person or family. A file imported through **Edit › Media…** (⌘⇧M) is moved (or
+the linked person or family. A file imported through **Media › Record Media…** (⌘⇧M) is moved (or
 copied, as chosen) under this name, the preview showing the name before import; a name
 already taken gets "(2)", "(3)"… **Media › Rename Using Template…** moves the files of an
 existing media after confirmation.

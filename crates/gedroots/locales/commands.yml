@@ -21,6 +21,12 @@ menu:
   view:
     en: View
     fr: Affichage
+  go:
+    en: Go
+    fr: Aller
+  copy_special:
+    en: Copy Special
+    fr: Copie spéciale
   help:
     en: Help
     fr: Aide
@@ -104,8 +110,8 @@ cmd:
     en: Select All
     fr: Tout sélectionner
   media_gallery:
-    en: Media…
-    fr: Médias…
+    en: Record Media…
+    fr: Médias de la fiche…
   add_web_link:
     en: Add Web Link…
     fr: Ajouter un lien web…
@@ -278,6 +284,9 @@ cmd:
   toggle_sidebar:
     en: Show or Hide Sidebar
     fr: Masquer ou afficher la barre latérale
+  toggle_inspector:
+    en: Show or Hide Details Panel
+    fr: Masquer ou afficher le panneau de détails
   relative_events:
     en: Relatives' Events
     fr: Événements des proches

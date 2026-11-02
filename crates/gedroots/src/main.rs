@@ -164,10 +164,22 @@ fn main() {
 }
 
 /// Main window opened on `path` (or on the welcome screen).
+/// Commands declared on the application rather than on a window (see `main`): they apply even
+/// without a window.
+pub(crate) fn is_global_action(action: &dyn Action) -> bool {
+    let name = action.name();
+    name == Quit.name()
+        || name == ReleaseNotes.name()
+        || (updates::available() && (name == CheckForUpdates.name() || name == ToggleAutomaticUpdates.name()))
+}
+
 fn open_workspace(path: Option<PathBuf>, cx: &mut App) -> Option<(AnyWindowHandle, WeakEntity<Workspace>)> {
     let bounds = Bounds::centered(None, size(px(1440.), px(900.)), cx);
     let options = WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(bounds)),
+        // Below this, the list and the record no longer fit side by side, even with the side
+        // columns folded away.
+        window_min_size: Some(size(px(720.), px(480.))),
         // macOS: title bar merged into the app's top bar, traffic lights included.
         titlebar: Some(TitlebarOptions {
             title: Some("GEDRoots".into()),
