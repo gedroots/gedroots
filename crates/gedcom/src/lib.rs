@@ -53,6 +53,7 @@ pub mod schema;
 pub mod search;
 pub mod settings;
 pub mod weblink;
+pub mod websearch;
 
 pub use act::{Act, ActKey, ActResult, ActRole, MediaChoice, Participant, PersonChoice, PersonField, Suggestion};
 pub use crop::{Crop, MediaLink, Rect};
@@ -74,6 +75,7 @@ pub use relations::{FAMILY_EVENTS, INDIVIDUAL_EVENTS, NewEvent, Relation, is_med
 pub use search::{IndividualQuery, Kin, has_token, toggle_token};
 pub use settings::{FileInfo, FileSettings, IgnoredIssue};
 pub use weblink::{WebLink, WebLinkKind, host, is_web_url, normalize_url};
+pub use websearch::{SearchSite, WEB_TOKENS};
 
 /// Charge un fichier GEDCOM depuis le disque.
 pub fn load(path: impl AsRef<std::path::Path>) -> Result<Gedcom, String> {

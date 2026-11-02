@@ -13,6 +13,7 @@ l'exige GEDCOM 7 :
 2 TAG _GR_EVEN https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_even
 2 TAG _GR_MEDIA https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_media
 2 TAG _GR_FIND https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_find
+2 TAG _GR_WEB https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_web
 ```
 
 Les autres logiciels ignorent ces balises sans perte de données.
@@ -352,3 +353,30 @@ Renommer la recherche**) et se supprime de la même façon.
 ```
 
 Supprimer la dernière recherche retire aussi les déclarations.
+
+## `_GR_WEB`
+
+Site de recherche en ligne, proposé dans **Individu › Rechercher sur** et au clic droit sur
+une personne. Se règle dans **Fichier › Réglages du fichier… › Recherche**.
+
+- **Sous** : `HEAD`, au niveau 1. Une occurrence par site, dans l'ordre du menu.
+- **Valeur** : nom du site.
+- **Sous-structures** : `_GR_URL <modèle>` : adresse de la recherche, où chaque variable
+  entre accolades est remplacée par la donnée de la personne, encodée pour l'URL (vide si
+  inconnue) : `{nom}`, `{prenom}`, `{naissance}` et `{deces}` (années), `{lieu}` (commune
+  de naissance), `{nom_pere}`, `{prenom_pere}`, `{nom_mere}`, `{prenom_mere}`,
+  `{nom_conjoint}`, `{prenom_conjoint}`.
+
+Sans `_GR_WEB`, GEDRoots propose Geneanet et FamilySearch. Un `_GR_WEB` seul, sans valeur ni
+`_GR_URL`, indique qu'aucun site n'est voulu.
+
+```
+0 HEAD
+1 SCHMA
+2 TAG _GR_WEB https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_web
+2 TAG _GR_URL https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_web
+1 _GR_WEB Geneanet
+2 _GR_URL https://www.geneanet.org/fonds/individus/?go=1&nom={nom}&prenom={prenom}&type_periode=between&from={naissance}&to={deces}
+1 _GR_WEB Google
+2 _GR_URL https://www.google.com/search?q=%22{prenom}%20{nom}%22%20{lieu}
+```

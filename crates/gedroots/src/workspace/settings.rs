@@ -1,11 +1,13 @@
-//! Réglages du fichier (Fichier › Réglages du fichier…), en quatre pages :
+//! Réglages du fichier (Fichier › Réglages du fichier…), en cinq pages :
 //! - Général : auteur, droits, description, langue et individu racine
 //!   (voir `gedcom::settings`) ;
 //! - Lieux : format des lieux (`HEAD.PLAC.FORM`), avec réécriture des lieux ;
 //! - Événements : types d'événements personnalisés (`EVEN` + `TYPE`), avec
 //!   leur libellé affiché ;
 //! - Médias : dossier des médias, sous-dossiers par type et modèles de nom
-//!   (`gedcom::media_naming`).
+//!   (`gedcom::media_naming`) ;
+//! - Recherche : sites d'Individu › Rechercher sur, avec leur modèle d'URL
+//!   (`gedcom::websearch`).
 //!
 //! Tout est rangé dans le .ged et s'annule comme toute modification.
 
@@ -21,6 +23,24 @@ pub(super) enum SettingsPage {
     Places,
     Events,
     Media,
+    Search,
+}
+
+/// Un site de recherche en cours de modification.
+struct SiteRow {
+    name: Entity<InputState>,
+    url: Entity<InputState>,
+}
+
+impl SiteRow {
+    fn new(site: &SearchSite, window: &mut Window, cx: &mut Context<Workspace>) -> (Self, Vec<Subscription>) {
+        let row = SiteRow {
+            name: text_input("Nom du site", &site.name, window, cx),
+            url: text_input("https://exemple.org/recherche?nom={nom}&prenom={prenom}", &site.url, window, cx),
+        };
+        let subs = vec![refresh_on_change(&row.url, cx)];
+        (row, subs)
+    }
 }
 
 /// Une juridiction du format des lieux en cours de modification.
@@ -62,6 +82,9 @@ pub(super) struct SettingsDialog {
     media_active: usize,
     /// Contexte de chaque média du fichier (calculé à l'ouverture), pour les exemples.
     media_samples: Vec<(MediaContext, String)>,
+    sites: Vec<SiteRow>,
+    /// Site dont le modèle reçoit les variables cliquées.
+    sites_active: usize,
     _subs: Vec<Subscription>,
 }
 
@@ -92,10 +115,13 @@ fn refresh_on_change(e: &Entity<InputState>, cx: &mut Context<Workspace>) -> Sub
         InputEvent::Change => cx.notify(),
         // Les variables cliquées vont dans le dernier modèle touché.
         InputEvent::Focus => {
-            if let Some(d) = this.settings_dialog()
-                && let Some(i) = d.media.iter().position(|r| r.template == input)
-            {
-                d.media_active = i;
+            if let Some(d) = this.settings_dialog() {
+                if let Some(i) = d.media.iter().position(|r| r.template == input) {
+                    d.media_active = i;
+                }
+                if let Some(i) = d.sites.iter().position(|r| r.url == input) {
+                    d.sites_active = i;
+                }
             }
         }
         _ => {}
@@ -168,6 +194,15 @@ impl Workspace {
                 Some((g.media_context_with(x, &numbers, Some(&naming)), file.to_string()))
             })
             .collect();
+        let sites = g
+            .search_sites()
+            .iter()
+            .map(|site| {
+                let (row, s) = SiteRow::new(site, window, cx);
+                subs.extend(s);
+                row
+            })
+            .collect();
         self.add_dialog = Some(AddDialog::Settings(Box::new(SettingsDialog {
             page,
             author,
@@ -183,6 +218,8 @@ impl Workspace {
             media,
             media_active: 0,
             media_samples,
+            sites,
+            sites_active: 0,
             _subs: subs,
         })));
         cx.notify();
@@ -228,12 +265,14 @@ impl Workspace {
             .collect();
         let removed = d.removed_events.clone();
         let naming = media_naming(d, cx);
+        let sites = search_sites(d, cx);
         self.add_dialog = None;
 
         let g = &self.doc.as_ref().unwrap().ged;
         let mut probe = g.clone();
         let mut changed = probe.set_file_settings(&s);
         changed |= probe.set_media_naming(&naming);
+        changed |= probe.set_search_sites(&sites);
         let root_changed = root.as_ref().is_some_and(|r| g.root().as_ref() != Some(r));
         let current = g.place_form();
         let format_changed = format.len() != current.len()
@@ -246,6 +285,7 @@ impl Workspace {
             self.mutate(window, cx, move |g| {
                 g.set_file_settings(&s);
                 g.set_media_naming(&naming);
+                g.set_search_sites(&sites);
                 if let Some(r) = root.filter(|_| root_changed) {
                     g.set_root(&r);
                 }
@@ -288,6 +328,7 @@ impl Workspace {
             SettingsPage::Places => self.settings_places(d, cx),
             SettingsPage::Events => self.settings_events(d, cx),
             SettingsPage::Media => self.settings_media(d, cx),
+            SettingsPage::Search => self.settings_search(d, cx),
         };
         let tab = |id: &'static str, label: &'static str, page: SettingsPage| {
             let active = d.page == page;
@@ -308,7 +349,8 @@ impl Workspace {
                     .child(tab("settings-general", "Général", SettingsPage::General))
                     .child(tab("settings-places", "Lieux", SettingsPage::Places))
                     .child(tab("settings-events", "Événements", SettingsPage::Events))
-                    .child(tab("settings-media", "Médias", SettingsPage::Media)),
+                    .child(tab("settings-media", "Médias", SettingsPage::Media))
+                    .child(tab("settings-search", "Recherche", SettingsPage::Search)),
             )
             .child(theme::scroll_y("settings-body").max_h(px(460.)).child(body))
             .child(
@@ -676,6 +718,110 @@ impl Workspace {
             )
             .into_any_element()
     }
+}
+
+impl Workspace {
+    fn settings_search(&self, d: &SettingsDialog, cx: &mut Context<Self>) -> AnyElement {
+        let g = &self.doc.as_ref().unwrap().ged;
+        // Exemple : la personne affichée, sinon l'individu racine.
+        let person = self.selected.clone().filter(|x| g.get(x).is_some_and(|n| n.tag == "INDI")).or_else(|| g.root());
+        let n = d.sites.len();
+        let rows = d.sites.iter().enumerate().map(|(i, r)| {
+            let id = |what: &str| SharedString::from(format!("site-{what}-{i}"));
+            let template = r.url.read(cx).value().trim().to_string();
+            let example = person.as_ref().filter(|_| !template.is_empty()).map(|x| g.search_url(&template, x));
+            v_flex()
+                .gap_1()
+                .p_2()
+                .rounded(theme::RADIUS_SM)
+                .border_1()
+                .border_color(if i == d.sites_active { theme::border_strong() } else { theme::border() })
+                .child(
+                    h_flex()
+                        .gap_1()
+                        .items_center()
+                        .child(div().flex_1().min_w_0().child(Input::new(&r.name).small()))
+                        .child(
+                            Button::new(id("up")).xsmall().ghost().icon(IconName::ChevronUp).disabled(i == 0).on_click(
+                                cx.listener(move |this, _, _, cx| {
+                                    if let Some(d) = this.settings_dialog() {
+                                        d.sites.swap(i, i - 1);
+                                    }
+                                    cx.notify();
+                                }),
+                            ),
+                        )
+                        .child(
+                            Button::new(id("down"))
+                                .xsmall()
+                                .ghost()
+                                .icon(IconName::ChevronDown)
+                                .disabled(i + 1 == n)
+                                .on_click(cx.listener(move |this, _, _, cx| {
+                                    if let Some(d) = this.settings_dialog() {
+                                        d.sites.swap(i, i + 1);
+                                    }
+                                    cx.notify();
+                                })),
+                        )
+                        .child(Button::new(id("del")).xsmall().ghost().icon(IconName::Close).on_click(cx.listener(
+                            move |this, _, _, cx| {
+                                if let Some(d) = this.settings_dialog() {
+                                    d.sites.remove(i);
+                                    d.sites_active = d.sites_active.min(d.sites.len().saturating_sub(1));
+                                }
+                                cx.notify();
+                            },
+                        ))),
+                )
+                .child(Input::new(&r.url).small())
+                .when_some(example, |v, text| {
+                    v.child(div().text_sm().truncate().text_color(theme::muted()).child(text))
+                })
+        });
+        let active = d.sites.get(d.sites_active).map(|r| r.url.clone());
+        let tokens = WEB_TOKENS.iter().map(|t| {
+            let input = active.clone();
+            Button::new(SharedString::from(format!("web-token-{t}")))
+                .xsmall()
+                .outline()
+                .label(format!("{{{t}}}"))
+                .on_click(cx.listener(move |_, _, w, cx| {
+                    let Some(input) = &input else { return };
+                    input.update(cx, |s, cx| {
+                        let v = s.value().to_string();
+                        s.set_value(format!("{v}{{{t}}}"), w, cx);
+                    });
+                }))
+        });
+        v_flex()
+            .gap_2()
+            .child(section_header(
+                "Sites de recherche",
+                plus_button("site-add").tooltip("Ajouter un site").on_click(cx.listener(|this, _, w, cx| {
+                    let empty = SearchSite { name: String::new(), url: String::new() };
+                    let (row, subs) = SiteRow::new(&empty, w, cx);
+                    row.name.update(cx, |s, cx| s.focus(w, cx));
+                    if let Some(d) = this.settings_dialog() {
+                        d.sites.push(row);
+                        d.sites_active = d.sites.len() - 1;
+                        d._subs.extend(subs);
+                    }
+                    cx.notify();
+                })),
+            ))
+            .children(rows)
+            .when(n > 0, |v| v.child(h_flex().flex_wrap().gap_1().children(tokens)))
+            .into_any_element()
+    }
+}
+
+/// Les sites saisis, dans l'ordre (ceux sans URL sont ignorés).
+fn search_sites(d: &SettingsDialog, cx: &App) -> Vec<SearchSite> {
+    d.sites
+        .iter()
+        .map(|r| SearchSite { name: r.name.read(cx).value().to_string(), url: r.url.read(cx).value().to_string() })
+        .collect()
 }
 
 /// Choix du menu des types : libellé, balises. Les événements courants, les

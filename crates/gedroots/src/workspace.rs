@@ -268,8 +268,8 @@ pub struct Workspace {
     show_relative_events: bool,
     /// Statistiques du fichier (page Statistiques).
     stats: Option<Rc<gedcom::analysis::stats::Stats>>,
-    /// Version de la liste des fichiers récents connue de la barre de menus de la fenêtre.
-    recent_gen: u64,
+    /// Versions des fichiers récents et des sites de recherche connues de la barre de menus de la fenêtre.
+    recent_gen: (u64, u64),
     _subs: Vec<Subscription>,
 }
 
@@ -330,7 +330,7 @@ impl Workspace {
             kinship: None,
             show_relative_events: false,
             stats: None,
-            recent_gen: crate::recent::generation(),
+            recent_gen: (crate::recent::generation(), crate::commands::search_sites_generation()),
             menu_row: Rc::default(),
             place_focus: None,
             place_search: Default::default(),
@@ -2707,9 +2707,22 @@ impl Render for Workspace {
             window.set_window_edited(self.doc.as_ref().is_some_and(|d| d.dirty));
             self.window_title = title;
         }
-        // Fichiers récents changés (ici ou dans une autre fenêtre) : la barre de menus les reprend.
-        if self.recent_gen != crate::recent::generation() {
-            self.recent_gen = crate::recent::generation();
+        // Sites de recherche du fichier de la fenêtre active (Individu › Rechercher sur).
+        if window.is_window_active() || cx.windows().len() == 1 {
+            let names = self
+                .doc
+                .as_ref()
+                .map(|d| d.ged.search_sites().into_iter().map(|s| s.name).collect())
+                .unwrap_or_default();
+            if crate::commands::set_search_sites(names) {
+                crate::commands::install_menus(cx);
+            }
+        }
+        // Fichiers récents ou sites de recherche changés (ici ou dans une autre fenêtre) :
+        // la barre de menus les reprend.
+        let menus_gen = (crate::recent::generation(), crate::commands::search_sites_generation());
+        if self.recent_gen != menus_gen {
+            self.recent_gen = menus_gen;
             if let Some(bar) = &self.menu_bar {
                 bar.update(cx, |bar, cx| bar.reload(cx));
             }

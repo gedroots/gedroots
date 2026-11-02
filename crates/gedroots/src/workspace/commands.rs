@@ -188,6 +188,11 @@ impl Workspace {
                 let d = on!(d, cx, KinshipWith, |this, w, cx| this.ask_kinship(w, cx));
                 let d = on!(d, cx, SearchAncestors, |this, w, cx| this.search_kin(Kin::Ancestors, w, cx));
                 let d = on!(d, cx, SearchDescendants, |this, w, cx| this.search_kin(Kin::Descendants, w, cx));
+                let d = d.on_action(cx.listener(|this, a: &SearchWeb, _, cx| {
+                    if let Some(x) = this.selected.clone() {
+                        this.search_web(a.index, &x, cx)
+                    }
+                }));
                 let d = on!(d, cx, LinkMedia, |this, w, cx| {
                     if let Some(owner) = this.selected.clone() {
                         this.open_picker(PickPurpose::MediaFor { owner, crop: false }, w, cx)
@@ -338,6 +343,15 @@ impl Workspace {
         }
         self.set_query(format!("{}:@{x}@ ", kin.key()), window, cx);
         self.filter.update(cx, |f, cx| f.focus(window, cx));
+    }
+
+    /// Ouvre dans le navigateur la recherche de la personne `xref` sur le site
+    /// `index` des réglages du fichier.
+    pub(super) fn search_web(&mut self, index: usize, xref: &str, cx: &mut Context<Self>) {
+        let Some(g) = self.doc.as_ref().map(|d| &d.ged) else { return };
+        if let Some(site) = g.search_sites().get(index) {
+            cx.open_url(&g.search_url(&site.url, xref));
+        }
     }
 
     fn toggle_filter(&mut self, token: &str, window: &mut Window, cx: &mut Context<Self>) {
