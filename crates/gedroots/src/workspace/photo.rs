@@ -16,6 +16,10 @@ use std::path::Path;
 /// Maximum size of the image in a media’s record.
 const MAX_W: f32 = 1600.;
 const MAX_H: f32 = 900.;
+/// Largest enlargement of a small photo, fitted.
+const MAX_FIT: f32 = 2.;
+/// Space below the fitted image for the names of the people framed at the bottom.
+const NAME_ROOM: f32 = 22.;
 
 /// Image of a link, cropped if the link has a `CROP` (box `w × h`). `cover`: fills the box
 /// (cropping), otherwise the image or area fits whole. Only the area is decoded: the element is
@@ -203,9 +207,10 @@ impl Workspace {
             a if a > 50. => a,
             _ => MAX_W,
         };
-        let scale = display_scale(size, avail);
-        self.photo_bounds.scale.set(scale);
-        let (dw, dh) = (size.0 as f32 * scale, size.1 as f32 * scale);
+        // Fitted size: the height of the viewer; zoomed, the image moves inside it.
+        let fit = display_scale(size, avail);
+        let dh = size.1 as f32 * fit;
+        let (iw, ih) = (size.0.max(1) as f32, size.1.max(1) as f32);
         let draw = self.photo_draw.as_ref().filter(|d| d.media == media);
         let drawing = draw.is_some();
         let links = g.media_links(media);
@@ -215,6 +220,8 @@ impl Workspace {
         let here = |l: &MediaLink| l.crop.is_some() && l.page == page;
         let people = links.iter().filter(|l| l.owner_tag == "INDI" && here(l)).count();
         let bounds = self.photo_bounds.bounds.clone();
+        let scale_cell = self.photo_bounds.scale.clone();
+        let zoom = self.photo_zoom.clone();
         let avail_cell = self.photo_bounds.avail.clone();
 
         // Identified people, and cropped areas for the other links (record excerpt for a source…).
@@ -230,14 +237,15 @@ impl Workspace {
             };
             let target = l.owner.clone();
             let hover_key = l.owner.clone();
+            let zoom = self.photo_zoom.clone();
             Some(
                 div()
                     .id(SharedString::from(format!("face-{}", l.owner)))
                     .absolute()
-                    .left(px(x as f32 * scale))
-                    .top(px(y as f32 * scale))
-                    .w(px(w as f32 * scale))
-                    .h(px(h as f32 * scale))
+                    .left(relative(x as f32 / iw))
+                    .top(relative(y as f32 / ih))
+                    .w(relative(w as f32 / iw))
+                    .h(relative(h as f32 / ih))
                     .border_2()
                     .when(!person, |d| d.border_dashed())
                     .rounded(theme::RADIUS_SM)
@@ -248,7 +256,12 @@ impl Workspace {
                                 this.photo_hover = h.then(|| hover_key.clone());
                                 cx.notify();
                             }))
-                            .on_click(cx.listener(move |this, _, w, cx| this.goto(target.clone(), w, cx)))
+                            .on_click(cx.listener(move |this, _, w, cx| {
+                                // The press moved the zoomed image: not a click on the person.
+                                if !zoom.dragged() {
+                                    this.goto(target.clone(), w, cx)
+                                }
+                            }))
                     })
                     .child(
                         div()
@@ -263,59 +276,76 @@ impl Workspace {
                             .text_color(color)
                             .whitespace_nowrap()
                             .child(g.record_label(&l.owner)),
-                    ),
+                    )
+                    .into_any_element(),
             )
         });
 
         let draft = draw.and_then(|d| d.rect()).map(|(x, y, w, h)| {
             div()
                 .absolute()
-                .left(px(x as f32 * scale))
-                .top(px(y as f32 * scale))
-                .w(px(w as f32 * scale))
-                .h(px(h as f32 * scale))
+                .left(relative(x as f32 / iw))
+                .top(relative(y as f32 / ih))
+                .w(relative(w as f32 / iw))
+                .h(relative(h as f32 / ih))
                 .border_2()
                 .border_color(theme::image_accent())
                 .bg(theme::image_accent().opacity(0.15))
+                .into_any_element()
         });
 
-        let canvas_el = canvas(move |b, _, _| bounds.set(Some(b)), |_, _, _, _| {}).absolute().inset_0();
-        let picture = div()
-            .id("photo")
-            .relative()
-            .w(px(dw))
-            .h(px(dh))
-            .flex_none()
-            .child(picture(path.clone(), dw, dh, ObjectFit::Fill).size_full())
-            .child(canvas_el)
-            .children(boxes)
-            .children(draft)
-            .when(drawing, |d| {
-                d.cursor(CursorStyle::Crosshair)
-                    .on_mouse_down(
-                        MouseButton::Left,
-                        cx.listener(|this, ev: &MouseDownEvent, _, cx| {
-                            let p = this.photo_point(ev.position);
-                            if let Some(d) = this.photo_draw.as_mut() {
-                                d.start = p;
-                                d.current = p;
-                            }
-                            cx.notify();
-                        }),
-                    )
-                    .on_mouse_move(cx.listener(|this, ev: &MouseMoveEvent, _, cx| {
-                        if !ev.dragging() {
-                            return;
-                        }
+        // Position and scale of the image on screen, to turn the pointer into image pixels.
+        let canvas_el = canvas(
+            move |b, _, _| {
+                bounds.set(Some(b));
+                scale_cell.set(f32::from(b.size.width) / iw);
+            },
+            |_, _, _, _| {},
+        )
+        .absolute()
+        .inset_0()
+        .into_any_element();
+        // While drawing, the pointer draws a frame instead of moving the image.
+        let draw_layer = drawing.then(|| {
+            div()
+                .id("photo-draw")
+                .absolute()
+                .inset_0()
+                .cursor(CursorStyle::Crosshair)
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(|this, ev: &MouseDownEvent, _, cx| {
+                        cx.stop_propagation();
                         let p = this.photo_point(ev.position);
-                        if let Some(d) = this.photo_draw.as_mut().filter(|d| d.start.is_some()) {
+                        if let Some(d) = this.photo_draw.as_mut() {
+                            d.start = p;
                             d.current = p;
-                            cx.notify();
                         }
-                    }))
-                    .on_mouse_up(MouseButton::Left, cx.listener(|this, _, w, cx| this.finish_draw(w, cx)))
-                    .on_mouse_up_out(MouseButton::Left, cx.listener(|this, _, w, cx| this.finish_draw(w, cx)))
-            });
+                        cx.notify();
+                    }),
+                )
+                .on_mouse_move(cx.listener(|this, ev: &MouseMoveEvent, _, cx| {
+                    if !ev.dragging() {
+                        return;
+                    }
+                    let p = this.photo_point(ev.position);
+                    if let Some(d) = this.photo_draw.as_mut().filter(|d| d.start.is_some()) {
+                        d.current = p;
+                        cx.notify();
+                    }
+                }))
+                .on_mouse_up(MouseButton::Left, cx.listener(|this, _, w, cx| this.finish_draw(w, cx)))
+                .on_mouse_up_out(MouseButton::Left, cx.listener(|this, _, w, cx| this.finish_draw(w, cx)))
+                .into_any_element()
+        });
+        let picture = div().w_full().h(px(dh + NAME_ROOM)).child(
+            zoom.view("photo", path.clone())
+                .max_fit(MAX_FIT)
+                .bottom_room(NAME_ROOM)
+                .background(theme::surface())
+                .drag_to_pan(!drawing)
+                .overlay(std::iter::once(canvas_el).chain(boxes).chain(draft).chain(draw_layer)),
+        );
 
         let toolbar = h_flex()
             .gap_2()
@@ -448,8 +478,6 @@ impl Workspace {
                     .border_color(if drawing { theme::accent() } else { theme::border() })
                     .bg(theme::surface())
                     .p_2()
-                    // Space below the image for the names of people framed at the bottom.
-                    .pb_6()
                     .overflow_hidden()
                     .relative()
                     .child(picture)
@@ -478,5 +506,5 @@ impl Workspace {
 }
 
 fn display_scale((w, h): (u32, u32), max_w: f32) -> f32 {
-    (max_w.min(MAX_W) / w.max(1) as f32).min(MAX_H / h.max(1) as f32).min(2.)
+    (max_w.min(MAX_W) / w.max(1) as f32).min(MAX_H / h.max(1) as f32).min(MAX_FIT)
 }

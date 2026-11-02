@@ -31,6 +31,19 @@ pub fn picture_region(path: PathBuf, rect: Rect, w: f32, h: f32, fit: ObjectFit)
     region(path, Some(rect), w, h, fit)
 }
 
+/// Image `path` decoded in detail, for a zoomed view: at full resolution, or [`DETAIL_SIDE`] px on
+/// the long side for a larger scan. Stretched to the element's size.
+pub fn picture_detail(path: PathBuf) -> Img {
+    img(ImageSource::Custom(Arc::new(move |window, cx| {
+        let side = image_size(&path).map_or(0, |(w, h)| if w.max(h) > DETAIL_SIDE { DETAIL_SIDE } else { 0 });
+        load_side(&path, None, side, window, cx)
+    })))
+    .object_fit(ObjectFit::Fill)
+}
+
+/// Long side of a zoomed image, at most: 64 MB of pixels, within the GPU's texture limits.
+const DETAIL_SIDE: u32 = 4096;
+
 fn region(path: PathBuf, rect: Option<Rect>, w: f32, h: f32, fit: ObjectFit) -> Img {
     let contain = matches!(fit, ObjectFit::Contain | ObjectFit::ScaleDown);
     img(ImageSource::Custom(Arc::new(move |window, cx| load(&path, rect, (w, h), contain, window, cx)))).object_fit(fit)
@@ -95,6 +108,17 @@ fn load(
         None => image_size(path),
     };
     let side = natural.map_or(0, |n| side_for(n, bx, contain, window.scale_factor()));
+    load_side(path, rect, side, window, cx)
+}
+
+/// Image `path` (or its area `rect`) decoded at `side` px on the long side; `0`: full resolution.
+fn load_side(
+    path: &Path,
+    rect: Option<Rect>,
+    side: u32,
+    window: &mut Window,
+    cx: &mut App,
+) -> Option<Result<Arc<RenderImage>, ImageCacheError>> {
     let key = (path.to_path_buf(), rect, side);
     let res = window.use_asset::<Scaled>(&key, cx)?;
     if let Ok(image) = &res {

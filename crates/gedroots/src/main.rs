@@ -18,6 +18,7 @@ mod recent;
 mod report;
 mod theme;
 mod updates;
+mod viewer;
 mod workspace;
 
 use commands::{CheckForUpdates, Quit, ReleaseNotes, ToggleAutomaticUpdates};

@@ -8,7 +8,6 @@
 
 use crate::date_field::DateField;
 use crate::editor::{PickerState, choice_with_search, picker};
-use crate::images::picture;
 use crate::theme;
 use gedcom::*;
 use gpui_kit::assets::IconName;
@@ -88,7 +87,7 @@ pub struct ActEditor {
     place_menu: Option<PlaceMenu>,
     preview: Option<Result<String, String>>,
     error: Option<SharedString>,
-    zoom: f32,
+    zoom: crate::viewer::Zoom,
     saved_count: usize,
     scroll: ScrollHandle,
     _subs: Vec<Subscription>,
@@ -192,7 +191,7 @@ impl ActEditor {
             place_menu: None,
             preview: None,
             error: None,
-            zoom: 1.0,
+            zoom: Default::default(),
             saved_count: 0,
             scroll: ScrollHandle::new(),
             _subs: Vec::new(),
@@ -579,6 +578,11 @@ impl ActEditor {
         cx.notify();
     }
 
+    /// Zoom of the act's image, for the View menu.
+    pub fn zoom(&self) -> &crate::viewer::Zoom {
+        &self.zoom
+    }
+
     pub fn set_error(&mut self, e: String, cx: &mut Context<Self>) {
         self.error = Some(e.into());
         cx.notify();
@@ -736,26 +740,14 @@ impl ActEditor {
             (_, Some(p)) => name(p),
             _ => t!("act.image").into(),
         };
-        let zoom = self.zoom;
         let is_image = |p: &Path| mime_for(&p.to_string_lossy()).starts_with("image/");
+        if !file.as_deref().is_some_and(|p| p.exists() && is_image(p)) {
+            self.zoom.clear();
+        }
         let viewer: AnyElement = match &file {
-            Some(p) if p.exists() && is_image(p) => div()
-                .id("acte-scroll")
-                .flex_1()
-                .min_h_0()
-                .overflow_scroll()
-                .bg(theme::viewer())
-                .child({
-                    // At 100 % the image fits in the panel; beyond that it is enlarged and scrolls.
-                    let (w, h) =
-                        imagesize::size(p).map(|s| (s.width as f32, s.height as f32)).unwrap_or((1000., 1400.));
-                    let width = 460. * zoom;
-                    // Decoded for the displayed width (the panel is rarely wider than 900 px).
-                    let shown = width.max(900.);
-                    let i = picture(p.clone(), shown, shown * h / w.max(1.), ObjectFit::Contain);
-                    if zoom <= 1.0 { i.size_full() } else { i.w(px(width)).h(px(width * h / w.max(1.))) }
-                })
-                .into_any_element(),
+            Some(p) if p.exists() && is_image(p) => {
+                div().flex_1().min_h_0().child(self.zoom.view("act-image", p.clone())).into_any_element()
+            }
             // PDF: no built-in preview, open it with the system's application.
             Some(p) if p.exists() => {
                 let target = p.clone();
@@ -843,20 +835,7 @@ impl ActEditor {
                                 }),
                             ),
                         )
-                    })
-                    .child(Button::new("zoom-out").ghost().xsmall().label("−").disabled(zoom <= 1.0).on_click(
-                        cx.listener(|this, _, _, cx| {
-                            this.zoom = (this.zoom / 1.25).max(1.0);
-                            cx.notify();
-                        }),
-                    ))
-                    .child(mono(t!("stats.percent", value = format!("{:.0}", zoom * 100.))))
-                    .child(Button::new("zoom-in").ghost().xsmall().label("+").on_click(cx.listener(
-                        |this, _, _, cx| {
-                            this.zoom = (this.zoom * 1.25).min(6.0);
-                            cx.notify();
-                        },
-                    ))),
+                    }),
             )
             .child(viewer)
             .child(

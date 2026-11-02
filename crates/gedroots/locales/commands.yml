@@ -36,6 +36,9 @@ menu:
   tree:
     en: Tree
     fr: Arbre
+  zoom:
+    en: Zoom
+    fr: Zoom
   filter_list:
     en: Filter List
     fr: Filtrer la liste
@@ -293,6 +296,18 @@ cmd:
   center_tree:
     en: Center Tree on Person
     fr: Centrer l'arbre sur la personne
+  zoom_in:
+    en: Zoom In
+    fr: Zoom avant
+  zoom_out:
+    en: Zoom Out
+    fr: Zoom arrière
+  zoom_to_fit:
+    en: Zoom to Fit
+    fr: Ajuster à la fenêtre
+  actual_size:
+    en: Actual Size
+    fr: Taille réelle
   more_generations:
     en: More Generations
     fr: Plus de générations
