@@ -443,7 +443,7 @@ impl Act {
     /// Libellé de l'événement.
     pub fn event_label(&self) -> String {
         if !self.event_type.trim().is_empty() {
-            return self.event_type.trim().to_string();
+            return crate::model::event_type_label(&self.event_type);
         }
         crate::model::event_label(&self.event).map(str::to_string).unwrap_or_else(|| self.event.clone())
     }

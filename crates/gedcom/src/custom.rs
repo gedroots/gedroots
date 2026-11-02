@@ -5,8 +5,11 @@
 //!   la plus précise à la plus large. Le changer peut réécrire tous les `PLAC`
 //!   du fichier (réordonner, ajouter, retirer, renommer une juridiction).
 //! - Types d'événements : un type personnalisé est un `EVEN` standard avec un
-//!   `TYPE`. Ils sont déduits du fichier ; seuls ceux qu'on déclare avant de
-//!   s'en servir sont écrits dans l'en-tête (`HEAD._GR_EVEN`, voir docs/extensions.md).
+//!   `TYPE`. Ils sont déduits du fichier ; l'en-tête (`HEAD._GR_EVEN`, voir
+//!   docs/extensions.md) ne déclare que ceux qu'on n'utilise pas encore et ceux
+//!   qui ont un libellé affiché différent de leur `TYPE`.
+//! - Import : les événements à balise d'extension d'autres logiciels (`_MILT`…)
+//!   deviennent des `EVEN` + `TYPE` (voir [`Gedcom::migrate_extension_events`]).
 
 use crate::document::Gedcom;
 use crate::model::sort_key;
@@ -33,6 +36,9 @@ pub struct PlaceRewrite {
 /// Un type d'événement personnalisé (`EVEN` + `TYPE`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EventType {
+    /// Valeur du `TYPE` des événements, telle qu'écrite dans le fichier.
+    pub ty: String,
+    /// Libellé affiché (`_GR_LABEL`), sinon le `TYPE`.
     pub label: String,
     /// Événement familial (sous `FAM`) ou individuel (sous `INDI`).
     pub family: bool,
@@ -47,6 +53,8 @@ pub const EVENT_TYPE_TAG: &str = "_GR_EVEN";
 pub const EVENT_TYPE_URI: &str = "https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_even";
 /// Sous `_GR_EVEN` : type réservé aux familles (`FAM`).
 const RECORD_TAG: &str = "_GR_REC";
+/// Sous `_GR_EVEN` : libellé affiché, quand il diffère du `TYPE`.
+const LABEL_TAG: &str = "_GR_LABEL";
 
 fn split_place(v: &str) -> Vec<&str> {
     v.split(',').map(str::trim).collect()
@@ -93,17 +101,25 @@ impl Gedcom {
     /// Types d'événements personnalisés : ceux du fichier et ceux déclarés, triés par libellé.
     pub fn event_types(&self) -> Vec<EventType> {
         let mut out: Vec<EventType> = Vec::new();
-        let mut add = |label: &str, family: bool, used: bool, declared: bool| {
-            let label = label.trim();
-            if label.is_empty() {
+        let mut add = |ty: &str, family: bool, used: bool, label: Option<&str>| {
+            let ty = ty.trim();
+            if ty.is_empty() {
                 return;
             }
-            match out.iter_mut().find(|t| t.family == family && t.label == label) {
-                Some(t) => {
-                    t.uses += usize::from(used);
-                    t.declared |= declared;
+            let i = match out.iter().position(|t| t.family == family && t.ty == ty) {
+                Some(i) => i,
+                None => {
+                    out.push(EventType { ty: ty.into(), label: ty.into(), family, uses: 0, declared: false });
+                    out.len() - 1
                 }
-                None => out.push(EventType { label: label.into(), family, uses: usize::from(used), declared }),
+            };
+            let t = &mut out[i];
+            t.uses += usize::from(used);
+            if !used {
+                t.declared = true;
+                if let Some(l) = label.map(str::trim).filter(|l| !l.is_empty()) {
+                    t.label = l.into();
+                }
             }
         };
         for r in &self.records {
@@ -114,19 +130,25 @@ impl Gedcom {
             };
             for e in r.children_with("EVEN") {
                 if let Some(t) = e.child_val("TYPE") {
-                    add(t, family, true, false);
+                    add(t, family, true, None);
                 }
             }
         }
         for d in self.header.children_with(EVENT_TYPE_TAG) {
-            add(d.val(), d.child_val(RECORD_TAG) == Some("FAM"), false, true);
+            add(d.val(), d.child_val(RECORD_TAG) == Some("FAM"), false, d.child_val(LABEL_TAG));
         }
         out.sort_by_cached_key(|t| (sort_key(&t.label), t.family));
         out
     }
 
-    /// Renomme un type d'événement partout (événements et déclaration). Renommer vers
-    /// un type existant les fusionne. Renvoie le nombre d'événements modifiés.
+    /// Libellés affichés des types qui en ont un (`(TYPE, libellé)`) : à passer à
+    /// [`crate::set_event_labels`] pour que les événements s'affichent sous ce libellé.
+    pub fn event_labels(&self) -> Vec<(String, String)> {
+        self.event_types().into_iter().filter(|t| t.label != t.ty).map(|t| (t.ty, t.label)).collect()
+    }
+
+    /// Renomme un type d'événement partout (`TYPE` des événements et déclaration).
+    /// Renommer vers un type existant les fusionne. Renvoie le nombre d'événements modifiés.
     pub fn rename_event_type(&mut self, family: bool, old: &str, new: &str) -> usize {
         let new = new.trim();
         if new.is_empty() || new == old {
@@ -150,46 +172,164 @@ impl Gedcom {
                 self.header.children[i].value = Some(new.to_string());
             }
         }
+        self.rename_media_type(old, new);
+        self.tidy_event_types();
         count
     }
 
-    fn declared_index(&self, family: bool, label: &str) -> Option<usize> {
+    /// Change le libellé affiché d'un type (vide ou égal au `TYPE` : le `TYPE` est affiché).
+    /// Les événements ne changent pas : le libellé est rangé dans `HEAD._GR_EVEN`.
+    pub fn set_event_type_label(&mut self, family: bool, ty: &str, label: &str) {
+        let label = label.trim();
+        let label = if label == ty.trim() { "" } else { label };
+        match self.declared_index(family, ty) {
+            Some(i) => self.header.children[i].set_child_val(LABEL_TAG, label),
+            None if !label.is_empty() => {
+                self.push_declaration(family, ty);
+                if let Some(i) = self.declared_index(family, ty) {
+                    self.header.children[i].set_child_val(LABEL_TAG, label);
+                }
+            }
+            None => {}
+        }
+        self.tidy_event_types();
+    }
+
+    fn declared_index(&self, family: bool, ty: &str) -> Option<usize> {
         self.header.children.iter().position(|c| {
-            c.tag == EVENT_TYPE_TAG && c.val().trim() == label && (c.child_val(RECORD_TAG) == Some("FAM")) == family
+            c.tag == EVENT_TYPE_TAG && c.val().trim() == ty && (c.child_val(RECORD_TAG) == Some("FAM")) == family
         })
     }
 
-    /// Déclare un type d'événement pour pouvoir le choisir avant de s'en servir.
-    /// Renvoie `false` s'il existait déjà (dans le fichier ou l'en-tête).
-    pub fn declare_event_type(&mut self, family: bool, label: &str) -> bool {
-        let label = label.trim();
-        if label.is_empty() || self.event_types().iter().any(|t| t.family == family && t.label == label) {
-            return false;
-        }
-        self.declare_extension(EVENT_TYPE_TAG, EVENT_TYPE_URI);
-        if family {
-            self.declare_extension(RECORD_TAG, EVENT_TYPE_URI);
-        }
-        let mut n = Node::with_value(EVENT_TYPE_TAG, label);
+    fn push_declaration(&mut self, family: bool, ty: &str) {
+        let mut n = Node::with_value(EVENT_TYPE_TAG, ty);
         if family {
             n.children.push(Node::with_value(RECORD_TAG, "FAM"));
         }
         self.header.insert_child(n);
+    }
+
+    /// Déclare un type d'événement pour pouvoir le choisir avant de s'en servir.
+    /// Renvoie `false` s'il existait déjà (dans le fichier ou l'en-tête).
+    pub fn declare_event_type(&mut self, family: bool, ty: &str) -> bool {
+        let ty = ty.trim();
+        if ty.is_empty() || self.event_types().iter().any(|t| t.family == family && t.ty == ty) {
+            return false;
+        }
+        self.push_declaration(family, ty);
+        self.tidy_event_types();
         true
     }
 
     /// Retire la déclaration d'un type (les événements du fichier ne changent pas).
-    pub fn undeclare_event_type(&mut self, family: bool, label: &str) {
-        if let Some(i) = self.declared_index(family, label) {
+    pub fn undeclare_event_type(&mut self, family: bool, ty: &str) {
+        if let Some(i) = self.declared_index(family, ty) {
             self.header.children.remove(i);
         }
-        if self.header.child(EVENT_TYPE_TAG).is_none() {
-            self.undeclare_extension(EVENT_TYPE_TAG);
-        }
-        if !self.header.children_with(EVENT_TYPE_TAG).any(|d| d.child(RECORD_TAG).is_some()) {
-            self.undeclare_extension(RECORD_TAG);
+        self.tidy_event_types();
+    }
+
+    /// Retire les déclarations devenues inutiles (type utilisé, sans libellé propre)
+    /// et ne garde dans `SCHMA` que les balises `_GR_EVEN` utilisées.
+    fn tidy_event_types(&mut self) {
+        let used: Vec<(bool, String)> =
+            self.event_types().into_iter().filter(|t| t.uses > 0).map(|t| (t.family, t.ty)).collect();
+        self.header.children.retain(|c| {
+            !(c.tag == EVENT_TYPE_TAG
+                && c.child(LABEL_TAG).is_none()
+                && used.contains(&(c.child_val(RECORD_TAG) == Some("FAM"), c.val().trim().to_string())))
+        });
+        for sub in [EVENT_TYPE_TAG, RECORD_TAG, LABEL_TAG] {
+            let used =
+                self.header.children_with(EVENT_TYPE_TAG).any(|d| sub == EVENT_TYPE_TAG || d.child(sub).is_some());
+            if used {
+                self.declare_extension(sub, EVENT_TYPE_URI);
+            } else {
+                self.undeclare_extension(sub);
+            }
         }
     }
+
+    /// Événements à balise d'extension venus d'autres logiciels (`_MILT`, `_MILI`…),
+    /// à convertir à l'import.
+    pub fn extension_event_count(&self) -> usize {
+        self.records
+            .iter()
+            .filter(|r| r.tag == "INDI" || r.tag == "FAM")
+            .map(|r| r.children.iter().filter(|c| extension_event_type(c).is_some()).count())
+            .sum()
+    }
+
+    /// Convertit les événements à balise d'extension en `EVEN` + `TYPE` standard :
+    /// `1 _MILT` → `1 EVEN` / `2 TYPE Service militaire`. Un `TYPE` d'origine (la
+    /// précision : « Infanterie ») passe dans une note. Renvoie le nombre d'événements convertis.
+    pub fn migrate_extension_events(&mut self) -> usize {
+        let mut count = 0;
+        let has = |r: &Node| r.children.iter().any(|c| extension_event_type(c).is_some());
+        for r in self.records_where_mut(|r| (r.tag == "INDI" || r.tag == "FAM") && has(r)) {
+            for e in r.children.iter_mut() {
+                let Some(ty) = extension_event_type(e) else { continue };
+                e.tag = "EVEN".into();
+                if let Some(i) = e.children.iter().position(|c| c.tag == "TYPE") {
+                    let old = e.children.remove(i);
+                    if !old.val().trim().is_empty() {
+                        e.insert_child(Node::with_value("NOTE", old.val().trim()));
+                    }
+                }
+                e.children.insert(0, Node::with_value("TYPE", &ty));
+                if e.value.as_deref() == Some("Y") {
+                    e.value = None;
+                }
+                count += 1;
+            }
+            r.touch();
+        }
+        count
+    }
+}
+
+/// Balises d'extension d'événements connues (Legacy, RootsMagic, Family Tree Maker,
+/// Ancestry, Heredis…) et le `TYPE` qu'elles deviennent.
+const EXTENSION_EVENTS: &[(&str, &str)] = &[
+    ("_MILT", "Service militaire"),
+    ("_MILI", "Service militaire"),
+    ("_MIL", "Service militaire"),
+    ("_MILITARY", "Service militaire"),
+    ("_MILITARY_SERVICE", "Service militaire"),
+    ("_MDCL", "Informations médicales"),
+    ("_MEDICAL", "Informations médicales"),
+    ("_DEG", "Diplôme"),
+    ("_DEGREE", "Diplôme"),
+    ("_ELEC", "Élection"),
+    ("_EMPLOY", "Emploi"),
+    ("_EXCM", "Excommunication"),
+    ("_FUN", "Funérailles"),
+    ("_FUNERAL", "Funérailles"),
+    ("_ORDI", "Ordination"),
+    ("_ORDN", "Ordination"),
+    ("_CIRC", "Circoncision"),
+    ("_DEST", "Destination"),
+    ("_SEPR", "Séparation"),
+    ("_SEPARATED", "Séparation"),
+    ("_HOSP", "Hospitalisation"),
+    ("_ARRI", "Arrivée"),
+    ("_DEPA", "Départ"),
+];
+
+/// Balises d'extension qui ne sont jamais des événements, même datées.
+const NOT_EVENTS: &[&str] = &["_TODO", "_LINT", "_UID", "_PRIM", "_URL", "_PHOTO", "_VALID", "_UPD", "_SOSADABOVILLE"];
+
+/// `TYPE` d'un événement à balise d'extension : balise connue, ou balise inconnue
+/// qui a une date ou un lieu (son nom, sans le `_`).
+fn extension_event_type(n: &Node) -> Option<String> {
+    if !n.tag.starts_with('_') || n.tag.starts_with("_GR_") || NOT_EVENTS.contains(&n.tag.as_str()) {
+        return None;
+    }
+    if let Some((_, ty)) = EXTENSION_EVENTS.iter().find(|(t, _)| *t == n.tag) {
+        return Some(ty.to_string());
+    }
+    let dated = n.children.iter().any(|c| c.tag == "DATE" || c.tag == "PLAC");
+    dated.then(|| n.tag.trim_start_matches('_').replace('_', " ").to_lowercase())
 }
 
 #[cfg(test)]
@@ -254,13 +394,13 @@ mod tests {
         let mut g = Gedcom::parse(G).unwrap();
         let t = g.event_types();
         assert_eq!(
-            t.iter().map(|t| (t.label.as_str(), t.family)).collect::<Vec<_>>(),
+            t.iter().map(|t| (t.ty.as_str(), t.family)).collect::<Vec<_>>(),
             vec![("Bapteme prot.", false), ("Baptême protestant", false), ("Contrat de mariage", true)]
         );
         // Fusion de deux types.
         assert_eq!(g.rename_event_type(false, "Bapteme prot.", "Baptême protestant"), 1);
         let t = g.event_types();
-        assert_eq!(t[0].label, "Baptême protestant");
+        assert_eq!(t[0].ty, "Baptême protestant");
         assert_eq!(t[0].uses, 2);
         assert_eq!(t.len(), 2);
 
@@ -271,12 +411,50 @@ mod tests {
         assert!(out.contains("1 _GR_EVEN Bans\n2 _GR_REC FAM\n"));
         assert!(out.contains("2 TAG _GR_EVEN https://"));
         let re = Gedcom::parse(&out).unwrap();
-        assert!(re.event_types().iter().any(|t| t.label == "Bans" && t.family && t.declared && t.uses == 0));
+        assert!(re.event_types().iter().any(|t| t.ty == "Bans" && t.family && t.declared && t.uses == 0));
 
         g.rename_event_type(true, "Bans", "Publication des bans");
-        assert!(g.event_types().iter().any(|t| t.label == "Publication des bans" && t.declared));
+        assert!(g.event_types().iter().any(|t| t.ty == "Publication des bans" && t.declared));
         g.undeclare_event_type(true, "Publication des bans");
         assert!(g.header.child(EVENT_TYPE_TAG).is_none());
         assert!(g.header.child("SCHMA").is_none());
+    }
+
+    #[test]
+    fn labels_are_kept_in_the_header() {
+        let mut g = Gedcom::parse(G).unwrap();
+        g.set_event_type_label(false, "Baptême protestant", "Baptême réformé");
+        let out = g.to_gedcom_string();
+        assert!(out.contains("1 _GR_EVEN Baptême protestant\n2 _GR_LABEL Baptême réformé\n"), "{out}");
+        assert!(out.contains("2 TAG _GR_LABEL https://"));
+        assert!(out.contains("2 TYPE Baptême protestant\n"));
+        let t = g.event_types();
+        let b = t.iter().find(|t| t.ty == "Baptême protestant").unwrap();
+        assert_eq!((b.label.as_str(), b.uses), ("Baptême réformé", 1));
+        assert_eq!(g.event_labels(), vec![("Baptême protestant".to_string(), "Baptême réformé".to_string())]);
+        // Renommer le TYPE garde le libellé.
+        g.rename_event_type(false, "Baptême protestant", "baptism (protestant)");
+        assert!(g.to_gedcom_string().contains("1 _GR_EVEN baptism (protestant)\n2 _GR_LABEL Baptême réformé\n"));
+        // Libellé effacé : le type est utilisé, la déclaration n'a plus lieu d'être.
+        g.set_event_type_label(false, "baptism (protestant)", "");
+        let out = g.to_gedcom_string();
+        assert!(!out.contains("_GR_EVEN"), "{out}");
+        assert!(!out.contains("_GR_LABEL"));
+    }
+
+    #[test]
+    fn imports_extension_events_as_even_type() {
+        let mut g = Gedcom::parse(
+            "0 HEAD\n0 @I1@ INDI\n1 _MILT\n2 DATE 1914\n2 TYPE Infanterie\n1 _TODO Chercher\n2 DATE 2020\n1 _HOBBY\n2 PLAC Paris\n1 _FOO bar\n0 @F1@ FAM\n1 _SEPR Y\n0 TRLR\n",
+        )
+        .unwrap();
+        assert_eq!(g.extension_event_count(), 3);
+        assert_eq!(g.migrate_extension_events(), 3);
+        let out = g.to_gedcom_string();
+        assert!(out.contains("1 EVEN\n2 TYPE Service militaire\n2 DATE 1914\n2 NOTE Infanterie\n"), "{out}");
+        assert!(out.contains("1 EVEN\n2 TYPE hobby\n2 PLAC Paris\n"), "{out}");
+        assert!(out.contains("1 _TODO Chercher\n") && out.contains("1 _FOO bar\n"));
+        assert!(out.contains("0 @F1@ FAM\n1 EVEN\n2 TYPE Séparation\n"), "{out}");
+        assert_eq!(g.extension_event_count(), 0);
     }
 }

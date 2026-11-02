@@ -106,7 +106,7 @@ pub fn media_type_labels(types: &[String]) -> String {
         let l = match t.as_str() {
             "INDI" => "portrait".into(),
             "FAM" => "famille".into(),
-            _ => event_label(t).map(|l| l.to_lowercase()).unwrap_or_else(|| t.to_string()),
+            _ => event_label(t).map(|l| l.to_lowercase()).unwrap_or_else(|| crate::model::event_type_label(t)),
         };
         if !out.contains(&l) {
             out.push(l);
@@ -372,6 +372,28 @@ impl Gedcom {
                     template: d.child_val(NAME_TAG).unwrap_or("").to_string(),
                 })
                 .collect(),
+        }
+    }
+
+    /// Remplace un type reçu par les sous-dossiers (type d'événement renommé).
+    pub(crate) fn rename_media_type(&mut self, old: &str, new: &str) {
+        let mut m = self.media_naming();
+        let mut changed = false;
+        for f in &mut m.folders {
+            if f.types.iter().any(|t| t.eq_ignore_ascii_case(old)) {
+                let mut types: Vec<String> = Vec::new();
+                for t in &f.types {
+                    let t = if t.eq_ignore_ascii_case(old) { new.to_string() } else { t.clone() };
+                    if !types.contains(&t) {
+                        types.push(t);
+                    }
+                }
+                f.types = types;
+                changed = true;
+            }
+        }
+        if changed {
+            self.set_media_naming(&m);
         }
     }
 

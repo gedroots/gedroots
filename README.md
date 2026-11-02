@@ -89,7 +89,8 @@ et suit le [design system GEDRoots](design.md) (fonds neutres et touches de viol
 - **Assistant d'import** (Fichier › « Importer un GEDCOM… ») : ouvre un fichier venu d'un autre
   logiciel, liste ce qu'il contient de non standard et propose de le convertir en GEDCOM 7
   (annulable). Premier contrôle : les balises `_URL` deviennent des liens multimédia (`WWW`
-  pour les dépôts). Les contrôles sont dans `crates/gedcom/src/import.rs`.
+  pour les dépôts) ; les événements à balise d'extension (`_MILT`, `_MILI`, `_DEG`…)
+  deviennent des `EVEN` + `TYPE`. Les contrôles sont dans `crates/gedcom/src/import.rs`.
 - **Export GEDZIP** (Fichier › « Exporter en GEDZIP… ») : une archive `.gdz` (GEDCOM 7,
   chapitre 4) avec `gedcom.ged` et les fichiers des médias, pour transmettre l'arbre complet.
   Les chemins relatifs gardent leur dossier (`Actes/…`), les fichiers hors du dossier du .ged
@@ -105,7 +106,8 @@ et suit le [design system GEDRoots](design.md) (fonds neutres et touches de viol
     La fiche d'un lieu propose un champ par juridiction, et les libellés courts (« Troyes
     (Aube) ») suivent ce format.
   - **Événements** : types d'événements personnalisés (`EVEN` + `TYPE`), déduits du fichier,
-    à renommer ou fusionner ; un nouveau type est déclaré par l'extension
+    à renommer ou fusionner, avec un libellé affiché à part du `TYPE` (« Service militaire »
+    pour `TYPE military service`) ; un nouveau type ou un libellé est déclaré par l'extension
     [`_GR_EVEN`](docs/extensions.md#_gr_even). Ils sont proposés dans « Ajouter un événement… ».
   - **Médias** : dossier des médias et sous-dossiers (Actes, Portraits…), chacun avec les
     événements qu'il reçoit (menu à cocher) et son modèle de nom (`{sosa:6}_{fratrie}_{type:1}_{nom}_{prenom}`…,

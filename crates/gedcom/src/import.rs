@@ -38,6 +38,13 @@ pub static CHECKS: &[Check] = &[
         fix: Gedcom::migrate_prim_tags,
     },
     Check {
+        id: "events",
+        what: ("événement à balise d'extension (_MILT…)", "événements à balise d'extension (_MILT…)"),
+        into: "événements EVEN + TYPE",
+        count: Gedcom::extension_event_count,
+        fix: Gedcom::migrate_extension_events,
+    },
+    Check {
         id: "templates",
         what: ("reste de l'ancienne saisie guidée", "restes de l'ancienne saisie guidée"),
         into: "actes en GEDCOM 7 standard, sans modèles",

@@ -106,7 +106,7 @@ fn parse_event(v: &str) -> (String, String, bool) {
 fn event_value(act: &Act, custom: &[EventType]) -> String {
     if act.event == "EVEN" {
         let fam = if act.family_even { "FAM:" } else { "" };
-        let known = custom.iter().any(|t| t.family == act.family_even && t.label == act.event_type.trim());
+        let known = custom.iter().any(|t| t.family == act.family_even && t.ty == act.event_type.trim());
         return if known { format!("{fam}EVEN:{}", act.event_type.trim()) } else { format!("{fam}EVEN") };
     }
     act.event.clone()
@@ -124,7 +124,7 @@ impl ActEditor {
             .collect();
         for t in &custom {
             let fam = if t.family { "FAM:" } else { "" };
-            options.push((format!("{fam}EVEN:{}", t.label), t.label.clone()));
+            options.push((format!("{fam}EVEN:{}", t.ty), t.label.clone()));
         }
         options.push(("EVEN".into(), "Autre événement…".into()));
         options.push(("FAM:EVEN".into(), "Autre événement familial…".into()));

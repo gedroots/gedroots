@@ -49,6 +49,28 @@ pub fn event_label(tag: &str) -> Option<&'static str> {
     EVENT_TAGS.iter().find(|(t, _)| *t == tag).map(|(_, l)| *l)
 }
 
+/// Libellés affichés des types d'événements personnalisés du fichier ouvert (`TYPE` → libellé).
+static EVENT_LABELS: std::sync::RwLock<Vec<(String, String)>> = std::sync::RwLock::new(Vec::new());
+
+/// Indique les libellés affichés des types d'événements du fichier ouvert
+/// (voir [`crate::Gedcom::event_labels`]).
+pub fn set_event_labels(labels: Vec<(String, String)>) {
+    if let Ok(mut l) = EVENT_LABELS.write() {
+        *l = labels;
+    }
+}
+
+/// Libellé affiché d'un `TYPE` d'événement personnalisé : celui des réglages du
+/// fichier ouvert, sinon le `TYPE` lui-même.
+pub fn event_type_label(ty: &str) -> String {
+    let ty = ty.trim();
+    EVENT_LABELS
+        .read()
+        .ok()
+        .and_then(|l| l.iter().find(|(t, _)| t == ty).map(|(_, l)| l.clone()))
+        .unwrap_or_else(|| ty.to_string())
+}
+
 /// Un événement ou attribut (BIRT, DEAT, OCCU, RESI, MARR…).
 #[derive(Debug, Clone)]
 pub struct Event<'a> {
@@ -63,7 +85,8 @@ impl<'a> Event<'a> {
     pub fn label(&self) -> String {
         let base = event_label(&self.node.tag).unwrap_or(&self.node.tag);
         match (self.node.tag.as_str(), self.node.child_val("TYPE")) {
-            ("EVEN" | "FACT", Some(t)) => t.to_string(),
+            ("EVEN", Some(t)) => event_type_label(t),
+            ("FACT", Some(t)) => t.to_string(),
             _ => base.to_string(),
         }
     }

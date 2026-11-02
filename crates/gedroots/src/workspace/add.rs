@@ -71,7 +71,7 @@ impl Workspace {
             types
                 .iter()
                 .filter(|t| t.family == fam)
-                .map(|t| (format!("{prefix}EVEN:{}", t.label), t.label.clone()))
+                .map(|t| (format!("{prefix}EVEN:{}", t.ty), t.label.clone()))
                 .collect()
         };
         let at = options.iter().position(|(t, _)| t == "EVEN").unwrap_or(options.len());
@@ -115,7 +115,7 @@ impl Workspace {
         }
         let custom_kind = current
             .as_ref()
-            .filter(|e| e.tag == "EVEN" && types.iter().any(|t| t.family == family && t.label == e.detail.trim()))
+            .filter(|e| e.tag == "EVEN" && types.iter().any(|t| t.family == family && t.ty == e.detail.trim()))
             .map(|e| format!("EVEN:{}", e.detail.trim()));
         let default_kind = match &current {
             _ if custom_kind.is_some() => custom_kind.as_deref().unwrap_or_default(),
@@ -223,7 +223,11 @@ impl Workspace {
             return;
         }
         self.add_dialog = None;
-        let label = if ev.tag == "EVEN" { ev.detail.clone() } else { event_label(&ev.tag).unwrap_or("").to_string() };
+        let label = if ev.tag == "EVEN" {
+            gedcom::event_type_label(&ev.detail)
+        } else {
+            event_label(&ev.tag).unwrap_or("").to_string()
+        };
         self.mutate(window, cx, move |g| {
             let who = g.record_label(&owner);
             match editing {
@@ -335,7 +339,9 @@ impl Workspace {
             "EDUC" => Some("Établissement ou diplôme"),
             "EVEN" => Some("Type d'événement"),
             "RESI" | "" => None,
-            _ => Some("Précision"),
+            // Le `TYPE` d'un événement standard ne se saisit pas ici (éditeur GEDCOM) ;
+            // celui d'un événement modifié est gardé tel quel.
+            _ => None,
         };
         let field = |label: &'static str, el: AnyElement| v_flex().gap_1().min_w_0().child(label_caps(label)).child(el);
         v_flex()
