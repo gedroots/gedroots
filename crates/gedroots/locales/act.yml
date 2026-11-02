@@ -93,12 +93,9 @@ act.unlink:
 act.remove_person:
   en: Remove from Record
   fr: "Retirer de l'acte"
-act.link_to:
-  en: "Link to %{name}"
-  fr: "Lier à %{name}"
-act.link_to_reason:
-  en: "Link to %{name} · %{reason}"
-  fr: "Lier à %{name} · %{reason}"
+act.link:
+  en: Link…
+  fr: Lier…
 act.mention:
   en: Mention Without Creating
   fr: Mentionner sans créer

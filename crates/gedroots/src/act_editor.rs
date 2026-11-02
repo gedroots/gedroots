@@ -30,10 +30,11 @@ pub enum ActEditorEvent {
         next: bool,
     },
     Close,
-    /// Choose an existing individual for the person at `idx`, searching for `query` first.
+    /// Choose an existing individual for the person at `idx`; `suggestions` (individual, why)
+    /// come first.
     PickPerson {
         idx: usize,
-        query: String,
+        suggestions: Vec<(String, String)>,
     },
     /// Typing in a place field (`changed`: the text changed): the workspace holds the place menu,
     /// shared by every Place field.
@@ -456,14 +457,12 @@ impl ActEditor {
     }
 
     fn pick_person(&mut self, idx: usize, cx: &mut Context<Self>) {
-        let Some(p) = self.collect(cx).participants.get(idx).cloned() else { return };
-        let query = [p.get(PersonField::Given), p.get(PersonField::Surname)]
-            .iter()
-            .map(|s| s.trim())
-            .filter(|s| !s.is_empty())
-            .collect::<Vec<_>>()
-            .join(" ");
-        cx.emit(ActEditorEvent::PickPerson { idx, query });
+        let suggestions = self
+            .rows
+            .get(idx)
+            .map(|r| r.suggestions.iter().map(|s| (s.xref.clone(), s.reason.clone())).collect())
+            .unwrap_or_default();
+        cx.emit(ActEditorEvent::PickPerson { idx, suggestions });
     }
 
     fn set_of(&mut self, idx: usize, of: usize, cx: &mut Context<Self>) {
@@ -706,8 +705,6 @@ fn field(label: impl Into<SharedString>, input: &Entity<InputState>) -> Div {
 fn chip(id: impl Into<SharedString>, label: impl Into<SharedString>, on: bool) -> Stateful<Div> {
     div()
         .id(ElementId::Name(id.into()))
-        // A long suggestion wraps instead of overflowing the card.
-        .max_w_full()
         .px_2()
         .py(px(3.))
         .rounded(theme::RADIUS_SM)
@@ -1047,13 +1044,32 @@ impl ActEditor {
                     .child(status)
                     .child(div().flex_1())
                     .when(row.choice == PersonChoice::Create, |d| {
+                        // The tour points at the button that finds the individual it expects.
+                        let ringed =
+                            self.tour_link.as_deref().is_some_and(|x| row.suggestions.iter().any(|s| s.xref == x));
                         d.child(
-                            Button::new(SharedString::from(format!("existing-{idx}")))
-                                .ghost()
-                                .xsmall()
-                                .label(t!("event_dialog.existing_person"))
-                                .on_click(cx.listener(move |this, _, _, cx| this.pick_person(idx, cx))),
+                            div()
+                                .rounded(theme::RADIUS_MD)
+                                .when(ringed, |d| d.border_2().border_color(theme::accent()))
+                                .child(
+                                    Button::new(SharedString::from(format!("link-{idx}")))
+                                        .ghost()
+                                        .xsmall()
+                                        .label(t!("act.link"))
+                                        .on_click(cx.listener(move |this, _, _, cx| this.pick_person(idx, cx))),
+                                ),
                         )
+                        .when(row.role != ActRole::Principal, |d| {
+                            d.child(
+                                Button::new(SharedString::from(format!("mention-{idx}")))
+                                    .ghost()
+                                    .xsmall()
+                                    .label(t!("act.mention"))
+                                    .on_click(cx.listener(move |this, _, w, cx| {
+                                        this.set_choice(idx, PersonChoice::Mention, w, cx)
+                                    })),
+                            )
+                        })
                     })
                     .when(row.choice != PersonChoice::Create, |d| {
                         d.child(
@@ -1107,35 +1123,6 @@ impl ActEditor {
                 ))
             })
             .children(place_hints)
-            .when(row.choice == PersonChoice::Create, |d| {
-                d.child(
-                    h_flex()
-                        .flex_wrap()
-                        .gap_1()
-                        .children(row.suggestions.iter().map(|s| {
-                            let x = s.xref.clone();
-                            let ringed = self.tour_link.as_deref() == Some(s.xref.as_str());
-                            chip(
-                                format!("sug-{idx}-{}", s.xref),
-                                if s.reason.is_empty() {
-                                    t!("act.link_to", name = s.label)
-                                } else {
-                                    t!("act.link_to_reason", name = s.label, reason = s.reason)
-                                },
-                                false,
-                            )
-                            .when(ringed, |d| d.border_2().border_color(theme::accent()))
-                            .on_click(cx.listener(move |this, _, w, cx| {
-                                this.set_choice(idx, PersonChoice::Link(x.clone()), w, cx)
-                            }))
-                        }))
-                        .when(row.role != ActRole::Principal, |d| {
-                            d.child(chip(format!("mention-{idx}"), t!("act.mention"), false).on_click(
-                                cx.listener(move |this, _, w, cx| this.set_choice(idx, PersonChoice::Mention, w, cx)),
-                            ))
-                        }),
-                )
-            })
     }
 
     fn render_people(&self, act: &Act, cx: &mut Context<Self>) -> Div {

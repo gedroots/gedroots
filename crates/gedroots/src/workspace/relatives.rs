@@ -21,8 +21,9 @@ pub enum PickPurpose {
     ActSource,
     /// Relationship between `indi` and the chosen person (nothing is changed).
     Kinship { indi: String },
-    /// The chosen person is the person at `idx` in the record being entered.
-    ActPerson { idx: usize },
+    /// The chosen person is the person at `idx` in the record being entered; the likely
+    /// individuals (individual, why) come first.
+    ActPerson { idx: usize, suggestions: Vec<(String, String)> },
 }
 
 impl PickPurpose {
@@ -322,6 +323,11 @@ impl Workspace {
             };
             people.sort_by_key(|i| rank(i.xref()));
         }
+        if let PickPurpose::ActPerson { suggestions, .. } = &p.purpose {
+            // The likely individuals first, in their order.
+            let rank = |x: &str| suggestions.iter().position(|(s, _)| s == x).unwrap_or(usize::MAX);
+            people.sort_by_key(|i| rank(i.xref()));
+        }
         out.extend(people.into_iter().map(|i| i.xref().to_string()));
         out.truncate(80);
         out
@@ -349,7 +355,7 @@ impl Workspace {
             self.open_act(source, None, window, cx);
             return;
         }
-        if let PickPurpose::ActPerson { idx } = p.purpose {
+        if let PickPurpose::ActPerson { idx, .. } = p.purpose {
             if let Some((editor, _)) = &self.act_editor {
                 editor.update(cx, |e, cx| e.link_person(idx, chosen, window, cx));
             }
@@ -487,7 +493,17 @@ impl Workspace {
                                 })
                                 .children(results.into_iter().enumerate().map(|(n, x)| {
                                     let kind = g.get(&x).and_then(|r| RecordKind::from_tag(&r.tag));
+                                    let why = match &p.purpose {
+                                        PickPurpose::ActPerson { suggestions, .. } => {
+                                            suggestions.iter().find(|(s, _)| *s == x).map(|(_, why)| why.clone())
+                                        }
+                                        _ => None,
+                                    };
                                     let meta = match g.individual(&x) {
+                                        // A likely individual: why it is suggested.
+                                        Some(i) if why.as_deref().is_some_and(|w| !w.is_empty()) => {
+                                            [i.years(), why.clone().unwrap_or_default()].join(" · ")
+                                        }
                                         Some(i) => {
                                             let place =
                                                 i.birth().and_then(|e| e.place().map(short_place)).unwrap_or_default();
@@ -528,7 +544,14 @@ impl Workspace {
                                                 },
                                             ),
                                         )
-                                        .child(mono(meta))
+                                        // A long reason gives way to the name.
+                                        .child(
+                                            mono(meta)
+                                                .max_w(px(280.))
+                                                .overflow_hidden()
+                                                .whitespace_nowrap()
+                                                .text_ellipsis(),
+                                        )
                                         .on_click(cx.listener(move |this, _, w, cx| this.pick(target.clone(), w, cx)))
                                 })),
                         )
