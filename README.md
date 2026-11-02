@@ -1,4 +1,4 @@
-# GedRoots
+# GEDRoots
 
 Logiciel de généalogie **libre et local**, écrit en Rust avec [GPUI](https://www.gpui.rs/)
 (via [GPUI Kit](https://gpui-kit.com)). Les données restent dans un fichier **GEDCOM 7**
@@ -82,7 +82,7 @@ et suit la maquette « Lignée » (thème sombre, barre d'activité, liste, arbr
 - **Réglages du fichier** (Fichier › « Réglages du fichier… ») : auteur, e-mail, droits,
   description, langue et individu racine, plus la liste des anomalies masquées (« Réafficher »).
   Tout est rangé dans l'en-tête du .ged en GEDCOM 7 standard (`HEAD.SUBM`, `COPR`, `NOTE`,
-  `LANG`). À chaque enregistrement, `HEAD.SOUR` et `HEAD.DATE` indiquent GedRoots et la date.
+  `LANG`). À chaque enregistrement, `HEAD.SOUR` et `HEAD.DATE` indiquent GEDRoots et la date.
   - **Lieux** : format des lieux (`HEAD.PLAC.FORM`) — juridictions à renommer, réordonner,
     ajouter ou retirer, avec réécriture de tous les lieux du fichier (annulable) et un aperçu.
     La fiche d'un lieu propose un champ par juridiction, et les libellés courts (« Troyes
@@ -120,7 +120,7 @@ et suit la maquette « Lignée » (thème sombre, barre d'activité, liste, arbr
 - **Saisie d'acte guidée** (`⌘E` / `Ctrl+E`), à la manière d'*Ancestral Sources* pour
   Family Historian : on choisit un modèle (naissance, baptême, mariage, décès, inhumation,
   recensement, registre matricule), la source et son image, puis on saisit les personnes
-  citées. Pour chacune, GedRoots propose les individus existants qui correspondent (nom,
+  citées. Pour chacune, GEDRoots propose les individus existants qui correspondent (nom,
   âge, et liens déjà connus : « parent de… », « conjoint de… ») ; on peut lier, créer, ou
   mentionner sans créer. Un seul enregistrement crée les individus, l'événement, les liens
   familiaux, les témoins (`ASSO`), les professions et domiciles datés, une naissance estimée
@@ -157,7 +157,43 @@ et suit la maquette « Lignée » (thème sombre, barre d'activité, liste, arbr
 
 ![Saisie d'acte](docs/capture-saisie.png)
 
-## Lancer
+## Installer
+
+### macOS
+
+```sh
+packaging/macos/bundle.sh --install
+```
+
+Compile GEDRoots en mode release, construit `GEDRoots.app` (icône, nom dans la barre de menus et
+le Dock, pas de Terminal) et la copie dans `/Applications`. Les fichiers `.ged` s'ouvrent ensuite
+d'un double-clic ou par « Ouvrir avec » dans le Finder. Sans `--install`, l'app reste dans
+`target/release/GEDRoots.app` ; avec `--dmg`, une image disque `GEDRoots.dmg` est créée à côté
+(utile pour la CI). Pour un autre cargo :
+`CARGO="mise exec rust@stable -- cargo" packaging/macos/bundle.sh --install`.
+
+L'app est signée « ad hoc », ce qui suffit sur le Mac qui l'a compilée. Une app téléchargée
+(le `.dmg` de la CI) est bloquée par Gatekeeper au premier lancement : clic droit › Ouvrir, ou
+`xattr -dr com.apple.quarantine /Applications/GEDRoots.app`. Pour la distribuer sans cet
+avertissement, il faudrait la signer avec un certificat Developer ID et la faire notariser par
+Apple (compte Apple Developer payant).
+
+### Linux
+
+```sh
+packaging/linux/install.sh
+```
+
+Installe `~/.local/bin/gedroots`, l'icône et l'entrée du menu des applications.
+
+### Windows
+
+`cargo build --release -p gedroots` produit `target\release\gedroots.exe`, qui s'ouvre sans
+fenêtre de console.
+
+L'icône (`packaging/icon.png`) vient du kit de marque GEDRoots (app icon sombre, posée sur la grille macOS).
+
+## Lancer depuis les sources
 
 ```sh
 cargo run --release -- chemin/vers/arbre.ged
@@ -169,7 +205,7 @@ Raccourcis : `⌘O` / `Ctrl+O` ouvrir, `⌘S` / `Ctrl+S` enregistrer, `⌘N` nou
 
 Variables d'environnement facultatives pour la carte : `GEDROOTS_OFFLINE=1` (démarrer hors ligne),
 `GEDROOTS_TILE_URL` (autre serveur de tuiles, `{z}/{x}/{y}`), `GEDROOTS_TILE_CACHE` (dossier du
-cache, par défaut `~/Library/Caches/GedRoots/tiles` ou `~/.cache/gedroots/tiles`),
+cache, par défaut `~/Library/Caches/GEDRoots/tiles` ou `~/.cache/gedroots/tiles`),
 `GEDROOTS_GEOCODER` (autre instance Nominatim).
 
 Sous Linux, installer d'abord les dépendances de GPUI :

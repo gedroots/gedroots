@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=GEDRoots
+Comment=Logiciel de généalogie libre et local (GEDCOM 7)
+Exec=gedroots %f
+Icon=gedroots
+Terminal=false
+Categories=Office;Education;
+MimeType=application/x-gedcom;

@@ -86,7 +86,7 @@ impl Gedcom {
     pub fn new() -> Self {
         let header = Node::new("HEAD")
             .push(Node::new("GEDC").push(Node::with_value("VERS", "7.0")))
-            .push(Node::with_value("SOUR", "GEDROOTS").push(Node::with_value("NAME", "GedRoots")))
+            .push(Node::with_value("SOUR", "GEDROOTS").push(Node::with_value("NAME", "GEDRoots")))
             .push(Node::with_value("LANG", "fr"));
         let mut g = Gedcom { header, records: Vec::new(), format: TextFormat::default(), index: HashMap::new() };
         g.reindex();
@@ -274,7 +274,7 @@ impl Gedcom {
     }
 
     // ------------------------------------------------------------------
-    // Extensions GedRoots (documentées dans docs/extensions.md)
+    // Extensions GEDRoots (documentées dans docs/extensions.md)
     // ------------------------------------------------------------------
 
     /// Individu racine : `HEAD._GR_ROOT`, sinon le Sosa 1 d'Ancestris, sinon le premier individu.

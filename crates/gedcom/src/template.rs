@@ -13,10 +13,10 @@
 use crate::document::Gedcom;
 use crate::node::Node;
 
-/// Préfixe des URI de documentation des extensions GedRoots (déclarées dans `HEAD.SCHMA`).
+/// Préfixe des URI de documentation des extensions GEDRoots (déclarées dans `HEAD.SCHMA`).
 pub const EXT_DOC: &str = "https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md";
 
-/// Balises d'extension GedRoots utilisées par la saisie guidée.
+/// Balises d'extension GEDRoots utilisées par la saisie guidée.
 pub const EXT_TAGS: &[&str] =
     &["_GR_TPL", "_GR_FLD", "_GR_ROLE", "_GR_REL", "_GR_PF", "_GR_PAGE", "_GR_EVT", "_GR_MULT"];
 
@@ -167,7 +167,7 @@ pub struct Template {
     pub page: String,
     pub fields: Vec<FieldDef>,
     pub roles: Vec<RoleDef>,
-    /// Le modèle est-il défini dans le fichier (et non intégré à GedRoots) ?
+    /// Le modèle est-il défini dans le fichier (et non intégré à GEDRoots) ?
     pub custom: bool,
 }
 
@@ -361,7 +361,7 @@ fn mother(of: &str) -> Relation {
 const PARENT: &[PersonField] = &[Surname, Given, Age, Occupation, Residence];
 const WITNESS: &[PersonField] = &[Surname, Given, Age, Occupation, Residence, Kinship];
 
-/// Modèles fournis avec GedRoots, pensés pour l'état civil et les registres français.
+/// Modèles fournis avec GEDRoots, pensés pour l'état civil et les registres français.
 pub fn builtin_templates() -> Vec<Template> {
     let acte = fields(&[("numero", "N° d'acte"), ("vue", "Vue"), ("folio", "Folio")]);
     let page = "Acte n° {numero}, vue {vue}, f° {folio}".to_string();
@@ -565,7 +565,7 @@ impl Gedcom {
         }
     }
 
-    /// Déclare les balises d'extension GedRoots dans `HEAD.SCHMA` (exigé par GEDCOM 7).
+    /// Déclare les balises d'extension GEDRoots dans `HEAD.SCHMA` (exigé par GEDCOM 7).
     pub fn declare_extensions(&mut self) {
         let schma = self.header.ensure_child("SCHMA");
         for tag in EXT_TAGS {

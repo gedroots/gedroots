@@ -27,7 +27,7 @@ const MAX_INFLIGHT: usize = 6;
 const DEFAULT_TILES: &str = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 const DEFAULT_GEOCODER: &str = "https://nominatim.openstreetmap.org/search";
 const USER_AGENT: &str =
-    concat!("GedRoots/", env!("CARGO_PKG_VERSION"), " (+https://github.com/antoninguyot/gedroots)");
+    concat!("GEDRoots/", env!("CARGO_PKG_VERSION"), " (+https://github.com/antoninguyot/gedroots)");
 
 /// Ce que la carte demande à l'espace de travail.
 pub enum MapEvent {
@@ -780,17 +780,17 @@ fn background_menu(
     }
 }
 
-/// Dossier de cache des tuiles (`~/Library/Caches/GedRoots/tiles`, `$XDG_CACHE_HOME/gedroots/tiles`…).
+/// Dossier de cache des tuiles (`~/Library/Caches/GEDRoots/tiles`, `$XDG_CACHE_HOME/gedroots/tiles`…).
 fn tile_cache_dir() -> Option<PathBuf> {
     if let Some(d) = std::env::var_os("GEDROOTS_TILE_CACHE") {
         return Some(PathBuf::from(d));
     }
     let home = std::env::var_os("HOME").map(PathBuf::from);
     if cfg!(target_os = "macos") {
-        return Some(home?.join("Library/Caches/GedRoots/tiles"));
+        return Some(home?.join("Library/Caches/GEDRoots/tiles"));
     }
     if cfg!(target_os = "windows") {
-        return Some(PathBuf::from(std::env::var_os("LOCALAPPDATA")?).join("GedRoots/tiles"));
+        return Some(PathBuf::from(std::env::var_os("LOCALAPPDATA")?).join("GEDRoots/tiles"));
     }
     let base = std::env::var_os("XDG_CACHE_HOME").map(PathBuf::from).or_else(|| Some(home?.join(".cache")))?;
     Some(base.join("gedroots/tiles"))

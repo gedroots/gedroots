@@ -1,6 +1,6 @@
-# Extensions GEDCOM de GedRoots
+# Extensions GEDCOM de GEDRoots
 
-GedRoots stocke ses propres données **dans le fichier `.ged`**, jamais dans un fichier
+GEDRoots stocke ses propres données **dans le fichier `.ged`**, jamais dans un fichier
 annexe. Toutes ses balises commencent par `_GR_` et sont déclarées dans l'en-tête, comme
 l'exige GEDCOM 7 :
 
@@ -20,7 +20,7 @@ Les autres logiciels ignorent ces balises sans perte de données.
 
 ## `_GR_ROOT`
 
-Individu racine de l'arbre : celui qu'ouvre GedRoots au chargement du fichier et vers
+Individu racine de l'arbre : celui qu'ouvre GEDRoots au chargement du fichier et vers
 lequel ramène le bouton **Racine**. Se définit depuis la fiche d'un individu,
 menu **… → Définir comme racine**.
 
@@ -35,7 +35,7 @@ menu **… → Définir comme racine**.
 1 _GR_ROOT @I00001@
 ```
 
-Sans cette balise (ou si elle pointe vers un individu supprimé), GedRoots prend le Sosa 1
+Sans cette balise (ou si elle pointe vers un individu supprimé), GEDRoots prend le Sosa 1
 déclaré par Ancestris (`_SOSADABOVILLE 1`), sinon le premier individu du fichier.
 Supprimer l'individu racine retire aussi la balise.
 
@@ -141,7 +141,7 @@ enregistrement `OBJE` standard avec plusieurs `FILE`, un par page, dans l'ordre 
 ```
 
 GEDCOM 7 applique le `CROP` d'un lien au premier fichier seulement. Pour situer une
-personne sur une autre page (cadre tracé sur la page 2 d'un acte), GedRoots ajoute
+personne sur une autre page (cadre tracé sur la page 2 d'un acte), GEDRoots ajoute
 `_GR_FILE` au lien :
 
 - **Sous** : un lien vers un média (`n OBJE @M@`), à côté de `CROP`.
@@ -234,7 +234,7 @@ possibles. Les dates « vers » ont une marge de 5 ans.
 
 ## Types des sources et des médias (sans extension)
 
-GedRoots type les sources et les médias avec les structures standard de GEDCOM 7,
+GEDRoots type les sources et les médias avec les structures standard de GEDCOM 7,
 que les autres logiciels lisent :
 
 | Donnée | GEDCOM écrit |

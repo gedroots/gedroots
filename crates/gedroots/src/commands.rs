@@ -169,7 +169,7 @@ fn model() -> Vec<(&'static str, Vec<Item>)> {
     let mac = cfg!(target_os = "macos");
     let mut menus = Vec::new();
     if mac {
-        menus.push(("GedRoots", vec![a("Toutes les commandes…", CommandPalette), Sep, a("Quitter GedRoots", Quit)]));
+        menus.push(("GEDRoots", vec![a("Toutes les commandes…", CommandPalette), Sep, a("Quitter GEDRoots", Quit)]));
     }
     let mut file = vec![
         a("Nouveau fichier", NewFile),
@@ -393,7 +393,7 @@ pub fn palette_entries() -> Vec<PaletteEntry> {
     }
     let mut out = Vec::new();
     for (menu, items) in model() {
-        if menu != "GedRoots" {
+        if menu != "GEDRoots" {
             walk(menu, items, &mut out);
         }
     }

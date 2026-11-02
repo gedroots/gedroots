@@ -1,4 +1,4 @@
-//! Bibliothèque GEDCOM 7 de GedRoots.
+//! Bibliothèque GEDCOM 7 de GEDRoots.
 //!
 //! - [`node`] : arbre générique sans perte (toutes les balises sont conservées) ;
 //! - [`parse`] : lecture/écriture du texte GEDCOM ;

@@ -313,6 +313,16 @@ impl Workspace {
     // Fichier
     // ------------------------------------------------------------------
 
+    /// Ouvre un fichier reçu de l'extérieur (Finder, Dock).
+    pub fn open_path(&mut self, path: PathBuf, window: &mut Window, cx: &mut Context<Self>) {
+        self.load(path, window, cx);
+    }
+
+    /// Vrai si le document ouvert a des modifications non enregistrées.
+    pub fn has_unsaved_changes(&self) -> bool {
+        self.doc.as_ref().is_some_and(|d| d.dirty)
+    }
+
     fn load(&mut self, path: PathBuf, window: &mut Window, cx: &mut Context<Self>) {
         match gedcom::load(&path) {
             Ok(ged) => {
@@ -1099,7 +1109,7 @@ impl Workspace {
                     .items_center()
                     .font_weight(FontWeight::SEMIBOLD)
                     .child(Icon::new(IconName::Network).size(px(16.)).text_color(theme::accent()))
-                    .child("GedRoots"),
+                    .child("GEDRoots"),
             )
             // Linux, Windows : menus dans la fenêtre (natifs sous macOS).
             .children(self.menu_bar.clone().map(|m| div().h_full().child(m)))
@@ -2344,7 +2354,7 @@ impl Workspace {
             .items_center()
             .justify_center()
             .gap_4()
-            .child(div().text_2xl().font_weight(FontWeight::SEMIBOLD).child("GedRoots"))
+            .child(div().text_2xl().font_weight(FontWeight::SEMIBOLD).child("GEDRoots"))
             .child(
                 div()
                     .text_color(theme::muted())
@@ -2376,7 +2386,7 @@ impl Render for Workspace {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let title = match &self.doc {
             Some(d) => format!(
-                "{}{} — GedRoots",
+                "{}{} — GEDRoots",
                 d.path
                     .as_ref()
                     .and_then(|p| p.file_name())
@@ -2384,7 +2394,7 @@ impl Render for Workspace {
                     .unwrap_or_else(|| "Nouveau fichier".into()),
                 if d.dirty { " •" } else { "" }
             ),
-            None => "GedRoots".into(),
+            None => "GEDRoots".into(),
         };
         if title != self.window_title {
             window.set_window_title(&title);
