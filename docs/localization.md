@@ -1,8 +1,9 @@
 # Localization
 
 GEDRoots is written in English and translated into French. Every string shown in the
-interface comes from a catalog in `crates/gedroots/locales/`; the code never contains
-user-facing text.
+interface comes from a catalog: `crates/gedroots/locales/` for the app's views and commands,
+`crates/gedcom/locales/` for the texts the data library produces (event names, dates, kinship,
+data quality, search labels…). The code never contains user-facing text.
 
 ## Library
 
@@ -32,8 +33,8 @@ the system's list of preferred languages, and falls back to English:
 
 ## Adding a string
 
-1. Pick the catalog of the area (`commands.yml` for menus and commands, one file per view as
-   the migration goes on) and add a key with **both** languages:
+1. Pick the catalog of the area (`commands.yml` for menus and commands, one file per view or
+   module) and add a key with **both** languages:
 
    ```yaml
    cmd:
@@ -54,6 +55,18 @@ the system's list of preferred languages, and falls back to English:
 
 `mise run test` checks that every key exists in every language with the same placeholders,
 that every key used in the code exists, and that no key is left unused.
+
+Unit tests run in English, since the language is global to the process; a French text is
+tested with an explicit language (`t!("key", locale = "fr")` or the `_in("fr", …)` functions).
+
+## What is not translated
+
+- Search keywords (`born:1850`, `without:source`, `sex:f`) and template variables
+  (`{surname}`, `{given}`) are a technical language: always in English, whatever the
+  interface language. Only the labels shown for them are translated.
+- Dates are accepted in French and English whatever the interface language; the text the app
+  writes into the file (record titles, media file names, role phrases) follows the interface
+  language.
 
 ## Style
 

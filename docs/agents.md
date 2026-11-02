@@ -93,7 +93,7 @@ the act editor. Proposals live in memory: they are lost when the app closes.
 - **Living people are hidden.** A person with no death, burial or cremation is treated as living
   unless their birth, or a date that places it (their own events, a union, a child's birth, a
   parent's birth), is more than 100 years ago. A living person's sheet is refused and their name
-  is replaced by « Living person » wherever they appear (`crates/gedcom/src/research.rs`).
+  is replaced by “Living person” wherever they appear (`crates/gedcom/src/research.rs`).
 - **Local only.** The server listens on `127.0.0.1:47280`, requires the token in the
   `Authorization` header and rejects requests sent by a web page (`Origin` header).
 - **Nothing is written by the agent.** It can only propose; a person reviews, compares and saves.

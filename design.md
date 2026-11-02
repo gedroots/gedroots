@@ -1,285 +1,287 @@
-# Design system GEDRoots
+# GEDRoots design system
 
-Tiré du kit de marque GEDRoots v1.0 (« graphe organique, minimaliste, violet »). Le code
-de référence est [`crates/gedroots/src/theme.rs`](crates/gedroots/src/theme.rs) : les vues
-n'écrivent jamais de couleur, de rayon ni de police en dur, elles passent par ses jetons.
+Taken from the GEDRoots brand kit v1.0 ("organic graph, minimalist, violet"). The reference
+code is [`crates/gedroots/src/theme.rs`](crates/gedroots/src/theme.rs): views never hardcode
+a colour, radius or font, they go through its tokens.
 
-| Clair | Sombre |
+| Light | Dark |
 |---|---|
-| ![Thème clair](docs/capture-theme-clair.png) | ![Thème sombre](docs/capture-theme-sombre.png) |
+| ![Light theme](docs/capture-theme-clair.png) | ![Dark theme](docs/capture-theme-sombre.png) |
 
-Ce document réunit le design system (jetons, typographie, icônes) et les règles d'interface
-tirées des guides [Apple HIG](https://developer.apple.com/design/human-interface-guidelines),
-[GNOME HIG](https://developer.gnome.org/hig/) et [Windows / Fluent](https://learn.microsoft.com/windows/apps/design/),
-adaptées à GEDRoots. En cas de conflit : les règles du projet ci-dessous l'emportent, puis la
-convention de la plateforme où l'app tourne.
+This document gathers the design system (tokens, typography, icons) and the interface rules
+taken from the [Apple HIG](https://developer.apple.com/design/human-interface-guidelines),
+[GNOME HIG](https://developer.gnome.org/hig/) and [Windows / Fluent](https://learn.microsoft.com/windows/apps/design/)
+guidelines, adapted to GEDRoots. When they conflict, the project rules below win, then the
+convention of the platform the app runs on.
 
-## Avant toute maquette
+## Before any mockup
 
-À faire **à chaque fois**, sans attendre qu'on le demande, avant de proposer un écran, une
-fenêtre ou un parcours :
+Do this **every time**, without waiting to be asked, before proposing a screen, a window or a
+flow:
 
-1. **Logiciels de généalogie.** Regarder comment au moins trois d'entre eux traitent le sujet,
-   en commençant par les plus pertinents :
-   - MacFamilyTree : app Mac soignée, arbres et graphes, édition directe dans la fiche ;
-   - Family Historian : sources et citations, témoins (rôles), diagrammes, requêtes ;
-   - Heredis : référence française, saisie d'actes, lieux et cartes ;
-   - RootsMagic : citations, « Problems », gestion des doublons, listes de tâches ;
-   - Gramps : modèle de données (événements partagés, rôles), Linux, greffons ;
-   - Ancestris : GEDCOM natif, vocabulaire français ;
-   - les services web (FamilySearch, Geneanet, Ancestry, Filae) pour la saisie et la
-     présentation des enregistrements.
-2. **Meilleures apps en général.** Chercher le même motif (liste + détail, recherche, import,
-   réglages, édition en place, carte, chronologie…) dans au moins deux apps réputées pour leur
-   design : Finder, Photos, Mail, Notes, Plans, Réglages (macOS) ; Things, Linear, Figma, Zed,
-   Obsidian, Raycast, Arc ; Fichiers, Fragments, Paramètres (GNOME) ; Explorateur, Photos,
-   Paramètres (Windows 11).
-3. **Guides de plateforme.** Vérifier le motif dans les HIG Apple, GNOME et Windows, puis
-   contre ce document (sections Principes, Interaction et Plateformes).
-4. **Rendre la recherche avec la maquette** : un court tableau « app · ce qu'elle fait bien ·
-   ce qu'on reprend · ce qu'on évite », avec liens ou captures. Pas de longue dissertation.
-5. **Maquetter avec les jetons** de ce document, en clair **et** en sombre, avec les vrais
-   libellés français et des données réalistes (dates partielles, noms longs, lieux
-   hiérarchisés, champs vides).
+1. **Genealogy software.** Look at how at least three of them handle the subject, starting
+   with the most relevant:
+   - MacFamilyTree: polished Mac app, trees and charts, direct editing in the record;
+   - Family Historian: sources and citations, witnesses (roles), diagrams, queries;
+   - Heredis: the French reference, record entry, places and maps;
+   - RootsMagic: citations, "Problems", duplicate handling, to-do lists;
+   - Gramps: data model (shared events, roles), Linux, plugins;
+   - Ancestris: native GEDCOM, French vocabulary;
+   - web services (FamilySearch, Geneanet, Ancestry, Filae) for entering and presenting
+     records.
+2. **The best apps in general.** Look for the same pattern (list + detail, search, import,
+   settings, in-place editing, map, timeline…) in at least two apps known for their design:
+   Finder, Photos, Mail, Notes, Maps, Settings (macOS); Things, Linear, Figma, Zed, Obsidian,
+   Raycast, Arc; Files, Fragments, Settings (GNOME); File Explorer, Photos, Settings
+   (Windows 11).
+3. **Platform guidelines.** Check the pattern against the Apple, GNOME and Windows HIGs, then
+   against this document (Principles, Interaction and Platforms sections).
+4. **Hand in the research with the mockup**: a short table "app · what it does well · what we
+   take · what we avoid", with links or screenshots. No long essay.
+5. **Mock up with the tokens** of this document, in light **and** dark, with the real English
+   and French labels and realistic data (partial dates, long names, hierarchical places,
+   empty fields).
 
-Une proposition sans cette recherche n'est pas prête à montrer.
+A proposal without this research is not ready to show.
 
-## Principes
+## Principles
 
-- **Fonds neutres, une pointe de violet** : les fonds restent blanc et ocre en clair, gris et
-  noir en sombre. Le violet primaire n'apparaît que par touches : action principale, lien,
-  sélection, symbole de marque. Jamais de fond ni de grand aplat violet, pas de dégradé.
-- **Les données d'abord** : l'écran sert la généalogie, pas l'interface. Pas de chrome
-  décoratif, pas de cartes dans des cartes, pas d'ombre sauf pour ce qui flotte (menus,
-  popovers, modales).
-- **Commandes dans les menus** : pas de barre d'outils. Chaque commande existe une seule fois
-  dans la barre de menus (modèle de `commands.rs`), donc aussi dans la palette `⌘⇧P` et, quand
-  elle porte sur un élément, dans son menu contextuel avec le même libellé. Les seuls boutons
-  visibles sont les petits « + » des en-têtes de section (Événements, Famille, Membres…) et les
-  emplacements pointillés de l'arbre.
-- **Pas de texte explicatif** : un titre par élément ; les exemples de format vont dans le
-  placeholder des champs ; les sections vides sont masquées.
-- **Dévoilement progressif** : les champs techniques sont déduits, pas affichés (ex. le `FORM`
-  d'un média) ; les actions rares ou destructrices sont repliées ou dans les menus ; les
-  identifiants GEDCOM n'apparaissent que via Édition › Copier l'ID et la recherche avancée.
-- **Édition en place** : on modifie là où on lit (fiche, événement, case de l'arbre), dans la
-  même fenêtre pour créer et modifier. Pas de mode « édition » séparé.
-- **Annuler plutôt que confirmer** : toute modification passe par un point d'annulation ; une
-  confirmation n'est demandée que pour ce qui ne s'annule pas (fichier écrasé sur le disque…).
-- **Une seule barre en haut** : sous macOS, la barre de titre est fondue dans celle de l'app
-  (feux tricolores à gauche, déplacement de la fenêtre). Le nom du fichier n'y figure qu'une
-  fois, centré, suivi de « • » tant qu'il n'est pas enregistré. Pas de barre d'état : les
-  messages s'affichent à droite de la barre du haut.
-- **Infobulles** sur tout bouton sans libellé, avec le raccourci quand il existe.
-- **Jamais la couleur seule** : lignées, états et sélections ont aussi une forme (point,
-  contour, icône, texte). Les couleurs restent lisibles par les daltoniens.
+- **Neutral backgrounds, a touch of violet**: backgrounds stay white and ochre in light mode,
+  grey and black in dark mode. The primary violet only appears in touches: main action, link,
+  selection, brand symbol. Never a violet background or large violet area, no gradients.
+- **Data first**: the screen serves genealogy, not the interface. No decorative chrome, no
+  cards inside cards, no shadows except for what floats (menus, popovers, modals).
+- **Commands in the menus**: no toolbar. Each command exists once in the menu bar (the
+  `commands.rs` model), so also in the `⌘⇧P` palette and, when it acts on an item, in that
+  item's context menu with the same label. The only visible buttons are the small "+" in
+  section headers (Events, Family, Members…) and the dashed slots of the tree.
+- **No explanatory text**: one title per element; format examples go in the field
+  placeholder; empty sections are hidden.
+- **Progressive disclosure**: technical fields are inferred, not shown (e.g. a media's
+  `FORM`); rare or destructive actions are collapsed or in menus; GEDCOM identifiers only
+  appear through Edit › Copy ID and the advanced search.
+- **In-place editing**: you edit where you read (record, event, tree box), in the same window
+  for creating and editing. No separate "edit" mode.
+- **Undo rather than confirm**: every change goes through an undo point; confirmation is only
+  asked for what cannot be undone (a file overwritten on disk…).
+- **A single bar at the top**: on macOS the title bar is merged with the app's bar (traffic
+  lights on the left, window dragging). The file name appears only once, centred, followed by
+  "•" while it is unsaved. No status bar: messages show on the right of the top bar.
+- **Tooltips** on every button without a label, with the shortcut when there is one.
+- **Never colour alone**: lineages, states and selections also have a shape (dot, outline,
+  icon, text). Colours stay readable for colour-blind users.
 
-## Couleurs
+## Colours
 
-Le mode suit l'apparence du système et change à chaud. `GEDROOTS_APPEARANCE=light|dark` le
-force (captures, tests).
+The mode follows the system appearance and changes live. `GEDROOTS_APPEARANCE=light|dark`
+forces it (screenshots, tests).
 
-| Jeton (`theme::`) | Rôle | Clair | Sombre |
+| Token (`theme::`) | Role | Light | Dark |
 |---|---|---|---|
-| `bg()` | Canevas principal | `#FFFFFF` | `#141414` |
-| `panel()` | Barres, panneaux latéraux | `#FAF7F1` | `#1A1A1A` |
-| `surface()` | Cartes, champs | `#F4EFE6` | `#222222` |
-| `hover()` | Survol, sélection discrète | `#EEE7DA` | `#2B2B2B` |
-| `border()` | Séparateurs | `#E6DED0` | `#2E2E2E` |
-| `border_strong()` | Contours de champs, cases | `#D5CAB7` | `#3D3D3D` |
-| `text()` | Texte principal | `#1F1B16` | `#ECECEC` |
-| `muted()` | Texte secondaire | `#6B6257` | `#A3A3A3` |
-| `accent()` | Violet : actions, liens, sélection | `#6D3DF0` | `#B997FF` |
-| — survol / pressé | Boutons primaires | `#5B2BDD` / `#4C21B8` | `#C8AAFF` / `#A77CF6` |
-| `on_accent()` | Texte sur le violet | `#FFFFFF` | `#1A1A1A` |
-| `accent_soft()` | Ligne sélectionnée | violet 10 % | violet 16 % |
-| `paternal()` | Lignée paternelle | `#3F5BD8` | `#8FA2FF` |
-| `maternal()` | Lignée maternelle | `#9C36B5` | `#E39BF0` |
-| `ok()` | Succès, « sourcé » | `#1A7346` | `#6FD3A0` |
-| `warn()` | À vérifier | `#9A5B00` | `#F0B35A` |
-| `danger()` | Erreur, suppression | `#C42B48` | `#F2828E` |
-| `scrim()` | Voile sous les modales | noir 35 % | noir 55 % |
-| `viewer()` | Fond des visionneuses d'actes | `#0E0E0E` | `#0E0E0E` |
-| `image_*()` | Cadres et étiquettes posés sur une photo | couleurs sombres, fond noir 72 % | idem |
+| `bg()` | Main canvas | `#FFFFFF` | `#141414` |
+| `panel()` | Bars, side panels | `#FAF7F1` | `#1A1A1A` |
+| `surface()` | Cards, fields | `#F4EFE6` | `#222222` |
+| `hover()` | Hover, subtle selection | `#EEE7DA` | `#2B2B2B` |
+| `border()` | Separators | `#E6DED0` | `#2E2E2E` |
+| `border_strong()` | Field outlines, tree boxes | `#D5CAB7` | `#3D3D3D` |
+| `text()` | Main text | `#1F1B16` | `#ECECEC` |
+| `muted()` | Secondary text | `#6B6257` | `#A3A3A3` |
+| `accent()` | Violet: actions, links, selection | `#6D3DF0` | `#B997FF` |
+| — hover / pressed | Primary buttons | `#5B2BDD` / `#4C21B8` | `#C8AAFF` / `#A77CF6` |
+| `on_accent()` | Text on violet | `#FFFFFF` | `#1A1A1A` |
+| `accent_soft()` | Selected row | violet 10 % | violet 16 % |
+| `paternal()` | Paternal lineage | `#3F5BD8` | `#8FA2FF` |
+| `maternal()` | Maternal lineage | `#9C36B5` | `#E39BF0` |
+| `ok()` | Success, "sourced" | `#1A7346` | `#6FD3A0` |
+| `warn()` | To check | `#9A5B00` | `#F0B35A` |
+| `danger()` | Error, deletion | `#C42B48` | `#F2828E` |
+| `scrim()` | Veil under modals | black 35 % | black 55 % |
+| `viewer()` | Background of record viewers | `#0E0E0E` | `#0E0E0E` |
+| `image_*()` | Frames and labels laid over a photo | dark colours, black 72 % background | same |
 
-Les neutres clairs tirent vers l'ocre, les sombres sont des gris purs.
+Light neutrals lean towards ochre, dark ones are pure greys.
 
-Le de cujus (Sosa 1) prend le violet ; les deux lignées restent dans la gamme violette
-(indigo côté père, orchidée côté mère) au lieu d'introduire d'autres couleurs fortes.
+The root person (Sosa 1) takes the violet; both lineages stay within the violet range (indigo
+on the father's side, orchid on the mother's) instead of bringing in other strong colours.
 
-Contrastes (WCAG) : tout texte courant dépasse 4,5:1 sur `bg`, `panel` et `surface` dans les
-deux modes (violet sur blanc 5,9:1 ; muted 5,2:1 sur surface ; texte sombre 13,5:1 sur surface). Les couleurs d'état
-et de lignée dépassent aussi 4,5:1 sur `bg`.
+Contrast (WCAG): all body text exceeds 4.5:1 on `bg`, `panel` and `surface` in both modes
+(violet on white 5.9:1; muted 5.2:1 on surface; dark text 13.5:1 on surface). State and
+lineage colours also exceed 4.5:1 on `bg`.
 
-Le thème des composants gpui-component (boutons, listes, menus, tableaux, champs) est rempli
-à partir de ces jetons dans `theme::apply`.
+The gpui-component theme (buttons, lists, menus, tables, fields) is filled from these tokens
+in `theme::apply`.
 
-## Typographie
+## Typography
 
-- **Inter**, embarquée dans l'app (Regular, Medium, SemiBold, Bold ; licence SIL OFL dans
-  `crates/gedroots/assets/fonts/OFL.txt`). Le rendu est le même sur macOS, Linux et Windows.
-- **Chiffres tabulaires** activés sur toute la fenêtre (`theme::tabular_nums()`), pour aligner
-  dates et effectifs.
-- Graisses : 400 texte, 500 libellés, 600 titres et noms, 700 réservé.
-- Échelle (px) : 12 `text_xs` (métadonnées, listes denses) · 14 `text_sm` (texte courant) ·
-  16 base · 20 `text_xl` (titres de fiche) · 24 `text_2xl`. Pas de 18 px.
-- Libellés en casse de phrase, courts.
+- **Inter**, bundled with the app (Regular, Medium, SemiBold, Bold; SIL OFL licence in
+  `crates/gedroots/assets/fonts/OFL.txt`). Rendering is the same on macOS, Linux and Windows.
+- **Tabular figures** enabled on the whole window (`theme::tabular_nums()`), to align dates
+  and counts.
+- Weights: 400 text, 500 labels, 600 titles and names, 700 reserved.
+- Scale (px): 12 `text_xs` (metadata, dense lists) · 14 `text_sm` (body text) · 16 base ·
+  20 `text_xl` (record titles) · 24 `text_2xl`. No 18 px.
+- Short labels. English: title case for menu items, buttons and window titles, sentence
+  case elsewhere; French: sentence case everywhere.
 
-## Espacements
+## Spacing
 
-Pas de 4 px : 4, 8, 12, 16, 24, 32, 48, 64 — soit `gap_1`, `gap_2`, `gap_3`, `gap_4`, `gap_6`,
-`gap_8`… (idem `p_*`, `px_*`, `py_*`). `0p5` (2 px) est toléré pour un écart vertical entre deux
-lignes de texte ; pas de `1p5` ni de `2p5`.
+4 px step: 4, 8, 12, 16, 24, 32, 48, 64, i.e. `gap_1`, `gap_2`, `gap_3`, `gap_4`, `gap_6`,
+`gap_8`… (same for `p_*`, `px_*`, `py_*`). `0p5` (2 px) is tolerated for a vertical gap
+between two lines of text; no `1p5` or `2p5`.
 
-## Rayons
+## Radii
 
-| Jeton | Valeur | Usage |
+| Token | Value | Use |
 |---|---|---|
-| `RADIUS_SM` | 8 px | Champs, puces, vignettes, cases de l'arbre, cartes de section (aussi `Theme.radius`) |
-| `RADIUS_MD` | 12 px | Boutons, menus, popovers (`Theme.radius_lg`) |
-| `RADIUS_LG` | 20 px | Fenêtres modales (palette de commandes, ajout d'un proche…) |
+| `RADIUS_SM` | 8 px | Fields, chips, thumbnails, tree boxes, section cards (also `Theme.radius`) |
+| `RADIUS_MD` | 12 px | Buttons, menus, popovers (`Theme.radius_lg`) |
+| `RADIUS_LG` | 20 px | Modal windows (command palette, add a relative…) |
 
-Le kit prévoit aussi 28 px pour de grands panneaux superposés : à introduire si l'app en a un.
-Bordures 1 px `border()` ; focus : anneau `accent()`.
+The kit also provides 28 px for large overlaid panels: to introduce if the app gets one.
+Borders 1 px `border()`; focus: `accent()` ring.
 
-L'anneau de focus (3 px) est peint hors de la bordure du champ : une zone qui défile le coupe si le
-champ touche son bord. Une zone qui défile et contient des champs s'écrit donc
-`theme::scroll_y(id)` (retrait `FOCUS_ROOM` compensé par une marge négative, l'alignement ne
-bouge pas) ou garde un `p_*` intérieur d'au moins 4 px ; jamais un `overflow_y_scroll()` nu
-autour d'un champ.
+The focus ring (3 px) is painted outside the field's border: a scrolling area clips it if the
+field touches its edge. A scrolling area that contains fields is therefore written
+`theme::scroll_y(id)` (`FOCUS_ROOM` inset offset by a negative margin, so alignment does not
+move) or keeps an inner `p_*` of at least 4 px; never a bare `overflow_y_scroll()` around a
+field.
 
-## Icônes
+## Icons
 
-- **Interface** : icônes Lucide (jeu de gpui-kit + `ExtraIcons` dans `main.rs`), 16 px dans les
-  listes et en-têtes, 14 px dans le texte, couleur `muted()` ou `accent()` quand actif.
-- **Marque** : sources SVG du kit dans `crates/gedroots/assets/brand/`, chargées par
+- **Interface**: Lucide icons (gpui-kit set + `ExtraIcons` in `main.rs`), 16 px in lists and
+  headers, 14 px in text, `muted()` colour or `accent()` when active.
+- **Brand**: SVG sources from the kit in `crates/gedroots/assets/brand/`, loaded with
   `img("brand/…")`.
-  - `icon-micro.svg` : symbole simplifié pour 16–32 px (barre du haut) ;
-  - `icon-primary.svg` : symbole détaillé dès 48 px ;
-  - `logo-horizontal-light.svg` / `-dark.svg` : écran d'accueil, selon le mode.
-- Ne jamais redessiner, recolorer ni entourer le symbole d'une forme ajoutée.
-- L'icône d'application (`.icns`, `.ico`, PNG) relève de `packaging/`.
+  - `icon-micro.svg`: simplified symbol for 16–32 px (top bar);
+  - `icon-primary.svg`: detailed symbol from 48 px;
+  - `logo-horizontal-light.svg` / `-dark.svg`: welcome screen, depending on the mode.
+- Never redraw, recolour or surround the symbol with an added shape.
+- The application icon (`.icns`, `.ico`, PNG) belongs to `packaging/`.
 
-## Graphes (arbre, éventail, carte)
+## Charts (tree, fan, map)
 
-- Lien de parenté proche : trait plein ; ascendants colorés par lignée, descendants et
-  collatéraux neutres (`border_strong()`).
-- Sélection : contour `accent()` + fond `accent_soft()`, jamais une simple teinte.
-- Liens : courbes ou coudes discrets, épaisseur homogène.
+- Close kinship link: solid line; ancestors coloured by lineage, descendants and collateral
+  relatives neutral (`border_strong()`).
+- Selection: `accent()` outline + `accent_soft()` background, never a mere tint.
+- Links: discreet curves or elbows, even thickness.
 
 ## Interaction
 
-Règles communes aux trois guides, à appliquer partout.
+Rules shared by the three guidelines, to apply everywhere.
 
 ### Navigation
 
-- Structure fixe : barre latérale (zones) → liste → fiche → panneau de détail. La barre
-  latérale est à gauche sur les trois plateformes et se masque.
-- **Historique** précédent/suivant sur toute la navigation (`workspace/history.rs`) : clavier,
-  boutons latéraux de la souris et, sur trackpad, balayage. Chaque liste rouvre le dernier
-  élément consulté ; Individus retombe sur l'individu racine.
-- Tout lien vers un enregistrement (proche, source citée, lieu, média) est cliquable et ouvre
-  sa fiche ; jamais d'impasse.
+- Fixed structure: sidebar (areas) → list → record → detail panel. The sidebar is on the left
+  on all three platforms and can be hidden.
+- **Back/forward history** across all navigation (`workspace/history.rs`): keyboard, side
+  mouse buttons and, on a trackpad, swipe. Each list reopens the last item viewed; Individuals
+  falls back to the root individual.
+- Every link to a record (relative, cited source, place, media) is clickable and opens its
+  record; never a dead end.
 
-### Menus et commandes
+### Menus and commands
 
-- Libellés : verbe à l'infinitif pour une commande (« Ajouter un événement »), nom ou adjectif
-  pour un réglage coché (« Événements des proches »). Casse de phrase.
-- **Points de suspension « … »** quand la commande demande encore quelque chose avant d'agir
-  (fenêtre, sélecteur) ; jamais sinon.
-- Une commande inapplicable est grisée, pas masquée (seuls les menus contextuels n'affichent
-  que ce qui s'applique). Un sous-menu vide est masqué (ex. Ouvrir récent).
-- Menus : 3 à 12 entrées, groupées par séparateurs, sous-menus à un seul niveau.
-- Menu contextuel : clic droit (et `⇧F10` / touche Menu hors macOS), mêmes libellés que la barre
-  de menus, il agit sur l'élément cliqué sans changer la sélection.
-- Raccourcis : seulement pour les commandes fréquentes ; reprendre ceux de la plateforme avant
-  d'en inventer (voir Plateformes). Le raccourci apparaît dans le menu, la palette et
-  l'infobulle.
+- Labels: a verb for a command ("Add Event"), a noun or adjective for a checked setting
+  ("Relatives' Events"). Title case in English, sentence case in French (« Ajouter un
+  événement »).
+- **Ellipsis "…"** when the command still asks for something before acting (window, picker);
+  never otherwise.
+- A command that does not apply is greyed out, not hidden (only context menus show just what
+  applies). An empty submenu is hidden (e.g. Open Recent).
+- Menus: 3 to 12 items, grouped by separators, submenus one level deep.
+- Context menu: right click (and `⇧F10` / Menu key outside macOS), same labels as the menu
+  bar; it acts on the clicked item without changing the selection.
+- Shortcuts: only for frequent commands; reuse the platform's before inventing new ones (see
+  Platforms). The shortcut appears in the menu, the palette and the tooltip.
 
-### Fenêtres et dialogues
+### Windows and dialogs
 
-- Préférer l'édition en place et les popovers aux modales. Une modale n'est justifiée que pour
-  une tâche courte et bloquante (ajouter un proche, choisir un fichier, saisir un acte).
-- Boutons de dialogue libellés par leur **verbe** (« Supprimer », « Fusionner »), jamais « OK »
-  ou « Oui ». `Entrée` valide le bouton par défaut, `Échap` annule. Le bouton destructif prend
-  `danger()` et n'est jamais le bouton par défaut.
-- Ordre des boutons selon la plateforme (voir Plateformes).
-- Réglages : appliqués immédiatement, sans bouton « Appliquer » ni « OK ».
-- Fichiers : dialogues natifs du système (ouvrir, enregistrer, choisir un dossier).
+- Prefer in-place editing and popovers to modals. A modal is only justified for a short,
+  blocking task (add a relative, pick a file, enter a record).
+- Dialog buttons are labelled by their **verb** ("Delete", "Merge"), never "OK" or "Yes".
+  `Enter` triggers the default button, `Esc` cancels. The destructive button takes `danger()`
+  and is never the default button.
+- Button order depends on the platform (see Platforms).
+- Settings: applied immediately, with no "Apply" or "OK" button.
+- Files: native system dialogs (open, save, choose a folder).
 
-### Retours et états
+### Feedback and states
 
-- Message bref à droite de la barre du haut après une action (« 3 médias rattachés »), en
-  `danger()` pour une erreur. Une erreur dit ce qui s'est passé et quoi faire, sans jargon.
-- Au-delà d'environ une seconde : indicateur de progression ; au-delà de quelques secondes :
-  progression chiffrée et annulable. Ne jamais figer la fenêtre.
-- État vide d'une vue entière : icône, titre court et au plus une action, sans paragraphe.
-  Une section vide dans une fiche est simplement masquée.
-- Glisser-déposer : la cible s'éclaire (`accent_soft()` + contour `accent()`) pendant le survol.
+- A short message on the right of the top bar after an action ("3 media attached"), in
+  `danger()` for an error. An error says what happened and what to do, without jargon.
+- Beyond about one second: a progress indicator; beyond a few seconds: numbered, cancellable
+  progress. Never freeze the window.
+- Empty state of a whole view: icon, short title and at most one action, no paragraph. An
+  empty section in a record is simply hidden.
+- Drag and drop: the target lights up (`accent_soft()` + `accent()` outline) while hovered.
 
-### Clavier et accessibilité
+### Keyboard and accessibility
 
-- Tout est faisable au clavier : ordre de tabulation logique, focus toujours visible (anneau
-  `accent()`), `Échap` ferme le popover ou la modale ouverte.
-- Cibles cliquables d'au moins 24 × 24 px (WCAG 2.2), 28 px conseillés pour les icônes seules.
-- Contraste 4,5:1 pour le texte, 3:1 pour les contours de contrôles et les icônes porteuses
-  de sens. Jamais la couleur seule (voir Principes).
-- Animations courtes (≤ 200 ms) et utiles ; respecter « réduire les animations » du système.
-- Tout bouton sans libellé a une infobulle et un nom accessible.
+- Everything can be done with the keyboard: logical tab order, focus always visible
+  (`accent()` ring), `Esc` closes the open popover or modal.
+- Click targets of at least 24 × 24 px (WCAG 2.2), 28 px recommended for icon-only buttons.
+- Contrast 4.5:1 for text, 3:1 for control outlines and meaningful icons. Never colour alone
+  (see Principles).
+- Short (≤ 200 ms), useful animations; respect the system's "reduce motion" setting.
+- Every button without a label has a tooltip and an accessible name.
 
-### Textes
+### Text
 
-- Français soigné : guillemets « », espace insécable avant `: ; ! ?` et dans « », caractère
-  `…` (pas trois points), apostrophe typographique `’` dans les libellés.
-- Vocabulaire du généalogiste, pas de GEDCOM : « Naissance », « Union », « Source citée »,
-  jamais `BIRT`, `FAM`, `SOUR` dans l'interface (sauf vue GEDCOM brute).
-- Dates à la française (`12 mars 1854`, `vers 1850`, `entre 1850 et 1855`), calendrier
-  républicain compris.
-- Libellés courts ; pas de « Veuillez », pas de point final dans les libellés et infobulles.
+- Texts are written in English and translated into French (see
+  [docs/localization.md](docs/localization.md)); no displayed text is hardcoded.
+- English: curly quotes “ ” and apostrophe ’, the `…` character (not three dots).
+- French: guillemets « », a non-breaking space before `: ; ! ?` and inside « », the `…`
+  character, the typographic apostrophe `’` in labels.
+- The genealogist's vocabulary, not GEDCOM's: "Birth", "Union", "Cited source", never `BIRT`,
+  `FAM`, `SOUR` in the interface (except the raw GEDCOM view).
+- Dates written as the language does (`12 March 1854`, `about 1850`, `between 1850 and 1855`;
+  `12 mars 1854`, `vers 1850` in French), French Republican calendar included.
+- Short labels; no "Please", no full stop at the end of labels and tooltips.
 
-## Plateformes
+## Platforms
 
-Le même modèle de commandes et la même mise en page partout ; seules changent les conventions
-ci-dessous. Toute nouvelle fonction se vérifie sur les trois colonnes.
+The same command model and the same layout everywhere; only the conventions below change.
+Every new feature is checked against all three columns.
 
-| Sujet | macOS (Apple HIG) | Windows (Fluent) | Linux (GNOME HIG) |
+| Subject | macOS (Apple HIG) | Windows (Fluent) | Linux (GNOME HIG) |
 |---|---|---|---|
-| Barre de menus | Native, en haut de l'écran, menu « GEDRoots » en premier | Dans la fenêtre, barre du haut | Dans la fenêtre, barre du haut (écart assumé : GNOME préfère un menu principal ☰) |
-| Boutons de fenêtre | Feux tricolores à gauche, fondus dans la barre du haut | Réduire / agrandir / fermer à droite | Côté et boutons selon le réglage du système (fermer à droite par défaut) |
-| Retour / suivant | Chevrons ‹ › à gauche de la barre du haut, après les feux tricolores | ‹ › centrés à côté du nom du fichier (écart assumé : Fluent met une flèche retour tout à gauche) | ‹ › centrés à côté du nom du fichier (écart assumé : GNOME met une flèche retour au début de la barre) |
-| Raccourcis retour / suivant | `⌘[` / `⌘]` | `Alt+←` / `Alt+→` | `Alt+←` / `Alt+→` |
-| Touche de commande | `⌘` (`⌥` pour les variantes) | `Ctrl` (`Alt` pour les variantes) | `Ctrl` (`Alt` pour les variantes) |
-| Rétablir | `⌘⇧Z` | `Ctrl+Y` | `Ctrl+Maj+Z` |
-| Réglages | GEDRoots › Réglages… `⌘,` | Fichier › Paramètres… / Options… `Ctrl+,` | Fichier › Préférences `Ctrl+,` |
-| À propos, Quitter | Menu GEDRoots ; `⌘Q` | Aide › À propos ; Fichier › Quitter, `Alt+F4` | Aide › À propos ; Fichier › Quitter, `Ctrl+Q` |
-| Aide | Menu Aide avec champ de recherche | `F1` | `F1` |
-| Plein écran | `⌃⌘F` | `F11` | `F11` |
-| Lettres soulignées des menus | Non | Oui (`Alt` + lettre) | Oui (`Alt` + lettre) |
-| Ordre des boutons de dialogue | Annuler à gauche, action à droite | Action à gauche, Annuler à droite | Annuler à gauche, action à droite |
-| Menu contextuel au clavier | — | `Maj+F10`, touche Menu | `Maj+F10`, touche Menu |
-| Barres de défilement | Superposées, selon le réglage système | Fines, s'élargissent au survol | Superposées |
+| Menu bar | Native, at the top of the screen, "GEDRoots" menu first | In the window, top bar | In the window, top bar (deliberate deviation: GNOME prefers a ☰ main menu) |
+| Window buttons | Traffic lights on the left, merged into the top bar | Minimise / maximise / close on the right | Side and buttons follow the system setting (close on the right by default) |
+| Back / forward | ‹ › chevrons on the left of the top bar, after the traffic lights | ‹ › centred next to the file name (deliberate deviation: Fluent puts a back arrow at the far left) | ‹ › centred next to the file name (deliberate deviation: GNOME puts a back arrow at the start of the bar) |
+| Back / forward shortcuts | `⌘[` / `⌘]` | `Alt+←` / `Alt+→` | `Alt+←` / `Alt+→` |
+| Command key | `⌘` (`⌥` for variants) | `Ctrl` (`Alt` for variants) | `Ctrl` (`Alt` for variants) |
+| Redo | `⌘⇧Z` | `Ctrl+Y` | `Ctrl+Shift+Z` |
+| Settings | GEDRoots › Settings… `⌘,` | File › Settings… / Options… `Ctrl+,` | File › Preferences `Ctrl+,` |
+| About, Quit | GEDRoots menu; `⌘Q` | Help › About; File › Exit, `Alt+F4` | Help › About; File › Quit, `Ctrl+Q` |
+| Help | Help menu with a search field | `F1` | `F1` |
+| Full screen | `⌃⌘F` | `F11` | `F11` |
+| Underlined menu letters | No | Yes (`Alt` + letter) | Yes (`Alt` + letter) |
+| Dialog button order | Cancel on the left, action on the right | Action on the left, Cancel on the right | Cancel on the left, action on the right |
+| Keyboard context menu | — | `Shift+F10`, Menu key | `Shift+F10`, Menu key |
+| Scroll bars | Overlay, per the system setting | Thin, widen on hover | Overlay |
 
-La police (Inter) et les couleurs restent les mêmes partout : l'identité de GEDRoots prime sur
-l'apparence de chaque système, mais le comportement suit la plateforme.
+The font (Inter) and the colours stay the same everywhere: GEDRoots' identity comes before
+each system's look, but behaviour follows the platform.
 
-### Écarts connus à corriger
+### Known deviations to fix
 
-État au 2 novembre 2026, à résorber au fil des PR :
+As of 2 November 2026, to be resolved over the PRs:
 
-- Hors macOS, les menus n'ont pas de lettres soulignées et Réglages ne porte pas le nom de la
-  plateforme (Paramètres, Préférences).
+- Outside macOS, menus have no underlined letters and Settings does not carry the platform's
+  name (Settings, Preferences).
 
-## Avant de livrer une interface
+## Before shipping an interface
 
-- [ ] Recherche « Avant toute maquette » faite et résumée dans la PR.
-- [ ] Commandes ajoutées au modèle de menus (donc palette), libellés identiques au clic droit.
-- [ ] Aucune couleur, police ni rayon en dur : jetons de `theme.rs` uniquement.
-- [ ] Captures en clair et en sombre, avec un vrai fichier (copie) et des données longues ou vides.
-- [ ] Parcours au clavier seul ; focus visible ; infobulles sur les icônes.
-- [ ] Comportement vérifié pour macOS, Windows et Linux (tableau Plateformes).
-- [ ] Pas de texte explicatif, sections vides masquées, identifiants GEDCOM invisibles.
+- [ ] "Before any mockup" research done and summarised in the PR.
+- [ ] Commands added to the menu model (hence the palette), same labels on right click.
+- [ ] No hardcoded colour, font or radius: `theme.rs` tokens only.
+- [ ] Screenshots in light and dark, with a real file (a copy) and long or empty data.
+- [ ] Keyboard-only walkthrough; visible focus; tooltips on icons.
+- [ ] Behaviour checked for macOS, Windows and Linux (Platforms table).
+- [ ] Texts in the English and French catalogues (`locales/*.yml`).
+- [ ] No explanatory text, empty sections hidden, GEDCOM identifiers invisible.
 
-## Ajouter un jeton
+## Adding a token
 
-Ajouter le rôle dans `Palette` (valeurs claire **et** sombre), une fonction d'accès, puis le
-documenter ici. Vérifier le contraste à 4,5:1 sur `bg`, `panel` et `surface`.
+Add the role to `Palette` (light **and** dark values), an accessor function, then document it
+here. Check 4.5:1 contrast on `bg`, `panel` and `surface`.
