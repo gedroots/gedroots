@@ -93,6 +93,12 @@ lignes de texte ; pas de `1p5` ni de `2p5`.
 Le kit prévoit aussi 28 px pour de grands panneaux superposés : à introduire si l'app en a un.
 Bordures 1 px `border()` ; focus : anneau `accent()`.
 
+L'anneau de focus (3 px) est peint hors de la bordure du champ : une zone qui défile le coupe si le
+champ touche son bord. Une zone qui défile et contient des champs s'écrit donc
+`theme::scroll_y(id)` (retrait `FOCUS_ROOM` compensé par une marge négative, l'alignement ne
+bouge pas) ou garde un `p_*` intérieur d'au moins 4 px ; jamais un `overflow_y_scroll()` nu
+autour d'un champ.
+
 ## Icônes
 
 - **Interface** : icônes Lucide (jeu de gpui-kit + `ExtraIcons` dans `main.rs`), 16 px dans les

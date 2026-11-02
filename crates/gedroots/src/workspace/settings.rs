@@ -293,7 +293,7 @@ impl Workspace {
                     .child(tab("settings-events", "Événements", SettingsPage::Events))
                     .child(tab("settings-media", "Médias", SettingsPage::Media)),
             )
-            .child(div().id("settings-body").max_h(px(460.)).overflow_y_scroll().child(body))
+            .child(theme::scroll_y("settings-body").max_h(px(460.)).child(body))
             .child(
                 h_flex().gap_2().justify_end().child(
                     Button::new("settings-save")
