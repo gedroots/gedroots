@@ -37,6 +37,7 @@ mod import;
 mod insights;
 mod media_files;
 mod menus;
+mod new_tree;
 mod pages;
 mod photo;
 mod places;
@@ -253,6 +254,8 @@ pub struct Workspace {
     /// “Detach” buttons unfolded in an individual's panel. Add window (event, relatives) opened by
     /// a “+”.
     add_dialog: Option<add::AddDialog>,
+    /// “New Tree” window (File › New Tree…).
+    new_tree: Option<Box<new_tree::NewTreeDialog>>,
     /// “Media” window (gallery of an individual, an event, a source).
     gallery: Option<gallery::Gallery>,
     /// “To Review” page: records proposed by an AI agent, waiting for review.
@@ -365,6 +368,7 @@ impl Workspace {
             locate: None,
             editor_subs: Vec::new(),
             add_dialog: None,
+            new_tree: None,
             gallery: None,
             review: review::Review::default(),
             _subs: vec![sub, map_sub, appearance_sub, activation_sub],
@@ -423,24 +427,7 @@ impl Workspace {
     }
 
     fn new_file(&mut self, _: &NewFile, window: &mut Window, cx: &mut Context<Self>) {
-        let mut ged = Gedcom::new();
-        let x = ged.create(RecordKind::Individual);
-        self.doc = Some(Document {
-            ged,
-            path: None,
-            dirty: true,
-            dirty_before_checkpoint: true,
-            history: Vec::new(),
-            future: Vec::new(),
-            future_before_checkpoint: Vec::new(),
-        });
-        self.view = View::Individuals;
-        self.selected = None;
-        self.reset_history();
-        self.rebuild_rows(cx);
-        self.select(x, window, cx);
-        self.tab = CenterTab::Form;
-        cx.notify();
+        self.open_new_tree(window, cx);
     }
 
     fn open_file(&mut self, _: &OpenFile, window: &mut Window, cx: &mut Context<Self>) {
@@ -1406,7 +1393,7 @@ impl Workspace {
                 .as_ref()
                 .and_then(|p| p.file_name())
                 .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_else(|| t!("cmd.new_file").into());
+                .unwrap_or_else(|| t!("ws.untitled").into());
             if d.dirty { format!("{name} •") } else { name }
         });
         h_flex()
@@ -2731,7 +2718,50 @@ impl Workspace {
             })
     }
 
-    fn render_welcome(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render_welcome(&self, window: &Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // One row per way to start, the creation first; the shortcut on the right.
+        let row = |id: &'static str,
+                   icon_name: IconName,
+                   title: SharedString,
+                   formats: Option<SharedString>,
+                   action: &dyn Action,
+                   primary: bool| {
+            let kbd =
+                gpui_kit::component::kbd::Kbd::binding_for_action(action, None, window).map(|k| k.appearance(false));
+            h_flex()
+                .id(id)
+                .w_full()
+                .px_4()
+                .py_3()
+                .gap_3()
+                .items_center()
+                .rounded(theme::RADIUS_MD)
+                .border_1()
+                .cursor_pointer()
+                .border_color(if primary { theme::accent() } else { theme::border() })
+                .bg(if primary { theme::accent_soft() } else { theme::bg() })
+                .hover(|d| d.border_color(theme::accent()))
+                .child(
+                    div()
+                        .flex_none()
+                        .size(px(32.))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .rounded(theme::RADIUS_SM)
+                        .bg(if primary { theme::accent() } else { theme::surface() })
+                        .text_color(if primary { theme::on_accent() } else { theme::muted() })
+                        .child(Icon::new(icon_name)),
+                )
+                .child(
+                    v_flex()
+                        .flex_1()
+                        .min_w_0()
+                        .child(div().font_weight(FontWeight::MEDIUM).child(title))
+                        .children(formats.map(|f| div().text_xs().text_color(theme::muted()).child(f))),
+                )
+                .children(kbd.map(|k| div().text_color(theme::muted()).child(k)))
+        };
         v_flex()
             .flex_1()
             .items_center()
@@ -2747,19 +2777,27 @@ impl Workspace {
                 .h(px(78.)),
             )
             .child(
-                h_flex()
+                v_flex()
+                    .w(px(440.))
                     .gap_2()
                     .child(
-                        Button::new("welcome-open")
-                            .primary()
-                            .label(t!("ws.open_file"))
+                        row("welcome-new", IconName::Sprout, t!("welcome.new_tree").into(), None, &NewFile, true)
+                            .on_click(cx.listener(|this, _, w, cx| this.new_file(&NewFile, w, cx))),
+                    )
+                    .child(
+                        row("welcome-open", IconName::FolderOpen, t!("welcome.open").into(), None, &OpenFile, false)
                             .on_click(cx.listener(|this, _, w, cx| this.open_file(&OpenFile, w, cx))),
                     )
                     .child(
-                        Button::new("welcome-new")
-                            .ghost()
-                            .label(t!("cmd.new_file"))
-                            .on_click(cx.listener(|this, _, w, cx| this.new_file(&NewFile, w, cx))),
+                        row(
+                            "welcome-import",
+                            IconName::Import,
+                            t!("welcome.import").into(),
+                            Some(t!("welcome.import_formats").into()),
+                            &ImportFile,
+                            false,
+                        )
+                        .on_click(cx.listener(|this, _, w, cx| this.import_file(w, cx))),
                     ),
             )
             .children(self.render_recents(cx))
@@ -2811,7 +2849,7 @@ impl Render for Workspace {
                     .as_ref()
                     .and_then(|p| p.file_name())
                     .map(|n| n.to_string_lossy().to_string())
-                    .unwrap_or_else(|| t!("cmd.new_file").into()),
+                    .unwrap_or_else(|| t!("ws.untitled").into()),
                 if d.dirty { " •" } else { "" }
             ),
             None => "GEDRoots".into(),
@@ -2877,7 +2915,7 @@ impl Render for Workspace {
                 .child(self.render_detail(cx))
                 .into_any_element()
         } else {
-            self.render_welcome(cx).into_any_element()
+            self.render_welcome(window, cx).into_any_element()
         };
         v_flex()
             .size_full()
@@ -2918,6 +2956,7 @@ impl Render for Workspace {
             .children(self.render_event_detail(cx))
             .children(self.render_media_gallery(cx))
             .children(self.render_add_dialog(cx))
+            .children(self.render_new_tree(cx))
             .children(self.render_new_place(cx))
             .children(self.render_report(cx))
             .children(self.render_palette(cx))

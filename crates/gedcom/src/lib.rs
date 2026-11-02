@@ -73,6 +73,7 @@ pub mod saved;
 pub mod schema;
 pub mod search;
 pub mod settings;
+pub mod starter;
 pub mod weblink;
 pub mod websearch;
 

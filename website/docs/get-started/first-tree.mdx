@@ -1,33 +1,23 @@
 ---
 title: Start your family tree
-description: A ten-minute tutorial. Create a file, add yourself and your parents, then enter a birth record from its source.
+description: A ten-minute tutorial. Create a tree with yourself, your parents and grandparents, then enter a birth record from its source.
 ---
 
-In this tutorial, you create a new family tree, add three people, and enter a birth record that names all three. By the end, you'll know the habit GEDRoots is built around: **enter what a record says, in the record's source**.
+In this tutorial, you create a new family tree with your first generations, and enter a birth record that names you and your parents. By the end, you'll know the habit GEDRoots is built around: **enter what a record says, in the record's source**.
 
 You need GEDRoots [installed](/get-started/install). Have one real document at hand if you can, such as a birth certificate. If not, follow along with invented names.
 
 <Steps titleSize="h3">
-  <Step title="Create a file">
-    Open GEDRoots and click **New File**, or select **File › New File**.
+  <Step title="Create the tree">
+    Open GEDRoots and click **Start a New Tree**, or select **File › New Tree…**.
 
-    GEDRoots creates a tree with one empty person and opens their details. This first person is the **root person**: the one the tree opens on, and the starting point of Sosa numbers.
+    The **New Tree** window is laid out as a small pedigree: you on the left, your parents, then your four grandparents. Enter what you know: given names, surname, and dates the way you say them (`14 March 1952`, `March 1952`, `about 1952`, `before 1952`). For yourself, also choose your sex and enter your birth place. Leave a box empty when you don't know the person: nobody is created for it.
+
+    A father's surname can be left empty: he takes his child's, shown in grey in the field. If the tree isn't about you, click **You** at the top of the first box and choose **Someone Else**.
+
+    Click **Create Tree**. GEDRoots creates everyone with their families and opens the tree on you. You are the **root person**: the one the tree opens on, and the starting point of Sosa numbers.
 
     Select **File › Save** and choose where to keep your `.ged` file. A folder of its own is a good idea: GEDRoots stores record images next to the file.
-  </Step>
-
-  <Step title="Describe yourself">
-    In the **Details** tab, enter your **Given Names**, your **Name** (surname), your **Sex**, and your birth date and place. Click **Apply**.
-
-    Dates are typed the way you say them: `14 March 1952`, `March 1952`, `about 1952`, `before 1952`. Places are suggested as you type, from your file and, when you're online, from OpenStreetMap.
-  </Step>
-
-  <Step title="Add your parents">
-    In the panel on the right, click **+** next to **Family**. In the **Relatives** window, click **New Person** on the **Father** row.
-
-    GEDRoots creates your father, links him to you, and opens his details. Fill them in and click **Apply**. Then go back to yourself with **View › Back** (<kbd>⌘[</kbd> on macOS, <kbd>Alt+←</kbd> on Windows and Linux) and add your mother the same way.
-
-    When both parents are entered, GEDRoots joins them in a single family, with you as their child.
   </Step>
 
   <Step title="Create the source">
@@ -41,7 +31,7 @@ You need GEDRoots [installed](/get-started/install). Have one real document at h
 
     1. Under **Event**, choose **Birth**. Enter the **Date** and the **Place** of the birth, and a **Reference** if the document has one, such as `Record no. 112`.
     2. Under **People**, the record already has a **Child**, a **Father** and a **Mother**. Type the names as the document writes them.
-    3. As you type, GEDRoots looks for matching people in your tree: **Link to Paul MARTIN · parent of …**. Click the suggestion to link each person to the one you created earlier.
+    3. As you type, GEDRoots looks for matching people in your tree: **Link to Paul MARTIN · parent of …**. Click the suggestion to link each person to the one you entered when creating the tree.
 
     ![The record editor suggesting the existing parents of the child](../images/record-matches.png)
 
@@ -58,7 +48,7 @@ You need GEDRoots [installed](/get-started/install). Have one real document at h
 ## What you've learned
 
 - A tree is a single `.ged` file. **File › Save** writes it; GEDRoots keeps the previous version as a `.ged.bak` copy next to it.
-- You add relatives from a person, with the **+** next to **Family**.
+- You start a tree with its first generations in one window, then add relatives from a person, with the **+** next to **Family** or the empty boxes of the tree.
 - You enter a record **once, in its source**. GEDRoots turns it into events, family links and citations for everyone it names.
 
 ## Next steps

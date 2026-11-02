@@ -1,0 +1,64 @@
+_version: 2
+# Welcome page and the “New Tree” window (crates/gedroots/src/workspace/new_tree.rs)
+welcome:
+  new_tree:
+    en: Start a New Tree
+    fr: Commencer un nouvel arbre
+  open:
+    en: Open a Tree…
+    fr: Ouvrir un arbre…
+  import:
+    en: Import From Another App…
+    fr: Importer depuis un autre logiciel…
+  import_formats:
+    en: GEDCOM 5.5.1
+    fr: GEDCOM 5.5.1
+new_tree:
+  title:
+    en: New Tree
+    fr: Nouvel arbre
+  you:
+    en: You
+    fr: Vous
+  someone_else:
+    en: Someone Else
+    fr: Une autre personne
+  father:
+    en: Father
+    fr: Père
+  mother:
+    en: Mother
+    fr: Mère
+  paternal_grandfather:
+    en: Paternal grandfather
+    fr: Grand-père paternel
+  paternal_grandmother:
+    en: Paternal grandmother
+    fr: Grand-mère paternelle
+  maternal_grandfather:
+    en: Maternal grandfather
+    fr: Grand-père maternel
+  maternal_grandmother:
+    en: Maternal grandmother
+    fr: Grand-mère maternelle
+  given:
+    en: Given names
+    fr: Prénoms
+  surname:
+    en: SURNAME
+    fr: NOM
+  born:
+    en: Born
+    fr: Naissance
+  died:
+    en: Died
+    fr: Décès
+  birth_place:
+    en: Birth place
+    fr: Lieu de naissance
+  cancel:
+    en: Cancel
+    fr: Annuler
+  create:
+    en: Create Tree
+    fr: Créer l’arbre
