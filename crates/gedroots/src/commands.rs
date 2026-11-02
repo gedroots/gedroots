@@ -43,6 +43,8 @@ actions!(
         SetRoot,
         GoToRoot,
         AttachFiles,
+        LinkMedia,
+        CropMedia,
         AddEvent,
         // Famille
         NewFamily,
@@ -239,6 +241,8 @@ fn model() -> Vec<(&'static str, Vec<Item>)> {
             ),
             a("Ajouter un événement…", AddEvent),
             a("Rattacher des photos ou documents…", AttachFiles),
+            a("Lier un média existant…", LinkMedia),
+            a("Recadrer un média existant…", CropMedia),
             Sep,
             a("Définir comme individu racine", SetRoot),
             a("Aller à l'individu racine", GoToRoot),
