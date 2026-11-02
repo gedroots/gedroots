@@ -302,12 +302,41 @@ impl Workspace {
             sx + CARD_W > -PRELOAD && sy + CARD_H > -PRELOAD && sx < vw + PRELOAD && sy < vh + PRELOAD
         };
         let root = g.root();
+        // Guided tour: an empty box in view carries the bubble, a parent's if possible.
+        let in_view = |x: f32, y: f32, part: f32| {
+            let (sx, sy) = to_screen(x, y);
+            sx >= 0. && sy >= 0. && sx + CARD_W * part <= vw && sy + CARD_H <= vh
+        };
+        let empty_box = |parent: bool, part: f32| {
+            l.cards.iter().zip(&ys).position(|(c, y)| {
+                let fits = match c.slot {
+                    Slot::AddParent { .. } => true,
+                    Slot::AddChild(_) | Slot::AddSibling(_) => !parent,
+                    Slot::Person { .. } => false,
+                };
+                fits && in_view(c.x, *y, part)
+            })
+        };
+        let tour_slot = if self.tour_wants(super::tour::Target::AddSlot) {
+            empty_box(true, 1.).or_else(|| empty_box(false, 1.)).or_else(|| empty_box(false, 0.5))
+        } else {
+            None
+        };
         let cards: Vec<AnyElement> = l
             .cards
             .iter()
             .zip(&ys)
-            .filter(|(c, y)| near_view(c.x, **y))
-            .filter_map(|(c, y)| self.chart_card(doc, c, to_screen(c.x, *y), sel, root.as_deref(), cx))
+            .enumerate()
+            .filter(|(_, (c, y))| near_view(c.x, **y))
+            .filter_map(|(i, (c, y))| {
+                let el = self.chart_card(doc, c, to_screen(c.x, *y), sel, root.as_deref(), cx)?;
+                match tour_slot == Some(i) {
+                    true => Some(
+                        div().child(el).children(self.tour_anchor_at(c, to_screen(c.x, *y), cx)).into_any_element(),
+                    ),
+                    false => Some(el),
+                }
+            })
             .collect();
 
         // Connectors, drawn under the boxes.
@@ -495,6 +524,12 @@ impl Workspace {
             }
         };
         Some(el)
+    }
+
+    /// Bubble of the guided tour on the empty box `c`, placed at `(x, y)` like the box.
+    fn tour_anchor_at(&self, _c: &Card, (x, y): (f32, f32), cx: &mut Context<Self>) -> Option<AnyElement> {
+        let bubble = self.tour_anchor(super::tour::Target::AddSlot, cx)?;
+        Some(div().absolute().left(px(x)).top(px(y)).w(px(CARD_W)).h(px(CARD_H)).child(bubble).into_any_element())
     }
 
     /// Minimap, in the bottom right corner, when the chart overflows the view.

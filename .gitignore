@@ -4,5 +4,7 @@
 *.ged.bak
 *.ged.tmp
 !crates/gedcom/tests/fixtures/*.ged
+# Fictional sample tree bundled with the app (Help › Open Sample Tree).
+!crates/gedroots/assets/sample/sample.ged
 .DS_Store
 mise.local.toml

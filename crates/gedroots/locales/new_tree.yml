@@ -62,3 +62,47 @@ new_tree:
   create:
     en: Create Tree
     fr: Créer l’arbre
+tour:
+  sidebar_title:
+    en: Your Whole Tree
+    fr: Tout votre arbre
+  sidebar_body:
+    en: "People, sources, places, media: each kind of record has its list here."
+    fr: "Individus, sources, lieux, médias : chaque type de fiche a sa liste ici."
+  grow_title:
+    en: Grow the Tree
+    fr: Faites pousser l’arbre
+  grow_body:
+    en: Click an empty box to add a parent, a spouse or a child.
+    fr: Cliquez sur une case vide pour ajouter un parent, un conjoint ou un enfant.
+  search_title:
+    en: Find Anything
+    fr: Trouvez tout
+  search_body:
+    en: A name, a place, or a criterion such as born:1850.
+    fr: Un nom, un lieu, ou un critère comme born:1850.
+  commands_title:
+    en: Every Command
+    fr: Toutes les commandes
+  commands_body:
+    en: Press this shortcut to search every command. The tour is in the Help menu.
+    fr: Ce raccourci recherche parmi toutes les commandes. La visite se rouvre depuis le menu Aide.
+  progress:
+    en: "%{n} of %{total}"
+    fr: "%{n} sur %{total}"
+  skip:
+    en: Skip
+    fr: Passer
+  next:
+    en: Next
+    fr: Suivant
+  done:
+    en: Done
+    fr: Terminé
+  leave:
+    en: Leave the Tour
+    fr: Quitter la visite
+sample:
+  title:
+    en: Sample Tree
+    fr: Arbre d’exemple

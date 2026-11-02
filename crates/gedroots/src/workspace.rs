@@ -47,6 +47,7 @@ mod report;
 mod review;
 mod saved;
 mod settings;
+mod tour;
 mod tree;
 mod weblinks;
 
@@ -180,6 +181,8 @@ struct Document {
     /// Opened by File › Import: `path` is the imported file (or, for a GEDZIP, where the unzipped
     /// tree would be saved), which Save never overwrites without asking where.
     imported: bool,
+    /// The sample tree (Help › Open Sample Tree): never saved.
+    sample: bool,
     dirty: bool,
     dirty_before_checkpoint: bool,
     /// Previous states, for Undo (the last one is the most recent).
@@ -191,9 +194,17 @@ struct Document {
 }
 
 impl Document {
+    /// Changes that Save would keep (the sample tree has none: it is never saved).
+    fn unsaved(&self) -> bool {
+        self.dirty && !self.sample
+    }
+
     /// Name shown in the title bar: the file name, without its extension for an imported tree
     /// (not saved yet, like an untitled one).
     fn title(&self) -> String {
+        if self.sample {
+            return t!("sample.title").into();
+        }
         let name = match self.imported {
             true => self.path.as_ref().and_then(|p| p.file_stem()),
             false => self.path.as_ref().and_then(|p| p.file_name()),
@@ -310,6 +321,8 @@ pub struct Workspace {
     quality: quality::QualityState,
     /// Relationship shown in a modal window (A, B).
     kinship: Option<(String, String)>,
+    /// Guided tour in progress.
+    tour: Option<tour::Tour>,
     /// Event shown read-only (click in a timeline).
     event_detail: Option<event_detail::EventDetail>,
     /// The record's fields are being edited (Edit › Edit Record); otherwise it is shown as text.
@@ -386,6 +399,7 @@ impl Workspace {
             list_scroll: UniformListScrollHandle::new(),
             quality: quality::QualityState { stale: true, ..Default::default() },
             kinship: None,
+            tour: None,
             event_detail: None,
             editing: false,
             show_relative_events: false,
@@ -426,7 +440,7 @@ impl Workspace {
 
     /// True if the open document has unsaved changes.
     pub fn has_unsaved_changes(&self) -> bool {
-        self.doc.as_ref().is_some_and(|d| d.dirty)
+        self.doc.as_ref().is_some_and(Document::unsaved)
     }
 
     fn load(&mut self, path: PathBuf, window: &mut Window, cx: &mut Context<Self>) {
@@ -438,6 +452,7 @@ impl Workspace {
                 crate::recent::add(&path, cx);
                 self.set_document(ged, Some(path), false, window, cx);
                 self.status = None;
+                self.offer_tour(window, cx);
             }
             Err(e) => self.set_error("ws.open_failed", t!("ws.open_failed", path = path.display(), error = e)),
         }
@@ -460,6 +475,7 @@ impl Workspace {
             ged,
             path,
             imported,
+            sample: false,
             dirty,
             dirty_before_checkpoint: dirty,
             history: Vec::new(),
@@ -474,6 +490,22 @@ impl Workspace {
         if let Some(x) = first {
             self.select(x, window, cx);
         }
+    }
+
+    /// Shows the sample tree (in a window of its own, see `main.rs`).
+    pub(crate) fn open_sample(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        match crate::sample::open() {
+            Ok((ged, path)) => {
+                self.set_document(ged, Some(path), false, window, cx);
+                if let Some(d) = &mut self.doc {
+                    d.sample = true;
+                }
+                self.tab = CenterTab::Tree;
+                self.offer_tour(window, cx);
+            }
+            Err(e) => self.set_error("ws.open_failed", t!("ws.open_failed", path = t!("sample.title"), error = e)),
+        }
+        cx.notify();
     }
 
     fn new_file(&mut self, _: &NewFile, window: &mut Window, cx: &mut Context<Self>) {
@@ -1443,7 +1475,7 @@ impl Workspace {
         let mac = cfg!(target_os = "macos");
         let title = self.doc.as_ref().map(|d| {
             let name = d.title();
-            if d.dirty { format!("{name} •") } else { name }
+            if d.unsaved() { format!("{name} •") } else { name }
         });
         h_flex()
             .id("header")
@@ -1581,6 +1613,7 @@ impl Workspace {
         // Active zone filtered: its counter gives the number of results.
         let filtered = self.is_filtered(cx);
         v_flex()
+            .relative()
             .w(px(184.))
             .flex_none()
             .p_2()
@@ -1617,6 +1650,7 @@ impl Workspace {
             }))
             .children(self.render_review_zone(cx))
             .children(self.render_saved(cx))
+            .children(self.tour_anchor(tour::Target::Sidebar, cx))
     }
 
     fn render_list(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -2966,13 +3000,13 @@ impl Render for Workspace {
         }
         self.search_focused = focused;
         let title = match &self.doc {
-            Some(d) => format!("{}{} — GEDRoots", d.title(), if d.dirty { " •" } else { "" }),
+            Some(d) => format!("{}{} — GEDRoots", d.title(), if d.unsaved() { " •" } else { "" }),
             None => "GEDRoots".into(),
         };
         if title != self.window_title {
             window.set_window_title(&title);
             // macOS: dot in the close button while the file is not saved.
-            window.set_window_edited(self.doc.as_ref().is_some_and(|d| d.dirty));
+            window.set_window_edited(self.doc.as_ref().is_some_and(Document::unsaved));
             self.window_title = title;
         }
         // Search sites of the active window's file (Person › Search On).
@@ -3051,6 +3085,9 @@ impl Render for Workspace {
             )
             .on_key_down(cx.listener(|this, ev: &KeyDownEvent, w, cx| {
                 if ev.keystroke.key == "escape" {
+                    if this.tour.is_some() {
+                        return this.end_tour(cx);
+                    }
                     if this.gallery_escape(w, cx) {
                         return;
                     }
@@ -3077,6 +3114,7 @@ impl Render for Workspace {
             .children(self.render_new_place(cx))
             .children(self.render_report(cx))
             .children(self.render_palette(cx))
+            .children(self.render_tour(window, cx))
     }
 }
 
