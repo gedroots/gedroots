@@ -7,6 +7,7 @@
 use super::relatives::PickPurpose;
 use super::tree::TreeMode;
 use super::*;
+use gedcom::gedcom551::Flavor;
 use gpui_kit::component::command::{Command, CommandItem, CommandState};
 
 /// Déclare un gestionnaire d'action sur l'élément racine.
@@ -60,6 +61,8 @@ impl Workspace {
         let d = on!(d, cx, OpenFileSettings, |this, w, cx| this.open_settings(w, cx));
         let d = on!(d, cx, SaveFileAs, |this, w, cx| this.save_file_as(w, cx));
         let d = on!(d, cx, ExportGedzip, |this, w, cx| this.export_gedzip(w, cx));
+        let d = on!(d, cx, ExportGedcom551, |this, w, cx| this.export_gedcom(Flavor::Standard, w, cx));
+        let d = on!(d, cx, ExportGeneanet, |this, w, cx| this.export_gedcom(Flavor::Geneanet, w, cx));
         let d = on!(d, cx, EnterRecord, |this, w, cx| this.enter_act(w, cx));
         let d = on!(d, cx, FocusSearch, |this, w, cx| this.filter.update(cx, |f, cx| f.focus(w, cx)));
         let d = on!(d, cx, ClearSearch, |this, w, cx| this.set_query(String::new(), w, cx));
@@ -175,6 +178,11 @@ impl Workspace {
                 let d = on!(d, cx, KinshipWith, |this, w, cx| this.ask_kinship(w, cx));
                 let d = on!(d, cx, SearchAncestors, |this, w, cx| this.search_kin(Kin::Ancestors, w, cx));
                 let d = on!(d, cx, SearchDescendants, |this, w, cx| this.search_kin(Kin::Descendants, w, cx));
+                let d = on!(d, cx, SearchGeneanet, |this, w, cx| {
+                    if let Some(x) = this.selected.clone() {
+                        this.search_geneanet(&x, cx)
+                    }
+                });
                 let d = on!(d, cx, LinkMedia, |this, w, cx| {
                     if let Some(owner) = this.selected.clone() {
                         this.open_picker(PickPurpose::MediaFor { owner, crop: false }, w, cx)
@@ -325,6 +333,13 @@ impl Workspace {
         }
         self.set_query(format!("{}:@{x}@ ", kin.key()), window, cx);
         self.filter.update(cx, |f, cx| f.focus(window, cx));
+    }
+
+    /// Ouvre dans le navigateur la recherche Geneanet de la personne.
+    pub(super) fn search_geneanet(&mut self, xref: &str, cx: &mut Context<Self>) {
+        if let Some(n) = self.doc.as_ref().and_then(|d| d.ged.get(xref)) {
+            cx.open_url(&gedcom::geneanet::search_url(n));
+        }
     }
 
     fn toggle_filter(&mut self, token: &str, window: &mut Window, cx: &mut Context<Self>) {

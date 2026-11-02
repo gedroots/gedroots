@@ -298,7 +298,8 @@ pub(super) fn person_menu(ws: Ws, x: String, from: From) -> MenuBuilder {
         })
         .collect();
         let rels2 = rels.clone();
-        let (x1, x2, x3, x4, x5, x6) = (x.clone(), x.clone(), x.clone(), x.clone(), x.clone(), x.clone());
+        let (x1, x2, x3, x4, x5, x6, x7) =
+            (x.clone(), x.clone(), x.clone(), x.clone(), x.clone(), x.clone(), x.clone());
         let (wa, wb) = (ws.clone(), ws.clone());
         menu.item(act(&ws, label::CENTER_TREE, move |this, w, cx| {
             this.act_editor = None;
@@ -323,6 +324,7 @@ pub(super) fn person_menu(ws: Ws, x: String, from: From) -> MenuBuilder {
         })
         .item(act(&ws, label::ADD_EVENT, move |this, w, cx| this.open_event_dialog(x5.clone(), None, w, cx)))
         .item(act(&ws, label::ATTACH_FILES, move |this, w, cx| this.choose_files(x6.clone(), w, cx)))
+        .item(act(&ws, label::SEARCH_GENEANET, move |this, _, cx| this.search_geneanet(&x7, cx)))
         .when_some(
             match &from {
                 From::Relative(indi, fam, label) => Some((indi.clone(), fam.clone(), *label)),

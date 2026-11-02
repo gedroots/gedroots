@@ -115,12 +115,24 @@ et suit le [design system GEDRoots](design.md) (fonds neutres et touches de viol
   (annulable). Premier contrôle : les balises `_URL` deviennent des liens multimédia (`WWW`
   pour les dépôts) ; les événements à balise d'extension (`_MILT`, `_MILI`, `_DEG`…)
   deviennent des `EVEN` + `TYPE`. Les contrôles sont dans `crates/gedcom/src/import.rs`.
-- **Export GEDZIP** (Fichier › « Exporter en GEDZIP… ») : une archive `.gdz` (GEDCOM 7,
+- **Export** (Fichier › Exporter) en trois formats.
+- **GEDZIP avec les médias** : une archive `.gdz` (GEDCOM 7,
   chapitre 4) avec `gedcom.ged` et les fichiers des médias, pour transmettre l'arbre complet.
   Les chemins relatifs gardent leur dossier (`Actes/…`), les fichiers hors du dossier du .ged
   vont dans `media/`, les `FILE` sont réécrits pour l'archive ; le .ged et les médias ne sont
   pas modifiés. Les fichiers introuvables gardent leur `FILE` et sont listés à la fin, chacun
   menant à son média.
+- **GEDCOM 5.5.1** : un `.ged` pour les logiciels qui ne lisent pas encore GEDCOM 7 (en-tête
+  5.5.1, `SNOTE` → `NOTE`, calendriers `@#DFRENCH R@`, `ROLE` → `RELA`, types MIME → formats,
+  structures propres à GEDCOM 7 et extensions `_GR_*` retirées, `@` doublés, lignes longues
+  en `CONC`). Conversion dans `crates/gedcom/src/gedcom551.rs`.
+- **GEDCOM pour Geneanet** : le même export, adapté à l'import de Geneanet (GeneWeb) : quand
+  la première juridiction du format des lieux est un lieu-dit (`Lieudit`, `Hameau`…), les
+  lieux deviennent `[Lieu-dit] - Commune, …` ; rôles des témoins dans le vocabulaire de
+  GeneWeb (`GODP`, `Civil officer`…). La page d'import de Geneanet s'ouvre ensuite dans le
+  navigateur. Geneanet n'a pas d'API publique : l'envoi reste manuel.
+- **Rechercher sur Geneanet** (Individu, clic droit sur une personne) : ouvre la recherche
+  Geneanet préremplie avec le nom, le prénom et les années de naissance et de décès.
 - **Réglages du fichier** (⌘ / Ctrl + `,` ; menu GEDRoots sur macOS, Fichier ailleurs) : auteur, e-mail, droits,
   description, langue et individu racine.
   Tout est rangé dans l'en-tête du .ged en GEDCOM 7 standard (`HEAD.SUBM`, `COPR`, `NOTE`,
@@ -303,8 +315,8 @@ cache, par défaut `~/Library/Caches/GEDRoots/tiles` ou `~/.cache/gedroots/tiles
 
 | Crate | Rôle |
 | --- | --- |
-| [`crates/gedcom`](crates/gedcom) | Lecture/écriture GEDCOM 7 sans perte, vues typées (individus, familles, sources, lieux, médias), recadrage `CROP` (`crop.rs`), médias multipages (`multipage.rs`), liens web (`weblink.rs`), assistant d'import (`import.rs`), préparation de l'export GEDZIP (`gedzip.rs`), formulaires d'édition, dates, coordonnées (`geo.rs`), outils d'analyse (`analysis/`), contrôles de la page Qualité (`quality.rs`), recherche (`search.rs`, `query.rs`, `phonetic.rs`), ajout/liaison de proches et médias (`relations.rs`), descendance (`pedigree.rs`) et actes des sources (`act.rs`). Sans dépendance. |
-| [`crates/gedroots`](crates/gedroots) | Application GPUI : `commands.rs` (toutes les commandes, raccourcis et menus), `workspace.rs` (fenêtre et vues) et `workspace/` (`commands.rs` commandes et palette, `tree.rs` arbres, `relatives.rs` proches/sélecteur/médias, `add.rs` fenêtres d'ajout et de modification d'événement, `menus.rs` menus du clic droit, `photo.rs` recadrage et personnes sur les photos, `pages.rs` médias multipages et fusion, `weblinks.rs` liens web, `import.rs` assistant d'import, `export.rs` export GEDZIP, `filters.rs` filtres rapides, `quality.rs` page Qualité, `insights.rs` page Statistiques et lien de parenté), `editor.rs` (éditeurs visuel et brut), `act_editor.rs` (éditeur d'acte), `gedzip.rs` (écriture de l'archive `.gdz`), `map.rs` (carte des lieux), `theme.rs` (palette de la maquette). |
+| [`crates/gedcom`](crates/gedcom) | Lecture/écriture GEDCOM 7 sans perte, vues typées (individus, familles, sources, lieux, médias), recadrage `CROP` (`crop.rs`), médias multipages (`multipage.rs`), liens web (`weblink.rs`), assistant d'import (`import.rs`), préparation de l'export GEDZIP (`gedzip.rs`), export GEDCOM 5.5.1 et Geneanet (`gedcom551.rs`, `geneanet.rs`), formulaires d'édition, dates, coordonnées (`geo.rs`), outils d'analyse (`analysis/`), contrôles de la page Qualité (`quality.rs`), recherche (`search.rs`, `query.rs`, `phonetic.rs`), ajout/liaison de proches et médias (`relations.rs`), descendance (`pedigree.rs`) et actes des sources (`act.rs`). Sans dépendance. |
+| [`crates/gedroots`](crates/gedroots) | Application GPUI : `commands.rs` (toutes les commandes, raccourcis et menus), `workspace.rs` (fenêtre et vues) et `workspace/` (`commands.rs` commandes et palette, `tree.rs` arbres, `relatives.rs` proches/sélecteur/médias, `add.rs` fenêtres d'ajout et de modification d'événement, `menus.rs` menus du clic droit, `photo.rs` recadrage et personnes sur les photos, `pages.rs` médias multipages et fusion, `weblinks.rs` liens web, `import.rs` assistant d'import, `export.rs` exports GEDZIP et GEDCOM 5.5.1, `filters.rs` filtres rapides, `quality.rs` page Qualité, `insights.rs` page Statistiques et lien de parenté), `editor.rs` (éditeurs visuel et brut), `act_editor.rs` (éditeur d'acte), `gedzip.rs` (écriture de l'archive `.gdz`), `map.rs` (carte des lieux), `theme.rs` (palette de la maquette). |
 
 ## Tests
 

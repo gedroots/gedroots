@@ -21,6 +21,8 @@ actions!(
         SaveFile,
         SaveFileAs,
         ExportGedzip,
+        ExportGedcom551,
+        ExportGeneanet,
         Quit,
         // Édition
         Undo,
@@ -46,6 +48,7 @@ actions!(
         GoToRoot,
         SearchAncestors,
         SearchDescendants,
+        SearchGeneanet,
         AttachFiles,
         LinkMedia,
         CropMedia,
@@ -200,6 +203,7 @@ pub mod label {
     pub const MERGE_SELECTED_MEDIA: &str = "Fusionner les médias sélectionnés";
     pub const ADD_PAGES: &str = "Ajouter des pages…";
     pub const CLEAR_SEARCH: &str = "Effacer la recherche";
+    pub const SEARCH_GENEANET: &str = "Rechercher sur Geneanet";
 }
 
 /// Une entrée de menu.
@@ -257,7 +261,14 @@ fn model_with(recents: &[std::path::PathBuf]) -> Vec<(&'static str, Vec<Item>)> 
         a("Enregistrer", SaveFile),
         a("Enregistrer sous…", SaveFileAs),
         Sep,
-        a("Exporter en GEDZIP…", ExportGedzip),
+        Sub(
+            "Exporter",
+            vec![
+                a("GEDZIP avec les médias…", ExportGedzip),
+                a("GEDCOM 5.5.1…", ExportGedcom551),
+                a("GEDCOM pour Geneanet…", ExportGeneanet),
+            ],
+        ),
     ]);
     if !mac {
         file.extend([Sep, a("Réglages du fichier…", OpenFileSettings), Sep, a("Quitter", Quit)]);
@@ -317,6 +328,7 @@ fn model_with(recents: &[std::path::PathBuf]) -> Vec<(&'static str, Vec<Item>)> 
             a("Lien de parenté avec…", KinshipWith),
             a("Rechercher ses ascendants", SearchAncestors),
             a("Rechercher ses descendants", SearchDescendants),
+            a(label::SEARCH_GENEANET, SearchGeneanet),
         ],
     ));
     // Dépôts et notes partagées hors de la barre latérale : on les crée depuis le menu Source.
@@ -516,7 +528,7 @@ mod tests {
         let entries = palette_entries();
         assert!(entries.iter().any(|e| e.path == "Individu › Ajouter un proche › Père"));
         assert!(entries.iter().any(|e| e.path == "Source › Saisir un acte"));
-        assert!(entries.iter().any(|e| e.path == "Fichier › Exporter en GEDZIP"));
+        assert!(entries.iter().any(|e| e.path == "Fichier › Exporter › GEDCOM pour Geneanet"));
         for (i, e) in entries.iter().enumerate() {
             assert!(!entries[i + 1..].iter().any(|o| o.action.partial_eq(e.action.as_ref())), "{} en double", e.path);
         }
