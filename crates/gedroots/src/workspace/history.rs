@@ -2,8 +2,10 @@
 //! chaque liste.
 //!
 //! Chaque changement d'élément affiché (clic dans la liste, lien depuis une
-//! fiche, lieu d'un événement…) mémorise l'endroit quitté. ⌘[ / ⌘] et les
-//! boutons « précédent / suivant » de la souris y reviennent.
+//! fiche, lieu d'un événement…) mémorise l'endroit quitté, quel que soit son
+//! type : depuis un lieu ouvert à partir d'un individu, « Précédent » ramène à
+//! l'individu. ⌘[ / ⌘], les flèches de la barre du haut et les boutons
+//! « précédent / suivant » de la souris y reviennent.
 
 use super::*;
 use std::collections::HashMap;
@@ -88,6 +90,18 @@ impl Workspace {
             return Some(root);
         }
         self.rows.first().map(|r| r.key.clone())
+    }
+
+    /// Nom de l'endroit où mène « Précédent » (ou « Suivant »), pour l'infobulle.
+    pub(super) fn next_label(&self, back: bool) -> Option<String> {
+        let stack = if back { &self.history.back } else { &self.history.forward };
+        let loc = stack.iter().rev().find(|l| self.still_there(l))?;
+        let doc = self.doc.as_ref()?;
+        Some(match loc.view {
+            View::Places => short_place(&loc.key),
+            View::Quality | View::Stats => loc.view.label().to_string(),
+            _ => doc.ged.record_label(&loc.key),
+        })
     }
 
     /// L'endroit existe-t-il encore (élément supprimé, lieu renommé…) ?

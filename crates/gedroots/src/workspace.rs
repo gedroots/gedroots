@@ -1181,7 +1181,7 @@ impl Workspace {
     /// Barre du haut. Sous macOS elle remplace la barre de titre : les feux tricolores y sont
     /// posés (voir `main.rs`) et elle sert à déplacer la fenêtre. Le nom du fichier n'apparaît
     /// qu'ici, centré, suivi d'un point tant qu'il reste des modifications à enregistrer.
-    fn render_header(&self) -> impl IntoElement {
+    fn render_header(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let mac = cfg!(target_os = "macos");
         let title = self.doc.as_ref().map(|d| {
             let name = d
@@ -1225,12 +1225,45 @@ impl Workspace {
                             .when(!mac, |d| d.child("GEDRoots")),
                     )
                     // Linux, Windows : menus dans la fenêtre (natifs sous macOS).
-                    .children(self.menu_bar.clone().map(|m| div().h_full().child(m))),
+                    .children(self.menu_bar.clone().map(|m| div().h_full().child(m)))
+                    .children(self.doc.is_some().then(|| self.render_history_buttons(cx))),
             )
             .children(title.map(|t| div().flex_none().text_sm().font_weight(FontWeight::MEDIUM).child(t)))
             .child(h_flex().flex_1().min_w_0().justify_end().text_xs().children(self.status.clone().map(
                 |(msg, err)| div().truncate().text_color(if err { theme::danger() } else { theme::muted() }).child(msg),
             )))
+    }
+
+    /// Flèches « Précédent / Suivant » : reviennent à l'endroit quitté (un individu
+    /// après avoir ouvert un de ses lieux, par exemple). L'infobulle nomme la destination.
+    fn render_history_buttons(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let arrow = |back: bool| {
+            let dest = self.next_label(back);
+            let (id, icon, verb) = if back {
+                ("history-back", IconName::ChevronLeft, "Précédent")
+            } else {
+                ("history-forward", IconName::ChevronRight, "Suivant")
+            };
+            let action: &dyn Action = if back { &GoBack } else { &GoForward };
+            Button::new(id)
+                .ghost()
+                .xsmall()
+                .icon(icon)
+                .disabled(dest.is_none())
+                .when_some(dest, |b, dest| b.tooltip_with_action(format!("{verb} : {dest}"), action, Some("Workspace")))
+                .on_click(cx.listener(
+                    move |this, _, w, cx| {
+                        if back { this.go_back(w, cx) } else { this.go_forward(w, cx) }
+                    },
+                ))
+        };
+        h_flex()
+            .gap_0p5()
+            .items_center()
+            // Un clic sur une flèche ne déplace pas la fenêtre (macOS).
+            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+            .child(arrow(true))
+            .child(arrow(false))
     }
 
     /// Barre latérale : les quatre zones, nommées, avec leur effectif. Elle ne
@@ -2619,7 +2652,7 @@ impl Render for Workspace {
             .bg(theme::bg())
             .text_color(theme::text())
             .text_sm()
-            .child(self.render_header())
+            .child(self.render_header(cx))
             .child(body)
             .children(self.render_picker(cx))
             .children(self.render_add_dialog(cx))
