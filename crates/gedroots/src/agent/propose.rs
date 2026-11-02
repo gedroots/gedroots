@@ -83,6 +83,16 @@ pub struct Pending {
     pub pdf_page: Option<usize>,
     /// Image displayed and attached (the agent's, or the page extracted from the PDF).
     pub image: Option<PathBuf>,
+    /// Image shown in the review viewer: `image`, or the rendered page when `image` is a
+    /// one-page PDF kept as is.
+    pub preview: Option<PathBuf>,
+}
+
+/// File to attach to the act, and the image that shows it in the review page.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Prepared {
+    pub file: PathBuf,
+    pub preview: PathBuf,
 }
 
 fn role(s: &str) -> Result<ActRole, String> {
@@ -181,13 +191,14 @@ pub fn prefers_images(ged: &Gedcom) -> bool {
 
 /// File of the record ready to attach: an image, or a single-page PDF if the file keeps its records
 /// as PDFs.
-pub fn prepare_file(path: &Path, page: Option<usize>, images: bool, cache: &Path) -> Result<PathBuf, String> {
+pub fn prepare_file(path: &Path, page: Option<usize>, images: bool, cache: &Path) -> Result<Prepared, String> {
     if !path.is_file() {
         return Err(format!("file not found: {}", path.display()));
     }
     let mime = gedcom::mime_for(&path.to_string_lossy());
     if mime.starts_with("image/") {
-        return Ok(path.to_path_buf());
+        let file = copy_image(path, cache)?;
+        return Ok(Prepared { preview: file.clone(), file });
     }
     if mime != "application/pdf" {
         return Err("the act's file must be an image or a PDF".into());
@@ -201,14 +212,35 @@ pub fn prepare_file(path: &Path, page: Option<usize>, images: bool, cache: &Path
         None if count == 1 => 1,
         None => return Err(format!("the PDF has {count} pages: give pdf_page, the page of the act")),
     };
-    if count == 1 && !images {
-        return Ok(path.to_path_buf());
-    }
     let jpeg = render_page(&pdf, page - 1)?;
     std::fs::create_dir_all(cache).map_err(|e| e.to_string())?;
     let stem = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| "act".into());
     let out = cache.join(format!("{stem} p{page}.jpg"));
     std::fs::write(&out, jpeg).map_err(|e| e.to_string())?;
+    // A one-page PDF is kept as is when the file stores PDFs; the viewer still needs an image.
+    let file = if count == 1 && !images { path.to_path_buf() } else { out.clone() };
+    Ok(Prepared { file, preview: out })
+}
+
+/// Image downloaded by the agent: read and decoded here, so an unreadable file (no permission,
+/// format the app cannot show) is refused with the reason instead of showing a black viewer;
+/// then copied to the app's cache, like an extracted PDF page.
+fn copy_image(path: &Path, cache: &Path) -> Result<PathBuf, String> {
+    let data = std::fs::read(path).map_err(|e| format!("GEDRoots cannot read {}: {e}", path.display()))?;
+    let decoded = image::ImageReader::new(std::io::Cursor::new(&data))
+        .with_guessed_format()
+        .map_err(|e| e.to_string())?
+        .decode()
+        .map_err(|e| format!("GEDRoots cannot decode {} ({e}): give a JPEG or PNG image", path.display()))?;
+    if decoded.width() == 0 || decoded.height() == 0 {
+        return Err(format!("{} is an empty image", path.display()));
+    }
+    std::fs::create_dir_all(cache).map_err(|e| e.to_string())?;
+    let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "act.jpg".into());
+    let out = cache.join(name);
+    if out != path {
+        std::fs::write(&out, &data).map_err(|e| e.to_string())?;
+    }
     Ok(out)
 }
 
@@ -283,9 +315,18 @@ mod tests {
         let txt = dir.join("a.txt");
         std::fs::write(&txt, "x").unwrap();
         assert!(prepare_file(&txt, None, true, &dir).unwrap_err().contains("image or a PDF"));
+        // Not an image after all: refused with the reason, not shown as a black viewer.
         let jpg = dir.join("a.jpg");
         std::fs::write(&jpg, "x").unwrap();
-        assert_eq!(prepare_file(&jpg, None, true, &dir).unwrap(), jpg);
+        assert!(prepare_file(&jpg, None, true, &dir).unwrap_err().contains("cannot decode"));
+        // A real image is copied to the app's cache.
+        let png = dir.join("scan.png");
+        image::RgbImage::from_pixel(4, 3, image::Rgb([200, 190, 170])).save(&png).unwrap();
+        let cache = dir.join("cache");
+        let copied = prepare_file(&png, None, true, &cache).unwrap();
+        assert_eq!(copied.file, cache.join("scan.png"));
+        assert_eq!(copied.preview, copied.file);
+        assert!(copied.file.is_file());
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -327,7 +368,7 @@ mod tests {
         // Register of several pages: the record's page is required.
         assert!(prepare_file(&register, None, true, &dir).unwrap_err().contains("3 pages"));
         assert!(prepare_file(&register, Some(4), true, &dir).is_err());
-        let jpeg = prepare_file(&register, Some(2), true, &dir).unwrap();
+        let jpeg = prepare_file(&register, Some(2), true, &dir).unwrap().file;
         assert_eq!(jpeg.file_name().unwrap(), "registre p2.jpg");
         let img = image::open(&jpeg).unwrap().to_rgb8();
         assert!(img.width().max(img.height()) >= 2900, "{}x{}", img.width(), img.height());
@@ -339,7 +380,11 @@ mod tests {
         // Single-page PDF, in a file that keeps its records as PDFs: kept as is.
         let single = dir.join("acte.pdf");
         std::fs::write(&single, pdf(1)).unwrap();
-        assert_eq!(prepare_file(&single, None, false, &dir).unwrap(), single);
+        // The viewer shows the rendered page, never the PDF itself.
+        let kept = prepare_file(&single, None, false, &dir).unwrap();
+        assert_eq!(kept.file, single);
+        assert_eq!(kept.preview.file_name().unwrap(), "acte p1.jpg");
+        assert!(image::open(&kept.preview).is_ok());
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

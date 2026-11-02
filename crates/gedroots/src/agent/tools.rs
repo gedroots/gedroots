@@ -263,7 +263,7 @@ impl GedrootsMcp {
                         the act's image and its web page (`url`)"
                 .to_string());
         }
-        let image = match &original {
+        let prepared = match &original {
             Some(path) => {
                 let (path, page, images) = (path.clone(), p.pdf_page, propose::prefers_images(&s.ged));
                 let prepared = tokio::task::spawn_blocking(move || {
@@ -275,8 +275,12 @@ impl GedrootsMcp {
             }
             None => None,
         };
+        let (image, preview) = match prepared {
+            Some(p) => (Some(p.file), Some(p.preview)),
+            None => (None, None),
+        };
         propose::attach(&mut proposal, image.as_deref());
-        let pending = Pending { proposal, original, pdf_page: p.pdf_page, image };
+        let pending = Pending { proposal, original, pdf_page: p.pdf_page, image, preview };
         let (tx, rx) = tokio::sync::oneshot::channel();
         self.bridge
             .send(Request::Propose(Box::new(pending), tx))
