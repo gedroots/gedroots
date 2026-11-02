@@ -4,6 +4,7 @@
 use crate::commands::*;
 use crate::editor::{FieldState, RecordEditor, Target};
 use crate::entry_form::{EntryForm, EntryFormEvent};
+use crate::images::picture;
 use crate::map::{MapEvent, MapView};
 use crate::theme;
 use gedcom::*;
@@ -1534,9 +1535,10 @@ impl Workspace {
                     let body = v_flex().gap_2().children(shown.into_iter().map(|page| {
                         match pages::page_path(doc, &m, page).filter(|p| p.exists()) {
                             Some(p) if crop.is_some() => photo::fitted_crop(p, crop, 700., 640.),
-                            Some(p) => {
-                                img(p).max_w_full().max_h(px(640.)).object_fit(ObjectFit::Contain).into_any_element()
-                            }
+                            Some(p) => picture(p, 700., 640., ObjectFit::Contain)
+                                .max_w_full()
+                                .max_h(px(640.))
+                                .into_any_element(),
                             None => div()
                                 .text_color(theme::warn())
                                 .child(format!("Fichier introuvable : {}", m.page_file(page).unwrap_or("")))
@@ -1608,7 +1610,9 @@ impl Workspace {
                     tile.flex().justify_center().child(photo::linked_img(p, crop, w, h, !large))
                 }
                 Some(p) => {
-                    tile.child(img(p).size_full().object_fit(if large { ObjectFit::Contain } else { ObjectFit::Cover }))
+                    let (w, h, fit) =
+                        if large { (326., 220., ObjectFit::Contain) } else { (104., 96., ObjectFit::Cover) };
+                    tile.child(picture(p, w, h, fit).size_full())
                 }
                 None => tile.flex().items_center().justify_center().child(
                     v_flex()
@@ -2058,7 +2062,7 @@ impl Workspace {
                             .border_1()
                             .border_color(theme::border())
                             .hover(|d| d.border_color(theme::accent()))
-                            .child(img(p).size_full().object_fit(ObjectFit::Cover))
+                            .child(picture(p, 56., 56., ObjectFit::Cover).size_full())
                             .on_click(open)
                             .with_menu(menu)
                             .into_any_element(),

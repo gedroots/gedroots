@@ -7,6 +7,7 @@
 //! faite par l'espace de travail quand il reçoit [`EntryFormEvent::Save`].
 
 use crate::date_field::{DateField, date_field};
+use crate::images::picture;
 use crate::theme;
 use gedcom::*;
 use gpui_kit::component::button::{Button, ButtonVariants};
@@ -597,7 +598,9 @@ impl EntryForm {
                     let (w, h) =
                         imagesize::size(p).map(|s| (s.width as f32, s.height as f32)).unwrap_or((1000., 1400.));
                     let width = 500. * zoom;
-                    let i = img(p.clone()).object_fit(ObjectFit::Contain);
+                    // Décodée pour la largeur affichée (le panneau fait rarement plus de 900 px).
+                    let shown = width.max(900.);
+                    let i = picture(p.clone(), shown, shown * h / w.max(1.), ObjectFit::Contain);
                     if zoom <= 1.0 { i.size_full() } else { i.w(px(width)).h(px(width * h / w.max(1.))) }
                 })
                 .into_any_element(),
