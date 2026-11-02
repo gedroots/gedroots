@@ -13,6 +13,76 @@ use gpui_kit::component::input::{InlineToken, InputContent};
 /// Nombre maximal de propositions affichées.
 const MAX_SUGGESTIONS: usize = 8;
 
+/// Menu ouvert sur un jeton de la recherche.
+pub(super) struct ChipMenu {
+    /// Plage du critère dans le texte du champ.
+    range: std::ops::Range<usize>,
+    word: String,
+    at: Point<Pixels>,
+}
+
+/// Réglages proposés dans le menu d'un jeton.
+enum ChipOption {
+    /// Marge d'une année (`né:1850±5`) : 0 = exactement.
+    Margin { key: String, year: String, margin: u32, on: bool },
+    /// Variantes d'orthographe d'un nom (`nom:guyot` / `nom:=guyot`).
+    Variants { name: String, on: bool },
+}
+
+const MARGINS: [u32; 4] = [0, 2, 5, 10];
+
+fn chip_options(word: &str) -> Vec<ChipOption> {
+    let Some((key, val)) = word.split_once(':') else { return vec![] };
+    let val = gedcom::query::unquote(val);
+    match gedcom::model::sort_key(key).as_str() {
+        k @ ("ne" | "nee" | "naissance" | "mort" | "morte" | "deces") => {
+            let (year, margin) = match val.split_once(['±', '~']) {
+                Some((y, m)) => (y.trim(), m.trim().parse::<u32>().ok()),
+                None => (val, Some(0)),
+            };
+            if year.is_empty() || !year.chars().all(|c| c.is_ascii_digit()) {
+                return vec![];
+            }
+            let key = if k.starts_with('n') { "né" } else { "mort" };
+            MARGINS
+                .iter()
+                .map(|&m| ChipOption::Margin { key: key.into(), year: year.into(), margin: m, on: margin == Some(m) })
+                .collect()
+        }
+        "nom" => {
+            let exact = val.starts_with('=');
+            vec![ChipOption::Variants { name: val.trim_start_matches('=').trim().to_string(), on: !exact }]
+        }
+        _ => vec![],
+    }
+}
+
+impl ChipOption {
+    fn label(&self) -> String {
+        match self {
+            ChipOption::Margin { margin: 0, .. } => "Exactement".into(),
+            ChipOption::Margin { margin, .. } => format!("± {margin} ans"),
+            ChipOption::Variants { .. } => "Inclure les variantes".into(),
+        }
+    }
+
+    fn on(&self) -> bool {
+        match self {
+            ChipOption::Margin { on, .. } | ChipOption::Variants { on, .. } => *on,
+        }
+    }
+
+    /// Critère une fois l'option choisie (ou décochée, pour les variantes).
+    fn apply(&self) -> String {
+        match self {
+            ChipOption::Margin { key, year, margin: 0, .. } => format!("{key}:{year}"),
+            ChipOption::Margin { key, year, margin, .. } => format!("{key}:{year}±{margin}"),
+            ChipOption::Variants { name, on: true } => gedcom::criterion("nom", &format!("={name}")),
+            ChipOption::Variants { name, on: false } => gedcom::criterion("nom", name),
+        }
+    }
+}
+
 impl Workspace {
     /// Le texte du champ a changé (frappe, effacement, jeton supprimé).
     pub(super) fn on_search_changed(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -31,7 +101,7 @@ impl Workspace {
             let spans: Vec<_> = f.tokens().iter().map(|s| s.range()).collect();
             (f.value().to_string(), spans, f.cursor())
         };
-        let chips = gedcom::chips(scope, &text);
+        let chips = gedcom::chips(scope, &text, self.doc.as_ref().map(|d| &d.ged));
         if chips.iter().map(|c| c.0.clone()).eq(spans.iter().cloned()) {
             return;
         }
@@ -107,6 +177,38 @@ impl Workspace {
         }
     }
 
+    /// Mots libres tapés juste avant le mot en cours (« jean » dans « jean guy »),
+    /// avec le début du premier.
+    fn previous_free_words(scope: Scope, text: &str, partial: &std::ops::Range<usize>) -> (usize, Vec<String>) {
+        let mut start = partial.start;
+        let mut out: Vec<String> = Vec::new();
+        for (r, w) in words(text).into_iter().rev() {
+            if r.end > partial.start {
+                continue;
+            }
+            if w.contains(':') || gedcom::chip_label(scope, w, None).is_some() {
+                break;
+            }
+            start = r.start;
+            out.insert(0, w.to_string());
+        }
+        (start, out)
+    }
+
+    /// Plage remplacée par une proposition : le mot en cours et, pour une
+    /// personne, les mots libres qui le précèdent.
+    fn suggestion_range(scope: Scope, text: &str, consumes: usize) -> std::ops::Range<usize> {
+        let (range, _) = Self::partial_word(text);
+        if consumes <= 1 {
+            return range;
+        }
+        let before: Vec<_> = words(&text[..range.start]).into_iter().filter(|(r, _)| r.end <= range.start).collect();
+        let (_, prev) = Self::previous_free_words(scope, text, &range);
+        let n = (consumes - 1).min(prev.len());
+        let start = before.len().checked_sub(n).and_then(|i| before.get(i)).map_or(range.start, |(r, _)| r.start);
+        start..range.end
+    }
+
     /// Recalcule les propositions et le nombre de résultats de chacune.
     pub(super) fn refresh_suggestions(&mut self, cx: &App) {
         self.suggestions.clear();
@@ -115,17 +217,21 @@ impl Workspace {
         let text = self.filter.read(cx).value().to_string();
         let (range, partial) = Self::partial_word(&text);
         // Le dernier mot est déjà un critère complet : rien à proposer.
-        if gedcom::chip_label(scope, &partial).is_some() {
+        if gedcom::chip_label(scope, &partial, Some(&doc.ged)).is_some() {
             return;
         }
         let index = self.media_index.as_deref();
         let media_type = self.active_media_type();
         let present: Vec<&str> = words(&text).into_iter().map(|(_, w)| w).collect();
-        for s in doc.ged.suggest(scope, &partial, index) {
+        let (_, previous) =
+            if partial.is_empty() { (0, Vec::new()) } else { Self::previous_free_words(scope, &text, &range) };
+        let previous: Vec<&str> = previous.iter().map(String::as_str).collect();
+        for s in doc.ged.suggest(scope, &previous, &partial, index) {
             if present.iter().any(|w| w.eq_ignore_ascii_case(&s.insert)) {
                 continue;
             }
-            let query = format!("{}{} {}", &text[..range.start], s.insert, &text[range.end..]);
+            let r = Self::suggestion_range(scope, &text, s.consumes);
+            let query = format!("{}{} {}", &text[..r.start], s.insert, &text[r.end..]);
             let n = doc.ged.search(scope, &query, index, media_type.as_deref()).len();
             if n > 0 {
                 self.suggestions.push((s, n));
@@ -139,8 +245,9 @@ impl Workspace {
     /// Remplace le mot en cours par la proposition, qui devient un jeton.
     pub(super) fn accept_suggestion(&mut self, i: usize, window: &mut Window, cx: &mut Context<Self>) {
         let Some((s, _)) = self.suggestions.get(i).cloned() else { return };
+        let Some(scope) = self.view.scope() else { return };
         let text = self.filter.read(cx).value().to_string();
-        let (range, _) = Self::partial_word(&text);
+        let range = Self::suggestion_range(scope, &text, s.consumes);
         let rest = text[range.end..].trim_start();
         let next = format!("{}{} {}", &text[..range.start], s.insert, rest);
         let end = range.start + s.insert.len() + 1;
@@ -152,8 +259,94 @@ impl Workspace {
         self.on_search_changed(window, cx);
     }
 
+    /// Remplace (ou retire, si `with` est vide) un critère du champ.
+    fn replace_criterion(
+        &mut self,
+        range: std::ops::Range<usize>,
+        with: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let text = self.filter.read(cx).value().to_string();
+        if range.end > text.len() {
+            return;
+        }
+        let rest = if with.is_empty() { text[range.end..].trim_start() } else { &text[range.end..] };
+        let next = format!("{}{with}{rest}", &text[..range.start]);
+        let end = next.len();
+        self.filter.update(cx, |f, cx| {
+            f.set_value(next, window, cx);
+            f.set_selected_range(end..end, cx);
+        });
+        self.chip_menu = None;
+        self.on_search_changed(window, cx);
+    }
+
+    /// Menu d'un jeton cliqué : marge des années, variantes des noms, Retirer.
+    pub(super) fn render_chip_menu(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let m = self.chip_menu.as_ref()?;
+        let range = m.range.clone();
+        let mut list = v_flex()
+            .id("chip-menu")
+            .min_w(px(180.))
+            .p_1()
+            .gap_0p5()
+            .bg(theme::bg())
+            .border_1()
+            .border_color(theme::border())
+            .rounded(theme::RADIUS_MD)
+            .shadow_lg()
+            .occlude()
+            .text_sm()
+            .on_mouse_down_out(cx.listener(|this, _, _, cx| {
+                this.chip_menu = None;
+                cx.notify();
+            }));
+        let row = |id: usize, label: String, on: bool| {
+            h_flex()
+                .id(("chip-option", id))
+                .px_2()
+                .py_1()
+                .gap_2()
+                .items_center()
+                .rounded(theme::RADIUS_SM)
+                .cursor_pointer()
+                .hover(|d| d.bg(theme::hover()))
+                .child(
+                    div()
+                        .w(px(14.))
+                        .when(on, |d| d.child(Icon::new(IconName::Check).size(px(14.)).text_color(theme::accent()))),
+                )
+                .child(label)
+        };
+        let options = chip_options(&m.word);
+        let has_options = !options.is_empty();
+        for (i, o) in options.into_iter().enumerate() {
+            let (label, on, with) = (o.label(), o.on(), o.apply());
+            let r = range.clone();
+            list = list.child(row(i, label, on).on_click(cx.listener(move |this, _, window, cx| {
+                this.replace_criterion(r.clone(), &with, window, cx);
+            })));
+        }
+        if has_options {
+            list = list.child(div().my_0p5().h(px(1.)).bg(theme::border()));
+        }
+        list = list.child(row(99, "Retirer".into(), false).on_click(cx.listener(move |this, _, window, cx| {
+            this.replace_criterion(range.clone(), "", window, cx);
+        })));
+        Some(
+            deferred(anchored().position(m.at).snap_to_window_with_margin(px(8.)).child(list))
+                .with_priority(1)
+                .into_any_element(),
+        )
+    }
+
     fn suggestions_visible(&self) -> bool {
-        self.search_focused && !self.suggest_closed && !self.suggestions.is_empty() && self.view.scope().is_some()
+        self.search_focused
+            && self.chip_menu.is_none()
+            && !self.suggest_closed
+            && !self.suggestions.is_empty()
+            && self.view.scope().is_some()
     }
 
     /// Champ de recherche ; ↑ ↓ ↵ et Échap pilotent les propositions.
@@ -164,6 +357,12 @@ impl Workspace {
             .pb_2()
             .capture_key_down(cx.listener(|this, ev: &KeyDownEvent, window, cx| {
                 if ev.keystroke.modifiers.modified() {
+                    return;
+                }
+                if this.chip_menu.is_some() && ev.keystroke.key == "escape" {
+                    this.chip_menu = None;
+                    cx.stop_propagation();
+                    cx.notify();
                     return;
                 }
                 if !this.suggestions_visible() {
@@ -183,7 +382,18 @@ impl Workspace {
                 cx.stop_propagation();
                 cx.notify();
             }))
-            .child(Input::new(&self.filter).small().cleanable(true))
+            .child(Input::new(&self.filter).small().cleanable(true).on_token_click({
+                let ws = cx.entity().downgrade();
+                move |ev, _, cx| {
+                    let (range, word) = (ev.range(), ev.token().id().to_string());
+                    let at = ev.bounds().bottom_left() + point(px(0.), px(4.));
+                    ws.update(cx, |this, cx| {
+                        this.chip_menu = Some(ChipMenu { range, word, at });
+                        cx.notify();
+                    })
+                    .ok();
+                }
+            }))
     }
 
     /// Critères mal écrits (`sans:truc`), seulement quand il y en a.
@@ -308,7 +518,7 @@ impl Workspace {
 fn group_icon(s: &Suggestion) -> IconName {
     match s.group {
         "Lieu" => IconName::MapPin,
-        "Nom" | "Personne" => IconName::Users,
+        "Nom" | "Personne" | "Famille" => IconName::Users,
         "Profession" => IconName::FileText,
         "Type d'acte" => IconName::BookOpen,
         "Dépôt" => IconName::Landmark,

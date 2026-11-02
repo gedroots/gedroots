@@ -213,6 +213,8 @@ pub struct Workspace {
     suggest_closed: bool,
     /// Le champ de recherche avait le focus au dernier rendu.
     search_focused: bool,
+    /// Menu d'un jeton de recherche cliqué (marge des dates, variantes des noms).
+    chip_menu: Option<filters::ChipMenu>,
     /// Saisie guidée d'un acte en cours (remplace liste, fiche et détail).
     act_editor: Option<(Entity<ActEditor>, Subscription)>,
     /// Actes de la source affichée (relus à chaque rafraîchissement de la fiche).
@@ -295,6 +297,7 @@ impl Workspace {
             suggest_sel: 0,
             suggest_closed: false,
             search_focused: false,
+            chip_menu: None,
             act_editor: None,
             source_acts: Vec::new(),
             palette: None,
@@ -1502,6 +1505,7 @@ impl Workspace {
             )
             // Propositions de la recherche, par-dessus la liste.
             .children(self.render_suggestions(cx))
+            .children(self.render_chip_menu(cx))
     }
 
     fn render_center(&self, cx: &mut Context<Self>) -> AnyElement {
