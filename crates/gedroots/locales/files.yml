@@ -1,5 +1,23 @@
 _version: 2
 # Opening, saving, importing and exporting files.
+export.title:
+  en: Export
+  fr: Exporter
+export.format:
+  en: "Format:"
+  fr: "Format :"
+export.format.gedzip:
+  en: GEDZIP (GEDCOM 7 with media)
+  fr: GEDZIP (GEDCOM 7 avec les médias)
+export.format.gedcom551:
+  en: GEDCOM 5.5.1
+  fr: GEDCOM 5.5.1
+export.format.geneanet:
+  en: GEDCOM 5.5.1 for Geneanet
+  fr: GEDCOM 5.5.1 pour Geneanet
+export.dialog_failed:
+  en: "The save dialog could not open: %{error}"
+  fr: "La fenêtre d'enregistrement n'a pas pu s'ouvrir : %{error}"
 export.default_name:
   en: tree
   fr: arbre

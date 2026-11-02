@@ -39,12 +39,40 @@ base64 = "0.22"
 velopack = "=1.2.161"
 # Name and version of the operating system, for Help › Report an Issue (already used by velopack).
 sysinfo = { version = "0.31.4", default-features = false, features = ["system"] }
+# Window of the native save dialogs with a format choice (`save_dialog.rs`); already used by GPUI.
+raw-window-handle = "0.6"
 
 # Recent files: the system's list on macOS (NSDocumentController)…
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
-objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "NSDocumentController"] }
-objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSArray", "NSString", "NSURL"] }
+# …and the Save panel with its Format pop-up (`save_dialog.rs`).
+block2 = "0.6"
+objc2-app-kit = { version = "0.3.2", default-features = false, features = [
+    "std",
+    "block2",
+    "NSApplication",
+    "NSControl",
+    "NSDocumentController",
+    "NSPanel",
+    "NSPopUpButton",
+    "NSResponder",
+    "NSSavePanel",
+    "NSButton",
+    "NSText",
+    "NSTextField",
+    "NSView",
+    "NSWindow",
+] }
+objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSArray", "NSGeometry", "NSObject", "NSString", "NSURL"] }
+
+# Save dialog with a format choice: the common dialog on Windows (same version as GPUI)…
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_System_Com", "Win32_UI_Shell", "Win32_UI_Shell_Common"] }
+
+# …and the desktop portal on Linux (same version and runtime as GPUI).
+[target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dependencies]
+ashpd = { version = "0.13", default-features = false, features = ["async-io", "file_chooser", "raw_handle", "wayland"] }
+url = "2"
 
 # Windows: icon of the executable (build.rs).
 [target.'cfg(windows)'.build-dependencies]

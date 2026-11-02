@@ -1,9 +1,11 @@
-//! File › Export:
-//! - GEDZIP with Media…: a `.gdz` archive (GEDCOM 7, chapter 4) with `gedcom.ged` and the media
-//!   files (see `gedcom::gedzip`);
-//! - GEDCOM 5.5.1… and GEDCOM for Geneanet…: a 5.5.1 `.ged` for software and websites that do not
-//!   read GEDCOM 7 (see `gedcom::gedcom551`). After the Geneanet export, its import page opens in
-//!   the browser.
+//! File › Export…: one native save dialog, whose format list offers
+//! - GEDZIP: a `.gdz` archive (GEDCOM 7, chapter 4) with `gedcom.ged` and the media files (see
+//!   `gedcom::gedzip`);
+//! - GEDCOM 5.5.1 and GEDCOM 5.5.1 for Geneanet: a 5.5.1 `.ged` for software and websites that do
+//!   not read GEDCOM 7 (see `gedcom::gedcom551`). After the Geneanet export, its import page opens
+//!   in the browser.
+//!
+//! The format is chosen in the dialog itself, like Preview's File › Export (see `save_dialog`).
 //!
 //! The export starts from the file as displayed, unsaved changes included; the `.ged` and the media
 //! are not touched. Missing files do not block the export (their `FILE` stays as is): they are
@@ -12,9 +14,11 @@
 use super::add::AddDialog;
 use super::*;
 use crate::gedzip::{self, Entry};
+use crate::save_dialog;
 use gedcom::gedcom551::Flavor;
 use rust_i18n::t;
 use std::path::Path;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// Files missing from the archive: (media, `FILE` value).
 pub(super) struct GedzipReport {
@@ -22,35 +26,79 @@ pub(super) struct GedzipReport {
     missing: Vec<(String, String)>,
 }
 
-impl Workspace {
-    pub(super) fn export_gedzip(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(doc) = &self.doc else { return };
-        let dir = doc.path.as_ref().and_then(|p| p.parent()).map(Path::to_path_buf).unwrap_or_else(dirs_home);
-        let stem = doc.path.as_ref().and_then(|p| p.file_stem()).map(|s| s.to_string_lossy().to_string());
-        let name = format!("{}.{}", stem.as_deref().unwrap_or(&t!("export.default_name")), gedcom::gedzip::EXTENSION);
-        let rx = cx.prompt_for_new_path(&dir, Some(&name));
-        cx.spawn_in(window, async move |this, cx| {
-            if let Ok(Ok(Some(p))) = rx.await {
-                let _ = this.update_in(cx, |this, window, cx| this.write_gedzip(p, window, cx));
-            }
-        })
-        .detach();
-    }
+/// Formats of File › Export…, in the order of the dialog's list.
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum ExportFormat {
+    Gedzip,
+    Gedcom551,
+    Geneanet,
+}
 
-    pub(super) fn export_gedcom(&mut self, flavor: Flavor, window: &mut Window, cx: &mut Context<Self>) {
+const FORMATS: [ExportFormat; 3] = [ExportFormat::Gedzip, ExportFormat::Gedcom551, ExportFormat::Geneanet];
+
+/// Format chosen at the last export, selected at the next one (for the session).
+static LAST_FORMAT: AtomicUsize = AtomicUsize::new(0);
+
+impl ExportFormat {
+    fn dialog_format(self) -> save_dialog::Format {
+        match self {
+            Self::Gedzip => save_dialog::Format {
+                label: t!("export.format.gedzip").into(),
+                extension: gedcom::gedzip::EXTENSION,
+                suffix: "",
+            },
+            Self::Gedcom551 => save_dialog::Format {
+                label: t!("export.format.gedcom551").into(),
+                extension: "ged",
+                suffix: " (5.5.1)",
+            },
+            Self::Geneanet => save_dialog::Format {
+                label: t!("export.format.geneanet").into(),
+                extension: "ged",
+                suffix: " (Geneanet)",
+            },
+        }
+    }
+}
+
+impl Workspace {
+    /// File › Export…: one save dialog, the format chosen in it (see `save_dialog`).
+    pub(super) fn export(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(doc) = &self.doc else { return };
-        let dir = doc.path.as_ref().and_then(|p| p.parent()).map(Path::to_path_buf).unwrap_or_else(dirs_home);
-        let stem = doc.path.as_ref().and_then(|p| p.file_stem()).map(|s| s.to_string_lossy().to_string());
-        let suffix = match flavor {
-            Flavor::Standard => "5.5.1",
-            Flavor::Geneanet => "Geneanet",
+        let directory = doc.path.as_ref().and_then(|p| p.parent()).map(Path::to_path_buf).unwrap_or_else(dirs_home);
+        let stem = doc
+            .path
+            .as_ref()
+            .and_then(|p| p.file_stem())
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_else(|| t!("export.default_name").into());
+        let request = save_dialog::Request {
+            title: t!("export.title").into(),
+            format_label: t!("export.format").into(),
+            directory,
+            stem,
+            formats: FORMATS.iter().map(|f| f.dialog_format()).collect(),
+            selected: LAST_FORMAT.load(Ordering::Relaxed),
         };
-        let name = format!("{} ({suffix}).ged", stem.as_deref().unwrap_or("arbre"));
-        let rx = cx.prompt_for_new_path(&dir, Some(&name));
+        let answer = save_dialog::prompt(window, request);
         cx.spawn_in(window, async move |this, cx| {
-            if let Ok(Ok(Some(p))) = rx.await {
-                let _ = this.update_in(cx, |this, window, cx| this.write_gedcom(flavor, p, window, cx));
-            }
+            let answer = answer.await;
+            let _ = this.update_in(cx, |this, window, cx| match answer {
+                Ok(Some(choice)) => {
+                    let Some(&format) = FORMATS.get(choice.format) else { return };
+                    LAST_FORMAT.store(choice.format, Ordering::Relaxed);
+                    match format {
+                        ExportFormat::Gedzip => this.write_gedzip(choice.path, window, cx),
+                        ExportFormat::Gedcom551 => this.write_gedcom(Flavor::Standard, choice.path, window, cx),
+                        ExportFormat::Geneanet => this.write_gedcom(Flavor::Geneanet, choice.path, window, cx),
+                    }
+                }
+                Ok(None) => {}
+                Err(e) => {
+                    this.set_error("export.dialog_failed", t!("export.dialog_failed", error = e));
+                    cx.notify();
+                }
+            });
         })
         .detach();
     }
