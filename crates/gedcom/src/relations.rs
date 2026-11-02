@@ -242,8 +242,7 @@ impl Gedcom {
                     _ => "U",
                 };
                 let new = self.create_individual("", "", other);
-                let fam = self.create_family();
-                self.set_spouse(&fam, indi)?;
+                let fam = self.union_for_spouse(indi)?;
                 self.set_spouse(&fam, &new)?;
                 Ok(new)
             }
@@ -321,8 +320,7 @@ impl Gedcom {
                 if already {
                     return Err("ces deux personnes forment déjà un couple".into());
                 }
-                let fam = self.create_family();
-                self.set_spouse(&fam, indi)?;
+                let fam = self.union_for_spouse(indi)?;
                 self.set_spouse(&fam, other)
             }
             Relation::Child => {
@@ -354,6 +352,23 @@ impl Gedcom {
         self.remove_link(indi, "FAMS", fam);
         self.remove_link(indi, "FAMC", fam);
         self.prune_family(fam);
+    }
+
+    /// Union où placer un nouveau conjoint de `indi` : son union encore sans
+    /// conjoint (parent seul avec ses enfants), sinon une nouvelle union.
+    fn union_for_spouse(&mut self, indi: &str) -> Result<String, String> {
+        let open = self.individual(indi).ok_or("personne introuvable")?.fams().into_iter().find(|f| {
+            self.family(f).is_some_and(|f| {
+                let spouses: Vec<&str> = [f.husband(), f.wife()].into_iter().flatten().collect();
+                spouses == [indi]
+            })
+        });
+        if let Some(f) = open {
+            return Ok(f.to_string());
+        }
+        let fam = self.create_family();
+        self.set_spouse(&fam, indi)?;
+        Ok(fam)
     }
 
     /// Supprime la famille si elle ne relie plus personne (au plus un membre et aucun événement).

@@ -11,20 +11,20 @@ et suit le [design system GEDRoots](design.md) (fonds neutres et touches de viol
 
 ## Fonctionnalités
 
-- **Tout est dans la barre de menus** (Fichier, Édition, Individu, Famille, Source, Média,
+- **Tout est dans la barre de menus** (Fichier, Édition, Individu, Source, Média,
   Affichage, Aide) : pas de barre d'outils, l'écran reste aux données. Menus natifs
   sous macOS ; sous Linux et Windows, les mêmes menus dans le haut de la fenêtre. Les commandes
   qui ne s'appliquent pas à la sélection sont grisées (macOS) ou sans effet.
 - **Palette de commandes** (`⌘⇧P` / `Ctrl+Maj+P`) : toutes les commandes applicables, recherche
-  sans accents. Raccourcis : `⌘1`…`⌘7` listes, `⌥⌘1`…`⌥⌘3` arbre/fiche/GEDCOM, `⌘F`
+  sans accents. Raccourcis : `⌘1`…`⌘8` listes et pages, `⌥⌘1`…`⌥⌘3` arbre/fiche/GEDCOM, `⌘F`
   rechercher, `⌘⇧N` nouvel élément, `⌘⇧H` individu racine, `⌘=` / `⌘-` générations de l'éventail,
   `⌘⇧S` enregistrer sous.
 - **Clic droit partout** : lignes des listes (et le fond, pour créer), cases des arbres et de
   l'éventail, cases vides (nouvelle personne ou personne existante), événements, proches,
-  membres d'une famille, liens et vignettes du panneau de détail, repères et fond de la carte
+  liens et vignettes du panneau de détail, repères et fond de la carte
   (« Placer ce lieu ici »). Le menu agit sur l'élément cliqué sans le sélectionner, avec les
   mêmes commandes que la barre de menus.
-- **Événements modifiables** : un clic sur un événement (individu ou famille) le rouvre dans
+- **Événements modifiables** : un clic sur un événement (individu ou union) le rouvre dans
   la même fenêtre que l'ajout (type, précision, date, lieu suggéré, source) ; on peut aussi le
   supprimer. Notes, âge, médias et autres citations de l'événement sont conservés.
 - **Chronologie unifiée** : la fiche d'un individu montre ses événements et ceux de ses unions
@@ -36,9 +36,14 @@ et suit le [design system GEDRoots](design.md) (fonds neutres et touches de viol
   de lier un média existant ou d'en détacher.
 - **Individus** : liste avec recherche sans accents ni casse et critères
   (`né:1800-1850`, `mort:<1900`, `vécu:1870`, `lieu:troyes`, `prof:meunier`, `sexe:f`,
-  `sans:source`, `sans:parents`, `avec:média`, `sosa:1-63`…), filtres rapides (Affichage › Filtrer la liste) ;
+  `sans:source`, `sans:parents`, `sans:mariage`, `avec:média`, `sosa:1-63`…), filtres rapides (Affichage › Filtrer la liste) ;
   fiche avec portrait, galerie d'images, événements (dates en français, calendrier républicain compris), sources citées,
   famille (parents, conjoints, enfants) cliquable.
+- **Pas d'onglet Familles** : une union (`FAM`) se gère depuis la fiche de chacun des conjoints
+  (événements d'union, enfants, photos et notes du couple). Avec plusieurs unions, la fenêtre
+  « + » propose « Enfant avec … » pour chacune, et le clic droit sur un conjoint « Ajouter un
+  enfant à ce couple ». Un conjoint ajouté à un parent seul rejoint son union existante. Un lien
+  vers une famille (Qualité, « Cité par »…) ouvre la fiche d'un conjoint.
 - **Arbres** : **arbre libre** (ascendants à droite, descendants et conjoints à gauche, frères et
   sœurs au-dessus ; on s'y déplace en glissant ou à la molette, les générations se chargent au fur et
   à mesure dans les deux sens, une mini-carte montre où l'on est, double-clic pour recentrer) et
@@ -47,11 +52,11 @@ et suit le [design system GEDRoots](design.md) (fonds neutres et touches de viol
   sœur), ou **lier une personne existante** via un sélecteur qui propose d'abord les dates
   plausibles ; détacher une personne d'une famille. Les liens `FAMS`/`FAMC` ↔ `HUSB`/`WIFE`/`CHIL`
   restent cohérents, et une famille vidée est supprimée.
-- **Photos et actes** : glisser-déposer ou choisir des fichiers sur une personne, une famille ou
+- **Photos et actes** : glisser-déposer ou choisir des fichiers sur une personne ou
   une source ; suggestions des fichiers du dossier (`Actes/`, `Portraits/`…) dont le nom contient
   celui de la personne ; les fichiers du dossier sans média sont dans Qualité › Fichiers à
   rattacher (menu Média › Fichiers à rattacher).
-- **Familles, sources, dépôts, médias, notes partagées** : liste, éditeur visuel,
+- **Sources, dépôts, médias, notes partagées** : liste, éditeur visuel,
   et panneau « Utilisé par / Liens » pour naviguer entre les enregistrements.
 - **Lieux** : index de tous les `PLAC` du fichier, renommage global et coordonnées (`MAP`).
 - **Carte des lieux** : tous les lieux ayant des coordonnées sur une carte OpenStreetMap
@@ -111,7 +116,7 @@ et suit le [design system GEDRoots](design.md) (fonds neutres et touches de viol
   [docs/extensions.md](docs/extensions.md)), jamais dans un fichier annexe.
 - Les identifiants GEDCOM n'apparaissent pas dans l'interface : liens choisis par nom
   (époux, dépôt…), identifiant accessible via **… → Copier l'ID** et l'onglet GEDCOM.
-- **Éditeur visuel** pour les enregistrements courants (individu, famille, source, dépôt,
+- **Éditeur visuel** pour les enregistrements courants (individu, source, dépôt,
   média, note) : seuls les champs affichés sont modifiés, tout le reste est conservé.
 - **Éditeur GEDCOM brut** pour chaque enregistrement, avec validation ; changer un
   identifiant met à jour tous les pointeurs. **Autocomplétion** selon le schéma GEDCOM 7
@@ -153,7 +158,7 @@ et suit le [design system GEDRoots](design.md) (fonds neutres et touches de viol
 - **Lien de parenté** (menu Individu › Lien de parenté avec…) : « cousine issue de germain »,
   « oncle à la mode de Bretagne », demi-frère, beau-père… avec le chemin par l'ancêtre commun
   et le degré civil, affiché dans le panneau de l'individu.
-- **Statistiques** (`⌘9` / `Ctrl+9`, menu Affichage) : une page avec les patronymes et prénoms
+- **Statistiques** (`⌘8` / `Ctrl+8`, menu Affichage) : une page avec les patronymes et prénoms
   fréquents, la longévité par siècle, l'âge au mariage, la complétude de l'ascendance de
   l'individu racine par génération et l'implexe.
 - Enregistrement **sans perte** : un fichier relu puis réécrit est identique à l'octet près

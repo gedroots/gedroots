@@ -258,15 +258,8 @@ impl RecordEditor {
                         place_field!("Décès — lieu", f.death.place);
                         long_text = Some(("Note", textarea(window, cx, &f.note)));
                     }
-                    RecordKind::Family => {
-                        let f = FamilyForm::read(node);
-                        for (label, x) in [("Époux", &f.husband), ("Épouse", &f.wife)] {
-                            let state = picker(ged, RecordKind::Individual, x, window, cx);
-                            pickers.push(Picker { label, placeholder: "Choisir un individu…", state });
-                        }
-                        date_field!("Mariage — date", f.marriage);
-                        place_field!("Mariage — lieu", f.marriage.place);
-                    }
+                    // Les unions se gèrent depuis la fiche des conjoints.
+                    RecordKind::Family => {}
                     RecordKind::Source => {
                         let f = SourceForm::read(node);
                         field!("Titre", "", f.title);
@@ -384,12 +377,7 @@ impl RecordEditor {
                         note,
                     }
                     .apply(node),
-                    RecordKind::Family => FamilyForm {
-                        husband: self.picked(0, cx),
-                        wife: self.picked(1, cx),
-                        marriage: self.event(0, cx)?,
-                    }
-                    .apply(node),
+                    RecordKind::Family => {}
                     RecordKind::Source => {
                         let before = SourceContent::read(node);
                         let events = if v[4].trim() == before.events_label() {
@@ -432,9 +420,6 @@ impl RecordEditor {
                     RecordKind::SharedNote => node.set_text(&note),
                     RecordKind::Submitter => node.set_child_val("NAME", &v[0]),
                 }
-                if *kind == RecordKind::Family {
-                    sync_family_links(ged, xref);
-                }
                 Ok(format!("{} : modifications appliquées", ged.record_label(xref)))
             }
         }
@@ -452,23 +437,5 @@ impl RecordEditor {
         let new_xref = node.xref.clone().unwrap_or_default();
         ged.replace(xref, node)?;
         Ok(new_xref)
-    }
-}
-
-/// Après édition d'une famille, garde les `FAMS` des époux cohérents.
-fn sync_family_links(ged: &mut Gedcom, fam: &str) {
-    let Some(f) = ged.family(fam) else { return };
-    let spouses: Vec<String> = [f.husband(), f.wife()].into_iter().flatten().map(str::to_string).collect();
-    let ptr = format!("@{fam}@");
-    let indis: Vec<String> = ged.records_of(RecordKind::Individual).filter_map(|r| r.xref.clone()).collect();
-    for x in indis {
-        let is_spouse = spouses.contains(&x);
-        let Some(node) = ged.get_mut(&x) else { continue };
-        let has = node.children.iter().any(|c| c.tag == "FAMS" && c.val() == ptr);
-        if is_spouse && !has {
-            node.children.push(Node::with_value("FAMS", ptr.clone()));
-        } else if !is_spouse && has {
-            node.children.retain(|c| !(c.tag == "FAMS" && c.val() == ptr));
-        }
     }
 }

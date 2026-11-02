@@ -8,7 +8,7 @@ use crate::editor::{PickerState, choice, picker};
 
 pub(super) enum AddDialog {
     Event(Box<EventDialog>),
-    /// Proches d'un individu, ou membres d'une famille.
+    /// Proches d'un individu.
     Relatives {
         target: String,
     },
@@ -262,10 +262,9 @@ impl Workspace {
                 };
                 (format!("{what} · {}", g.record_label(&d.owner)), self.event_body(d, cx))
             }
-            AddDialog::Relatives { target } => match g.family(target) {
-                Some(_) => (format!("Membres · {}", g.record_label(target)), self.family_body(target, cx)),
-                None => (format!("Proches · {}", g.record_label(target)), self.relatives_body(target, cx)),
-            },
+            AddDialog::Relatives { target } => {
+                (format!("Proches · {}", g.record_label(target)), self.relatives_body(target, cx))
+            }
             AddDialog::WebLink(d) => (self.weblink_dialog_title(d), self.weblink_body(d, cx)),
             AddDialog::Import(d) => (self.import_title(d), self.import_body(d, cx)),
             AddDialog::Settings(d) => ("Réglages du fichier".into(), self.settings_body(d, cx)),
@@ -405,7 +404,7 @@ impl Workspace {
     /// Une ligne « Rôle : Nouveau · Existant… ».
     fn relative_row(
         &self,
-        label: &'static str,
+        label: String,
         new: Option<RowAction>,
         existing: RowAction,
         cx: &mut Context<Self>,
@@ -415,7 +414,7 @@ impl Workspace {
             .gap_2()
             .items_center()
             .py_1()
-            .child(div().flex_1().child(label))
+            .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(label.clone()))
             .when_some(new, |d, new| {
                 let new = Rc::new(new);
                 d.child(
@@ -446,45 +445,42 @@ impl Workspace {
     fn relatives_body(&self, indi: &str, cx: &mut Context<Self>) -> AnyElement {
         let g = &self.doc.as_ref().unwrap().ged;
         let (father, mother) = g.parents(indi);
-        let rels = Relation::ALL.into_iter().filter(|r| match r {
-            Relation::Father => father.is_none(),
-            Relation::Mother => mother.is_none(),
-            _ => true,
-        });
+        // Plusieurs unions : on choisit celle de l'enfant (« Enfant avec Marie »).
+        let unions = g.individual(indi).map(|i| i.unions(g)).unwrap_or_default();
         let mut rows = Vec::new();
-        for rel in rels.collect::<Vec<_>>() {
+        for rel in Relation::ALL {
+            match rel {
+                Relation::Father if father.is_some() => continue,
+                Relation::Mother if mother.is_some() => continue,
+                Relation::Child if unions.len() > 1 => {
+                    for (fam, spouse) in &unions {
+                        let label = match spouse {
+                            Some(s) => format!("Enfant avec {}", g.record_label(s)),
+                            None => "Enfant (conjoint inconnu)".into(),
+                        };
+                        let (a, b) = (fam.clone(), fam.clone());
+                        rows.push(self.relative_row(
+                            label,
+                            Some(Box::new(move |this, w, cx| this.add_family_child(a.clone(), w, cx))),
+                            Box::new(move |this, w, cx| {
+                                this.open_picker(PickPurpose::FamilyChild { fam: b.clone() }, w, cx)
+                            }),
+                            cx,
+                        ));
+                    }
+                    continue;
+                }
+                _ => {}
+            }
             let (a, b) = (indi.to_string(), indi.to_string());
             rows.push(self.relative_row(
-                rel.label_fr(),
+                rel.label_fr().to_string(),
                 Some(Box::new(move |this, w, cx| this.add_relative(a.clone(), rel, w, cx))),
                 Box::new(move |this, w, cx| this.open_picker(PickPurpose::Relative { indi: b.clone(), rel }, w, cx)),
                 cx,
             ));
         }
         v_flex().children(rows).into_any_element()
-    }
-
-    fn family_body(&self, fam: &str, cx: &mut Context<Self>) -> AnyElement {
-        let g = &self.doc.as_ref().unwrap().ged;
-        let full = g.family(fam).is_some_and(|f| f.husband().is_some() && f.wife().is_some());
-        let (a, b, c) = (fam.to_string(), fam.to_string(), fam.to_string());
-        let child = self.relative_row(
-            "Enfant",
-            Some(Box::new(move |this, w, cx| this.add_family_child(a.clone(), w, cx))),
-            Box::new(move |this, w, cx| this.open_picker(PickPurpose::FamilyChild { fam: b.clone() }, w, cx)),
-            cx,
-        );
-        let parent = if full {
-            None
-        } else {
-            Some(self.relative_row(
-                "Parent",
-                None,
-                Box::new(move |this, w, cx| this.open_picker(PickPurpose::FamilySpouse { fam: c.clone() }, w, cx)),
-                cx,
-            ))
-        };
-        v_flex().child(child).children(parent).into_any_element()
     }
 }
 
