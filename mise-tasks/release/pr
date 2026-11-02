@@ -15,9 +15,6 @@ fi
 
 version=$(mise run --quiet release:version)
 branch=release
-git config user.name "github-actions[bot]"
-git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-git checkout -B "$branch"
 
 # The app's version (Cargo.toml and Cargo.lock): the About box, Velopack's packages.
 sed -i.bak "0,/^version = \".*\"/s//version = \"$version\"/" crates/gedroots/Cargo.toml
@@ -27,9 +24,28 @@ cargo update --workspace --offline 2>/dev/null || cargo update --workspace
 git cliff --tag "v$version" --unreleased --prepend CHANGELOG.md
 notes=$(git cliff --tag "v$version" --unreleased --strip all | tail -n +3)
 
-git add crates/gedroots/Cargo.toml Cargo.lock CHANGELOG.md
-git commit -m "chore: release $version"
-git push --force origin "$branch"
+# The commit is created through GitHub's API rather than `git push`: GitHub signs the commits it
+# creates with the workflow's token, as the branch rules require (verified signatures).
+repo=${GITHUB_REPOSITORY:?}
+base=$(git rev-parse HEAD)
+if gh api "repos/$repo/git/ref/heads/$branch" > /dev/null 2>&1; then
+	gh api -X PATCH "repos/$repo/git/refs/heads/$branch" -f sha="$base" -F force=true > /dev/null
+else
+	gh api -X POST "repos/$repo/git/refs" -f ref="refs/heads/$branch" -f sha="$base" > /dev/null
+fi
+files=(crates/gedroots/Cargo.toml Cargo.lock CHANGELOG.md)
+additions=$(for f in "${files[@]}"; do jq -n --arg path "$f" --arg contents "$(base64 -w0 "$f")" '{path: $path, contents: $contents}'; done | jq -s .)
+jq -n --arg repo "$repo" --arg branch "$branch" --arg head "$base" --arg message "chore: release $version" \
+	--argjson additions "$additions" '{
+		query: "mutation($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { oid } } }",
+		variables: {input: {
+			branch: {repositoryNameWithOwner: $repo, branchName: $branch},
+			expectedHeadOid: $head,
+			message: {headline: $message},
+			fileChanges: {additions: $additions}
+		}}
+	}' | gh api graphql --input - --jq .data.createCommitOnBranch.commit.oid
+git checkout -- "${files[@]}" 2> /dev/null || true
 
 title="chore: release $version"
 body=$(printf 'Merging this pull request publishes GEDRoots %s: tag, installers for macOS, Windows and Linux, update packages, release notes.\n\n%s\n' "$version" "$notes")
