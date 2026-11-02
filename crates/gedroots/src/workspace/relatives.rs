@@ -136,6 +136,7 @@ impl Workspace {
         let doc = self.doc.as_mut().unwrap();
         match f(&mut doc.ged) {
             Ok((msg, open)) => {
+                self.apply_pending_places();
                 self.rebuild_rows(cx);
                 match open {
                     Some(x) => {

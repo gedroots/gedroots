@@ -1,6 +1,6 @@
 //! Carte des lieux : tuiles OpenStreetMap mises en cache sur le disque, un repère par
-//! lieu ayant des coordonnées (`PLAC.MAP`), géocodage des lieux qui n'en ont pas
-//! (Nominatim, à la demande) et placement à la main d'un clic.
+//! lieu ayant des coordonnées (`PLAC.MAP`) et placement à la main d'un clic.
+//! La même vue, en mode « sélecteur », sert à poser l'épingle d'un nouveau lieu.
 //!
 //! Hors ligne, la carte utilise les tuiles déjà en cache et affiche les repères sur
 //! un quadrillage : les coordonnées viennent du fichier GEDCOM, pas d'Internet.
@@ -17,15 +17,12 @@ use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 use std::collections::HashSet;
 use std::path::PathBuf;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 const MIN_ZOOM: u8 = 2;
 const MAX_ZOOM: u8 = 18;
 const MAX_INFLIGHT: usize = 6;
 const DEFAULT_TILES: &str = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
-const DEFAULT_GEOCODER: &str = "https://nominatim.openstreetmap.org/search";
 const USER_AGENT: &str =
     concat!("GEDRoots/", env!("CARGO_PKG_VERSION"), " (+https://github.com/antoninguyot/gedroots)");
 
@@ -33,7 +30,8 @@ const USER_AGENT: &str =
 pub enum MapEvent {
     /// Un repère a été cliqué.
     Select(String),
-    /// Coordonnées trouvées (géocodage) ou posées à la main, à écrire dans le GEDCOM.
+    /// Coordonnées posées à la main, à écrire dans le GEDCOM (en mode sélecteur :
+    /// nouvelle position de l'épingle, `name` vide).
     /// `checkpoint` : créer un point d'annulation (faux pour la suite d'une même série).
     SetCoords { name: String, lat: f64, lon: f64, checkpoint: bool },
 }
@@ -46,19 +44,12 @@ struct Marker {
     uses: usize,
 }
 
-struct GeocodeJob {
-    total: usize,
-    done: usize,
-    found: usize,
-    cancel: Arc<AtomicBool>,
-}
-
 type TileKey = (u8, u32, u32);
 
 pub struct MapView {
     markers: Vec<Marker>,
-    /// Lieux sans coordonnées : nom et requêtes de géocodage.
-    missing: Vec<(String, Vec<String>)>,
+    /// Nombre de lieux sans coordonnées.
+    missing: usize,
     selected: Option<String>,
     /// Centre de la vue, en coordonnées « monde » au zoom 0.
     center: (f64, f64),
@@ -78,8 +69,10 @@ pub struct MapView {
     pending: HashSet<TileKey>,
     failed: HashSet<TileKey>,
     agent: ureq::Agent,
-    job: Option<GeocodeJob>,
-    message: Option<(SharedString, bool)>,
+    /// Sélecteur de position (fenêtre « Nouveau lieu ») : une seule épingle, chaque clic la déplace.
+    picker: bool,
+    /// Sélecteur : position du bouton enfoncé, pour distinguer un clic d'un glissé.
+    press: Option<Point<Pixels>>,
 }
 
 impl EventEmitter<MapEvent> for MapView {}
@@ -93,7 +86,7 @@ impl MapView {
             .build();
         Self {
             markers: Vec::new(),
-            missing: Vec::new(),
+            missing: 0,
             selected: None,
             center: project(46.6, 2.4),
             zoom: 5,
@@ -109,16 +102,44 @@ impl MapView {
             pending: HashSet::new(),
             failed: HashSet::new(),
             agent,
-            job: None,
-            message: None,
+            picker: false,
+            press: None,
         }
+    }
+
+    /// Petite carte pour choisir la position d'un lieu : épingle en `pin`, vue centrée sur
+    /// `pin` ou, à défaut, sur `near` (lieu parent) ; sinon la France.
+    pub fn picker(pin: Option<(f64, f64)>, near: Option<(f64, f64)>) -> Self {
+        let mut m = Self::new();
+        m.picker = true;
+        m.needs_fit = false;
+        m.selected = Some(String::new());
+        if let Some(c) = pin.or(near) {
+            m.center = project(c.0, c.1);
+            m.zoom = 12;
+        }
+        if let Some((lat, lon)) = pin {
+            m.set_pin(lat, lon);
+        }
+        m
+    }
+
+    fn set_pin(&mut self, lat: f64, lon: f64) {
+        self.markers = vec![Marker { name: String::new(), label: "".into(), world: project(lat, lon), uses: 1 }];
+    }
+
+    /// « Placer sur la carte » : le prochain clic sur la carte place ce lieu.
+    pub fn start_placing(&mut self, name: String, cx: &mut Context<Self>) {
+        self.selected = Some(name);
+        self.placing = true;
+        cx.notify();
     }
 
     /// Met à jour la liste des lieux (après chaque modification du document).
     pub fn set_places(&mut self, places: &[Place], cx: &mut Context<Self>) {
         let had_markers = !self.markers.is_empty();
         self.markers.clear();
-        self.missing.clear();
+        self.missing = 0;
         for p in places {
             match p.coords() {
                 Some((lat, lon)) => self.markers.push(Marker {
@@ -127,7 +148,7 @@ impl MapView {
                     world: project(lat, lon),
                     uses: p.uses,
                 }),
-                None => self.missing.push((p.name.clone(), p.geocode_queries())),
+                None => self.missing += 1,
             }
         }
         // Les plus utilisés dessinés en dernier, donc au-dessus.
@@ -261,97 +282,6 @@ impl MapView {
     }
 
     // ------------------------------------------------------------------
-    // Géocodage
-    // ------------------------------------------------------------------
-
-    /// Localise un lieu sans coordonnées (Qualité › Localiser…), un seul à la fois.
-    pub fn geocode_place(&mut self, name: String, cx: &mut Context<Self>) {
-        if !self.online {
-            self.message = Some(("Carte hors ligne : passez-la en ligne pour localiser le lieu".into(), true));
-            cx.notify();
-            return;
-        }
-        self.geocode(vec![name], cx);
-    }
-
-    fn geocode(&mut self, names: Vec<String>, cx: &mut Context<Self>) {
-        if self.job.is_some() || names.is_empty() {
-            return;
-        }
-        let todo: Vec<(String, Vec<String>)> =
-            self.missing.iter().filter(|(n, _)| names.contains(n)).cloned().collect();
-        let cancel = Arc::new(AtomicBool::new(false));
-        self.job = Some(GeocodeJob { total: todo.len(), done: 0, found: 0, cancel: cancel.clone() });
-        self.message = None;
-        let agent = self.agent.clone();
-        let url = std::env::var("GEDROOTS_GEOCODER").unwrap_or_else(|_| DEFAULT_GEOCODER.into());
-        cx.spawn(async move |this, cx| {
-            let mut first = true;
-            let mut error = None;
-            for (name, queries) in todo {
-                let mut hit = None;
-                for q in queries {
-                    if cancel.load(Ordering::Relaxed) {
-                        break;
-                    }
-                    let (agent, url) = (agent.clone(), url.clone());
-                    let res = cx.background_spawn(async move { nominatim(&agent, &url, &q) }).await;
-                    // Règle d'usage de Nominatim : au plus une requête par seconde.
-                    cx.background_executor().timer(Duration::from_millis(1100)).await;
-                    match res {
-                        Ok(Some(c)) => {
-                            hit = Some(c);
-                            break;
-                        }
-                        Ok(None) => {}
-                        Err(e) => {
-                            error = Some(e);
-                            break;
-                        }
-                    }
-                }
-                if cancel.load(Ordering::Relaxed) || error.is_some() {
-                    break;
-                }
-                let checkpoint = first && hit.is_some();
-                let alive = this.update(cx, |this, cx| {
-                    if let Some(job) = &mut this.job {
-                        job.done += 1;
-                        job.found += usize::from(hit.is_some());
-                    }
-                    if let Some((lat, lon)) = hit {
-                        cx.emit(MapEvent::SetCoords { name, lat, lon, checkpoint });
-                    }
-                    cx.notify();
-                });
-                if alive.is_err() {
-                    return;
-                }
-                first &= hit.is_none();
-            }
-            let _ = this.update(cx, |this, cx| {
-                if let Some(job) = this.job.take() {
-                    this.message = Some(match error {
-                        Some(e) => (format!("Géocodage interrompu : {e}").into(), true),
-                        None => (
-                            format!(
-                                "{} lieu(x) localisé(s) sur {}{}",
-                                job.found,
-                                job.done,
-                                if job.done < job.total { " (arrêté)" } else { "" }
-                            )
-                            .into(),
-                            false,
-                        ),
-                    });
-                }
-                cx.notify();
-            });
-        })
-        .detach();
-    }
-
-    // ------------------------------------------------------------------
     // Rendu
     // ------------------------------------------------------------------
 
@@ -441,11 +371,14 @@ impl MapView {
                     .top(px(y - 9.))
                     .size(px(18.))
                     .rounded_full()
-                    .bg(theme::warn())
+                    .bg(if self.picker { theme::accent() } else { theme::warn() })
                     .border_2()
                     .border_color(theme::text())
                     .into_any_element(),
             );
+            if m.label.is_empty() {
+                return out;
+            }
             out.push(
                 div()
                     .absolute()
@@ -493,47 +426,33 @@ impl MapView {
                             .label("−")
                             .on_click(cx.listener(|this, _, _, cx| this.zoom_by(-1, None, cx))),
                     )
-                    .child(Button::new("fit").ghost().xsmall().label("Tout afficher").on_click(cx.listener(
-                        |this, _, _, cx| {
-                            this.fit();
-                            cx.notify();
-                        },
-                    ))),
-            )
-            .child(
-                pill().child(
-                    Button::new("online")
-                        .ghost()
-                        .xsmall()
-                        .label(if self.online { "● En ligne" } else { "○ Hors ligne" })
-                        .tooltip(if self.online {
-                            "Les tuiles manquantes sont téléchargées depuis OpenStreetMap puis gardées en cache"
-                        } else {
-                            "Seules les tuiles déjà en cache sont affichées ; aucune connexion"
-                        })
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            this.online = !this.online;
-                            this.failed.clear();
-                            cx.notify();
-                        })),
-                ),
-            )
-            .child(div().flex_1())
-            .when_some(self.job.as_ref(), |d, job| {
-                let cancel = job.cancel.clone();
-                d.child(
-                    pill()
-                        .child(
-                            div()
-                                .px_1()
-                                .text_xs()
-                                .child(format!("Localisation… {}/{} · {} trouvé(s)", job.done, job.total, job.found)),
-                        )
-                        .child(Button::new("geocode-stop").ghost().xsmall().label("Arrêter").on_click(
-                            move |_, _, _| {
-                                cancel.store(true, Ordering::Relaxed);
+                    .when(!self.picker, |d| {
+                        d.child(Button::new("fit").ghost().xsmall().label("Tout afficher").on_click(cx.listener(
+                            |this, _, _, cx| {
+                                this.fit();
+                                cx.notify();
                             },
-                        )),
+                        )))
+                    }),
+            )
+            .when(!self.picker, |d| {
+                d.child(
+                    pill().child(
+                        Button::new("online")
+                            .ghost()
+                            .xsmall()
+                            .label(if self.online { "● En ligne" } else { "○ Hors ligne" })
+                            .tooltip(if self.online {
+                                "Les tuiles manquantes sont téléchargées depuis OpenStreetMap puis gardées en cache"
+                            } else {
+                                "Seules les tuiles déjà en cache sont affichées ; aucune connexion"
+                            })
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.online = !this.online;
+                                this.failed.clear();
+                                cx.notify();
+                            })),
+                    ),
                 )
             })
     }
@@ -559,7 +478,7 @@ impl Render for MapView {
         let markers = self.render_markers(cx);
         let entity = cx.entity().downgrade();
         let shown = self.markers.len();
-        let missing = self.missing.len();
+        let missing = self.missing;
         div()
             .id("map")
             .flex_1()
@@ -589,7 +508,11 @@ impl Render for MapView {
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(|this, ev: &MouseDownEvent, _, cx| {
-                    if this.placing {
+                    if this.picker {
+                        // Sélecteur : glisser déplace la carte, un simple clic pose l'épingle.
+                        this.press = Some(ev.position);
+                        this.drag = Some(ev.position);
+                    } else if this.placing {
                         let (x, y) = this.to_world(ev.position);
                         let (lat, lon) = unproject(x.rem_euclid(TILE_SIZE), y.clamp(0., TILE_SIZE));
                         this.placing = false;
@@ -618,8 +541,17 @@ impl Render for MapView {
             }))
             .on_mouse_up(
                 MouseButton::Left,
-                cx.listener(|this, _, _, cx| {
+                cx.listener(|this, ev: &MouseUpEvent, _, cx| {
                     this.drag = None;
+                    if let Some(at) = this.press.take().filter(|_| this.picker) {
+                        let moved = f32::from((ev.position.x - at.x).abs()) + f32::from((ev.position.y - at.y).abs());
+                        if moved < 4. {
+                            let (x, y) = this.to_world(ev.position);
+                            let (lat, lon) = unproject(x.rem_euclid(TILE_SIZE), y.clamp(0., TILE_SIZE));
+                            this.set_pin(lat, lon);
+                            cx.emit(MapEvent::SetCoords { name: String::new(), lat, lon, checkpoint: true });
+                        }
+                    }
                     cx.notify();
                 }),
             )
@@ -656,15 +588,13 @@ impl Render for MapView {
                     .text_xs()
                     .bg(theme::panel().opacity(0.85))
                     .text_color(theme::muted())
-                    .child(format!("{shown} lieu(x) sur la carte"))
-                    .when(missing > 0, |d| {
-                        d.child(div().text_color(theme::warn()).child(format!("{missing} sans coordonnées")))
-                    })
-                    .when_some(self.message.clone(), |d, (m, err)| {
-                        d.child(div().text_color(if err { theme::danger() } else { theme::ok() }).child(m))
+                    .when(!self.picker, |d| {
+                        d.child(format!("{shown} lieu(x) sur la carte")).when(missing > 0, |d| {
+                            d.child(div().text_color(theme::warn()).child(format!("{missing} sans coordonnées")))
+                        })
                     })
                     .child(div().flex_1())
-                    .child(format!("zoom {}", self.zoom))
+                    .when(!self.picker, |d| d.child(format!("zoom {}", self.zoom)))
                     .child("© les contributeurs d'OpenStreetMap"),
             )
             .context_menu(background_menu(cx.entity().downgrade()))
@@ -715,7 +645,7 @@ fn background_menu(
         let Some(this) = map.upgrade() else { return menu };
         let (selected, pos) = {
             let this = this.read(cx);
-            (this.selected.clone(), this.menu_pos.get())
+            (this.selected.clone().filter(|s| !s.is_empty()), this.menu_pos.get())
         };
         menu.when_some(selected.zip(pos), |m, (name, pos)| {
             let short = gedcom::short_place(&name).to_string();
@@ -767,22 +697,6 @@ fn download(agent: &ureq::Agent, url: &str, path: &std::path::Path) -> Result<()
     let tmp = path.with_extension("part");
     std::fs::write(&tmp, &bytes).map_err(|e| e.to_string())?;
     std::fs::rename(tmp, path).map_err(|e| e.to_string())
-}
-
-/// Première réponse de Nominatim pour une recherche plein texte.
-fn nominatim(agent: &ureq::Agent, url: &str, q: &str) -> Result<Option<(f64, f64)>, String> {
-    let resp = agent
-        .get(url)
-        .query("format", "jsonv2")
-        .query("limit", "1")
-        .query("accept-language", "fr")
-        .query("q", q)
-        .call()
-        .map_err(|e| e.to_string())?;
-    let v: serde_json::Value = resp.into_json().map_err(|e| e.to_string())?;
-    let first = v.as_array().and_then(|a| a.first());
-    let num = |k: &str| first.and_then(|f| f.get(k)).and_then(|x| x.as_str()).and_then(|s| s.parse::<f64>().ok());
-    Ok(num("lat").zip(num("lon")))
 }
 
 use std::io::Read as _;

@@ -7,6 +7,7 @@
 //! - [`schema`] : schéma GEDCOM 7 (sous-structures permises, types de valeurs) ;
 //! - [`complete`] : autocomplétion du texte GEDCOM brut ;
 //! - [`geo`] : coordonnées des lieux (`MAP`) et projection de la carte ;
+//! - [`gazetteer`] : création de lieux (découpage selon le format, lieux-dits, `EXID`) ;
 //! - [`search`] : recherche et filtres sur les individus ;
 //! - [`relations`] : ajout/liaison/suppression de proches, lieux et médias ;
 //! - [`events`] : modification et suppression des événements ;
@@ -32,6 +33,7 @@ pub mod custom;
 pub mod date;
 pub mod document;
 pub mod events;
+pub mod gazetteer;
 pub mod gedzip;
 pub mod geo;
 pub mod import;

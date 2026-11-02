@@ -8,6 +8,7 @@ mod commands;
 mod completion;
 mod date_field;
 mod editor;
+mod gazetteer;
 mod gedzip;
 mod images;
 mod map;
@@ -25,8 +26,34 @@ use workspace::Workspace;
 gpui_kit::assets::icon_assets!(
     ExtraIcons,
     [
-        Users, Heart, BookOpen, MapPin, Image, Images, Landmark, StickyNote, FolderOpen, Undo2, Save, Plus, GitFork,
-        Pencil, Code, Ellipsis, Copy, House, Star, Trash, Network, Library, Crop, UserPlus, Calendar,
+        Users,
+        Heart,
+        BookOpen,
+        MapPin,
+        Globe,
+        CornerDownRight,
+        Locate,
+        Image,
+        Images,
+        Landmark,
+        StickyNote,
+        FolderOpen,
+        Undo2,
+        Save,
+        Plus,
+        GitFork,
+        Pencil,
+        Code,
+        Ellipsis,
+        Copy,
+        House,
+        Star,
+        Trash,
+        Network,
+        Library,
+        Crop,
+        UserPlus,
+        Calendar,
     ]
 );
 
