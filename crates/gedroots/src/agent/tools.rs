@@ -241,7 +241,7 @@ impl GedrootsMcp {
 
     #[tool(
         name = "propose_act",
-        description = "Proposes an act found in the archives (birth, marriage, death…), with its source, people and image. Nothing is written: the proposal waits in GEDRoots' review page, where the user compares it with the tree and saves or rejects it. It is refused, with the reason, if it does not fit the tree (unknown source or person, one source per act or per register as the file does, a parent other than the tree's, impossible date): fix it and propose again. Give the place as the tree names it, the date in GEDCOM format, and the downloaded file (a PDF register needs pdf_page).",
+        description = "Proposes an act found in the archives (birth, marriage, death…), with its source, people and image. Nothing is written: the proposal waits in GEDRoots' review page, where the user compares it with the tree and saves or rejects it. It is refused, with the reason, if it does not fit the tree (unknown source or person, one source per act or per register as the file does, a parent other than the tree's, impossible date): fix it and propose again. Give the place as the tree names it, the date in GEDCOM format, the downloaded file (a PDF register needs pdf_page) and the act's page in the archive's viewer (url): both are kept, the image and a web link.",
         annotations(
             read_only_hint = false,
             destructive_hint = false,
@@ -257,6 +257,12 @@ impl GedrootsMcp {
         proposal.check(&s.ged, year)?;
         let original =
             p.file.as_ref().map(|f| std::path::PathBuf::from(f.trim())).filter(|f| !f.as_os_str().is_empty());
+        // An act found online is kept twice: its image (downloaded file) and its web page.
+        if original.is_none() && p.url.as_deref().is_some_and(|u| !u.trim().is_empty()) {
+            return Err("give the downloaded image or PDF of the act in `file` too: GEDRoots keeps both \
+                        the act's image and its web page (`url`)"
+                .to_string());
+        }
         let image = match &original {
             Some(path) => {
                 let (path, page, images) = (path.clone(), p.pdf_page, propose::prefers_images(&s.ged));

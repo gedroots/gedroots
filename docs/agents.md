@@ -83,11 +83,13 @@ The downloaded file takes the format of the acts already attached to the file's 
 act's page of a PDF register becomes a JPEG image (rendered in pure Rust, on every platform) kept
 in the app's cache until the act is saved. The act's page in the archive's viewer (`url`) becomes a
 web link of the source, like the links added in the app: a media whose `FILE` is the address
-(`FORM text/html`), titled after the source and the reference.
+(`FORM text/html`), titled after the source and the reference. The image and the web link stay two
+separate media: the source shows the image and a link button, and a web link is never offered
+as an act's image. A proposal with a `url` must also give the `file`.
 
 The **To Review** page (sidebar, or Source › Review Agent Proposals) shows, for each proposal,
 the act's image, a comparison of what the tree holds and what is proposed (each person can be
-unchecked), the attachment (repository, source, file, event), the transcription and, on demand,
+unchecked), the attachment (repository, source, file, web link, event), the transcription and, on demand,
 the exact GEDCOM lines that will change, computed on a copy of the file. **Save to Tree** (⌘↩)
 writes everything at once, as a single undo step, and stores the image next to the `.ged`,
 named by File Settings › Media; **Reject** (⌘⌫) drops it; **Edit in Record Entry…** opens it in

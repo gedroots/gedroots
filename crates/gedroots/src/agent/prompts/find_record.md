@@ -18,8 +18,10 @@ How to work:
    not use commercial genealogy sites (Geneanet, Ancestry, MyHeritage, Filae) unless the user
    asks.
 4. When you find the act, download its image or the PDF of the register into the user's
-   Downloads folder, and note the address of the act's page (the viewer's permanent link, ark
-   or permalink, when there is one), the register's call number and the image or page number. Then read the act and propose it, following the `read_record` prompt.
+   Downloads folder (if the viewer offers no download, save a screenshot of the act there), and
+   note the address of the act's page (the viewer's permanent link, ark or permalink, when there
+   is one), the register's call number and the image or page number. Then read the act and
+   propose it, following the `read_record` prompt.
 5. If you cannot find it, say where you looked (archive, registers, years) so the next search
    does not start over.
 

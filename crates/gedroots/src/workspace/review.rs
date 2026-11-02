@@ -482,6 +482,11 @@ impl Workspace {
             };
             links = links.child(link_row(t!("review.file").into_owned(), planned, detail, true));
         }
+        if let Ok(url) = gedcom::weblink::normalize_url(&p.url) {
+            let host = gedcom::weblink::host(&url).to_string();
+            let created = g.media_by_file(&url).is_none();
+            links = links.child(link_row(t!("review.web_link").into_owned(), host, String::new(), created));
+        }
         links = links.child(link_row(
             t!("review.event").into_owned(),
             p.act.event_label(),
