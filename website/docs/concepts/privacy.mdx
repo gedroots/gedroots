@@ -29,12 +29,14 @@ Map tiles are kept on disk once downloaded. Switch the map to **Offline** to sto
 
 **Help › Report an Issue…** opens a new GitHub issue with your description. **Include Context** (checked by default, **Show** displays it) adds what helps reproduce the problem, and nothing from your tree:
 
-- the GEDRoots version, the system and the interface language;
-- the screen shown (such as “Individuals › Tree”), the type of the selected record, the number of records of each type, the GEDCOM version and the program that wrote the file;
+- the GEDRoots version, the system (name, version, processor, memory, preferred languages), the interface language and appearance, the window size;
+- the screen shown (such as “Individuals › Tree”), the type of the selected record, whether a search is active (not what it searches);
+- the number of records of each type, places and media files, the GEDCOM version, the program that wrote the file, the file size and the names of the extension tags it uses (such as `_UID`);
+- the update and AI agent settings;
 - the last commands you ran and the last errors, by name (such as `AddEvent`, `ws.save_failed`), without their message;
 - after a crash, the place in GEDRoots' code where it happened.
 
-No name, date, place, identifier or file path is included. GitHub issues are public: in the description, describe the people with made-up names.
+It is written as JSON, so that it can be read by scripts. No name, date, place, identifier or file path is included. GitHub issues are public: in the description, describe the people with made-up names.
 
 ## AI agents
 

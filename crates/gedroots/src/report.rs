@@ -1,10 +1,11 @@
 //! Help › Report an Issue…: the context attached to a GitHub issue.
 //!
-//! The context only holds values chosen by the app, never text taken from the file: version and
-//! system, the screen shown (as enum names), record counts, the last commands (action names), the
-//! last errors (message keys) and the place in the code of the last crash. No name, place, date,
-//! identifier or file path can end up in it.
+//! The context is JSON and only holds values chosen by the app, never text taken from the file:
+//! version and system, the screen shown (as enum names), record counts and the file's format, the
+//! last commands (action names), the last errors (message keys) and the place in the code of the
+//! last crash. No name, place, date, identifier or file path can end up in it.
 
+use serde_json::{Value, json};
 use std::collections::VecDeque;
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -17,8 +18,8 @@ const MAX_URL: usize = 7_500;
 
 struct Journal {
     started: Instant,
-    commands: VecDeque<&'static str>,
-    errors: VecDeque<&'static str>,
+    commands: VecDeque<(Instant, &'static str)>,
+    errors: VecDeque<(Instant, &'static str)>,
 }
 
 static JOURNAL: Mutex<Option<Journal>> = Mutex::new(None);
@@ -33,11 +34,11 @@ fn with_journal<R>(f: impl FnOnce(&mut Journal) -> R) -> R {
     f(journal)
 }
 
-fn push(list: &mut VecDeque<&'static str>, item: &'static str) {
+fn push(list: &mut VecDeque<(Instant, &'static str)>, item: &'static str) {
     if list.len() == KEPT {
         list.pop_front();
     }
-    list.push_back(item);
+    list.push_back((Instant::now(), item));
 }
 
 /// Remembers a command run from a shortcut, a menu or the palette (its action name, e.g.
@@ -49,7 +50,7 @@ pub fn record_command(name: &'static str) {
         return;
     }
     with_journal(|j| {
-        if j.commands.back() != Some(&name) {
+        if j.commands.back().map(|c| c.1) != Some(name) {
             push(&mut j.commands, name);
         }
     });
@@ -149,45 +150,63 @@ pub fn clear_crash() {
 // The issue
 // ----------------------------------------------------------------------
 
-/// Operating system and processor, e.g. `macOS 15.1 Sequoia (aarch64)`.
-fn system() -> String {
-    let os = sysinfo::System::long_os_version().unwrap_or_else(|| std::env::consts::OS.to_string());
-    format!("{os} ({})", std::env::consts::ARCH)
+/// Version, system and machine: nothing that identifies the user.
+fn app_and_system() -> Value {
+    use sysinfo::{MemoryRefreshKind, RefreshKind, System};
+    let memory =
+        System::new_with_specifics(RefreshKind::new().with_memory(MemoryRefreshKind::new().with_ram())).total_memory();
+    json!({
+        "app": {
+            "version": env!("CARGO_PKG_VERSION"),
+            "build": if cfg!(debug_assertions) { "debug" } else { "release" },
+        },
+        "system": {
+            "os": System::long_os_version().unwrap_or_else(|| std::env::consts::OS.to_string()),
+            "kernel": System::kernel_version(),
+            "arch": std::env::consts::ARCH,
+            "cpus": std::thread::available_parallelism().map(|n| n.get()).unwrap_or(0),
+            "memory_gb": (memory as f64 / 1e9 * 10.).round() / 10.,
+            "locales": sys_locale::get_locales().take(4).collect::<Vec<_>>(),
+        },
+    })
 }
 
-/// The context attached to the issue, in English (it is read by the developers). `screen`
-/// describes what the window shows (see `Workspace::report_screen`).
-pub fn context(screen: &[(&str, String)], language: &str, dark: bool) -> String {
-    let (commands, errors, uptime) = with_journal(|j| {
-        (
-            j.commands.iter().copied().collect::<Vec<_>>(),
-            j.errors.iter().copied().collect::<Vec<_>>(),
-            j.started.elapsed().as_secs() / 60,
-        )
-    });
-    let language = match language {
-        "fr" => "French",
-        "en" => "English",
-        other => other,
+/// Commands and errors as `[name, seconds ago]`.
+fn journal() -> Value {
+    let ago = |list: &VecDeque<(Instant, &'static str)>| {
+        list.iter().map(|(at, name)| json!([name, at.elapsed().as_secs()])).collect::<Vec<_>>()
     };
-    let mut lines = vec![
-        format!("- App: GEDRoots {} on {}", env!("CARGO_PKG_VERSION"), system()),
-        format!("- Interface: {language}, {} mode, open for {uptime} min", if dark { "dark" } else { "light" }),
-    ];
-    lines.extend(screen.iter().map(|(k, v)| format!("- {k}: {v}")));
-    if !commands.is_empty() {
-        lines.push(format!("- Last commands: {}", commands.join(", ")));
+    with_journal(|j| {
+        json!({
+            "minutes_open": j.started.elapsed().as_secs() / 60,
+            "last_commands": ago(&j.commands),
+            "last_errors": ago(&j.errors),
+        })
+    })
+}
+
+/// The context attached to the issue, as JSON so that the triage and scripts can read it.
+/// `window` describes what the window shows (see `Workspace::report_window`); its keys are
+/// stable: fields are added, never renamed.
+pub fn context(window: Value) -> String {
+    let mut out = app_and_system();
+    let map = out.as_object_mut().expect("object");
+    for part in [window, journal()] {
+        if let Value::Object(part) = part {
+            map.extend(part);
+        }
     }
-    if !errors.is_empty() {
-        lines.push(format!("- Last errors: {}", errors.join(", ")));
-    }
-    let mut out = lines.join("\n");
     if let Some(crash) = last_crash() {
-        out.push_str("\n\nLast crash:\n```\n");
-        out.push_str(crash.trim());
-        out.push_str("\n```");
+        map.insert("last_crash".into(), Value::String(crash.trim().to_string()));
     }
-    out
+    one_line_per_key(&out)
+}
+
+/// JSON with one line per top-level key: short enough for a URL, easy to read and to parse.
+fn one_line_per_key(value: &Value) -> String {
+    let Value::Object(map) = value else { return value.to_string() };
+    let lines: Vec<String> = map.iter().map(|(k, v)| format!("  {}: {v}", Value::String(k.clone()))).collect();
+    format!("{{\n{}\n}}", lines.join(",\n"))
 }
 
 /// Body of the issue: the user's description, then the context folded.
@@ -197,9 +216,9 @@ pub fn body(description: &str, context: Option<&str>) -> String {
         if !out.is_empty() {
             out.push_str("\n\n");
         }
-        out.push_str("<details><summary>Context</summary>\n\n");
+        out.push_str("<details><summary>Context</summary>\n\n```json\n");
         out.push_str(context);
-        out.push_str("\n\n</details>");
+        out.push_str("\n```\n\n</details>");
     }
     out.push_str("\n\n_Sent from GEDRoots (Help › Report an Issue)._");
     out
@@ -255,6 +274,17 @@ mod tests {
     }
 
     #[test]
+    fn context_is_json_with_one_line_per_key() {
+        record_command("gedroots::ShowTree");
+        let text = context(json!({ "screen": { "view": "Individuals" } }));
+        let parsed: Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(parsed["screen"]["view"], "Individuals");
+        assert_eq!(parsed["app"]["version"], env!("CARGO_PKG_VERSION"));
+        assert!(parsed["last_commands"].as_array().is_some_and(|c| !c.is_empty()));
+        assert!(text.lines().any(|l| l.starts_with("  \"screen\": {")));
+    }
+
+    #[test]
     fn title_is_the_first_line_shortened() {
         assert_eq!(title("  Tree is empty\nafter import"), "Tree is empty");
         let long = "x".repeat(120);
@@ -265,8 +295,8 @@ mod tests {
 
     #[test]
     fn body_folds_the_context() {
-        let b = body("It fails", Some("- Version: 1"));
-        assert!(b.starts_with("It fails\n\n<details><summary>Context</summary>\n\n- Version: 1\n\n</details>"));
+        let b = body("It fails", Some("{}"));
+        assert!(b.starts_with("It fails\n\n<details><summary>Context</summary>\n\n```json\n{}\n```\n\n</details>"));
         assert!(!body("It fails", None).contains("<details>"));
     }
 
@@ -308,6 +338,6 @@ mod tests {
         }
         let commands = with_journal(|j| j.commands.clone());
         assert_eq!(commands.len(), KEPT);
-        assert_eq!(commands.back(), Some(&"SaveFile"));
+        assert_eq!(commands.back().map(|c| c.1), Some("SaveFile"));
     }
 }

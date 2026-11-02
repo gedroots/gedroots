@@ -38,7 +38,7 @@ impl Item {
 
 #[derive(Default)]
 pub(super) struct Review {
-    items: Vec<Item>,
+    pub(super) items: Vec<Item>,
     /// Page displayed instead of the lists.
     pub(super) open: bool,
     sel: usize,

@@ -29,7 +29,7 @@ impl Workspace {
         cx.defer_in(window, move |_, window, cx| field.update(cx, |s, cx| s.focus(window, cx)));
         // The send button follows the description.
         let sub = cx.subscribe(&description, |_, _, _: &InputEvent, cx| cx.notify());
-        let context = report::context(&self.report_screen(), &crate::i18n::language(), theme::is_dark());
+        let context = report::context(self.report_window(window, cx));
         self.report = Some(ReportDialog { description, include: true, preview: false, context, _sub: sub });
         cx.notify();
     }
@@ -66,76 +66,112 @@ impl Workspace {
         self.close_report(window, cx);
     }
 
-    /// What the window shows, without anything from the file but counts and its format.
-    fn report_screen(&self) -> Vec<(&'static str, String)> {
-        let Some(doc) = &self.doc else { return vec![("Screen", "Welcome".into())] };
-        let mut screen = format!("{:?}", self.view);
-        if !matches!(self.view, View::Quality | View::Stats) {
-            screen.push_str(&format!(" › {:?}", self.tab));
-            if self.tab == CenterTab::Tree {
-                screen.push_str(&format!(" ({:?}, {} generations)", self.tree_mode, self.tree_gens));
-            }
-        }
+    /// What the window shows and the shape of the file, without anything from the file but
+    /// counts, tag names and its format.
+    fn report_window(&self, window: &Window, cx: &App) -> serde_json::Value {
+        use serde_json::json;
+        let size = window.viewport_size();
+        let interface = json!({
+            "language": &*crate::i18n::language(),
+            "appearance": if theme::is_dark() { "dark" } else { "light" },
+            "window": [size.width.as_f32().round(), size.height.as_f32().round()],
+            "scale": window.scale_factor(),
+            "windows": cx.windows().len(),
+            "sidebar": self.sidebar,
+        });
+        let settings = json!({
+            "installed": crate::updates::available(),
+            "automatic_updates": crate::updates::load().automatic,
+            "agents": match crate::agent::status() {
+                crate::agent::Status::Off => "off",
+                crate::agent::Status::Running => "running",
+                crate::agent::Status::Failed(_) => "failed",
+            },
+        });
+        let Some(doc) = &self.doc else {
+            return json!({ "interface": interface, "settings": settings, "screen": { "view": "Welcome" } });
+        };
+        let g = &doc.ged;
         let open: Vec<&str> = [
-            (self.act_editor.is_some(), "record entry"),
-            (self.review.open, "To Review"),
-            (self.gallery.is_some(), "media gallery"),
-            (self.add_dialog.is_some(), "add dialog"),
-            (self.picker.is_some(), "person picker"),
-            (self.new_place.is_some(), "new place"),
-            (self.locate.is_some(), "locate place"),
+            (self.act_editor.is_some(), "record_entry"),
+            (self.review.open, "to_review"),
+            (self.gallery.is_some(), "media_gallery"),
+            (self.add_dialog.is_some(), "add_dialog"),
+            (self.picker.is_some(), "person_picker"),
+            (self.new_place.is_some(), "new_place"),
+            (self.locate.is_some(), "locate_place"),
             (self.kinship.is_some(), "kinship"),
-            (self.photo_draw.is_some(), "photo framing"),
+            (self.photo_draw.is_some(), "photo_framing"),
         ]
         .into_iter()
         .filter_map(|(on, name)| on.then_some(name))
         .collect();
-        if !open.is_empty() {
-            screen.push_str(&format!(", {}", open.join(", ")));
-        }
-        if !self.sidebar {
-            screen.push_str(", sidebar hidden");
-        }
-        let g = &doc.ged;
         let selected = self.selected.as_ref().and_then(|x| g.get(x)).and_then(|n| RecordKind::from_tag(&n.tag));
-        // Only how big the tree is: numbers of records, never their contents.
-        let counts: Vec<String> = RecordKind::ALL
-            .iter()
-            .map(|&k| (k, g.count(k)))
-            .filter(|&(_, n)| n > 0)
-            .map(|(k, n)| {
-                let (one, many) = match k {
-                    RecordKind::Individual => ("person", "people"),
-                    RecordKind::Family => ("family", "families"),
-                    RecordKind::Source => ("source", "sources"),
-                    RecordKind::Repository => ("repository", "repositories"),
-                    RecordKind::Media => ("media", "media"),
-                    RecordKind::SharedNote => ("note", "notes"),
-                    RecordKind::Submitter => ("submitter", "submitters"),
-                };
-                format!("{n} {}", if n == 1 { one } else { many })
-            })
-            .collect();
+        let pages = matches!(self.view, View::Quality | View::Stats);
+        let screen = json!({
+            "view": format!("{:?}", self.view),
+            "tab": (!pages).then(|| format!("{:?}", self.tab)),
+            "tree": (!pages && self.tab == CenterTab::Tree)
+                .then(|| json!({ "mode": format!("{:?}", self.tree_mode), "generations": self.tree_gens })),
+            "open": open,
+            "selected": selected.map(|k| format!("{k:?}")),
+            "search_active": !self.filter.read(cx).value().is_empty(),
+            "flagged_only": self.only_flagged,
+        });
+        // How big the tree is: numbers of records, never their contents.
+        let mut tree = serde_json::Map::new();
+        for kind in RecordKind::ALL {
+            let key = match kind {
+                RecordKind::Individual => "individuals",
+                RecordKind::Family => "families",
+                RecordKind::Source => "sources",
+                RecordKind::Repository => "repositories",
+                RecordKind::Media => "media",
+                RecordKind::SharedNote => "notes",
+                RecordKind::Submitter => "submitters",
+            };
+            tree.insert(key.into(), g.count(kind).into());
+        }
+        tree.insert("places".into(), g.places().len().into());
+        tree.insert("media_files_in_folder".into(), self.media_files.len().into());
+        // Extension tags (`_UID`, `_GR_SCOPE`…) and how often they appear: tag names only.
+        let mut tags = std::collections::BTreeMap::<String, usize>::new();
+        let mut count = |n: &Node| {
+            let tag_like =
+                n.tag.len() <= 24 && n.tag.bytes().all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || b == b'_');
+            if n.tag.starts_with('_') && tag_like {
+                *tags.entry(n.tag.clone()).or_default() += 1;
+            }
+        };
+        g.header.walk(&mut count);
+        for r in &g.records {
+            r.walk(&mut count);
+        }
+        let mut tags: Vec<(String, usize)> = tags.into_iter().collect();
+        tags.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+        tags.truncate(20);
         // `HEAD.SOUR`: the product identifier of the software that wrote the file.
         let product = |path: &[&str]| {
             g.header.path_val(path).map(|v| v.chars().filter(|c| !c.is_control()).take(40).collect::<String>())
         };
-        let mut format = format!("GEDCOM {}", g.version());
-        if let Some(sour) = product(&["SOUR"]) {
-            format.push_str(&format!(" from {sour}"));
-            if let Some(vers) = product(&["SOUR", "VERS"]) {
-                format.push_str(&format!(" {vers}"));
-            }
-        }
-        if doc.dirty {
-            format.push_str(", unsaved changes");
-        }
-        if let Some(kind) = selected {
-            screen.push_str(&format!(", {} selected", format!("{kind:?}").to_lowercase()));
-        }
-        let size = if counts.is_empty() { "empty".to_string() } else { counts.join(", ") };
-        let out = vec![("Screen", screen), ("Tree size", size), ("Format", format)];
-        out
+        let file = json!({
+            "gedcom": g.version(),
+            "written_by": product(&["SOUR"]),
+            "written_by_version": product(&["SOUR", "VERS"]),
+            "bom": g.format.bom,
+            "crlf": g.format.crlf,
+            "size_kb": doc.path.as_ref().and_then(|p| std::fs::metadata(p).ok()).map(|m| m.len() / 1024),
+            "saved": doc.path.is_some(),
+            "unsaved_changes": doc.dirty,
+            "undo_steps": doc.history.len(),
+            "extension_tags": tags.into_iter().map(|(t, n)| json!([t, n])).collect::<Vec<_>>(),
+        });
+        let settings = {
+            let mut s = settings;
+            s["proposals_to_review"] = self.review.items.len().into();
+            s
+        };
+        json!({ "interface": interface, "settings": settings, "screen": screen, "tree": tree, "file": file })
     }
 
     pub(super) fn render_report(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
