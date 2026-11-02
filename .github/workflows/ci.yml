@@ -1,5 +1,8 @@
 name: CI
 
+# Outils et commandes viennent de mise.toml (et mise.lock) : la CI lance les
+# mêmes tâches qu'en local (`mise run ci`, `mise run bundle`).
+
 on:
   push:
     branches: [main]
@@ -8,23 +11,46 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  # Pas de compilation incrémentale en CI : inutile sur une machine neuve et
+  # elle alourdit le cache de target/.
+  CARGO_INCREMENTAL: "0"
 
 jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Dépendances système de GPUI
         run: |
           sudo apt-get update
           sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-dev libfontconfig-dev libwayland-dev libxcb1-dev libvulkan-dev
-      - uses: dtolnay/rust-toolchain@stable
+      # mise seul ; les outils s'installent après la restauration du cache.
+      - uses: jdx/mise-action@v5
         with:
-          components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo fmt --all --check
-      - run: cargo test -p gedcom
-      - run: cargo clippy --workspace -- -D warnings
+          version: 2026.10.25
+          install: false
+          cache: false
+          env: false
+      # Rust s'installe par rustup, hors du dossier de mise : on place rustup
+      # et cargo (toolchain, index et crates téléchargés) dans le dossier de
+      # cache de mise, qu'un seul cache suffit ensuite à conserver.
+      - name: Dossier de cache de mise
+        id: mise-cache
+        run: |
+          dir=$(mise cache path)
+          echo "dir=$dir" >> "$GITHUB_OUTPUT"
+          echo "MISE_RUSTUP_HOME=$dir/rustup" >> "$GITHUB_ENV"
+          echo "MISE_CARGO_HOME=$dir/cargo" >> "$GITHUB_ENV"
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ${{ steps.mise-cache.outputs.dir }}
+            !${{ steps.mise-cache.outputs.dir }}/cargo/registry/src
+            target
+          key: ${{ github.job }}-${{ hashFiles('mise.lock', 'Cargo.lock') }}
+          restore-keys: ${{ github.job }}-
+      - run: mise install --locked
+      - run: mise run ci
 
   macos-build:
     # App macOS (Apple Silicon) téléchargeable en .dmg, pour tester sans compiler.
@@ -33,12 +59,32 @@ jobs:
     if: github.event_name != 'pull_request'
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v5
+        with:
+          version: 2026.10.25
+          install: false
+          cache: false
+          env: false
+      - name: Dossier de cache de mise
+        id: mise-cache
+        run: |
+          dir=$(mise cache path)
+          echo "dir=$dir" >> "$GITHUB_OUTPUT"
+          echo "MISE_RUSTUP_HOME=$dir/rustup" >> "$GITHUB_ENV"
+          echo "MISE_CARGO_HOME=$dir/cargo" >> "$GITHUB_ENV"
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ${{ steps.mise-cache.outputs.dir }}
+            !${{ steps.mise-cache.outputs.dir }}/cargo/registry/src
+            target
+          key: ${{ github.job }}-${{ hashFiles('mise.lock', 'Cargo.lock') }}
+          restore-keys: ${{ github.job }}-
+      - run: mise install --locked
       - name: Construire GEDRoots.app et GEDRoots.dmg
-        run: packaging/macos/bundle.sh --dmg
-      - uses: actions/upload-artifact@v4
+        run: mise run bundle --dmg
+      - uses: actions/upload-artifact@v7
         with:
           name: GEDRoots-macos-arm64-${{ github.run_number }}
           path: target/release/GEDRoots.dmg
