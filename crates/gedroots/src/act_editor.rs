@@ -706,6 +706,8 @@ fn field(label: impl Into<SharedString>, input: &Entity<InputState>) -> Div {
 fn chip(id: impl Into<SharedString>, label: impl Into<SharedString>, on: bool) -> Stateful<Div> {
     div()
         .id(ElementId::Name(id.into()))
+        // A long suggestion wraps instead of overflowing the card.
+        .max_w_full()
         .px_2()
         .py(px(3.))
         .rounded(theme::RADIUS_SM)
