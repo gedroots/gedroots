@@ -60,6 +60,9 @@ impl Workspace {
         }
         let d = on!(d, cx, SaveFile, |this, w, cx| this.save_file(&SaveFile, w, cx));
         let d = on!(d, cx, OpenFileSettings, |this, w, cx| this.open_settings(w, cx));
+        let d = on!(d, cx, ReviewProposals, |this, w, cx| this.open_review(cx));
+        let d = on!(d, cx, AcceptProposal, |this, w, cx| this.accept_proposal(w, cx));
+        let d = on!(d, cx, RejectProposal, |this, w, cx| this.reject_proposal(cx));
         let d = on!(d, cx, ConnectAgent, |this, w, cx| this.open_agent_dialog(cx));
         let d = on!(d, cx, SaveFileAs, |this, w, cx| this.save_file_as(w, cx));
         let d = on!(d, cx, ExportGedzip, |this, w, cx| this.export_gedzip(w, cx));
@@ -276,6 +279,7 @@ impl Workspace {
     /// Change de liste, en quittant la saisie d'acte si besoin.
     pub(super) fn show_view(&mut self, view: View, window: &mut Window, cx: &mut Context<Self>) {
         self.act_editor = None;
+        self.review.open = false;
         self.set_view(view, window, cx);
         cx.notify();
     }

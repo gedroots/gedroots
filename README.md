@@ -226,8 +226,9 @@ et suit le [design system GEDRoots](design.md) (fonds neutres et touches de viol
   l'individu racine par génération et l'implexe.
 - **Agents IA** (Fichier › Connecter un agent IA…) : un serveur MCP local, sur `127.0.0.1`,
   laisse un agent comme Claude Code lire le fichier ouvert (fiches, recherche, actes à chercher
-  parmi les ascendants), sans jamais l'écrire ; les personnes vivantes sont masquées. Voir
-  [docs/agents.md](docs/agents.md).
+  parmi les ascendants), sans jamais l'écrire : les actes qu'il trouve attendent dans la page
+  « À relire », où l'on compare ce qui sera écrit avec l'arbre avant d'enregistrer. Les personnes
+  vivantes sont masquées. Voir [docs/agents.md](docs/agents.md).
 - Enregistrement **sans perte** : un fichier relu puis réécrit est identique à l'octet près
   (balises propriétaires `_SOSADABOVILLE`, `_TODO`… comprises). Une copie `.ged.bak` est
   gardée à chaque enregistrement.

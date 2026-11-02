@@ -2,7 +2,9 @@
 //!
 //! Quand le réglage est activé (File › Connect an AI Agent…), l'app sert le protocole
 //! MCP en HTTP sur `127.0.0.1` : un agent comme Claude Code lit le fichier ouvert (fiches,
-//! recherche, lacunes), sans jamais l'écrire. Les personnes vivantes sont masquées.
+//! recherche, lacunes), sans jamais l'écrire : ses actes trouvés deviennent des
+//! propositions, relues dans la page « À relire » avant d'être enregistrées. Les personnes
+//! vivantes sont masquées.
 //!
 //! - le serveur tourne sur un fil à part (runtime tokio) ;
 //! - chaque appel d'outil demande à la boucle de l'app une copie du document affiché
@@ -13,6 +15,7 @@
 //! Le réglage et le jeton sont propres à la machine : ils vivent dans le dossier de
 //! configuration de la plateforme, jamais dans le `.ged`.
 
+pub mod propose;
 mod tools;
 
 use gedcom::Gedcom;
@@ -37,6 +40,8 @@ pub fn claude_command(token: &str) -> String {
 /// Ce que l'app demande au document affiché, depuis le fil du serveur.
 pub enum Request {
     Snapshot(tokio::sync::oneshot::Sender<Option<Snapshot>>),
+    /// Proposition d'acte : ajoutée à la page « À relire » de la fenêtre, ou refusée.
+    Propose(Box<propose::Pending>, tokio::sync::oneshot::Sender<Result<usize, String>>),
 }
 
 /// Copie du document de la fenêtre active.
@@ -98,6 +103,16 @@ pub fn install(cx: &mut App) {
                         ws.read(cx).agent_snapshot()
                     });
                     let _ = reply.send(snap);
+                }
+                Request::Propose(pending, reply) => {
+                    let res = cx.update(|cx| {
+                        let ws = cx.global::<Target>().0.as_ref().and_then(|w| w.upgrade());
+                        match ws {
+                            Some(ws) => ws.update(cx, |ws, cx| ws.add_proposal(*pending, cx)),
+                            None => Err("no file is open in GEDRoots".to_string()),
+                        }
+                    });
+                    let _ = reply.send(res);
                 }
             }
         }

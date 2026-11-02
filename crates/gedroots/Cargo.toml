@@ -29,6 +29,8 @@ schemars = "1"
 # Dossier de configuration de la plateforme (réglage des agents IA, fichiers récents hors macOS).
 dirs = "6"
 tokio-util = "0.7.20"
+hayro = "0.8.0"
+similar = "2.7.0"
 
 # Fichiers récents : liste du système sous macOS (NSDocumentController)…
 [target.'cfg(target_os = "macos")'.dependencies]
