@@ -34,6 +34,8 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$OUT/gedroots" "$APP/Contents/MacOS/gedroots"
 sed "s/@VERSION@/$VERSION/g" packaging/macos/Info.plist > "$APP/Contents/Info.plist"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
+# Traductions des textes de l'Info.plist (nom du type de fichier…).
+cp -R packaging/macos/*.lproj "$APP/Contents/Resources/"
 
 # Icône : toutes les tailles attendues par macOS, à partir de l'image 1024 px.
 ICONSET=$(mktemp -d)/GEDRoots.iconset

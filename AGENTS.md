@@ -32,6 +32,10 @@ Le détail (quelles apps, quoi rendre) est dans [design.md › Avant toute maque
 - **Multiplateforme** (macOS, Windows, Linux) : préférer les solutions qui marchent partout.
 - **Commandes** : chaque commande vit dans le modèle de menus (`crates/gedroots/src/commands.rs`)
   et donc dans la palette `⌘⇧P` ; pas de barre d'outils (voir `design.md`).
+- **Textes de l'interface traduits** : l'app est écrite en anglais et traduite en français. Aucun
+  texte affiché en dur dans le code : une clé dans `crates/gedroots/locales/*.yml` avec `en` et
+  `fr`, lue par `t!("…")` (voir [`docs/localization.md`](docs/localization.md)). Le français
+  reste celui de l'interface actuelle.
 - **Identifiants GEDCOM cachés** dans l'interface, sauf Édition › Copier l'ID et la recherche
   avancée.
 - **Tester sur une copie** d'un vrai fichier, jamais sur l'original. Ne jamais committer de `.ged`
