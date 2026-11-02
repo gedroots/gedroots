@@ -118,6 +118,9 @@ cmd:
   add_web_link:
     en: Add Web Link…
     fr: Ajouter un lien web…
+  edit_record:
+    en: Edit Record
+    fr: Modifier la fiche
   copy_name:
     en: Copy Name
     fr: Copier le nom

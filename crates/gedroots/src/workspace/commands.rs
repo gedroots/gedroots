@@ -112,6 +112,12 @@ impl Workspace {
             .when(self.history.can_forward(), |d| on!(d, cx, GoForward, |this, w, cx| this.go_forward(w, cx)))
             .when(can_undo, |d| on!(d, cx, Undo, |this, w, cx| this.undo(&Undo, w, cx)))
             .when(can_redo, |d| on!(d, cx, Redo, |this, w, cx| this.redo(&Redo, w, cx)))
+            .when(
+                self.editor.as_ref().is_some_and(|ed| {
+                    ed.error.is_none() && (!ed.fields.is_empty() || !ed.pickers.is_empty() || ed.long_text.is_some())
+                }),
+                |d| on!(d, cx, EditRecord, |this, w, cx| this.start_edit(w, cx)),
+            )
             .when(sel.is_some(), |d| {
                 on!(d, cx, DeleteRecord, |this, w, cx| {
                     this.tab = CenterTab::Form;

@@ -60,8 +60,11 @@ A proposal without this research is not ready to show.
 - **Progressive disclosure**: technical fields are inferred, not shown (e.g. a media's
   `FORM`); rare or destructive actions are collapsed or in menus; GEDCOM identifiers only
   appear through Edit › Copy ID and the advanced search.
-- **In-place editing**: you edit where you read (record, event, tree box), in the same window
-  for creating and editing. No separate "edit" mode.
+- **Read first, edit in place**: a record opens as text (empty values hidden, linked records
+  clickable). Edit › Edit Record (`⌘L`, like Contacts) or the small pencil next to it turns the
+  same layout into fields; Done saves (one undo point), Cancel or `Esc` drops the changes. A
+  new record opens on its fields. An item of a record (an event) opens read-only on click, with
+  "Edit…"; a double-click edits it directly.
 - **Undo rather than confirm**: every change goes through an undo point; confirmation is only
   asked for what cannot be undone (a file overwritten on disk…).
 - **A single bar at the top**: on macOS the title bar is merged with the app's bar (traffic
@@ -184,8 +187,12 @@ Rules shared by the three guidelines, to apply everywhere.
 
 ### Navigation
 
-- Fixed structure: sidebar (areas) → list → record → detail panel. The sidebar is on the left
-  on all three platforms and can be hidden.
+- Fixed structure: sidebar (areas) → list → record. The sidebar is on the left on all three
+  platforms and can be hidden. Individuals and places add a detail panel on the right, because
+  the centre shows the tree or the map. Sources, media, repositories and notes have none (like
+  Contacts or Mail): the record is read whole in the centre, in one readable column (720 px at
+  most): title with the repository and call number under it, facts, records, images, web
+  links, links, then "Used by".
 - **Back/forward history** across all navigation (`workspace/history.rs`): keyboard, side
   mouse buttons and, on a trackpad, swipe. Each list reopens the last item viewed; Individuals
   falls back to the root individual.

@@ -35,31 +35,6 @@ pub(super) fn linked_img(path: PathBuf, crop: Option<Crop>, w: f32, h: f32, cove
     .h(px(h))
 }
 
-/// Cropped area alone, at its own aspect ratio, within at most `max_w × max_h`.
-pub(super) fn fitted_crop(path: PathBuf, crop: Option<Crop>, max_w: f32, max_h: f32) -> AnyElement {
-    let Some((size, r)) = image_size(&path).and_then(|s| crop?.rect(s.0, s.1).map(|r| (s, r))) else {
-        return picture(path, max_w, max_h, ObjectFit::Contain).max_w_full().max_h(px(max_h)).into_any_element();
-    };
-    let (x, y, rw, rh) = (r.0 as f32, r.1 as f32, r.2 as f32, r.3 as f32);
-    let s = (max_w / rw).min(max_h / rh).min(2.);
-    // Relative dimensions: the area follows the available width, keeping its proportions.
-    div()
-        .relative()
-        .overflow_hidden()
-        .w_full()
-        .max_w(px(rw * s))
-        .aspect_ratio(rw / rh)
-        .child(
-            picture(path, size.0 as f32 * s, size.1 as f32 * s, ObjectFit::Fill)
-                .absolute()
-                .left(relative(-x / rw))
-                .top(relative(-y / rh))
-                .w(relative(size.0 as f32 / rw))
-                .h(relative(size.1 as f32 / rh)),
-        )
-        .into_any_element()
-}
-
 /// Frame being drawn on a photo.
 pub struct PhotoDraw {
     pub media: String,
