@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Condvar, Mutex};
 
 /// Pixels décodés gardés au plus (hors images affichées dans la dernière image rendue).
-const BUDGET: usize = 128 << 20;
+const BUDGET: usize = 64 << 20;
 /// Plus petit palier, en pixels sur le grand côté.
 const MIN_SIDE: f32 = 256.;
 
