@@ -277,9 +277,9 @@ fn tail(menu: PopupMenu, ws: &Ws, xref: &str, from: &From) -> PopupMenu {
 
 pub(super) fn person_menu(ws: Ws, x: String, from: From) -> MenuBuilder {
     Rc::new(move |menu, window, cx| {
-        let Some((father, mother, is_root)) = read(&ws, cx, |_, g| {
+        let Some((father, mother)) = read(&ws, cx, |_, g| {
             let (f, m) = g.parents(&x);
-            (f.is_some(), m.is_some(), g.root().as_deref() == Some(x.as_str()))
+            (f.is_some(), m.is_some())
         }) else {
             return menu;
         };
@@ -298,8 +298,7 @@ pub(super) fn person_menu(ws: Ws, x: String, from: From) -> MenuBuilder {
         })
         .collect();
         let rels2 = rels.clone();
-        let (x1, x2, x3, x4, x5, x6, x7) =
-            (x.clone(), x.clone(), x.clone(), x.clone(), x.clone(), x.clone(), x.clone());
+        let (x1, x2, x3, x4, x5, x6) = (x.clone(), x.clone(), x.clone(), x.clone(), x.clone(), x.clone());
         let (wa, wb) = (ws.clone(), ws.clone());
         menu.item(act(&ws, label::CENTER_TREE, move |this, w, cx| {
             this.act_editor = None;
@@ -324,18 +323,13 @@ pub(super) fn person_menu(ws: Ws, x: String, from: From) -> MenuBuilder {
         })
         .item(act(&ws, label::ADD_EVENT, move |this, w, cx| this.open_event_dialog(x5.clone(), None, w, cx)))
         .item(act(&ws, label::ATTACH_FILES, move |this, w, cx| this.choose_files(x6.clone(), w, cx)))
-        .separator()
-        .when(!is_root, |m| {
-            let x = x7.clone();
-            m.item(act(&ws, label::SET_ROOT, move |this, _, cx| this.set_root(x.clone(), cx)))
-        })
         .when_some(
             match &from {
                 From::Relative(indi, fam, label) => Some((indi.clone(), fam.clone(), *label)),
                 _ => None,
             },
             |m, (indi, fam, label)| {
-                m.item(act(&ws, label, move |this, w, cx| this.unlink(indi.clone(), fam.clone(), w, cx)))
+                m.separator().item(act(&ws, label, move |this, w, cx| this.unlink(indi.clone(), fam.clone(), w, cx)))
             },
         )
         .map(|m| tail(m, &ws, &x, &from))
