@@ -226,6 +226,13 @@ la liste) porte la balise avec le bon code.
 | `duplicate_media` | Deux médias désignent exactement les mêmes fichiers |
 | `missing_form` | `FILE` sans `FORM` (remplace `missing_required` pour ce cas) |
 | `unattached_file` | Fichier du dossier du `.ged` qu'aucun média ne désigne (ne peut pas être masqué : il n'a pas d'enregistrement) |
+| `missing_coords` | Lieu sans coordonnées (`PLAC.MAP`) |
+| `bad_coords` | Coordonnées illisibles ou incomplètes |
+| `place_variant` | Même lieu écrit autrement (casse, accents, « St »/« Saint », codes), ou forme abrégée d'un seul autre lieu |
+| `place_hierarchy` | Une même division rattachée à deux divisions supérieures (« Loire » en « Rhône-Alpes » et en « Auvergne-Rhône-Alpes ») ; « Harmoniser » reprend la plus fréquente |
+
+Les anomalies de fichiers et de lieux ne peuvent pas être masquées : elles ne portent sur
+aucun enregistrement où écrire `_GR_IGNORE`.
 
 Le contrôle du schéma GEDCOM 7 ne s'applique qu'aux fichiers en version 7 ; les balises
 d'extension (`_XXX`) ne sont jamais signalées.

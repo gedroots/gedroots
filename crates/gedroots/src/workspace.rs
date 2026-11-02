@@ -517,7 +517,7 @@ impl Workspace {
         self.open_location(View::for_kind(kind), Some(xref), window, cx);
     }
 
-    fn goto_place(&mut self, name: String, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn goto_place(&mut self, name: String, window: &mut Window, cx: &mut Context<Self>) {
         self.open_location(View::Places, Some(name), window, cx);
     }
 

@@ -56,7 +56,7 @@ et suit la maquette « Lignée » (thème sombre, barre d'activité, liste, arbr
 - **Lieux** : index de tous les `PLAC` du fichier, renommage global et coordonnées (`MAP`).
 - **Carte des lieux** : tous les lieux ayant des coordonnées sur une carte OpenStreetMap
   (glisser pour déplacer, molette pour zoomer, clic sur un repère pour ouvrir le lieu).
-  Les lieux sans coordonnées se localisent d'un clic (un par un ou tous, via Nominatim) ou se
+  Les lieux sans coordonnées se localisent un par un d'un clic (via Nominatim), pour vérifier chaque résultat, ou se
   placent à la main ; les coordonnées sont écrites dans le GEDCOM (`PLAC.MAP.LATI/LONG`,
   format `N49.11652` / `W1.11437`) et s'annulent comme toute modification. Les tuiles sont
   gardées en cache sur le disque : en mode « Hors ligne », rien ne part sur Internet.
@@ -142,11 +142,13 @@ et suit la maquette « Lignée » (thème sombre, barre d'activité, liste, arbr
   cassé), éléments vides ou isolés (événements et notes vides, familles sans membre,
   enregistrements cités nulle part, arbres séparés de la racine), médias (fichier
   introuvable, déplacé dans le dossier, médias en double, format absent), événements sans
-  source et fichiers du dossier à rattacher. Un clic ouvre l'élément (`⌘[` revient), le
+  source, fichiers du dossier à rattacher, lieux (variantes d'un même lieu, rattachement
+  incohérent comme « Loire » tantôt en « Rhône-Alpes », tantôt en « Auvergne-Rhône-Alpes »,
+  coordonnées illisibles) et lieux sans coordonnées. Un clic ouvre l'élément (`⌘[` revient), le
   bouton de la ligne corrige quand c'est sûr (supprimer, rétablir un lien à sens unique,
-  retirer un lien cassé, corriger le chemin, fusionner, créer le média), et en lot, avec
+  retirer un lien cassé, corriger le chemin, fusionner, créer le média, harmoniser), et en lot, avec
   confirmation pour les suppressions et fusions. « Localiser… » choisit à la main le
-  fichier d'un média introuvable. Clic droit › « Masquer » écrit [`_GR_IGNORE`](docs/extensions.md).
+  fichier d'un média introuvable, ou ouvre le lieu sur la carte pour le localiser. Clic droit › « Masquer » écrit [`_GR_IGNORE`](docs/extensions.md).
 - **Lien de parenté** (menu Individu › Lien de parenté avec…) : « cousine issue de germain »,
   « oncle à la mode de Bretagne », demi-frère, beau-père… avec le chemin par l'ancêtre commun
   et le degré civil, affiché dans le panneau de l'individu.
