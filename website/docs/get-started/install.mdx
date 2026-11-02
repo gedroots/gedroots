@@ -1,0 +1,74 @@
+---
+title: Install GEDRoots
+description: Build and install GEDRoots on macOS, Linux or Windows.
+---
+
+GEDRoots runs on macOS, Windows and Linux. Until signed installers are published, you build it from its source code. It takes one command once the tools are in place.
+
+## Before you begin
+
+- [Git](https://git-scm.com), to download the source code.
+- [mise](https://mise.jdx.dev), which installs the exact Rust version GEDRoots needs and runs the build. You don't need to install Rust yourself.
+- On Linux, the system libraries for the graphical interface:
+
+  ```sh
+  sudo apt install libxkbcommon-dev libxkbcommon-x11-dev libfontconfig-dev libwayland-dev libvulkan-dev
+  ```
+
+  The package names are for Debian and Ubuntu. Other distributions ship the same libraries under similar names.
+
+## Install
+
+<Steps>
+  <Step title="Download the source code">
+    ```sh
+    git clone https://github.com/gedroots/gedroots.git
+    cd gedroots
+    ```
+  </Step>
+  <Step title="Install the toolchain">
+    ```sh
+    mise trust && mise install
+    ```
+
+    mise reads `mise.toml` and installs the pinned Rust toolchain for this folder only.
+  </Step>
+  <Step title="Build and install the app">
+    ```sh
+    mise run install
+    ```
+
+    The first build takes several minutes.
+  </Step>
+</Steps>
+
+What `mise run install` produces depends on your system:
+
+<Tabs>
+  <Tab title="macOS">
+    `GEDRoots.app` is copied to `/Applications`. GEDRoots then appears in Launchpad and the Dock, and `.ged` files open in it with a double-click or **Open With** in the Finder.
+  </Tab>
+  <Tab title="Linux">
+    The `gedroots` command is installed in `~/.local/bin`, with its icon and an entry in your applications menu.
+  </Tab>
+  <Tab title="Windows">
+    The build produces `target\release\gedroots.exe`. Copy it wherever you like and create a shortcut to it.
+  </Tab>
+</Tabs>
+
+## Update GEDRoots
+
+To get the latest version, download the changes and install again:
+
+```sh
+git pull
+mise run install
+```
+
+Your family tree files are not affected: they live wherever you saved them, not inside the app.
+
+## Next step
+
+<Card title="Start your family tree" href="/get-started/first-tree" icon="sprout">
+  Create a file and enter your first sourced record.
+</Card>

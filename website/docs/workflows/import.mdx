@@ -1,0 +1,49 @@
+---
+title: Bring in a tree from other software
+description: Move your research from Ancestris, Heredis, RootsMagic, Gramps or any program that exports GEDCOM, without losing data.
+---
+
+GEDRoots works directly on GEDCOM files, so there is nothing to convert into a private format. You export your tree from your current software, then open the file in GEDRoots.
+
+:::tip
+Work on a copy of your file the first time. Keep the original export untouched until you're happy with the result.
+:::
+
+## Export from your current software
+
+In your current program, look for an **Export GEDCOM** command. If it offers several versions, choose **GEDCOM 7**. GEDRoots is built on GEDCOM 7: its checks and editors follow the version 7 rules.
+
+Put the `.ged` file in the folder that holds your scans and photos. Media paths in a GEDCOM file are usually relative to the file, so GEDRoots finds the images when they keep the same place relative to it.
+
+## Import the file
+
+1. Select **File › Import GEDCOM…** and choose the file.
+2. GEDRoots lists what the file contains that isn't standard GEDCOM 7, with the number of items and what each will become.
+3. Click **Normalize** to convert them, or **Keep As Is** to open the file unchanged.
+
+The conversion is a single change: **Edit › Undo** reverts all of it.
+
+### What the import assistant converts
+
+| Found in the file | Written by | Becomes |
+| --- | --- | --- |
+| `_URL` links to web pages | Many programs | A web link: a multimedia link whose file is the address, the GEDCOM 7 way. On a repository, its `WWW` address. |
+| `_PRIM Y` on a photo link | Family Tree Maker, Legacy, MyHeritage… | The marked photo moves to the top of the person's media, so it becomes their portrait. |
+| Events in extension tags (`_MILT`, `_MILI`, `_DEG`, `_FUN`…) | Ancestris, Heredis… | A standard `EVEN` with a `TYPE`, such as `military service`, readable by any GEDCOM 7 program. |
+
+Everything else is kept exactly as it was, including tags that GEDRoots doesn't use. If you later open the file in your previous software, its own tags are still there.
+
+## Open a file directly
+
+**File › Open…** (<kbd>⌘O</kbd> / <kbd>Ctrl+O</kbd>) opens a `.ged` file as it is, without the assistant. Use it for files you already work on in GEDRoots. Recent files are in **File › Open Recent** and on the welcome screen.
+
+## Check the result
+
+After a first import, open **View › Data Quality** (<kbd>⌘7</kbd> / <kbd>Ctrl+7</kbd>). It lists what other software may have left behind: broken links between families, media files that moved, the same town written three different ways. See [Check and clean your data](/workflows/quality).
+
+Then set the **root person** in **File › File Settings… › General**, if it isn't the one GEDRoots picked. Without a root person declared in the file, GEDRoots uses the Sosa 1 that Ancestris declares, or else the first person in the file.
+
+## Related pages
+
+- [Your tree is a GEDCOM 7 file](/concepts/gedcom-7)
+- [Set up a file](/workflows/file-settings)

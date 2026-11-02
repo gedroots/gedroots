@@ -1,0 +1,111 @@
+---
+title: Record what a source says
+description: Enter a birth, marriage, death or census record once, in its source, with every person it names. GEDRoots writes the events, family links and citations.
+---
+
+Genealogists don't think in people first. They read a record, and the record names several people: a child and the parents, two spouses and their witnesses, a whole household. GEDRoots lets you enter it that way: **one record, in its source, with everyone in it**.
+
+![A birth record being entered, with the existing parents suggested](../images/record-linked.png)
+
+## Before you begin
+
+Decide how you cite registers. Both habits are common, and GEDRoots supports both:
+
+- **One source per register** (`Saint-Lô, Births 1910–1919`), with the record number as the citation's reference.
+- **One source per record** (`Birth record of Paul MARCHAND`).
+
+The [Sources and citations](/concepts/sources-and-citations) page explains the trade-off. Whatever you choose, be consistent within a register.
+
+## Create the source and its repository
+
+1. Select **Source › New Source**. GEDRoots creates the source and opens an empty record in it.
+2. Click the source's name at the top to go back to it, and fill in its **Details**:
+   - **Title**: what the document is, such as `Saint-Lô, Births 1910–1919`.
+   - **Repository**: where the original is kept. Choose one, or create it with **Source › New Repository**.
+   - **Call Number**: the reference of the document in the repository, such as `5 Mi 431`.
+   - **Records** and **Period**: what the register holds and the years it covers. GEDRoots fills them in for you as you enter records.
+
+To reuse a source, open it from the **Sources** list (<kbd>⌘2</kbd> / <kbd>Ctrl+2</kbd>). Its page lists every record already entered from it.
+
+![A source with its records and the people it cites](../images/source.png)
+
+## Enter a record
+
+1. Open the source and click **+** next to **Records**, or select **Source › Enter Record…** (<kbd>⌘E</kbd> / <kbd>Ctrl+E</kbd>).
+2. In the **Record** section:
+   - **Event**: the event the record attests, such as **Birth**, **Marriage**, **Death** or **Census**. For anything else, choose **Other Event…** or **Other Family Event…** and type its name.
+   - **Date** and **Place** of the event.
+   - **Record Date**, when the record was written later than the event, such as a birth declared three days after.
+   - **Reference**: where the record is in the source, such as `Record no. 27, image 12`.
+   - **Quality**: how much you trust the record for this event, from **Unreliable** to **Primary**.
+3. In **People**, GEDRoots has already added the roles the event needs: a **Child**, a **Father** and a **Mother** for a birth (plus a **Godfather** and a **Godmother** for a baptism); a **Husband**, a **Wife** and both sets of parents for a marriage. Remove a role you don't need with its **×**. Fill in each person as the record writes them: **Surname**, **Given Names**, **Sex**, **Stated Age**, **Occupation**, **Residence**, **Born in**.
+4. To add someone else, click **+** next to **People** and choose their role: **Witness**, **Godfather**, **Godmother**, **Informant**, **Officiant**, **Neighbor**…
+5. For each person, decide what to do (see [Link, create or mention](#link-create-or-mention)).
+6. Optional: paste or type the **Transcription**.
+7. Click **Save**.
+
+To check what will be written, click **GEDCOM Preview** before saving.
+
+### Link, create or mention
+
+As you type a name, GEDRoots looks for the people who match it: same name, a plausible age, and the links the tree already knows. A suggestion such as **Link to Jeanne ROUSSEL (1886–1961) · parent of Henri MARCHAND** tells you why it fits.
+
+For each person, choose one of three things:
+
+| Choice | When | What GEDRoots does |
+| --- | --- | --- |
+| **Link to …** | The person is already in your tree. | Adds the event or the citation to that person. |
+| *(nothing)* | The person is new and belongs in your tree. | Creates them when you save. |
+| **Mention Without Creating** | A witness or a neighbor you don't want as a person in the tree. | Writes their name, role and details in a note of the citation. |
+
+The counter at the bottom, such as `2 linked · 1 to decide`, tells you how many people are still to decide.
+
+### What GEDRoots writes when you save
+
+- The event, on the main person (or on the couple's family for a marriage), with its date, place and the citation.
+- The family links that follow from the roles: the **Father** and **Mother** of a child become their parents; a **Husband** and **Wife** form a couple.
+- A citation on every person, with their **role** in the record.
+- Witnesses, godparents and informants as associates of the main event, with their role.
+- Each stated occupation and residence as a dated, sourced fact. A stated age becomes the person's age at the event, and, if **Birth estimated from the stated age** is selected, an estimated birth (`about 1880`).
+
+Everything is standard GEDCOM 7. Other genealogy programs read it.
+
+## Attach the record's image
+
+Drop the scans or photos of the record anywhere on the editor, or:
+
+- click **Existing media…** to pick an image already in your file;
+- click **Other File…** to choose files on your disk.
+
+Several files make a single media with several pages, such as a marriage record on two sheets. A file you already imported is reused, never duplicated. When you save, GEDRoots files the images in your media folder and names them after your [naming template](/workflows/media#file-images-automatically).
+
+You can also start from the images: in **Edit › Media…** (<kbd>⌘⇧M</kbd> / <kbd>Ctrl+Shift+M</kbd>), select the files and click **Enter a Record from Images…**.
+
+## Go through a whole register
+
+When you index a register, record after record:
+
+1. Enter the first record.
+2. Click **Save and Next Record**.
+
+GEDRoots saves the record and opens a new one in the same source. It keeps the event type, place, image and quality, and increases the first number of the reference: `Record no. 27` becomes `Record no. 28`.
+
+## Enter a census or another household record
+
+For a census, choose the **Census** event and add the household members with the roles **Head of Household** and **Household Member**. Type each member's **Stated Relationship** as written, such as `wife` or `son`: GEDRoots links each one to the head of household accordingly.
+
+## Correct or delete a record
+
+On the source's page, click a record to reopen it in the editor. Saving it replaces its citations. To delete a record, right-click it and choose **Delete Record**: its citations and associations are removed, while the events and the people stay in the tree.
+
+Records entered in other software appear in the list too: GEDRoots rebuilds the list from the citations that point to the source, grouped by reference.
+
+## Add a web link
+
+For a record you consulted online, keep a link to its page in the archive's viewer. Select **Edit › Add Web Link…**, or click **+** next to **Web Links** in the details panel, then enter the **Address** and a **Title**. The link opens in your browser with a click.
+
+## Related pages
+
+- [Sources and citations](/concepts/sources-and-citations)
+- [Organize scans and photos](/workflows/media)
+- [Research with an AI agent](/workflows/ai-agents)

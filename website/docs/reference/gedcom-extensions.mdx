@@ -1,0 +1,39 @@
+---
+title: GEDCOM extensions
+description: The few _GR_ tags GEDRoots writes when GEDCOM 7 has no standard structure, and the standard structures it uses for everything else.
+---
+
+GEDRoots stores everything in standard GEDCOM 7 whenever the standard has a structure for it. For the rest, it writes extension tags that start with `_GR_`, declared in the file's header (`HEAD.SCHMA`) as GEDCOM 7 requires. Software that doesn't know them ignores them without losing data, and GEDRoots removes them from [GEDCOM 5.5.1 exports](/workflows/share#give-a-file-to-older-software).
+
+The full specification of each tag, with examples, is in [`docs/extensions.md`](https://github.com/gedroots/gedroots/blob/main/docs/extensions.md) in the source repository.
+
+## Extension tags
+
+| Tag | Where | Stores | Set in |
+| --- | --- | --- | --- |
+| <a id="_gr_root"></a>`_GR_ROOT` | `HEAD` | The root person | File Settings › General |
+| <a id="_gr_even"></a>`_GR_EVEN` | `HEAD` | A custom event type not used yet, or the label of a type | File Settings › Events |
+| <a id="_gr_media"></a>`_GR_MEDIA` | `HEAD` | Media folder, subfolders, what each receives, naming templates | File Settings › Media |
+| <a id="_gr_find"></a>`_GR_FIND` | `HEAD` | A saved search: name, list, criteria | **View › Save Search** |
+| <a id="_gr_web"></a>`_GR_WEB` | `HEAD` | A website for **Person › Search On**, with its address template | File Settings › Search |
+| <a id="_gr_file"></a>`_GR_FILE` | A link to a media | The page of a multi-page media that a crop applies to | Tagging a person on page 2 or later |
+| <a id="_gr_ignore"></a>`_GR_IGNORE` | Any record | A Data Quality issue you checked and hid | Right-click an issue › **Hide** |
+
+## Standard structures GEDRoots uses
+
+These features need no extension. Other GEDCOM 7 software reads them.
+
+| Feature | GEDCOM 7 structure |
+| --- | --- |
+| Author, copyright, description, language of the file | `HEAD.SUBM`, `HEAD.COPR`, `HEAD.NOTE`, `HEAD.LANG` |
+| Place format | `HEAD.PLAC.FORM` |
+| Place coordinates and OpenStreetMap identifier | `PLAC.MAP.LATI`/`LONG`, `PLAC.EXID` |
+| Custom event | `EVEN` with `TYPE` |
+| Citation with role and reference | `SOUR` with `PAGE`, `EVEN`/`ROLE`, `DATA.DATE`, `DATA.TEXT`, `QUAY` |
+| Witnesses, godparents, informants | `ASSO` with `ROLE` |
+| Source contents and period | `SOUR.DATA.EVEN` with `DATE` |
+| Multi-page media | `OBJE` with one `FILE` per page |
+| Medium of a media | `FILE.FORM.MEDI` |
+| Person tagged in a photo, cropped portrait | `CROP` on the `OBJE` link |
+| Web link | `OBJE` whose `FILE` is the address, `FORM text/html`; `WWW` on a repository |
+| Media of an event | `OBJE` under the event |

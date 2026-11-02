@@ -1,0 +1,93 @@
+---
+title: Data quality checks
+description: Every check of the Data Quality page, with its threshold and whether it can be hidden.
+---
+
+The [Data Quality](/workflows/quality) page runs these checks on the whole file. The code is what GEDRoots writes in the file when you hide an issue (see [`_GR_IGNORE`](/reference/gedcom-extensions#_gr_ignore)).
+
+Imprecise dates count as ranges: an issue is reported only if it holds for every possible date. An `about` date has a margin of 5 years.
+
+## Dates and Ages
+
+| Issue | Code |
+| --- | --- |
+| Death before birth | `death_before_birth` |
+| Burial before death | `burial_before_death` |
+| Event before birth | `event_before_birth` |
+| Event after death | `event_after_death` |
+| Lifespan over 110 years | `too_old` |
+| Parent under 14 at the child's birth | `parent_too_young` |
+| Father over 80 at the birth | `father_too_old` |
+| Mother over 55 at the birth | `mother_too_old` |
+| Birth after the mother's death | `birth_after_mother_death` |
+| Birth more than 10 months after the father's death | `birth_after_father_death` |
+| Child born before their parent | `child_before_parent` |
+| Marriage before 14 | `marriage_too_young` |
+| Marriage after a spouse's death | `marriage_after_death` |
+| More than 30 years between spouses | `marriage_age_gap` |
+| Two births less than 8 months apart, twins aside | `siblings_too_close` |
+| Record dated outside the period its source covers for that record type | `outside_source_period` |
+
+## Family Links
+
+| Issue | Code |
+| --- | --- |
+| A person lists a family that doesn't list them back | `missing_backlink` |
+| Husband who isn't a man, wife who isn't a woman | `husband_not_male`, `wife_not_female` |
+| Person in their own ancestry | `own_ancestor` |
+| Father or husband role given to a woman in a citation, or the reverse | `role_sex_mismatch` |
+
+## GEDCOM Structure
+
+Checked against the official GEDCOM 7 schema, for GEDCOM 7 files only. Extension tags (`_XXX`) are never reported.
+
+| Issue | Code |
+| --- | --- |
+| Standard tag not allowed in this place | `tag_not_allowed` |
+| Required information missing, such as a repository's name | `missing_required` |
+| Information given several times where only one is allowed | `too_many` |
+| Link to a record of the wrong kind | `wrong_pointer` |
+| Link to a record that doesn't exist | `broken_link` |
+| Unreadable or impossible date, unknown value | `invalid_value` |
+
+## Empty or Isolated Items
+
+| Issue | Code |
+| --- | --- |
+| Event with no data at all | `empty_fact` |
+| Empty note or empty shared note | `empty_note` |
+| Family with no members | `empty_family` |
+| Media, source, repository or shared note used nowhere | `unused_record` |
+| Person, or group of people, with no family link to the root person | `disconnected` |
+
+## Media
+
+| Issue | Code |
+| --- | --- |
+| File not found | `missing_file` |
+| File not at its path, but a single file with the same name exists in the `.ged` folder | `moved_file` |
+| Two media pointing to exactly the same files | `duplicate_media` |
+| File without a format | `missing_form` |
+
+## Places
+
+These issues can't be hidden: they concern no single record.
+
+| Issue | Code |
+| --- | --- |
+| Same place written differently (case, accents, `St`/`Saint`, codes), or a shortened form of exactly one other place | `place_variant` |
+| Same division under two different higher divisions | `place_hierarchy` |
+| Unreadable or incomplete coordinates | `bad_coords` |
+| Place without coordinates (**Places Without Coordinates** category) | `missing_coords` |
+
+## Events Without Sources
+
+| Issue | Code |
+| --- | --- |
+| Event that cites no source | `unsourced` |
+
+## Files to Attach
+
+| Issue | Code |
+| --- | --- |
+| File in the `.ged` folder that no media uses. Can't be hidden. | `unattached_file` |

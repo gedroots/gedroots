@@ -1,0 +1,100 @@
+---
+title: All commands
+description: Every command of the GEDRoots menu bar, menu by menu, with what it does.
+---
+
+Every command is in the menu bar, and in the command palette (<kbd>⌘⇧P</kbd> / <kbd>Ctrl+Shift+P</kbd>). Commands that act on a single record also appear when you right-click it. Shortcuts are listed in [Keyboard shortcuts](/reference/shortcuts).
+
+On macOS, **File Settings…** and **Quit GEDRoots** are in the **GEDRoots** menu. On Windows and Linux, they are at the bottom of the **File** menu.
+
+## File
+
+| Command | Does |
+| --- | --- |
+| **New File** | Creates a tree with one empty person. |
+| **Open…** | Opens a `.ged` file as it is. |
+| **Open Recent** | The files you opened recently. **Clear Menu** empties the list. |
+| **Import GEDCOM…** | Opens a file from other software and offers to convert its non-standard parts to GEDCOM 7. See [Bring in a tree](/workflows/import). |
+| **Save**, **Save As…** | Writes the tree. A `.ged.bak` copy of the previous version is kept. |
+| **Export › GEDZIP with Media…** | A `.gdz` archive with the tree and its media files. |
+| **Export › GEDCOM 5.5.1…** | A file for software that doesn't read GEDCOM 7. |
+| **Export › GEDCOM for Geneanet…** | A GEDCOM 5.5.1 file adapted to Geneanet, then opens Geneanet's import page. |
+| **Connect an AI Agent…** | Turns the local MCP server on or off and gives the command to connect an agent. |
+| **File Settings…** | Author, root person, place format, event types, media, search sites. |
+
+## Edit
+
+| Command | Does |
+| --- | --- |
+| **Undo**, **Redo** | Undoes or redoes a change to the tree, up to 50 steps. |
+| **Cut**, **Copy**, **Paste**, **Select All** | In text fields. |
+| **Media…** | Opens the media window of the selected record. |
+| **Add Web Link…** | Adds a link to a web page to the selected record. |
+| **Copy Name** | Copies the record's name. |
+| **Copy ID** | Copies the record's GEDCOM identifier, such as `@I12@`. |
+| **Delete…** | Deletes the selected record, after confirmation. |
+| **Find** | Moves to the search field of the list. |
+
+## Person
+
+| Command | Does |
+| --- | --- |
+| **New Person** | Creates a person with no links. |
+| **Add Relative › Father, Mother, Spouse, Child, Sibling** | Creates the relative and links them to the selected person. |
+| **Link Existing Person › Father…, Mother…, Spouse…, Child…, Sibling…** | Links a person already in the tree. |
+| **Add Event…** | Adds an event to the person or one of their unions. |
+| **Go to Root Person** | Opens the root person. |
+| **Relationship With…** | Names the relationship between the selected person and another one. |
+| **Find Ancestors**, **Find Descendants** | Searches the person's ancestors or descendants in the list. |
+| **Search On** | Opens the person's search on a website. Present when the file has search sites. |
+
+## Source
+
+| Command | Does |
+| --- | --- |
+| **Enter Record…** | Opens the record editor in the selected source, or asks which source. |
+| **Review Agent Proposals** | Opens the To Review page. |
+| **Save Proposal to Tree**, **Reject Proposal** | Act on the proposal shown in To Review. |
+| **New Source**, **New Repository**, **New Note** | Create a record of that kind. |
+
+## Media
+
+| Command | Does |
+| --- | --- |
+| **New Media** | Creates a media record. |
+| **Attach This Media To…** | Links the selected media to a person, a family, a source or an event. |
+| **Pages › Previous Page, Next Page** | Turn the pages of a multi-page media. |
+| **Pages › Add Pages…** | Adds files as new pages. |
+| **Pages › Move Page Left, Move Page Right** | Reorder the current page. |
+| **Pages › Split Page into New Media** | Turns the current page into a media of its own. |
+| **Pages › Remove Page from Media** | Takes the page out of the media; its file stays on disk. |
+| **Merge with Another Media…** | Adds the pages of another media to this one. |
+| **Merge Selected Media** | Merges the media selected in the list, in order. |
+| **Rename Using Template…** | Moves and renames the media's files according to File Settings › Media. |
+| **Tag a Person in the Photo** | Draws a frame around a face and links it to a person. |
+| **Files to Attach** | Lists the files of the `.ged` folder that no media uses. |
+
+## View
+
+| Command | Does |
+| --- | --- |
+| **Back**, **Forward** | Move through the records you opened. |
+| **People**, **Sources**, **Places**, **Media**, **Repositories**, **Notes** | Show a list. |
+| **Data Quality**, **Statistics** | Show a page. |
+| **Tree**, **Details**, **Raw GEDCOM** | Switch the view of the selected record. |
+| **Show or Hide Sidebar** | Toggles the sidebar. |
+| **Relatives' Events** | Mixes the births and deaths of close relatives into a person's timeline. |
+| **Tree › Free Tree**, **Fan Chart** | Choose the chart. |
+| **Tree › Center Tree on Person** | Centers the free tree on the selected person. |
+| **Tree › More Generations**, **Fewer Generations** | Change the depth of the fan chart. |
+| **Filter List › …** | Quick filters: Men, Women, Ancestors of the Root Person, Without Sources, Without Parents, Without Dates, Unions Without Marriage, With Media. |
+| **Filter List › Flagged Items Only** | Shows only the items with a warning, such as media without a file. |
+| **Filter List › Ignored Issues** | Shows the Data Quality issues you've hidden. |
+| **Filter List › Clear Search** | Empties the search field. |
+| **Save Search**, **Rename Search**, **Delete Search** | Manage the saved searches of the sidebar. |
+
+## Help
+
+| Command | Does |
+| --- | --- |
+| **All Commands…** | Opens the command palette. |

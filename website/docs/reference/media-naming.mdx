@@ -1,0 +1,51 @@
+---
+title: Media naming templates
+description: The variables and options you can use in the naming template of a media subfolder.
+---
+
+In **File › File Settings… › Media**, each subfolder has a naming template. GEDRoots uses it to name the files it files there, on import or with **Media › Rename Using Template…**. See [Organize scans and photos](/workflows/media#file-images-automatically).
+
+A template is text with variables in braces, such as `{sosa:6}_{branch}_{type:1}_{surname:simple}_{given}`. A `/` in a template creates a subfolder.
+
+## Variables
+
+| Variable | Value |
+| --- | --- |
+| `{type}` | Event type, such as `Birth`, or the type of a custom event, in the interface language |
+| `{date}` | Date of the event, as `YYYY-MM-DD` |
+| `{year}` | Year of the event |
+| `{place}` | Town of the event |
+| `{surname}` | Surname. For a couple, the husband's |
+| `{given}` | First given name. For a couple, the husband's |
+| `{given_names}` | All given names |
+| `{spouse}` | For a couple, the wife's surname |
+| `{sosa}` | Sosa-d'Aboville number, computed from the root person |
+| `{branch}` | Branch of a collateral relative from their Sosa ancestor (see below) |
+| `{source}` | Title of the source |
+| `{page}` | Reference of the citation, such as `Record no. 27` |
+| `{title}` | Title of the media |
+| `{n}` | Page number, for a media with several files |
+
+Variable names are in English whatever the interface language.
+
+### Sosa-d'Aboville numbers
+
+`{sosa}` and `{branch}` number every relative of the root person, not only direct ancestors. A direct ancestor has their Sosa number and no branch. A collateral relative gets the Sosa number of the ancestor they descend from, and a branch in d'Aboville style: `{sosa}` = `58` and `{branch}` = `2` for the second child of Sosa 58; `B1` for the first child of their second union; `2.3` for the third child of that second child.
+
+## Options
+
+| Option | Effect | Example |
+| --- | --- | --- |
+| `:N` on a number | Pads with zeros to N digits | `{sosa:6}` → `000058` |
+| `:N` on text | Keeps the first N letters | `{type:1}` → `B` for Birth |
+| `:simple` | Removes accents, spaces and apostrophes | `{surname:simple}` → `LEFEVRE` for `LEFÈVRE` |
+
+## Rules
+
+- An empty variable disappears, along with the separator before it.
+- Without `{n}`, the pages of a multi-page media get `p2`, `p3`… at the end of the name.
+- A name already taken gets `(2)`, `(3)`…
+
+## Where the values come from
+
+Variables are read from the event that the media documents: the event that carries the media, the event that cites it, or the event that cites a source that carries it. When several events qualify, GEDRoots prefers the one the source describes or its title names, such as a *Birth record…*, over an occupation or a residence. Failing an event, values come from the source, then from the linked person or family.

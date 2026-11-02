@@ -1,0 +1,59 @@
+---
+title: MCP server
+description: The tools, prompts and rules of the local MCP server that GEDRoots offers to AI agents.
+---
+
+GEDRoots serves the [Model Context Protocol](https://modelcontextprotocol.io) so that an AI agent can read the open tree and propose records. To set it up and review proposals, see [Research with an AI agent](/workflows/ai-agents).
+
+## Connection
+
+| | |
+| --- | --- |
+| Turn on | **File › Connect an AI Agent…**, **Allow AI agents** |
+| Address | `http://127.0.0.1:47280/mcp` |
+| Transport | Streamable HTTP |
+| Authentication | `Authorization: Bearer <token>` header. The token is shown in the command that **Copy Command** copies. |
+| Runs | While GEDRoots is open and the setting is on |
+| File | The file of the most recently active GEDRoots window |
+
+The server refuses requests sent by a web page (with an `Origin` header). The setting and the token are stored in `GEDRoots/agents` in your system's configuration folder: `~/Library/Application Support` on macOS, `~/.config` on Linux, `%APPDATA%` on Windows.
+
+## Tools
+
+The tools return structured JSON. All are read-only, including `propose_act`, which only adds a proposal to review.
+
+| Tool | Returns |
+| --- | --- |
+| `file_info` | File name, counts, root person |
+| `search_people` | People matching a search, with the syntax of the app's [search field](/reference/search-criteria) |
+| `person_sheet` | A person's events with date, place, cited sources and media; parents, unions, children; Sosa number |
+| `research_gaps` | Births, marriages and deaths missing or unsourced among the root person's direct ancestors, by Sosa number, with each person's known places |
+| `search_sources` | Sources (register, repository, call number, number of records) and repositories, to cite an existing one |
+| `propose_act` | Adds a record to the To Review page: event, date, place, source, reference, transcription, people with their role, downloaded file, address of the record's page |
+
+Identifiers such as `I12` are only for passing between tools. The server's instructions ask the agent not to show them to you.
+
+## Prompts
+
+| Prompt | Arguments | Does |
+| --- | --- | --- |
+| `find_record` | `person`, `event`, both optional | Picks a gap with `research_gaps`, finds the archive and register, searches it at a human pace, downloads the record and continues with `read_record` |
+| `read_record` | `file`, `person`, both optional | Transcribes the record, checks it against the person's sheet, picks or describes the source with `search_sources`, then calls `propose_act` and corrects the proposal if it's refused |
+
+In Claude Code, prompts appear as commands: `/mcp__gedroots__find_record` and `/mcp__gedroots__read_record`.
+
+## Validation of proposals
+
+`propose_act` uses the same model as the [record editor](/workflows/records). A proposal is refused, with the reason, when:
+
+- the source or repository doesn't exist, and the new source doesn't name its register;
+- it doesn't follow the file's habit for that register: one source per record, or one per register with the record's reference;
+- it gives a person a parent other than the one already in the tree;
+- a linked person doesn't exist or is living;
+- a date is invalid. Valid dates are rewritten in GEDCOM 7 syntax.
+
+A place named like a place of the tree becomes that place. A PDF register page is extracted as a JPEG image when the file's other records are images. The address of the record's page in the archive's viewer becomes a web link of the source.
+
+## Living people
+
+A person with no death, burial or cremation is treated as living, unless their birth, or a date that places it, is more than 100 years ago. A living person's sheet is refused, and their name is replaced by “Living person” in every result.
