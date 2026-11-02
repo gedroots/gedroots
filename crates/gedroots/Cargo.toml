@@ -2,7 +2,7 @@
 name = "gedroots"
 version = "0.1.0"
 edition = "2024"
-description = "GedRoots — logiciel de généalogie libre et local, GEDCOM 7"
+description = "GEDRoots — logiciel de généalogie libre et local, GEDCOM 7"
 
 [dependencies]
 gpui-kit = "=0.8.1"
@@ -12,4 +12,6 @@ lsp-types = "0.97"
 image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "tiff", "webp", "gif", "bmp"] }
 ureq = { version = "2", features = ["native-certs", "json"] }
 serde_json = "1.0.154"
+# Fichiers ouverts depuis le Finder, transmis à la boucle de l'app.
+async-channel = "2"
 imagesize = "0.14"

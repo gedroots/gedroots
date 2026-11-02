@@ -1,6 +1,6 @@
-# Extensions GEDCOM de GedRoots
+# Extensions GEDCOM de GEDRoots
 
-GedRoots stocke ses propres données **dans le fichier `.ged`**, jamais dans un fichier
+GEDRoots stocke ses propres données **dans le fichier `.ged`**, jamais dans un fichier
 annexe. Toutes ses balises commencent par `_GR_` et sont déclarées dans l'en-tête, comme
 l'exige GEDCOM 7 :
 
@@ -17,7 +17,7 @@ Les autres logiciels ignorent ces balises sans perte de données.
 
 ## `_GR_ROOT`
 
-Individu racine de l'arbre : celui qu'ouvre GedRoots au chargement du fichier et vers
+Individu racine de l'arbre : celui qu'ouvre GEDRoots au chargement du fichier et vers
 lequel ramène le bouton **Racine**. Se définit depuis la fiche d'un individu,
 menu **… → Définir comme racine**.
 
@@ -32,7 +32,7 @@ menu **… → Définir comme racine**.
 1 _GR_ROOT @I00001@
 ```
 
-Sans cette balise (ou si elle pointe vers un individu supprimé), GedRoots prend le Sosa 1
+Sans cette balise (ou si elle pointe vers un individu supprimé), GEDRoots prend le Sosa 1
 déclaré par Ancestris (`_SOSADABOVILLE 1`), sinon le premier individu du fichier.
 Supprimer l'individu racine retire aussi la balise.
 
@@ -77,7 +77,7 @@ enregistrement `OBJE` standard avec plusieurs `FILE`, un par page, dans l'ordre 
 ```
 
 GEDCOM 7 applique le `CROP` d'un lien au premier fichier seulement. Pour situer une
-personne sur une autre page (cadre tracé sur la page 2 d'un acte), GedRoots ajoute
+personne sur une autre page (cadre tracé sur la page 2 d'un acte), GEDRoots ajoute
 `_GR_FILE` au lien :
 
 - **Sous** : un lien vers un média (`n OBJE @M@`), à côté de `CROP`.
@@ -157,9 +157,13 @@ la liste) porte la balise avec le bon code.
 | `empty_family` | Famille sans aucun membre |
 | `unused_record` | Média, source, dépôt ou note partagée cité nulle part |
 | `disconnected` | Individu (ou groupe d'individus) sans aucun lien familial ni `ASSO` avec l'individu racine |
-
 | `role_sex_mismatch` | Rôle `FATH`/`HUSB` d'une femme ou `MOTH`/`WIFE` d'un homme dans une citation |
 | `outside_source_period` | Acte daté hors de la période que sa source déclare pour ce type d'acte |
+| `missing_file` | Fichier d'un média introuvable sur le disque |
+| `moved_file` | Fichier introuvable à son chemin, mais un seul fichier du même nom existe dans le dossier du `.ged` |
+| `duplicate_media` | Deux médias désignent exactement les mêmes fichiers |
+| `missing_form` | `FILE` sans `FORM` (remplace `missing_required` pour ce cas) |
+| `unattached_file` | Fichier du dossier du `.ged` qu'aucun média ne désigne (ne peut pas être masqué : il n'a pas d'enregistrement) |
 
 Le contrôle du schéma GEDCOM 7 ne s'applique qu'aux fichiers en version 7 ; les balises
 d'extension (`_XXX`) ne sont jamais signalées.
@@ -170,7 +174,7 @@ possibles. Les dates « vers » ont une marge de 5 ans.
 
 ## Types des sources et des médias (sans extension)
 
-GedRoots type les sources et les médias avec les structures standard de GEDCOM 7,
+GEDRoots type les sources et les médias avec les structures standard de GEDCOM 7,
 que les autres logiciels lisent :
 
 | Donnée | GEDCOM écrit |
@@ -213,7 +217,7 @@ rattachent à leur famille, `SPOU` forme un couple, et dans un ménage (plusieur
 principales, ex. un recensement) le lien déclaré (« épouse », « fils »…) relie chacun à la
 première.
 
-**Liste des actes d'une source.** GedRoots la reconstitue à partir des citations des individus
+**Liste des actes d'une source.** GEDRoots la reconstitue à partir des citations des individus
 et des familles qui désignent la source, regroupées par `PAGE` et `DATA.DATE` : la personne
 principale est celle dont l'événement porte la citation, les autres sont lues dans leur
 `ROLE`. Les citations écrites par d'autres logiciels apparaissent donc aussi. Rouvrir un acte
@@ -222,7 +226,7 @@ remplace ses citations ; le supprimer retire ses citations et ses `ASSO`, en lai
 
 ### Anciennes balises `_GR_TPL`, `_GR_FLD`…
 
-Les versions précédentes de GedRoots décrivaient des modèles d'actes (`0 @T1@ _GR_TPL`,
+Les versions précédentes de GEDRoots décrivaient des modèles d'actes (`0 @T1@ _GR_TPL`,
 `1 _GR_TPL` sur une source) et recopiaient les champs d'un acte dans ses citations
 (`_GR_FLD`), avec un rôle non standard `PRIN`. Elles ne sont plus écrites. L'assistant d'import
 (**Fichier › Importer un GEDCOM…**) les propose au nettoyage : les modèles et ces balises sont

@@ -14,7 +14,7 @@
 //!
 //! Les individus et les sources pointent alors vers un seul média. La norme
 //! applique le `CROP` d'un lien au premier fichier ; pour situer une personne
-//! sur une autre page, GedRoots ajoute au lien l'extension `_GR_FILE` (numéro
+//! sur une autre page, GEDRoots ajoute au lien l'extension `_GR_FILE` (numéro
 //! de la page, à partir de 1, voir `docs/extensions.md`) :
 //!
 //! ```text
@@ -159,7 +159,7 @@ impl Gedcom {
     }
 
     /// Réécrit les liens vers `media` dans tout le fichier ; touche les enregistrements modifiés.
-    fn rewrite_links(&mut self, media: &str, mut f: impl FnMut(&mut Node) -> Vec<Node>, dedupe: &[&str]) {
+    pub(crate) fn rewrite_links(&mut self, media: &str, mut f: impl FnMut(&mut Node) -> Vec<Node>, dedupe: &[&str]) {
         let p = ptr(media);
         let mut uses_pages = false;
         let mut wrap = |l: &mut Node| {

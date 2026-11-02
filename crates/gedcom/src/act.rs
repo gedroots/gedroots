@@ -2116,7 +2116,7 @@ fn suggestion_label(i: &Individual) -> String {
 // Ancienne saisie guidée (modèles) : nettoyage par l'assistant d'import
 // ----------------------------------------------------------------------
 
-/// Balises des anciens modèles d'actes de GedRoots (`_GR_TPL`…), qui ne sont plus écrites.
+/// Balises des anciens modèles d'actes de GEDRoots (`_GR_TPL`…), qui ne sont plus écrites.
 pub const LEGACY_TEMPLATE_TAGS: &[&str] =
     &["_GR_TPL", "_GR_FLD", "_GR_ROLE", "_GR_REL", "_GR_PF", "_GR_PAGE", "_GR_EVT", "_GR_MULT"];
 

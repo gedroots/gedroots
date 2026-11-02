@@ -1,4 +1,4 @@
-# GedRoots
+# GEDRoots
 
 Logiciel de généalogie **libre et local**, écrit en Rust avec [GPUI](https://www.gpui.rs/)
 (via [GPUI Kit](https://gpui-kit.com)). Les données restent dans un fichier **GEDCOM 7**
@@ -49,7 +49,8 @@ et suit la maquette « Lignée » (thème sombre, barre d'activité, liste, arbr
   restent cohérents, et une famille vidée est supprimée.
 - **Photos et actes** : glisser-déposer ou choisir des fichiers sur une personne, une famille ou
   une source ; suggestions des fichiers du dossier (`Actes/`, `Portraits/`…) dont le nom contient
-  celui de la personne ; liste des fichiers du dossier sans média, importables en un clic.
+  celui de la personne ; les fichiers du dossier sans média sont dans Qualité › Fichiers à
+  rattacher (menu Média › Fichiers à rattacher).
 - **Familles, sources, dépôts, médias, notes partagées** : liste, éditeur visuel,
   et panneau « Utilisé par / Liens » pour naviguer entre les enregistrements.
 - **Lieux** : index de tous les `PLAC` du fichier, renommage global et coordonnées (`MAP`).
@@ -82,7 +83,7 @@ et suit la maquette « Lignée » (thème sombre, barre d'activité, liste, arbr
 - **Réglages du fichier** (Fichier › « Réglages du fichier… ») : auteur, e-mail, droits,
   description, langue et individu racine, plus la liste des anomalies masquées (« Réafficher »).
   Tout est rangé dans l'en-tête du .ged en GEDCOM 7 standard (`HEAD.SUBM`, `COPR`, `NOTE`,
-  `LANG`). À chaque enregistrement, `HEAD.SOUR` et `HEAD.DATE` indiquent GedRoots et la date.
+  `LANG`). À chaque enregistrement, `HEAD.SOUR` et `HEAD.DATE` indiquent GEDRoots et la date.
   - **Lieux** : format des lieux (`HEAD.PLAC.FORM`) — juridictions à renommer, réordonner,
     ajouter ou retirer, avec réécriture de tous les lieux du fichier (annulable) et un aperçu.
     La fiche d'un lieu propose un champ par juridiction, et les libellés courts (« Troyes
@@ -118,7 +119,7 @@ et suit la maquette « Lignée » (thème sombre, barre d'activité, liste, arbr
   modèles : on choisit n'importe quel événement GEDCOM (ou un type personnalisé), puis on
   ajoute les personnes avec leur rôle standard (enfant, père, mère, époux, témoin, parrain,
   déclarant, officiant, voisin…) ; les champs et les liens familiaux découlent du rôle.
-  Pour chaque personne, GedRoots propose les individus existants qui correspondent (nom,
+  Pour chaque personne, GEDRoots propose les individus existants qui correspondent (nom,
   âge, et liens déjà connus : « parent de… », « conjoint de… ») ; on peut lier, créer, ou
   mentionner sans créer. L'enregistrement écrit tout de suite l'événement, les liens
   familiaux, les témoins (`ASSO`), les professions et domiciles datés, une naissance estimée
@@ -133,10 +134,13 @@ et suit la maquette « Lignée » (thème sombre, barre d'activité, liste, arbr
   impossibles, liens familiaux incohérents, structure GEDCOM 7 (balise non permise,
   information obligatoire absente ou en double, date illisible, valeur inconnue, lien
   cassé), éléments vides ou isolés (événements et notes vides, familles sans membre,
-  enregistrements cités nulle part, arbres séparés de la racine) et événements sans
-  source. Un clic ouvre l'élément (`⌘[` revient), le bouton de la ligne corrige quand
-  c'est sûr (supprimer, rétablir un lien à sens unique, retirer un lien cassé), et en lot
-  avec confirmation. Clic droit › « Masquer » écrit [`_GR_IGNORE`](docs/extensions.md).
+  enregistrements cités nulle part, arbres séparés de la racine), médias (fichier
+  introuvable, déplacé dans le dossier, médias en double, format absent), événements sans
+  source et fichiers du dossier à rattacher. Un clic ouvre l'élément (`⌘[` revient), le
+  bouton de la ligne corrige quand c'est sûr (supprimer, rétablir un lien à sens unique,
+  retirer un lien cassé, corriger le chemin, fusionner, créer le média), et en lot, avec
+  confirmation pour les suppressions et fusions. « Localiser… » choisit à la main le
+  fichier d'un média introuvable. Clic droit › « Masquer » écrit [`_GR_IGNORE`](docs/extensions.md).
 - **Lien de parenté** (menu Individu › Lien de parenté avec…) : « cousine issue de germain »,
   « oncle à la mode de Bretagne », demi-frère, beau-père… avec le chemin par l'ancêtre commun
   et le degré civil, affiché dans le panneau de l'individu.
@@ -155,7 +159,43 @@ et suit la maquette « Lignée » (thème sombre, barre d'activité, liste, arbr
 
 ![Acte dans la fiche source](docs/capture-saisie.png)
 
-## Lancer
+## Installer
+
+### macOS
+
+```sh
+packaging/macos/bundle.sh --install
+```
+
+Compile GEDRoots en mode release, construit `GEDRoots.app` (icône, nom dans la barre de menus et
+le Dock, pas de Terminal) et la copie dans `/Applications`. Les fichiers `.ged` s'ouvrent ensuite
+d'un double-clic ou par « Ouvrir avec » dans le Finder. Sans `--install`, l'app reste dans
+`target/release/GEDRoots.app` ; avec `--dmg`, une image disque `GEDRoots.dmg` est créée à côté
+(utile pour la CI). Pour un autre cargo :
+`CARGO="mise exec rust@stable -- cargo" packaging/macos/bundle.sh --install`.
+
+L'app est signée « ad hoc », ce qui suffit sur le Mac qui l'a compilée. Une app téléchargée
+(le `.dmg` de la CI) est bloquée par Gatekeeper au premier lancement : clic droit › Ouvrir, ou
+`xattr -dr com.apple.quarantine /Applications/GEDRoots.app`. Pour la distribuer sans cet
+avertissement, il faudrait la signer avec un certificat Developer ID et la faire notariser par
+Apple (compte Apple Developer payant).
+
+### Linux
+
+```sh
+packaging/linux/install.sh
+```
+
+Installe `~/.local/bin/gedroots`, l'icône et l'entrée du menu des applications.
+
+### Windows
+
+`cargo build --release -p gedroots` produit `target\release\gedroots.exe`, qui s'ouvre sans
+fenêtre de console.
+
+L'icône (`packaging/icon.png`) vient du kit de marque GEDRoots (app icon sombre, posée sur la grille macOS).
+
+## Lancer depuis les sources
 
 ```sh
 cargo run --release -- chemin/vers/arbre.ged
@@ -167,7 +207,7 @@ Raccourcis : `⌘O` / `Ctrl+O` ouvrir, `⌘S` / `Ctrl+S` enregistrer, `⌘N` nou
 
 Variables d'environnement facultatives pour la carte : `GEDROOTS_OFFLINE=1` (démarrer hors ligne),
 `GEDROOTS_TILE_URL` (autre serveur de tuiles, `{z}/{x}/{y}`), `GEDROOTS_TILE_CACHE` (dossier du
-cache, par défaut `~/Library/Caches/GedRoots/tiles` ou `~/.cache/gedroots/tiles`),
+cache, par défaut `~/Library/Caches/GEDRoots/tiles` ou `~/.cache/gedroots/tiles`),
 `GEDROOTS_GEOCODER` (autre instance Nominatim).
 
 Sous Linux, installer d'abord les dépendances de GPUI :
