@@ -21,6 +21,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 mod add;
+mod chart;
 mod commands;
 mod filters;
 mod history;
@@ -169,6 +170,8 @@ pub struct Workspace {
     map: Entity<MapView>,
     tree_mode: tree::TreeMode,
     tree_gens: u32,
+    /// Arbre libre : personne centrale, générations chargées, déplacement.
+    chart: std::cell::RefCell<chart::Chart>,
     picker: Option<relatives::Picker>,
     /// Fichiers image/PDF du dossier du `.ged`, pour les suggestions de rattachement.
     media_files: Rc<Vec<String>>,
@@ -233,8 +236,9 @@ impl Workspace {
             editor: None,
             status: None,
             map,
-            tree_mode: tree::TreeMode::Ancestors,
-            tree_gens: 4,
+            tree_mode: tree::TreeMode::Chart,
+            tree_gens: 5,
+            chart: Default::default(),
             picker: None,
             media_files: Rc::new(Vec::new()),
             pending_delete: None,
@@ -1231,11 +1235,14 @@ impl Workspace {
                             .child(icon(t.icon()).text_color(if active { theme::accent() } else { theme::muted() }))
                             .child(match t {
                                 // Vue d'arbre courante, réglable dans Affichage › Arbre.
-                                CenterTab::Tree => {
-                                    let r = self.tree_mode.generations();
-                                    let gens = self.tree_gens.clamp(*r.start(), *r.end());
-                                    format!("{} · {gens} gén.", self.tree_mode.label())
-                                }
+                                CenterTab::Tree => match self.tree_mode {
+                                    tree::TreeMode::Fan => {
+                                        let r = self.tree_mode.generations();
+                                        let gens = self.tree_gens.clamp(*r.start(), *r.end());
+                                        format!("{} · {gens} gén.", self.tree_mode.label())
+                                    }
+                                    m => m.label().to_string(),
+                                },
                                 _ => t.label().to_string(),
                             })
                             .on_click(cx.listener(move |this, _, _, cx| {
@@ -1256,126 +1263,6 @@ impl Workspace {
             .justify_center()
             .text_color(theme::muted())
             .child("Sélectionnez un élément dans la liste")
-    }
-
-    /// Arbre d'ascendance sur 4 générations (Sosa 1 à 15).
-    fn render_tree(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let (Some(doc), Some(root)) = (&self.doc, &self.selected) else { return div() };
-        let g = &doc.ged;
-        let anc = g.ancestry(root, 4);
-        let tree_root = g.root();
-        let column = |range: std::ops::Range<usize>, cx: &mut Context<Self>| {
-            v_flex().flex_1().min_w(px(140.)).justify_around().gap_2().children(range.map(|k| {
-                let card = match anc[k].as_ref().and_then(|x| g.individual(x)) {
-                    Some(i) => {
-                        let x = i.xref().to_string();
-                        let on = k == 1;
-                        let is_root = tree_root.as_deref() == Some(i.xref());
-                        v_flex()
-                            .id(SharedString::from(format!("anc-{k}")))
-                            .p_2()
-                            .gap_0p5()
-                            .rounded_md()
-                            .border_1()
-                            .border_color(if on { theme::accent() } else { theme::border() })
-                            .bg(if on { theme::accent_soft() } else { theme::surface() })
-                            .cursor_pointer()
-                            .hover(|d| d.border_color(theme::border_strong()))
-                            .child(
-                                h_flex()
-                                    .gap_2()
-                                    .items_center()
-                                    .child(avatar(doc, &i, 28., theme::lineage(k)))
-                                    .child(
-                                        v_flex()
-                                            .flex_1()
-                                            .min_w_0()
-                                            .child(
-                                                div()
-                                                    .overflow_hidden()
-                                                    .whitespace_nowrap()
-                                                    .text_ellipsis()
-                                                    .child(format!("{} {}", i.surname(), i.given())),
-                                            )
-                                            .child(mono(i.years())),
-                                    )
-                                    .when(is_root, |d| d.child(icon(IconName::House).text_color(theme::accent()))),
-                            )
-                            .on_click({
-                                let x = x.clone();
-                                cx.listener(move |this, _, w, cx| this.select(x.clone(), w, cx))
-                            })
-                            .with_menu(self.person_menu(&x, MenuFrom::Link, cx))
-                            .into_any_element()
-                    }
-                    // Branche inconnue plus haut : on n'affiche pas ses ascendants.
-                    None if k > 3 && anc[k / 2].is_none() => div().h(px(36.)).into_any_element(),
-                    // Parent inconnu : un clic le crée.
-                    None => {
-                        let child = anc[k / 2].clone().unwrap_or_default();
-                        let rel = if k % 2 == 0 { Relation::Father } else { Relation::Mother };
-                        let menu = self.slot_menu(&child, rel, cx);
-                        add_slot(format!("anc-add-{k}"), if k % 2 == 0 { "Père" } else { "Mère" })
-                            .on_click(cx.listener(move |this, _, w, cx| this.add_relative(child.clone(), rel, w, cx)))
-                            .with_menu(menu)
-                            .into_any_element()
-                    }
-                };
-                // Sous la personne centrale : ajouter un enfant, un frère ou une sœur.
-                if k != 1 {
-                    return card;
-                }
-                let (c1, c2) = (root.clone(), root.clone());
-                v_flex()
-                    .gap_2()
-                    .child(card)
-                    .child(
-                        add_slot("anc-add-child", "Enfant")
-                            .on_click(
-                                cx.listener(move |this, _, w, cx| {
-                                    this.add_relative(c1.clone(), Relation::Child, w, cx)
-                                }),
-                            )
-                            .with_menu(self.slot_menu(root, Relation::Child, cx)),
-                    )
-                    .child(
-                        add_slot("anc-add-sibling", "Frère ou sœur")
-                            .on_click(cx.listener(move |this, _, w, cx| {
-                                this.add_relative(c2.clone(), Relation::Sibling, w, cx)
-                            }))
-                            .with_menu(self.slot_menu(root, Relation::Sibling, cx)),
-                    )
-                    .into_any_element()
-            }))
-        };
-        div().flex_1().p_4().child(
-            v_flex()
-                .size_full()
-                .gap_3()
-                .child(
-                    h_flex()
-                        .gap_4()
-                        .text_xs()
-                        .text_color(theme::muted())
-                        .child(
-                            h_flex().gap_1p5().items_center().child(dot(theme::paternal())).child("Lignée paternelle"),
-                        )
-                        .child(
-                            h_flex().gap_1p5().items_center().child(dot(theme::maternal())).child("Lignée maternelle"),
-                        ),
-                )
-                .child(
-                    h_flex()
-                        .flex_1()
-                        .items_stretch()
-                        .gap_3()
-                        .text_sm()
-                        .child(column(1..2, cx))
-                        .child(column(2..4, cx))
-                        .child(column(4..8, cx))
-                        .child(column(8..16, cx)),
-                ),
-        )
     }
 
     fn render_form(&self, ed: &RecordEditor, cx: &mut Context<Self>) -> impl IntoElement {
