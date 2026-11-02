@@ -1,0 +1,4 @@
+# The documentation site is built with Bun (`npm install` is very slow on
+# Blume's dependency tree). `mise install` in this folder installs it.
+[tools]
+bun = "1.4"

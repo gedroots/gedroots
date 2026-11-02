@@ -5,7 +5,8 @@ The user documentation of GEDRoots, built with [Blume](https://useblume.dev). Pa
 
 ```sh
 cd website
-bun install        # or: npm install
+mise install       # installs Bun (or use your own)
+bun install
 bun run dev        # live preview on http://localhost:4321
 bun run build      # static site in dist/
 bun run check      # broken links and anchors
