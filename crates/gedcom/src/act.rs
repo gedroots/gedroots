@@ -250,6 +250,25 @@ fn starts_with_label(p: &str, role: ActRole) -> bool {
     crate::i18n::LANGUAGES.iter().filter_map(|l| role.base_phrase(l)).any(|b| p.starts_with(&sort_key(&b)))
 }
 
+/// Role of an associated person (`ASSO` / `ROLE` and its `PHRASE`) in words: the role
+/// (“Witness”, “Godmother”, or the phrase itself for `OTHER`: “neighbour”) and the rest of the
+/// phrase (“aunt”). The parts of the phrase that only repeat the role are dropped.
+pub fn association_role(role: &str, phrase: &str, sex: &str) -> (String, Option<String>) {
+    let r = ActRole::from_gedcom(role, phrase, sex);
+    let same = |part: &str| {
+        let k = sort_key(part);
+        crate::i18n::LANGUAGES.iter().any(|l| sort_key(&r.label_in(l, "", false, 0)) == k)
+    };
+    let mut extra: Vec<&str> = phrase.split(',').map(str::trim).filter(|p| !p.is_empty() && !same(p)).collect();
+    let label = if r == ActRole::Other && !extra.is_empty() {
+        // `OTHER` with a phrase: the phrase says it better than “Other”.
+        extra.remove(0).to_string()
+    } else {
+        r.label("", false, 0).into_owned()
+    };
+    (label, (!extra.is_empty()).then(|| extra.join(", ")))
+}
+
 // ----------------------------------------------------------------------
 // Record being entered
 // ----------------------------------------------------------------------

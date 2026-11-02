@@ -25,7 +25,8 @@
 //! - [`multipage`]: multi-page media (several `FILE`s), merging and splitting;
 //! - [`pedigree`]: descendants for the chart views;
 //! - [`date`]: GEDCOM dates (French Republican calendar included), displayed in words;
-//! - [`act`]: records of a source (entry, reading from citations, editing).
+//! - [`act`]: records of a source (entry, reading from citations, editing);
+//! - [`associations`]: witnesses, godparents… of events (`ASSO`) and the events a person attended.
 
 rust_i18n::i18n!("locales", fallback = "en");
 
@@ -42,6 +43,7 @@ pub mod i18n;
 
 pub mod act;
 pub mod analysis;
+pub mod associations;
 pub mod complete;
 pub mod crop;
 pub mod custom;
@@ -75,6 +77,7 @@ pub mod weblink;
 pub mod websearch;
 
 pub use act::{Act, ActKey, ActResult, ActRole, MediaChoice, Participant, PersonChoice, PersonField, Suggestion};
+pub use associations::{Associate, AttendedEvent};
 pub use crop::{Crop, MediaLink, Rect};
 pub use custom::{EventType, Jurisdiction, PlaceRewrite};
 pub use date::{Calendar, Date, DateKind, Parsed as DateInput, SimpleDate, parse_input as parse_date_input};
