@@ -93,9 +93,17 @@ impl MediaNaming {
         self.root.trim().is_empty() && self.folders.is_empty()
     }
 
-    /// Dossier qui reçoit un média de ce contexte.
+    /// Dossier qui reçoit un média de ce contexte : celui qui nomme son type, le
+    /// plus précis (le moins de types) s'il y en a plusieurs, le premier à
+    /// égalité ; à défaut, le premier dossier « tout le reste ».
     pub fn folder_for(&self, ctx: &MediaContext) -> Option<&MediaFolder> {
-        self.folders.iter().find(|f| f.accepts(&ctx.event))
+        self.folders
+            .iter()
+            .enumerate()
+            .filter(|(_, f)| !f.types.is_empty() && f.accepts(&ctx.event))
+            .min_by_key(|(i, f)| (f.types.len(), *i))
+            .map(|(_, f)| f)
+            .or_else(|| self.folders.iter().find(|f| f.types.is_empty()))
     }
 }
 
@@ -878,5 +886,22 @@ mod tests {
             media_path(&naming("", vec![folder("", &[], "{source}")]), &ctx, "a.pdf", None),
             "AD 10 - 4E-123.pdf"
         );
+    }
+
+    #[test]
+    fn the_most_specific_folder_wins() {
+        let n = naming(
+            "",
+            vec![
+                folder("Divers", &[], ""),
+                folder("Actes", &["BIRT", "DEAT", "BURI"], ""),
+                folder("Sépultures", &["BURI"], ""),
+            ],
+        );
+        let at =
+            |e: &str| n.folder_for(&MediaContext { event: e.into(), ..Default::default() }).map(|f| f.dir.as_str());
+        assert_eq!(at("BURI"), Some("Sépultures"));
+        assert_eq!(at("BIRT"), Some("Actes"));
+        assert_eq!(at("CENS"), Some("Divers"));
     }
 }
