@@ -1,0 +1,29 @@
+name: Bug
+description: Something does not work as expected.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        In GEDRoots, **Help › Report an Issue…** fills in this page with the version and context
+        of the app. Never paste names, dates or files of living people: describe the problem, or
+        attach a small example file with made-up people.
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: What you did, what happened, and what you expected.
+      placeholder: |
+        1. Open a file exported from …
+        2. Click …
+        3. The tree is empty, I expected …
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: GEDRoots version and system
+      description: Help › Release Notes shows the version.
+      placeholder: GEDRoots 2026.11.2, macOS 15.1
+    validations:
+      required: false

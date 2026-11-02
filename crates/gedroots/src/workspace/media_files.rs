@@ -205,7 +205,7 @@ impl Workspace {
     fn rename_media(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(AddDialog::RenameMedia(d)) = self.add_dialog.take() else { return };
         let Some(base) = self.ged_dir() else {
-            self.set_status(t!("media_files.save_first"), true);
+            self.set_error("media_files.save_first", t!("media_files.save_first"));
             cx.notify();
             return;
         };
@@ -223,7 +223,7 @@ impl Workspace {
                 let n = moved.len();
                 self.set_status(crate::tn!("media_files.renamed", n), false);
             }
-            Err(e) => self.set_status(t!("media_files.rename_failed", error = e), true),
+            Err(e) => self.set_error("media_files.rename_failed", t!("media_files.rename_failed", error = e)),
         }
         self.rescan_media();
         self.rebuild_rows(cx);

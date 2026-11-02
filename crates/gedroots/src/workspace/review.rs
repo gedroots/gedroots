@@ -38,7 +38,7 @@ impl Item {
 
 #[derive(Default)]
 pub(super) struct Review {
-    items: Vec<Item>,
+    pub(super) items: Vec<Item>,
     /// Page displayed instead of the lists.
     pub(super) open: bool,
     sel: usize,
@@ -151,7 +151,7 @@ impl Workspace {
         let base = self.ged_dir();
         // The extracted image lives in the app’s cache: it must join the .ged folder.
         if base.is_none() && item.pending.image.is_some() {
-            self.set_status(t!("review.save_ged_first"), true);
+            self.set_error("review.save_ged_first", t!("review.save_ged_first"));
             cx.notify();
             return;
         }
@@ -182,7 +182,7 @@ impl Workspace {
             }
             Err(e) => {
                 self.drop_checkpoint();
-                self.set_status(e, true);
+                self.set_error("review.failed", e);
             }
         }
         cx.notify();
@@ -202,7 +202,7 @@ impl Workspace {
                     Ok(act) => act,
                     Err(e) => {
                         self.drop_checkpoint();
-                        self.set_status(e, true);
+                        self.set_error("review.failed", e);
                         cx.notify();
                         return;
                     }

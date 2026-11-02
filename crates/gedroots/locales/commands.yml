@@ -351,6 +351,9 @@ cmd:
   release_notes:
     en: Release Notes
     fr: Notes de version
+  report_issue:
+    en: Report an Issue…
+    fr: Signaler un problème…
   check_for_updates:
     en: Check for Updates
     fr: Rechercher les mises à jour

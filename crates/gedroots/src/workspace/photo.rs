@@ -109,7 +109,7 @@ impl Workspace {
 
     pub(super) fn start_draw(&mut self, media: String, owner: Option<String>, path: &Path, cx: &mut Context<Self>) {
         let Some(size) = image_size(path) else {
-            self.set_status(t!("photo.no_size"), true);
+            self.set_error("photo.no_size", t!("photo.no_size"));
             cx.notify();
             return;
         };
@@ -126,7 +126,7 @@ impl Workspace {
         self.goto(media.clone(), window, cx);
         self.tab = CenterTab::Form;
         let Some(path) = self.photo_file(&media) else {
-            self.set_status(t!("photo.no_image"), true);
+            self.set_error("photo.no_image", t!("photo.no_image"));
             cx.notify();
             return;
         };

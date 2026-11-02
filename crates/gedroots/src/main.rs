@@ -15,6 +15,7 @@ mod i18n;
 mod images;
 mod map;
 mod recent;
+mod report;
 mod theme;
 mod updates;
 mod workspace;
@@ -102,6 +103,8 @@ impl AssetSource for AppAssets {
 fn main() {
     // First of all: Velopack may run the app for its install and update hooks, then exit.
     updates::startup();
+    // Where the app crashed, for the next Help › Report an Issue.
+    report::install_panic_hook();
 
     // On macOS, an app launched by the Finder can receive a `-psn_…` argument: ignore it.
     let path = std::env::args_os().skip(1).find(|a| !a.to_string_lossy().starts_with("-psn")).map(PathBuf::from);

@@ -1,0 +1,28 @@
+_version: 2
+# Help › Report an Issue (crates/gedroots/src/workspace/report.rs).
+
+report:
+  title:
+    en: Report an Issue
+    fr: Signaler un problème
+  placeholder:
+    en: What happened, and what did you expect?
+    fr: Que s’est-il passé, et qu’attendiez-vous ?
+  include:
+    en: Include Context
+    fr: Joindre le contexte
+  include_detail:
+    en: Version, system, screen, tree size, last commands and errors. No names, places or file paths.
+    fr: Version, système, écran, taille de l’arbre, dernières commandes et erreurs. Aucun nom, lieu ni chemin de fichier.
+  show:
+    en: Show
+    fr: Afficher
+  hide:
+    en: Hide
+    fr: Masquer
+  continue:
+    en: Continue on GitHub
+    fr: Continuer sur GitHub
+  copied:
+    en: Report copied. Paste it into the GitHub page.
+    fr: Rapport copié. Collez-le dans la page GitHub.

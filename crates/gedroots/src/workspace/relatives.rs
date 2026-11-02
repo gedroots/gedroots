@@ -142,7 +142,7 @@ impl Workspace {
             }
             Err(e) => {
                 self.drop_checkpoint();
-                self.set_status(e, true);
+                self.set_error("relatives.failed", e);
             }
         }
         cx.notify();

@@ -15,6 +15,8 @@ macro_rules! on {
     ($d:expr, $cx:expr, $action:ty, |$this:ident, $w:ident, $c:ident| $body:expr) => {
         $d.on_action($cx.listener(
             |$this: &mut Workspace, _: &$action, $w: &mut Window, $c: &mut Context<Workspace>| {
+                // Last commands, for Help › Report an Issue (action names only).
+                crate::report::record_command(<$action as Action>::name_for_type());
                 #[allow(unused_variables)]
                 let _ = (&$w, &$c);
                 $body
@@ -54,6 +56,7 @@ impl Workspace {
         let d = on!(d, cx, ImportFile, |this, w, cx| this.import_file(w, cx));
         let d = on!(d, cx, NewFile, |this, w, cx| this.new_file(&NewFile, w, cx));
         let d = on!(d, cx, CommandPalette, |this, w, cx| this.toggle_palette(w, cx));
+        let d = on!(d, cx, ReportIssue, |this, w, cx| this.open_report(w, cx));
         if !has_doc {
             return d;
         }

@@ -37,6 +37,8 @@ similar = "2.7.0"
 base64 = "0.22"
 # Updates from the GitHub releases. Same version as the `vpk` packager in mise.release.toml.
 velopack = "=1.2.161"
+# Name and version of the operating system, for Help › Report an Issue (already used by velopack).
+sysinfo = { version = "0.31.4", default-features = false, features = ["system"] }
 
 # Recent files: the system's list on macOS (NSDocumentController)…
 [target.'cfg(target_os = "macos")'.dependencies]

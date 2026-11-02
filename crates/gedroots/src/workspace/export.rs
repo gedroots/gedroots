@@ -60,7 +60,7 @@ impl Workspace {
         let same =
             |p: &Path| std::fs::canonicalize(p).ok().is_some_and(|p| std::fs::canonicalize(&dest).ok() == Some(p));
         if doc.path.as_deref().is_some_and(same) {
-            self.set_status(t!("export.replaces_open"), true);
+            self.set_error("export.replaces_open", t!("export.replaces_open"));
             cx.notify();
             return;
         }
@@ -88,7 +88,7 @@ impl Workspace {
                         }
                         this.set_status(msg, false);
                     }
-                    Err(e) => this.set_status(t!("export.gedcom_failed", error = e), true),
+                    Err(e) => this.set_error("export.gedcom_failed", t!("export.gedcom_failed", error = e)),
                 }
                 cx.notify();
             });
@@ -113,7 +113,7 @@ impl Workspace {
         let same =
             |p: &Path| std::fs::canonicalize(p).ok().is_some_and(|p| std::fs::canonicalize(&dest).ok() == Some(p));
         if doc.path.as_deref().is_some_and(same) || entries.iter().any(|e| same(&e.source)) {
-            self.set_status(t!("export.name_taken"), true);
+            self.set_error("export.name_taken", t!("export.name_taken"));
             cx.notify();
             return;
         }
@@ -139,7 +139,7 @@ impl Workspace {
                         }
                         this.set_status(msg, false);
                     }
-                    Err(e) => this.set_status(t!("export.failed", error = e), true),
+                    Err(e) => this.set_error("export.failed", t!("export.failed", error = e)),
                 }
                 cx.notify();
             });
