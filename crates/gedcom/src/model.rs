@@ -262,6 +262,10 @@ impl<'a> Family<'a> {
     pub fn marriage(&self) -> Option<Event<'a>> {
         self.node.child("MARR").map(|node| Event { node })
     }
+    /// Fin de l'union : divorce ou annulation.
+    pub fn separation(&self) -> Option<Event<'a>> {
+        self.node.children.iter().find(|c| c.tag == "DIV" || c.tag == "ANUL").map(|node| Event { node })
+    }
 }
 
 /// Vue sur un enregistrement `SOUR`.

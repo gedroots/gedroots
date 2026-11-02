@@ -196,7 +196,6 @@ pub struct Workspace {
     /// Fenêtre « Fichiers du dossier sans média » ouverte.
     orphans_open: bool,
     /// Boutons « Détacher » dépliés dans le panneau d'un individu.
-    show_detach: bool,
     /// Fenêtre d'ajout (événement, proches) ouverte par un « + ».
     add_dialog: Option<add::AddDialog>,
     /// Champ de lieu en cours de saisie dans la fiche.
@@ -249,7 +248,6 @@ impl Workspace {
             media_marked: Vec::new(),
             history: Default::default(),
             orphans_open: false,
-            show_detach: false,
             list_scroll: UniformListScrollHandle::new(),
             menu_row: Rc::default(),
             place_focus: None,
@@ -447,7 +445,6 @@ impl Workspace {
         }
         self.selected = Some(key);
         self.pending_delete = None;
-        self.show_detach = false;
         self.photo_draw = None;
         self.photo_hover = None;
         self.refresh_editor(window, cx);
@@ -2155,14 +2152,37 @@ impl Workspace {
         let events_el = self.render_events(&xref, cx);
 
         // Famille : parents, conjoints, enfants.
-        let mut family: Vec<(&'static str, String)> = Vec::new();
-        let (f, m) = g.parents(&xref);
-        family.extend(f.map(|p| ("Père", p.xref().to_string())));
-        family.extend(m.map(|p| ("Mère", p.xref().to_string())));
-        for (spouse, kids) in g.spouses_and_children(&xref) {
-            family.extend(spouse.map(|s| ("Conjoint", s.xref().to_string())));
-            family.extend(kids.into_iter().map(|k| ("Enfant", k.xref().to_string())));
+        // (rôle, proche, lien à défaire au clic droit : (individu, famille, libellé)).
+        type Unlink = (String, String, &'static str);
+        // Quatrième champ : années d'une union terminée (« 1932–1950 »).
+        let mut family: Vec<(&'static str, String, Unlink, Option<String>)> = Vec::new();
+        if let Some(fam) = i.famc().first().and_then(|f| g.family(f)) {
+            let link = (xref.clone(), fam.xref().to_string(), "Détacher de ses parents");
+            family.extend(fam.husband().map(|p| ("Père", p.to_string(), link.clone(), None)));
+            family.extend(fam.wife().map(|p| ("Mère", p.to_string(), link, None)));
         }
+        for fam in i.fams().into_iter().filter_map(|f| g.family(f)) {
+            let f = fam.xref().to_string();
+            let spouse = [fam.husband(), fam.wife()].into_iter().flatten().find(|x| *x != xref);
+            // Union terminée (divorce, annulation) : ses années à la place de celles du conjoint.
+            let end = fam.separation().map(|e| {
+                let year = |e: Option<gedcom::Event>| e.and_then(|e| e.date()).and_then(|d| d.year());
+                let end = year(Some(e)).map(|y| y.to_string()).unwrap_or_else(|| "?".into());
+                match year(fam.marriage()) {
+                    Some(start) => format!("{start}–{end}"),
+                    None => format!("–{end}"),
+                }
+            });
+            family.extend(
+                spouse.map(|s| ("Conjoint", s.to_string(), (xref.clone(), f.clone(), "Détacher de cette union"), end)),
+            );
+            family.extend(
+                fam.children()
+                    .into_iter()
+                    .map(|k| ("Enfant", k.to_string(), (k.to_string(), f.clone(), "Retirer cet enfant"), None)),
+            );
+        }
+        family.retain(|(_, x, _, _)| g.individual(x).is_some());
         let family_el = v_flex()
             .p_4()
             .gap_1()
@@ -2174,7 +2194,7 @@ impl Workspace {
                     .tooltip("Ajouter ou lier un proche")
                     .on_click(cx.listener(move |this, _, _, cx| this.open_relatives_dialog(x.clone(), cx)))
             }))
-            .children(family.into_iter().map(|(role, x)| {
+            .children(family.into_iter().map(|(role, x, unlink, end)| {
                 let p = g.individual(&x).unwrap();
                 let target = x.clone();
                 h_flex()
@@ -2186,11 +2206,12 @@ impl Workspace {
                     .items_center()
                     .cursor_pointer()
                     .hover(|d| d.bg(theme::hover()))
-                    .child(div().w(px(64.)).text_xs().text_color(theme::muted()).child(role))
+                    .child(div().w(px(64.)).flex_none().text_xs().text_color(theme::muted()).child(role))
                     .child(div().flex_1().overflow_hidden().whitespace_nowrap().text_ellipsis().child(p.display_name()))
-                    .child(mono(p.years()))
+                    // Union terminée : ses années plutôt que les dates de vie du conjoint.
+                    .child(mono(end.unwrap_or_else(|| p.years())))
                     .on_click(cx.listener(move |this, _, w, cx| this.goto(target.clone(), w, cx)))
-                    .with_menu(self.person_menu(&x, MenuFrom::Link, cx))
+                    .with_menu(self.person_menu(&x, MenuFrom::Relative(unlink.0, unlink.1, unlink.2), cx))
             }));
 
         let images: Vec<String> = g.images_of(&xref).iter().map(|m| m.xref().to_string()).collect();

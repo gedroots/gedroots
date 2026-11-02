@@ -486,52 +486,13 @@ impl Workspace {
         let el = match self.view {
             View::Individuals => {
                 let i = g.individual(&key)?;
-                // Détacher : famille d'origine et unions.
-                let mut detach: Vec<(String, String)> = i
-                    .famc()
-                    .into_iter()
-                    .map(|fam| (fam.to_string(), format!("des parents ({})", g.record_label(fam))))
-                    .collect();
-                for (fam, spouse) in i.unions(g) {
-                    let label = match spouse {
-                        Some(s) => format!("de l'union avec {}", g.record_label(&s)),
-                        None => match g.family(&fam).and_then(|f| f.children().first().map(|c| g.record_label(c))) {
-                            Some(kid) => format!("de la famille de {kid}"),
-                            None => "d'une famille vide".into(),
-                        },
-                    };
-                    detach.push((fam, label));
-                }
+                // Détacher un proche : clic droit sur sa ligne dans « Famille ».
                 let mut media_keys = keywords(&i.surname());
                 media_keys.extend(keywords(&i.given()).into_iter().take(1));
-                // Ajouter ou lier un proche : menu Individu.
-                if detach.is_empty() && !self.has_suggestions(&media_keys) {
+                if !self.has_suggestions(&media_keys) {
                     return None;
                 }
-                let open = self.show_detach;
-                section()
-                    .when(!detach.is_empty() && !open, |d| {
-                        d.child(h_flex().child(
-                            Button::new("show-detach").xsmall().ghost().label("Détacher de…").on_click(cx.listener(
-                                |this, _, _, cx| {
-                                    this.show_detach = true;
-                                    cx.notify();
-                                },
-                            )),
-                        ))
-                    })
-                    .when(!detach.is_empty() && open, |d| {
-                        d.child(label_caps("Détacher")).children(detach.into_iter().map(|(fam, label)| {
-                            let x = key.clone();
-                            let id = SharedString::from(format!("unlink-{fam}"));
-                            h_flex().child(
-                                Button::new(id).xsmall().ghost().icon(IconName::Close).label(label).on_click(
-                                    cx.listener(move |this, _, w, cx| this.unlink(x.clone(), fam.clone(), w, cx)),
-                                ),
-                            )
-                        }))
-                    })
-                    .child(self.render_media_drop(&key, media_keys, cx))
+                section().child(self.render_media_drop(&key, media_keys, cx))
             }
             View::Families => {
                 let fam = g.family(&key)?;

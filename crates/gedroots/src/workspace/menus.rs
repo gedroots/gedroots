@@ -25,6 +25,9 @@ pub(super) enum From {
     Attached(String),
     /// Un média d'un événement (enregistrement porteur, position de l'événement).
     OnEvent(String, usize),
+    /// Un proche dans la section « Famille » d'un individu : le lien (individu,
+    /// famille) que « Détacher » défait, et le libellé de la commande.
+    Relative(String, String, &'static str),
 }
 
 type Ws = WeakEntity<Workspace>;
@@ -324,6 +327,15 @@ pub(super) fn person_menu(ws: Ws, x: String, from: From) -> MenuBuilder {
             |m, fam| {
                 let x = x.clone();
                 m.item(act(&ws, "Retirer de la famille", move |this, w, cx| this.unlink(x.clone(), fam.clone(), w, cx)))
+            },
+        )
+        .when_some(
+            match &from {
+                From::Relative(indi, fam, label) => Some((indi.clone(), fam.clone(), *label)),
+                _ => None,
+            },
+            |m, (indi, fam, label)| {
+                m.item(act(&ws, label, move |this, w, cx| this.unlink(indi.clone(), fam.clone(), w, cx)))
             },
         )
         .item(act(&ws, "Copier le nom", move |this, _, cx| this.copy_text(name.clone(), "Nom", cx)))
