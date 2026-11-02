@@ -89,8 +89,7 @@ impl Workspace {
         let d = on!(d, cx, ToggleRelativeEvents, |this, _w, cx| this.toggle_relative_events(cx));
         let d = on!(d, cx, ShowForm, |this, w, cx| this.show_tab(CenterTab::Form, cx));
         let d = on!(d, cx, ShowUnreferencedFiles, |this, w, cx| {
-            this.orphans_open = true;
-            cx.notify();
+            this.open_quality(gedcom::quality::Category::Files, w, cx)
         });
 
         d.when(self.history.can_back(), |d| on!(d, cx, GoBack, |this, w, cx| this.go_back(w, cx)))

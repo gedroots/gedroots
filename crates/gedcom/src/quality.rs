@@ -3,7 +3,8 @@
 //!
 //! Les contrôles de cohérence (dates, âges, liens familiaux) viennent de
 //! [`crate::analysis::check`] ; ce module y ajoute la conformité au schéma
-//! GEDCOM 7, les éléments vides et les enregistrements que rien n'utilise.
+//! GEDCOM 7, les éléments vides, les enregistrements que rien n'utilise et,
+//! quand l'appelant donne accès aux fichiers ([`Files`]), l'état des médias.
 //! Une anomalie se masque comme les autres, par `_GR_IGNORE <code>` sous son
 //! enregistrement.
 //!
@@ -17,7 +18,9 @@ use crate::date::Date;
 use crate::document::{Gedcom, RecordKind};
 use crate::model::event_label;
 use crate::node::Node;
+use crate::relations::mime_for;
 use crate::schema::{self, Payload, StructDef};
+use crate::weblink::is_web_url;
 use std::collections::{HashMap, HashSet, VecDeque};
 
 /// Les deux blocs de la page.
@@ -45,12 +48,21 @@ pub enum Category {
     Family,
     Structure,
     Empty,
+    Media,
     Sources,
+    Files,
 }
 
 impl Category {
-    pub const ALL: [Category; 5] =
-        [Category::Dates, Category::Family, Category::Structure, Category::Empty, Category::Sources];
+    pub const ALL: [Category; 7] = [
+        Category::Dates,
+        Category::Family,
+        Category::Structure,
+        Category::Empty,
+        Category::Media,
+        Category::Sources,
+        Category::Files,
+    ];
 
     pub fn label(self) -> &'static str {
         match self {
@@ -58,7 +70,9 @@ impl Category {
             Category::Family => "Liens familiaux",
             Category::Structure => "Structure GEDCOM",
             Category::Empty => "Éléments vides ou isolés",
+            Category::Media => "Médias",
             Category::Sources => "Événements sans source",
+            Category::Files => "Fichiers à rattacher",
         }
     }
 
@@ -69,7 +83,9 @@ impl Category {
             Category::Family => "family",
             Category::Structure => "structure",
             Category::Empty => "empty",
+            Category::Media => "media",
             Category::Sources => "sources",
+            Category::Files => "files",
         }
     }
 
@@ -79,7 +95,7 @@ impl Category {
 
     pub fn group(self) -> Group {
         match self {
-            Category::Sources => Group::Complete,
+            Category::Sources | Category::Files => Group::Complete,
             _ => Group::Fix,
         }
     }
@@ -95,7 +111,9 @@ pub fn category(code: &str) -> Category {
             Category::Structure
         }
         "empty_fact" | "empty_note" | "empty_family" | "unused_record" | "disconnected" => Category::Empty,
+        "missing_file" | "moved_file" | "duplicate_media" | "missing_form" => Category::Media,
         "unsourced" => Category::Sources,
+        "unattached_file" => Category::Files,
         _ => Category::Dates,
     }
 }
@@ -118,13 +136,32 @@ pub fn fix_of(code: &str) -> Option<Fix> {
         "unused_record" => Fix { label: "Supprimer", batch: None },
         "missing_backlink" => Fix { label: "Rétablir le lien", batch: Some("Rétablir tous les liens") },
         "broken_link" => Fix { label: "Retirer le lien", batch: Some("Retirer tous les liens cassés") },
+        "moved_file" => Fix { label: "Corriger le chemin", batch: Some("Corriger tous les chemins") },
+        "missing_form" => Fix { label: "Déduire le format", batch: Some("Déduire tous les formats") },
+        "duplicate_media" => Fix { label: "Fusionner", batch: Some("Tout fusionner") },
+        "unattached_file" => Fix { label: "Créer le média", batch: Some("Créer tous les médias") },
         _ => return None,
     })
 }
 
+/// Accès aux fichiers des médias, fourni par l'application (la bibliothèque ne
+/// lit pas le disque).
+pub struct Files<'a> {
+    /// Le fichier désigné par une valeur `FILE` existe-t-il ?
+    pub exists: &'a dyn Fn(&str) -> bool,
+    /// Fichiers de médias du dossier du `.ged`, en chemins relatifs (`Actes/x.jpg`).
+    pub folder: &'a [String],
+}
+
 /// Toutes les anomalies du fichier, masquées comprises (champ `ignored`),
-/// triées par catégorie puis gravité.
+/// triées par catégorie puis gravité. Sans accès aux fichiers.
 pub fn run(g: &Gedcom) -> Vec<Issue> {
+    run_with(g, None)
+}
+
+/// Comme [`run`], avec en plus les contrôles qui regardent les fichiers des
+/// médias (absents, déplacés, non rattachés).
+pub fn run_with(g: &Gedcom, files: Option<&Files>) -> Vec<Issue> {
     let t = Thresholds { report_unsourced: true, ..Thresholds::default() };
     let mut issues = check::check_all(g, &t);
     let mut more = Vec::new();
@@ -133,6 +170,7 @@ pub fn run(g: &Gedcom) -> Vec<Issue> {
     }
     empty(g, &mut more);
     unused(g, &mut more);
+    media(g, files, &mut more);
     check::mark_ignored(g, &mut more);
     issues.extend(more);
     issues.sort_by(|a, b| {
@@ -202,7 +240,8 @@ fn validate(g: &Gedcom, x: &str, who: &str, node: &Node, def: &StructDef, path: 
     for sub in def.subs {
         let n = node.children.iter().filter(|c| c.tag == sub.tag).count();
         let what = schema::label_fr(sub.tag, sub.def());
-        if n == 0 && sub.card.required() {
+        // `FILE` sans `FORM` : signalé (et corrigé) par `missing_form`.
+        if n == 0 && sub.card.required() && !(sub.tag == "FORM" && node.tag == "FILE") {
             out.push(issue(
                 Severity::Warning,
                 "missing_required",
@@ -417,6 +456,94 @@ fn unused(g: &Gedcom, out: &mut Vec<Issue>) {
 }
 
 // ---------------------------------------------------------------------------
+// Médias et fichiers
+// ---------------------------------------------------------------------------
+
+/// Chemin `FILE` comparable à ceux du dossier (`./Actes\\x.jpg` → `Actes/x.jpg`).
+fn normalize(file: &str) -> String {
+    let f = file.trim().strip_prefix("file://").unwrap_or(file.trim()).replace('\\', "/");
+    f.strip_prefix("./").unwrap_or(&f).to_string()
+}
+
+fn file_name(path: &str) -> String {
+    path.rsplit('/').next().unwrap_or(path).to_lowercase()
+}
+
+fn media(g: &Gedcom, files: Option<&Files>, out: &mut Vec<Issue>) {
+    // Fichiers du dossier par nom, pour retrouver un fichier déplacé.
+    let mut by_name: HashMap<String, Vec<&str>> = HashMap::new();
+    for f in files.map(|f| f.folder).unwrap_or_default() {
+        by_name.entry(file_name(f)).or_default().push(f);
+    }
+    let mut seen: HashMap<Vec<String>, &str> = HashMap::new();
+    let mut referenced: HashSet<String> = HashSet::new();
+    for r in g.records.iter().filter(|r| r.tag == "OBJE") {
+        let Some(x) = r.xref.as_deref() else { continue };
+        let who = g.record_label(x);
+        let mut paths = Vec::new();
+        for (i, f) in r.children.iter().enumerate().filter(|(_, c)| c.tag == "FILE") {
+            let v = f.val().trim();
+            if v.is_empty() {
+                continue;
+            }
+            paths.push(normalize(v));
+            referenced.insert(normalize(v));
+            if f.child("FORM").is_none() {
+                out.push(issue(
+                    Severity::Warning,
+                    "missing_form",
+                    x,
+                    vec![i],
+                    format!("{who} : format du fichier non indiqué"),
+                ));
+            }
+            let Some(files) = files.filter(|_| !is_web_url(v)) else { continue };
+            if (files.exists)(v) {
+                continue;
+            }
+            match by_name.get(&file_name(&normalize(v))).map(Vec::as_slice) {
+                Some([found]) => {
+                    // Le fichier retrouvé n'est pas « à rattacher » : la correction du chemin s'en charge.
+                    referenced.insert(found.to_string());
+                    let mut i =
+                        issue(Severity::Warning, "moved_file", x, vec![i], format!("{who} : retrouvé dans {found}"));
+                    i.related = vec![found.to_string()];
+                    out.push(i);
+                }
+                _ => out.push(issue(Severity::Error, "missing_file", x, vec![i], format!("{who} : {v}"))),
+            }
+        }
+        if paths.is_empty() {
+            continue;
+        }
+        match seen.get(&paths) {
+            Some(first) => {
+                let mut i = issue(
+                    Severity::Warning,
+                    "duplicate_media",
+                    x,
+                    vec![],
+                    format!("« {who} » et « {} » désignent le même fichier", g.record_label(first)),
+                );
+                i.related = vec![first.to_string()];
+                out.push(i);
+            }
+            None => {
+                seen.insert(paths, x);
+            }
+        }
+    }
+    // Fichiers du dossier qu'aucun média ne désigne.
+    for f in files.map(|f| f.folder).unwrap_or_default() {
+        if !referenced.contains(f) {
+            let mut i = issue(Severity::Info, "unattached_file", "", vec![], f.clone());
+            i.related = vec![f.clone()];
+            out.push(i);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Corrections
 // ---------------------------------------------------------------------------
 
@@ -442,6 +569,13 @@ impl Gedcom {
                 "empty_note" | "empty_family" | "unused_record" => self.delete(&i.xref).is_some(),
                 "missing_backlink" => i.related.first().is_some_and(|f| self.add_backlink(&i.xref, f)),
                 "broken_link" => i.related.first().is_some_and(|p| self.remove_pointers(&i.xref, p)),
+                "moved_file" => i.related.first().is_some_and(|f| self.set_media_file(&i.xref, &i.path, f)),
+                "missing_form" => self.infer_form(&i.xref, &i.path),
+                "duplicate_media" => i.related.first().is_some_and(|keep| self.merge_duplicate_media(keep, &i.xref)),
+                "unattached_file" => i.related.first().is_some_and(|f| {
+                    self.media_for_file(f);
+                    true
+                }),
                 _ => false,
             };
             if ok {
@@ -498,6 +632,60 @@ impl Gedcom {
         };
         f.insert_child(Node::with_value(tag, p));
         true
+    }
+
+    /// Le `FILE` à `path` dans le média (position parmi ses sous-structures).
+    fn media_file_at(&mut self, media: &str, path: &[usize]) -> Option<&mut Node> {
+        let [i] = path else { return None };
+        let m = self.get_mut(media).filter(|m| m.tag == "OBJE")?;
+        m.children.get_mut(*i).filter(|f| f.tag == "FILE")
+    }
+
+    /// Change le chemin d'un fichier de média (fichier déplacé ou retrouvé à la
+    /// main) et son format.
+    pub fn set_media_file(&mut self, media: &str, path: &[usize], value: &str) -> bool {
+        let Some(f) = self.media_file_at(media, path) else { return false };
+        f.value = Some(value.to_string());
+        f.set_child_val("FORM", mime_for(value));
+        true
+    }
+
+    /// Déduit `FORM` de l'extension du fichier.
+    fn infer_form(&mut self, media: &str, path: &[usize]) -> bool {
+        let Some(f) = self.media_file_at(media, path) else { return false };
+        if f.child("FORM").is_some() {
+            return false;
+        }
+        let form = mime_for(f.val());
+        f.set_child_val("FORM", form);
+        true
+    }
+
+    /// Fusionne le média `dup` dans `keep` (même fichier) : les liens vers `dup`
+    /// pointent vers `keep`, ses notes et sources lui sont ajoutées, puis `dup`
+    /// est supprimé.
+    pub fn merge_duplicate_media(&mut self, keep: &str, dup: &str) -> bool {
+        if keep == dup || self.get(keep).is_none_or(|n| n.tag != "OBJE") {
+            return false;
+        }
+        let Some(src) = self.get(dup).filter(|n| n.tag == "OBJE").cloned() else { return false };
+        let target = self.get_mut(keep).unwrap();
+        for c in src.children.iter().filter(|c| !matches!(c.tag.as_str(), "FILE" | "CREA" | "CHAN")) {
+            if !target.children.contains(c) {
+                target.insert_child(c.clone());
+            }
+        }
+        target.touch();
+        let p = format!("@{keep}@");
+        self.rewrite_links(
+            dup,
+            |l| {
+                l.value = Some(p.clone());
+                vec![]
+            },
+            &[keep],
+        );
+        self.delete(dup).is_some()
     }
 
     /// Retire de l'enregistrement les structures qui pointent vers `target`.

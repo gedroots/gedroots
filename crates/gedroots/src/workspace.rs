@@ -223,8 +223,6 @@ pub struct Workspace {
     media_marked: Vec<String>,
     /// Précédent / Suivant, et dernier élément vu dans chaque liste.
     history: history::History,
-    /// Fenêtre « Fichiers du dossier sans média » ouverte.
-    orphans_open: bool,
     /// Boutons « Détacher » dépliés dans le panneau d'un individu.
     /// Fenêtre d'ajout (événement, proches) ouverte par un « + ».
     add_dialog: Option<add::AddDialog>,
@@ -286,7 +284,6 @@ impl Workspace {
             media_page: 1,
             media_marked: Vec::new(),
             history: Default::default(),
-            orphans_open: false,
             list_scroll: UniformListScrollHandle::new(),
             quality: quality::QualityState { stale: true, ..Default::default() },
             kinship: None,
@@ -2445,7 +2442,6 @@ impl Render for Workspace {
             .child(body)
             .child(self.render_status())
             .children(self.render_picker(cx))
-            .children(self.render_unreferenced_files(cx))
             .children(self.render_add_dialog(cx))
             .children(self.render_palette(cx))
     }
