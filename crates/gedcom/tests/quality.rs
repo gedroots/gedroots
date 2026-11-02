@@ -212,3 +212,73 @@ fn media_fixes() {
     assert!(g.media_by_file("Portraits/jean.png").is_some());
     assert!(media_issues(&g).iter().all(|i| i.code == "missing_file" || quality::category(i.code) != Category::Media));
 }
+
+const PLACES: &str = "0 HEAD
+1 GEDC
+2 VERS 7.0
+0 @I1@ INDI
+1 BIRT
+2 PLAC Saint-Étienne, Loire, Auvergne-Rhône-Alpes, France
+3 MAP
+4 LATI N45.43
+4 LONG E4.39
+1 DEAT
+2 PLAC St Etienne, Loire, Auvergne-Rhône-Alpes, France
+1 RESI
+2 PLAC Saint-Étienne, Loire, Auvergne-Rhône-Alpes, France
+1 BURI
+2 PLAC Unias, Loire, Rhône-Alpes, France
+1 CHR
+2 PLAC Unias
+1 EVEN
+2 PLAC Saint-Martin
+1 OCCU
+2 PLAC Saint-Martin, Isère, Auvergne-Rhône-Alpes, France
+1 EDUC
+2 PLAC Saint-Martin, Gard, Occitanie, France
+1 GRAD
+2 PLAC Lyon, Rhône, Auvergne-Rhône-Alpes, France
+3 MAP
+4 LATI quarante-cinq
+4 LONG E4.83
+0 TRLR
+";
+
+#[test]
+fn place_checks() {
+    let g = Gedcom::parse(PLACES).unwrap();
+    let issues = quality::run(&g);
+    let of = |code: &str| issues.iter().filter(|i| i.code == code).map(|i| i.related.clone()).collect::<Vec<_>>();
+    // Variantes : écriture différente, et forme abrégée d'un seul lieu ; « Saint-Martin » est ambigu.
+    let variants = of("place_variant");
+    assert!(variants.contains(&vec![
+        "St Etienne, Loire, Auvergne-Rhône-Alpes, France".to_string(),
+        "Saint-Étienne, Loire, Auvergne-Rhône-Alpes, France".to_string()
+    ]));
+    assert!(variants.contains(&vec!["Unias".to_string(), "Unias, Loire, Rhône-Alpes, France".to_string()]));
+    assert_eq!(variants.len(), 2);
+    assert_eq!(
+        of("place_hierarchy"),
+        [vec!["Loire".to_string(), "Rhône-Alpes".to_string(), "Auvergne-Rhône-Alpes".to_string()]]
+    );
+    assert_eq!(of("bad_coords"), [vec!["Lyon, Rhône, Auvergne-Rhône-Alpes, France".to_string()]]);
+    assert!(of("missing_coords").contains(&vec!["Saint-Martin".to_string()]));
+    assert!(
+        issues.iter().filter(|i| i.code == "missing_coords").all(|i| quality::category(i.code) == Category::Coords)
+    );
+}
+
+#[test]
+fn place_fixes() {
+    let mut g = Gedcom::parse(PLACES).unwrap();
+    let fix: Vec<_> =
+        quality::run(&g).into_iter().filter(|i| matches!(i.code, "place_variant" | "place_hierarchy")).collect();
+    assert_eq!(g.fix_issues(&fix), 3);
+    let names: Vec<String> = g.places().into_iter().map(|p| p.name).collect();
+    assert!(!names.iter().any(|n| n.starts_with("St ") || n == "Unias" || n.contains(", Rhône-Alpes")));
+    // La variante reprend les coordonnées du lieu gardé.
+    let st = g.places().into_iter().find(|p| p.name.starts_with("Saint-Étienne")).unwrap();
+    assert_eq!(st.uses, 3);
+    assert!(st.coords().is_some());
+    assert!(g.places().iter().any(|p| p.name == "Unias, Loire, Auvergne-Rhône-Alpes, France" && p.uses == 2));
+}

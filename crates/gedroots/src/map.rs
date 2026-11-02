@@ -458,7 +458,6 @@ impl MapView {
 
     fn render_toolbar(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let sel_missing = self.selected.as_ref().filter(|n| self.missing.iter().any(|(m, _)| &m == n)).cloned();
-        let n_missing = self.missing.len();
         let busy = self.job.is_some();
         h_flex()
             .absolute()
@@ -545,22 +544,6 @@ impl MapView {
                 )
             })
             .child(div().flex_1())
-            .when(n_missing > 0 && !busy, |d| {
-                d.child(
-                    pill().child(
-                        Button::new("geocode-all")
-                            .ghost()
-                            .xsmall()
-                            .label(format!("Localiser les {n_missing} lieux sans coordonnées"))
-                            .disabled(!self.online)
-                            .tooltip("Recherche chaque lieu sur OpenStreetMap (Nominatim), au rythme d'un par seconde")
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                let names = this.missing.iter().map(|(n, _)| n.clone()).collect();
-                                this.geocode(names, cx);
-                            })),
-                    ),
-                )
-            })
             .when_some(self.job.as_ref(), |d, job| {
                 let cancel = job.cancel.clone();
                 d.child(

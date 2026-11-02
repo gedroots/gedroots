@@ -116,8 +116,24 @@ impl Workspace {
         self.quality_edit(|g| g.fix_issues(&issues) > 0, msg, window, cx);
     }
 
-    /// « Localiser… » : choisir le fichier d'un média introuvable.
+    /// Ouvre l'élément d'une anomalie : son enregistrement, ou le lieu concerné.
+    fn open_issue(&mut self, issue: &Issue, window: &mut Window, cx: &mut Context<Self>) {
+        if !issue.xref.is_empty() {
+            self.goto(issue.xref.clone(), window, cx);
+        } else if place_issue(issue)
+            && let Some(p) = issue.related.first()
+        {
+            self.goto_place(p.clone(), window, cx);
+        }
+    }
+
+    /// « Localiser… » : choisir le fichier d'un média introuvable, ou ouvrir le
+    /// lieu sur la carte pour le localiser (un lieu à la fois).
     fn locate_file(&mut self, issue: Issue, window: &mut Window, cx: &mut Context<Self>) {
+        if place_issue(&issue) {
+            self.open_issue(&issue, window, cx);
+            return;
+        }
         let rx = cx.prompt_for_paths(PathPromptOptions {
             files: true,
             directories: false,
@@ -242,7 +258,7 @@ impl Workspace {
                                 .map(|n| {
                                     let i = &shown[n];
                                     let (open, fix) = (entity.clone(), entity.clone());
-                                    let (x, issue, for_menu) = (i.xref.clone(), i.clone(), i.clone());
+                                    let (x, issue, for_menu) = (i.clone(), i.clone(), i.clone());
                                     let menu_issue = menu_issue.clone();
                                     h_flex()
                                         .id(n)
@@ -275,7 +291,7 @@ impl Workspace {
                                                         .child(check::code_label(i.code)),
                                                 ),
                                         )
-                                        .when(i.code == "missing_file" && !i.ignored, |d| {
+                                        .when(locatable(i.code) && !i.ignored, |d| {
                                             let (locate, issue) = (entity.clone(), i.clone());
                                             d.child(
                                                 Button::new(("locate", n))
@@ -301,7 +317,7 @@ impl Workspace {
                                         })
                                         .on_click(move |_, w, cx| {
                                             let x = x.clone();
-                                            let _ = open.update(cx, |this, cx| this.goto(x, w, cx));
+                                            let _ = open.update(cx, |this, cx| this.open_issue(&x, w, cx));
                                         })
                                         .on_mouse_down(MouseButton::Right, move |_, _, _| {
                                             *menu_issue.borrow_mut() = Some(for_menu.clone());
@@ -326,12 +342,12 @@ impl Workspace {
             let (a, b, c, d) = (issue.clone(), issue.clone(), issue.clone(), issue.clone());
             // Fichier sans média : rien à ouvrir ni où écrire `_GR_IGNORE`.
             let record = !issue.xref.is_empty();
-            let menu = if record {
-                menu.item(menus::act(&ws, "Ouvrir", move |this, w, cx| this.goto(a.xref.clone(), w, cx)))
+            let menu = if record || place_issue(&issue) {
+                menu.item(menus::act(&ws, "Ouvrir", move |this, w, cx| this.open_issue(&a, w, cx)))
             } else {
                 menu
             };
-            let menu = if issue.code == "missing_file" && !issue.ignored {
+            let menu = if locatable(issue.code) && !issue.ignored {
                 menu.item(menus::act(&ws, "Localiser…", move |this, w, cx| this.locate_file(d.clone(), w, cx)))
             } else {
                 menu
@@ -351,6 +367,16 @@ impl Workspace {
             ))
         })
     }
+}
+
+/// Anomalies qui portent sur un lieu (sans enregistrement).
+fn place_issue(i: &Issue) -> bool {
+    i.xref.is_empty() && matches!(quality::category(i.code), Category::Places | Category::Coords)
+}
+
+/// Anomalies avec un bouton « Localiser… ».
+fn locatable(code: &str) -> bool {
+    matches!(code, "missing_file" | "missing_coords" | "bad_coords")
 }
 
 fn plural(n: usize) -> &'static str {

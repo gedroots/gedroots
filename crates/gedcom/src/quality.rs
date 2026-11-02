@@ -16,7 +16,7 @@
 use crate::analysis::check::{self, Issue, Severity, Thresholds};
 use crate::date::Date;
 use crate::document::{Gedcom, RecordKind};
-use crate::model::event_label;
+use crate::model::{Place, event_label, sort_key};
 use crate::node::Node;
 use crate::relations::mime_for;
 use crate::schema::{self, Payload, StructDef};
@@ -49,19 +49,23 @@ pub enum Category {
     Structure,
     Empty,
     Media,
+    Places,
     Sources,
     Files,
+    Coords,
 }
 
 impl Category {
-    pub const ALL: [Category; 7] = [
+    pub const ALL: [Category; 9] = [
         Category::Dates,
         Category::Family,
         Category::Structure,
         Category::Empty,
         Category::Media,
+        Category::Places,
         Category::Sources,
         Category::Files,
+        Category::Coords,
     ];
 
     pub fn label(self) -> &'static str {
@@ -71,6 +75,8 @@ impl Category {
             Category::Structure => "Structure GEDCOM",
             Category::Empty => "Éléments vides ou isolés",
             Category::Media => "Médias",
+            Category::Places => "Lieux",
+            Category::Coords => "Lieux sans coordonnées",
             Category::Sources => "Événements sans source",
             Category::Files => "Fichiers à rattacher",
         }
@@ -84,6 +90,8 @@ impl Category {
             Category::Structure => "structure",
             Category::Empty => "empty",
             Category::Media => "media",
+            Category::Places => "places",
+            Category::Coords => "coords",
             Category::Sources => "sources",
             Category::Files => "files",
         }
@@ -95,7 +103,7 @@ impl Category {
 
     pub fn group(self) -> Group {
         match self {
-            Category::Sources | Category::Files => Group::Complete,
+            Category::Sources | Category::Files | Category::Coords => Group::Complete,
             _ => Group::Fix,
         }
     }
@@ -114,6 +122,8 @@ pub fn category(code: &str) -> Category {
         "missing_file" | "moved_file" | "duplicate_media" | "missing_form" => Category::Media,
         "unsourced" => Category::Sources,
         "unattached_file" => Category::Files,
+        "place_variant" | "place_hierarchy" | "bad_coords" => Category::Places,
+        "missing_coords" => Category::Coords,
         _ => Category::Dates,
     }
 }
@@ -140,6 +150,9 @@ pub fn fix_of(code: &str) -> Option<Fix> {
         "missing_form" => Fix { label: "Déduire le format", batch: Some("Déduire tous les formats") },
         "duplicate_media" => Fix { label: "Fusionner", batch: Some("Tout fusionner") },
         "unattached_file" => Fix { label: "Créer le média", batch: Some("Créer tous les médias") },
+        // Deux lieux du même nom peuvent être distincts : à vérifier un par un.
+        "place_variant" => Fix { label: "Fusionner", batch: None },
+        "place_hierarchy" => Fix { label: "Harmoniser", batch: None },
         _ => return None,
     })
 }
@@ -171,6 +184,7 @@ pub fn run_with(g: &Gedcom, files: Option<&Files>) -> Vec<Issue> {
     empty(g, &mut more);
     unused(g, &mut more);
     media(g, files, &mut more);
+    places(g, &mut more);
     check::mark_ignored(g, &mut more);
     issues.extend(more);
     issues.sort_by(|a, b| {
@@ -544,6 +558,161 @@ fn media(g: &Gedcom, files: Option<&Files>, out: &mut Vec<Issue>) {
 }
 
 // ---------------------------------------------------------------------------
+// Lieux
+// ---------------------------------------------------------------------------
+
+/// Parties significatives d'un nom de lieu, pour comparer deux écritures :
+/// sans casse, accents, tirets ni ponctuation, sans les codes (postal, INSEE),
+/// « St » et « Ste » développés. Les parties vides sont retirées.
+fn place_parts(name: &str) -> Vec<String> {
+    name.split(',')
+        .map(|part| {
+            let clean: String = sort_key(part).chars().map(|c| if c.is_alphanumeric() { c } else { ' ' }).collect();
+            clean
+                .split_whitespace()
+                .map(|w| match w {
+                    "st" => "saint",
+                    "ste" => "sainte",
+                    w => w,
+                })
+                .collect::<Vec<_>>()
+                .join(" ")
+        })
+        .filter(|p| !p.is_empty() && !p.chars().all(|c| c.is_ascii_digit() || c == ' '))
+        .collect()
+}
+
+/// `short` est-il une écriture abrégée de `long` (mêmes parties dans le même
+/// ordre, certaines en moins, la première identique) ?
+fn abbreviates(short: &[String], long: &[String]) -> bool {
+    if short.len() >= long.len() || short.first() != long.first() {
+        return false;
+    }
+    let mut rest = long.iter();
+    short.iter().all(|s| rest.any(|l| l == s))
+}
+
+fn place_issue(code: &'static str, severity: Severity, places: &[&str], message: String) -> Issue {
+    let mut i = issue(severity, code, "", vec![], message);
+    i.related = places.iter().map(|p| p.to_string()).collect();
+    i
+}
+
+fn places(g: &Gedcom, out: &mut Vec<Issue>) {
+    let all = g.places();
+    for p in &all {
+        match (&p.latitude, &p.longitude) {
+            (None, None) => out.push(place_issue("missing_coords", Severity::Info, &[&p.name], p.name.clone())),
+            _ if p.coords().is_none() => out.push(place_issue(
+                "bad_coords",
+                Severity::Warning,
+                &[&p.name],
+                format!(
+                    "{} : coordonnées illisibles ({} {})",
+                    p.name,
+                    p.latitude.as_deref().unwrap_or("?"),
+                    p.longitude.as_deref().unwrap_or("?")
+                ),
+            )),
+            _ => {}
+        }
+    }
+
+    // Variantes : même nom une fois normalisé, ou forme abrégée d'un seul autre lieu.
+    // Chaque variante est rapprochée du lieu le plus utilisé de son groupe.
+    let parts: Vec<Vec<String>> = all.iter().map(|p| place_parts(&p.name)).collect();
+    let better = |a: &Place, b: &Place| {
+        (a.uses, a.coords().is_some(), a.name.len()) > (b.uses, b.coords().is_some(), b.name.len())
+    };
+    let mut groups: HashMap<&[String], Vec<usize>> = HashMap::new();
+    for (i, k) in parts.iter().enumerate().filter(|(_, k)| !k.is_empty()) {
+        groups.entry(k.as_slice()).or_default().push(i);
+    }
+    let mut target: Vec<Option<usize>> = vec![None; all.len()];
+    for members in groups.values().filter(|m| m.len() > 1) {
+        let best = *members.iter().reduce(|a, b| if better(&all[*b], &all[*a]) { b } else { a }).unwrap();
+        for &m in members.iter().filter(|&&m| m != best) {
+            target[m] = Some(best);
+        }
+    }
+    for i in 0..all.len() {
+        if target[i].is_some() || parts[i].is_empty() {
+            continue;
+        }
+        let longer: Vec<usize> =
+            (0..all.len()).filter(|&j| target[j].is_none() && abbreviates(&parts[i], &parts[j])).collect();
+        // Plusieurs lieux possibles (Saint-Martin, Isère / Saint-Martin, Gard) : on ne devine pas.
+        if let [j] = longer[..] {
+            target[i] = Some(j);
+        }
+    }
+    hierarchy(&all, out);
+    for (i, t) in target.iter().enumerate() {
+        let Some(t) = *t else { continue };
+        let (a, b) = (&all[i], &all[t]);
+        let n = |p: &Place| format!("{} fois", p.uses);
+        out.push(place_issue(
+            "place_variant",
+            Severity::Warning,
+            &[&a.name, &b.name],
+            format!("« {} » ({}) semble être « {} » ({})", a.name, n(a), b.name, n(b)),
+        ));
+    }
+}
+
+/// Niveaux d'un nom de lieu, à leur position (vides compris).
+fn levels(name: &str) -> Vec<&str> {
+    name.split(',').map(str::trim).collect()
+}
+
+/// Une même division rattachée à deux divisions supérieures différentes
+/// (« Loire » tantôt en « Rhône-Alpes », tantôt en « Auvergne-Rhône-Alpes »).
+/// Le niveau le plus bas d'un lieu (sa commune, son lieu-dit) n'est pas
+/// comparé : deux communes homonymes sont souvent dans deux départements.
+fn hierarchy(all: &[Place], out: &mut Vec<Issue>) {
+    // (niveau du parent, parent) → valeur au niveau suivant → nombre de lieux.
+    let mut seen: HashMap<(usize, String), HashMap<&str, usize>> = HashMap::new();
+    for p in all {
+        let l = levels(&p.name);
+        let Some(lowest) = l.iter().position(|x| !x.is_empty()) else { continue };
+        for m in (lowest + 2)..l.len() {
+            let (parent, child) = (l[m - 1], l[m]);
+            let code = |x: &str| x.chars().all(|c| c.is_ascii_digit() || c == ' ');
+            // Codes (postal, INSEE) : deux communes homonymes en ont de différents.
+            if parent.is_empty() || child.is_empty() || code(parent) || code(child) {
+                continue;
+            }
+            *seen.entry((m - 1, sort_key(parent))).or_default().entry(child).or_default() += p.uses;
+        }
+    }
+    let mut keys: Vec<_> = seen.keys().cloned().collect();
+    keys.sort();
+    for key in keys {
+        let values = &seen[&key];
+        if values.len() < 2 {
+            continue;
+        }
+        let mut v: Vec<(&str, usize)> = values.iter().map(|(k, n)| (*k, *n)).collect();
+        v.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(b.0)));
+        let (to, _) = v[0];
+        let parent = all
+            .iter()
+            .find_map(|p| levels(&p.name).get(key.0).filter(|x| sort_key(x) == key.1).map(|x| x.to_string()))
+            .unwrap_or_default();
+        for (from, n) in &v[1..] {
+            let mut i = place_issue(
+                "place_hierarchy",
+                Severity::Warning,
+                &[&parent, from, to],
+                format!("{parent} : « {from} » ({n} fois) au lieu de « {to} »"),
+            );
+            i.path = vec![key.0];
+            out.push(i);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Corrections
 // ---------------------------------------------------------------------------
 
@@ -561,6 +730,8 @@ impl Gedcom {
         // pour que les positions des autres restent valables ; les suppressions
         // d'enregistrements à la fin.
         fixable.sort_by(|a, b| (a.path.is_empty(), &b.xref, &b.path).cmp(&(b.path.is_empty(), &a.xref, &a.path)));
+        // Les variantes de lieux d'abord : harmoniser renomme les lieux qu'elles visent.
+        fixable.sort_by_key(|i| i.code == "place_hierarchy");
         let mut done = 0;
         let mut touched: HashSet<String> = HashSet::new();
         for i in fixable {
@@ -572,6 +743,14 @@ impl Gedcom {
                 "moved_file" => i.related.first().is_some_and(|f| self.set_media_file(&i.xref, &i.path, f)),
                 "missing_form" => self.infer_form(&i.xref, &i.path),
                 "duplicate_media" => i.related.first().is_some_and(|keep| self.merge_duplicate_media(keep, &i.xref)),
+                "place_hierarchy" => match (&i.related[..], i.path.first()) {
+                    ([parent, from, to], Some(&level)) => self.rename_jurisdiction(level, parent, from, to) > 0,
+                    _ => false,
+                },
+                "place_variant" => match &i.related[..] {
+                    [from, to] => self.merge_place(from, to),
+                    _ => false,
+                },
                 "unattached_file" => i.related.first().is_some_and(|f| {
                     self.media_for_file(f);
                     true
@@ -686,6 +865,41 @@ impl Gedcom {
             &[keep],
         );
         self.delete(dup).is_some()
+    }
+
+    /// Remplace partout le lieu `from` par `to`, en gardant les coordonnées de
+    /// `to` (ou celles de `from` si `to` n'en a pas).
+    pub fn merge_place(&mut self, from: &str, to: &str) -> bool {
+        let places = self.places();
+        let find = |n: &str| places.iter().find(|p| p.name == n);
+        let (Some(a), Some(b)) = (find(from), find(to)) else { return false };
+        let (lat, long) = match (&b.latitude, &b.longitude, &a.latitude, &a.longitude) {
+            (Some(la), Some(lo), _, _) | (_, _, Some(la), Some(lo)) => (la.clone(), lo.clone()),
+            _ => (String::new(), String::new()),
+        };
+        self.update_place(from, to, &lat, &long);
+        if !lat.is_empty() {
+            self.update_place(to, to, &lat, &long);
+        }
+        true
+    }
+
+    /// Dans les lieux dont le niveau `level` vaut `parent`, remplace `from` par
+    /// `to` au niveau suivant. Renvoie le nombre de lieux renommés.
+    pub fn rename_jurisdiction(&mut self, level: usize, parent: &str, from: &str, to: &str) -> usize {
+        let mut n = 0;
+        for p in self.places() {
+            let l = levels(&p.name);
+            if l.get(level).is_some_and(|x| sort_key(x) == sort_key(parent)) && l.get(level + 1) == Some(&from) {
+                let mut new: Vec<&str> = l.clone();
+                new[level + 1] = to;
+                let new = new.join(", ");
+                let (lat, long) = (p.latitude.clone().unwrap_or_default(), p.longitude.clone().unwrap_or_default());
+                self.update_place(&p.name, &new, &lat, &long);
+                n += 1;
+            }
+        }
+        n
     }
 
     /// Retire de l'enregistrement les structures qui pointent vers `target`.
