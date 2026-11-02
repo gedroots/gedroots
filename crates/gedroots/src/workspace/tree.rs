@@ -1,4 +1,4 @@
-//! Vues en arbre : ascendance, descendance et éventail.
+//! Vues en arbre : arbre libre (voir `chart`) et éventail.
 
 use super::*;
 use gpui_kit::component::menu::ContextMenuExt;
@@ -7,24 +7,23 @@ use std::f32::consts::PI;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TreeMode {
-    Ancestors,
-    Descendants,
+    /// Ascendants et descendants autour d'une personne, à parcourir librement.
+    Chart,
     Fan,
 }
 
 impl TreeMode {
     pub(super) fn label(self) -> &'static str {
         match self {
-            TreeMode::Ancestors => "Ascendance",
-            TreeMode::Descendants => "Descendance",
+            TreeMode::Chart => "Arbre",
             TreeMode::Fan => "Éventail",
         }
     }
 
     pub(super) fn generations(self) -> std::ops::RangeInclusive<u32> {
         match self {
-            TreeMode::Ancestors => 4..=4,
-            TreeMode::Descendants => 2..=8,
+            // Générations chargées au fil du déplacement.
+            TreeMode::Chart => 0..=0,
             TreeMode::Fan => 2..=7,
         }
     }
@@ -99,122 +98,10 @@ impl Workspace {
         let gens = self.tree_gens.clamp(*mode.generations().start(), *mode.generations().end());
         // Vue et générations : menu Affichage › Arbre (⌘= / ⌘-).
         let body: AnyElement = match mode {
-            TreeMode::Ancestors => self.render_tree(cx).into_any_element(),
-            TreeMode::Descendants => self.render_descendants(gens, cx),
+            TreeMode::Chart => self.render_chart(cx),
             TreeMode::Fan => self.render_fan(gens, cx),
         };
         v_flex().flex_1().min_h_0().child(body).into_any_element()
-    }
-
-    // ------------------------------------------------------------------
-    // Descendance
-    // ------------------------------------------------------------------
-
-    fn render_descendants(&self, gens: u32, cx: &mut Context<Self>) -> AnyElement {
-        let (Some(doc), Some(root)) = (&self.doc, &self.selected) else { return div().into_any_element() };
-        let g = &doc.ged;
-        let Some(tree) = g.descendants(root, gens) else { return div().into_any_element() };
-        let total = g.descendant_count(root);
-        let shown = tree.count() - 1;
-        div()
-            .id("desc-scroll")
-            .flex_1()
-            .overflow_scroll()
-            .p_4()
-            .child(
-                v_flex()
-                    .gap_3()
-                    .child(mono(if shown < total {
-                        format!("{shown} descendants affichés sur {total} — augmentez le nombre de générations")
-                    } else {
-                        format!("{total} descendant{} connu{}", plural(total), plural(total))
-                    }))
-                    .child(self.desc_node(g, &tree, 0, cx)),
-            )
-            .into_any_element()
-    }
-
-    fn person_box(&self, g: &Gedcom, xref: &str, root: bool, cx: &mut Context<Self>) -> Stateful<Div> {
-        let i = g.individual(xref);
-        let (name, years, sex) = match i {
-            Some(i) => (i.display_name(), i.years(), i.sex().to_string()),
-            None => ("?".into(), String::new(), "U".into()),
-        };
-        let color = match sex.as_str() {
-            "M" => theme::paternal(),
-            "F" => theme::maternal(),
-            _ => theme::border_strong(),
-        };
-        let target = xref.to_string();
-        v_flex()
-            .id(SharedString::from(format!("box-{xref}")))
-            .w(px(190.))
-            .flex_none()
-            .px_2()
-            .py_1()
-            .rounded_md()
-            .border_1()
-            .border_l_4()
-            .border_color(if root { theme::accent() } else { theme::border() })
-            .bg(if root { theme::accent_soft() } else { theme::surface() })
-            .cursor_pointer()
-            .hover(|d| d.bg(theme::hover()))
-            .child(
-                h_flex()
-                    .gap_1p5()
-                    .items_center()
-                    .child(dot(color))
-                    .child(div().flex_1().overflow_hidden().whitespace_nowrap().text_ellipsis().child(name)),
-            )
-            .child(mono(years))
-            .on_click(cx.listener(move |this, _, w, cx| this.select(target.clone(), w, cx)))
-    }
-
-    fn desc_node(&self, g: &Gedcom, node: &DescNode, depth: usize, cx: &mut Context<Self>) -> AnyElement {
-        let me = self
-            .person_box(g, &node.xref, depth == 0, cx)
-            .when(node.truncated, |d| {
-                d.child(div().text_xs().text_color(theme::accent()).child("▸ descendants masqués"))
-            })
-            .with_menu(self.person_menu(&node.xref, MenuFrom::Link, cx));
-        h_flex()
-            .items_start()
-            .gap_3()
-            .text_sm()
-            .child(me)
-            .when(!node.unions.is_empty(), |d| {
-                d.child(v_flex().gap_2().children(node.unions.iter().map(|u| {
-                    v_flex()
-                        .gap_1()
-                        .child(
-                            h_flex().gap_2().items_center().child(div().text_color(theme::muted()).child("∞")).child(
-                                match &u.spouse {
-                                    Some(s) => self
-                                        .person_box(g, s, false, cx)
-                                        .with_menu(self.person_menu(s, MenuFrom::Link, cx))
-                                        .into_any_element(),
-                                    None => div()
-                                        .text_xs()
-                                        .text_color(theme::muted())
-                                        .child("conjoint inconnu")
-                                        .into_any_element(),
-                                },
-                            ),
-                        )
-                        .when(!u.children.is_empty(), |d| {
-                            d.child(
-                                v_flex()
-                                    .ml(px(8.))
-                                    .pl_3()
-                                    .gap_1p5()
-                                    .border_l_1()
-                                    .border_color(theme::border_strong())
-                                    .children(u.children.iter().map(|c| self.desc_node(g, c, depth + 1, cx))),
-                            )
-                        })
-                })))
-            })
-            .into_any_element()
     }
 
     // ------------------------------------------------------------------
@@ -399,8 +286,4 @@ impl Workspace {
             )
             .into_any_element()
     }
-}
-
-fn plural(n: usize) -> &'static str {
-    if n > 1 { "s" } else { "" }
 }
