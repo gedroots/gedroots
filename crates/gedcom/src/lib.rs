@@ -49,6 +49,7 @@ pub mod phonetic;
 pub mod quality;
 pub mod query;
 pub mod relations;
+pub mod saved;
 pub mod schema;
 pub mod search;
 pub mod settings;

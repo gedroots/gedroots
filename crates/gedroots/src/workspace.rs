@@ -38,6 +38,7 @@ mod photo;
 mod places;
 mod quality;
 mod relatives;
+mod saved;
 mod settings;
 mod tree;
 mod weblinks;
@@ -216,6 +217,10 @@ pub struct Workspace {
     search_focused: bool,
     /// Menu d'un jeton de recherche cliqué (marge des dates, variantes des noms).
     chip_menu: Option<filters::ChipMenu>,
+    /// Recherches enregistrées (`HEAD._GR_FIND`) et leur nombre de résultats.
+    saved: Rc<Vec<(gedcom::saved::SavedSearch, usize)>>,
+    /// Recherche enregistrée en cours de renommage.
+    saved_rename: Option<saved::SavedRename>,
     /// Saisie guidée d'un acte en cours (remplace liste, fiche et détail).
     act_editor: Option<(Entity<ActEditor>, Subscription)>,
     /// Actes de la source affichée (relus à chaque rafraîchissement de la fiche).
@@ -307,6 +312,8 @@ impl Workspace {
             suggest_closed: false,
             search_focused: false,
             chip_menu: None,
+            saved: Rc::new(Vec::new()),
+            saved_rename: None,
             act_editor: None,
             source_acts: Vec::new(),
             palette: None,
@@ -743,7 +750,8 @@ impl Workspace {
         let Some(ed) = self.editor.take() else { return };
         self.checkpoint();
         let doc = self.doc.as_mut().unwrap();
-        let result = ed.apply_form(&mut doc.ged, cx);
+        let created: Vec<String> = self.pending_places.iter().map(|p| p.name.clone()).collect();
+        let result = ed.apply_form(&mut doc.ged, &created, cx);
         let renamed = ed.place_name(cx);
         self.editor = Some(ed);
         if result.is_ok() {
@@ -858,6 +866,14 @@ impl Workspace {
                 cx.notify();
             }
             ActEditorEvent::Save { act, next } => this.save_act(editor.clone(), act, *next, window, cx),
+            ActEditorEvent::PlaceInput { input, changed } => this.place_input(input, *changed, cx),
+        });
+        // Champs Lieu de l'acte : même menu que partout ailleurs.
+        let ws = cx.entity().downgrade();
+        editor.update(cx, |e, _| {
+            e.set_place_menu(Rc::new(move |input, cx| {
+                ws.update(cx, |ws, cx| ws.place_suggestions(input, cx)).ok().flatten()
+            }))
         });
         self.act_editor = Some((editor, sub));
         cx.notify();
@@ -874,6 +890,19 @@ impl Workspace {
         self.checkpoint();
         let Some(doc) = &mut self.doc else { return };
         let base = doc.path.as_ref().and_then(|p| p.parent()).map(std::path::Path::to_path_buf);
+        // Champs de lieu : le libellé affiché redevient la valeur `PLAC` complète.
+        let created: Vec<String> = self.pending_places.iter().map(|p| p.name.clone()).collect();
+        let mut act = act.clone();
+        act.place = doc.ged.place_value(&act.place, &created);
+        for p in &mut act.participants {
+            for f in [PersonField::Residence, PersonField::Birthplace] {
+                let v = p.get(f).to_string();
+                if !v.is_empty() {
+                    p.set(f, doc.ged.place_value(&v, &created));
+                }
+            }
+        }
+        let act = &act;
         match act.save(&mut doc.ged) {
             Ok(res) => {
                 // Images de l'acte : copiées (ou déplacées) et nommées selon Réglages du fichier › Médias.
@@ -883,7 +912,9 @@ impl Workspace {
                     }
                     _ => String::new(),
                 };
-                let ged = doc.ged.clone();
+                // Lieux créés dans l'acte : leurs coordonnées.
+                self.apply_pending_places();
+                let ged = self.doc.as_ref().map(|d| d.ged.clone()).unwrap_or_default();
                 self.set_status(res.summary() + &note, false);
                 self.rebuild_rows(cx);
                 self.refresh_editor(window, cx);
@@ -964,6 +995,7 @@ impl Workspace {
         self.quality.stale = true;
         self.media_index = None;
         self.refresh_quality();
+        self.refresh_saved();
         self.build_rows(cx);
     }
 
@@ -1398,6 +1430,7 @@ impl Workspace {
                     .children(n.map(|n| div().text_xs().text_color(theme::muted()).child(group_thousands(n))))
                     .on_click(cx.listener(move |this, _, w, cx| this.show_view(v, w, cx)))
             }))
+            .children(self.render_saved(cx))
     }
 
     fn render_list(&self, cx: &mut Context<Self>) -> impl IntoElement {

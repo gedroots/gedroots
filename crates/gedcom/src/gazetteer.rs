@@ -300,4 +300,22 @@ mod tests {
         assert!(text.contains("3 MAP\n4 LATI N48.2978\n4 LONG E4.1175\n3 EXID 415228\n4 TYPE https://www.openstreetmap.org/relation/\n"), "{text}");
         assert_eq!(text.matches("EXID").count(), 1);
     }
+
+    #[test]
+    fn labels_drop_empty_jurisdictions() {
+        use crate::model::place_label;
+        assert_eq!(place_label(", Troyes, 10000, Aube, , France"), "Troyes, 10000, Aube, France");
+        assert_eq!(place_label("Paris"), "Paris");
+        let g = Gedcom::parse(
+            "0 HEAD\n1 GEDC\n2 VERS 7.0\n0 @I1@ INDI\n1 BIRT\n2 PLAC , Troyes, 10000, Aube, Grand Est, France\n0 TRLR\n",
+        )
+        .unwrap();
+        let full = ", Troyes, 10000, Aube, Grand Est, France";
+        // Le libellé affiché redonne le lieu du fichier, juridictions vides comprises.
+        assert_eq!(g.place_value("Troyes, 10000, Aube, Grand Est, France ", &[]), full);
+        assert_eq!(g.place_value(full, &[]), full);
+        let created = ", Bayeux, 14400, Calvados, Normandie, France".to_string();
+        assert_eq!(g.place_value("Bayeux, 14400, Calvados, Normandie, France", &[created.clone()]), created);
+        assert_eq!(g.place_value("Lyon, France", &[]), "Lyon, France");
+    }
 }

@@ -59,6 +59,10 @@ et suit le [design system GEDRoots](design.md) (fonds neutres et touches de viol
   s'écrit entre guillemets. Dans la zone Médias, une ligne de types (Tous · Actes ·
   Portraits…) reprend les sous-dossiers des réglages, sinon les dossiers des fichiers, sinon
   le support GEDCOM (`MEDI`) ; les liens web ont leur type.
+  **Recherches enregistrées** : le « + » de la section Recherches de la barre latérale (ou
+  Affichage › Enregistrer la recherche) garde la recherche affichée sous le nom de ses
+  jetons, à retaper aussitôt ; elle s'affiche avec son nombre de résultats et vit dans le
+  `.ged` (`HEAD._GR_FIND`, voir [extensions](docs/extensions.md#_gr_find)).
 - **Individus** : filtres rapides (Affichage › Filtrer la liste) ;
   fiche avec portrait, galerie d'images, événements (dates en français, calendrier républicain compris), sources citées,
   famille (parents, conjoints, enfants) cliquable.
@@ -313,7 +317,7 @@ cache, par défaut `~/Library/Caches/GEDRoots/tiles` ou `~/.cache/gedroots/tiles
 
 | Crate | Rôle |
 | --- | --- |
-| [`crates/gedcom`](crates/gedcom) | Lecture/écriture GEDCOM 7 sans perte, vues typées (individus, familles, sources, lieux, médias), recadrage `CROP` (`crop.rs`), médias multipages (`multipage.rs`), liens web (`weblink.rs`), assistant d'import (`import.rs`), préparation de l'export GEDZIP (`gedzip.rs`), export GEDCOM 5.5.1 et Geneanet (`gedcom551.rs`), formulaires d'édition, dates, coordonnées (`geo.rs`), outils d'analyse (`analysis/`), contrôles de la page Qualité (`quality.rs`), recherche (`search.rs`, `query.rs`, `phonetic.rs`), ajout/liaison de proches et médias (`relations.rs`), descendance (`pedigree.rs`) et actes des sources (`act.rs`). Sans dépendance. |
+| [`crates/gedcom`](crates/gedcom) | Lecture/écriture GEDCOM 7 sans perte, vues typées (individus, familles, sources, lieux, médias), recadrage `CROP` (`crop.rs`), médias multipages (`multipage.rs`), liens web (`weblink.rs`), assistant d'import (`import.rs`), préparation de l'export GEDZIP (`gedzip.rs`), export GEDCOM 5.5.1 et Geneanet (`gedcom551.rs`), formulaires d'édition, dates, coordonnées (`geo.rs`), outils d'analyse (`analysis/`), contrôles de la page Qualité (`quality.rs`), recherche (`search.rs`, `query.rs`, `phonetic.rs`, recherches enregistrées `saved.rs`), ajout/liaison de proches et médias (`relations.rs`), descendance (`pedigree.rs`) et actes des sources (`act.rs`). Sans dépendance. |
 | [`crates/gedroots`](crates/gedroots) | Application GPUI : `commands.rs` (toutes les commandes, raccourcis et menus), `workspace.rs` (fenêtre et vues) et `workspace/` (`commands.rs` commandes et palette, `tree.rs` arbres, `relatives.rs` proches/sélecteur/médias, `add.rs` fenêtres d'ajout et de modification d'événement, `menus.rs` menus du clic droit, `photo.rs` recadrage et personnes sur les photos, `pages.rs` médias multipages et fusion, `weblinks.rs` liens web, `import.rs` assistant d'import, `export.rs` exports GEDZIP et GEDCOM 5.5.1, `filters.rs` filtres rapides, `quality.rs` page Qualité, `insights.rs` page Statistiques et lien de parenté), `editor.rs` (éditeurs visuel et brut), `act_editor.rs` (éditeur d'acte), `gedzip.rs` (écriture de l'archive `.gdz`), `map.rs` (carte des lieux), `theme.rs` (palette de la maquette). |
 
 ## Tests

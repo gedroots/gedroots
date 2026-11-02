@@ -181,8 +181,12 @@ impl Workspace {
                 };
                 return builder(menu, w, cx);
             }
-            let Some((filtered, root)) = read(&ws, cx, |this, g| {
-                (!this.filter.read(cx).value().trim().is_empty() || this.only_flagged, g.root().is_some())
+            let Some((filtered, root, can_save)) = read(&ws, cx, |this, g| {
+                (
+                    !this.filter.read(cx).value().trim().is_empty() || this.only_flagged,
+                    g.root().is_some(),
+                    this.can_save_search(cx),
+                )
             }) else {
                 return menu;
             };
@@ -200,6 +204,9 @@ impl Workspace {
                 })
                 .when(view == View::Sources, |m| {
                     m.item(act(&ws, label::ENTER_ACT, |this, w, cx| this.enter_act(w, cx)))
+                })
+                .when(can_save, |m| {
+                    m.separator().item(act(&ws, label::SAVE_SEARCH, |this, w, cx| this.save_search(w, cx)))
                 })
                 .when(filtered, |m| {
                     m.separator().item(act(&ws, label::CLEAR_SEARCH, |this, w, cx| {
