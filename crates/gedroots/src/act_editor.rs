@@ -8,7 +8,7 @@
 //! par l'espace de travail quand il reçoit [`ActEditorEvent::Save`].
 
 use crate::date_field::DateField;
-use crate::editor::{PickerState, choice_with_search};
+use crate::editor::{PickerState, choice_with_search, picker};
 use crate::images::picture;
 use crate::theme;
 use gedcom::*;
@@ -69,6 +69,8 @@ pub struct ActEditor {
     media: MediaChoice,
     /// Page affichée de l'image de l'acte (à partir de 0).
     media_page: usize,
+    /// N'importe quel média du fichier, pour lier un fichier déjà importé.
+    media_picker: Entity<PickerState>,
     estimate_births: bool,
     rows: Vec<PersonRow>,
     /// Champ de lieu actif (pour afficher les lieux proposés sous ce champ).
@@ -155,12 +157,14 @@ impl ActEditor {
             let t = act.transcription.clone();
             cx.new(|cx| TextareaState::new(window, cx).rows(4).default_value(t))
         };
+        let media_picker = picker(&ged, RecordKind::Media, "", window, cx);
         let mut this = Self {
             ged,
             base_dir: ged_path.and_then(|p| p.parent().map(Path::to_path_buf)),
             quality: act.quality,
             media: act.media.clone(),
             media_page: 0,
+            media_picker,
             estimate_births: act.estimate_births,
             base: act.clone(),
             event,
@@ -200,6 +204,8 @@ impl ActEditor {
                 cx.notify();
             }
         });
+        this._subs.push(sub);
+        let sub = this.watch_media_picker(window, cx);
         this._subs.push(sub);
         let e = this.event.clone();
         let sub = cx.subscribe_in(&e, window, |this, _, ev: &SelectEvent<_>, window, cx| {
@@ -464,10 +470,28 @@ impl ActEditor {
                 }
             }
             self.media_page = first.min(all.len().saturating_sub(1));
-            self.media = MediaChoice::NewFiles(all);
+            // Fichiers déjà importés (tous dans le même média) : on lie ce média, sans doublon.
+            let known: Vec<Option<String>> = all.iter().map(|f| self.ged.media_by_file(f)).collect();
+            self.media = match known.first() {
+                Some(Some(x)) if known.iter().all(|k| k.as_ref() == Some(x)) => {
+                    self.media_page = 0;
+                    MediaChoice::Existing(x.clone())
+                }
+                _ => MediaChoice::NewFiles(all),
+            };
             self.preview = None;
         }
         cx.notify();
+    }
+
+    fn watch_media_picker(&self, window: &mut Window, cx: &mut Context<Self>) -> Subscription {
+        cx.subscribe_in(&self.media_picker, window, |this, picker, ev: &SelectEvent<_>, window, cx| {
+            if let SelectEvent::Confirm(Some(x)) = ev {
+                this.set_media(MediaChoice::Existing(x.clone()), cx);
+                // Le sélecteur sert d'action : il revient à « Média existant… ».
+                picker.update(cx, |p, cx| p.set_selected_index(None, window, cx));
+            }
+        })
     }
 
     fn set_media(&mut self, media: MediaChoice, cx: &mut Context<Self>) {
@@ -511,6 +535,10 @@ impl ActEditor {
             n.media = result.media.clone().map(MediaChoice::Existing).unwrap_or_default();
         }
         self.ged = ged;
+        // Le média créé par cet acte devient proposable.
+        self.media_picker = picker(&self.ged, RecordKind::Media, "", window, cx);
+        let sub = self.watch_media_picker(window, cx);
+        self._subs.push(sub);
         self.saved_count += 1;
         self.places = self.ged.places().into_iter().map(|p| (p.short(), p.name)).collect();
         self.base = n.clone();
@@ -681,6 +709,14 @@ impl ActEditor {
                     .collect()
             })
             .unwrap_or_default();
+        // Média lié par « Média existant… » sans être encore dans la source : affiché aussi.
+        let mut candidates = candidates;
+        if let MediaChoice::Existing(x) = &self.media
+            && !candidates.iter().any(|(c, _)| c == x)
+            && let Some(n) = self.ged.get(x)
+        {
+            candidates.push((x.clone(), Media::new(n).title()));
+        }
         let pages = self.media_pages();
         let count = pages.len();
         let at = self.media_page.min(count.saturating_sub(1));
@@ -832,6 +868,15 @@ impl ActEditor {
                         let label = if f.len() > 1 { format!("{first} +{}", f.len() - 1) } else { first };
                         d.child(chip("media-new", label, true).max_w(px(240.)).overflow_hidden())
                     })
+                    .child(
+                        div().w(px(170.)).child(
+                            Select::new(&self.media_picker)
+                                .xsmall()
+                                .placeholder("Média existant…")
+                                .menu_width(px(360.))
+                                .search_placeholder("Rechercher…"),
+                        ),
+                    )
                     .child(
                         Button::new("pick-file")
                             .ghost()
