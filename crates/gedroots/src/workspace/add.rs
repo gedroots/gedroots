@@ -130,7 +130,7 @@ impl Workspace {
         };
         let detail = text("", cur.detail, window, cx);
         let date = date_field(&cur.date, &cur.date_phrase, window, cx);
-        let place = text("Commune…", cur.place, window, cx);
+        let place = text("Commune…", place_label(&cur.place), window, cx);
         let source = picker(g, RecordKind::Source, cur.source.as_deref().unwrap_or(""), window, cx);
         let sub =
             cx.subscribe_in(&place, window, |this, input, ev: &InputEvent, _, cx| this.on_place_input(input, ev, cx));
@@ -184,7 +184,11 @@ impl Workspace {
             detail: d.detail.read(cx).value().to_string(),
             date,
             date_phrase,
-            place: d.place.read(cx).value().to_string(),
+            place: places::place_value(
+                self.doc.as_ref().map(|d| &d.ged),
+                &self.pending_places,
+                &d.place.read(cx).value(),
+            ),
             source: d.source.read(cx).selected_value().cloned(),
         };
         let (mut owner, editing) = (d.owner.clone(), d.editing);

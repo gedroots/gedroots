@@ -155,7 +155,7 @@ impl ActEditor {
             if current == "EVEN" || current == "FAM:EVEN" { act.event_type.clone() } else { String::new() };
         let event_type = mk(cx, window, "ex. Registre matricule", &custom_type);
         let page = mk(cx, window, "Acte n° 27, vue 12", &act.page);
-        let place = mk(cx, window, "Commune…", &act.place);
+        let place = mk(cx, window, "Commune…", &place_label(&act.place));
         // Colonnes étroites (grille à 4) : exemple sans « ex. » pour qu'il ne soit pas tronqué.
         let short = |value: &str, phrase: &str, window: &mut Window, cx: &mut Context<Self>| {
             cx.new(|cx| DateField::new(value, phrase, window, cx).with_placeholder("3 mars 1912", window, cx))
@@ -298,7 +298,10 @@ impl ActEditor {
                     _ => "",
                 }
                 .to_string();
-                let v = p.get(f).to_string();
+                let v = match kind {
+                    Kind::Place => place_label(p.get(f)),
+                    _ => p.get(f).to_string(),
+                };
                 let e = cx.new(|cx| InputState::new(window, cx).placeholder(ph).default_value(v));
                 subs.push(self.watch(&e, kind, window, cx));
                 inputs.push((f, e));

@@ -23,7 +23,7 @@ pub(super) struct PlaceSearch {
 /// Coordonnées d'un lieu créé, écrites dès que le lieu apparaît dans le fichier
 /// (à l'enregistrement de l'événement ou de la fiche).
 pub(super) struct PendingPlace {
-    name: String,
+    pub(super) name: String,
     lat: f64,
     lon: f64,
     exid: Option<(String, String)>,
@@ -158,7 +158,8 @@ impl Workspace {
         }
         let doc = self.doc.as_ref()?;
         let places = doc.ged.places();
-        if places.iter().any(|p| p.name == value) {
+        let shown = |n: &str| n == value || place_label(n) == typed;
+        if places.iter().any(|p| shown(&p.name)) || self.pending_places.iter().any(|p| shown(&p.name)) {
             return None;
         }
         let form = doc.ged.place_form();
@@ -200,7 +201,7 @@ impl Workspace {
                 let entity = input.clone();
                 place_row(format!("pl-{id}-{n}").into(), IconName::MapPin, short.into(), None).on_click(cx.listener(
                     move |this, _, window, cx| {
-                        entity.update(cx, |s, cx| s.set_value(full.clone(), window, cx));
+                        entity.update(cx, |s, cx| s.set_value(place_label(&full), window, cx));
                         this.place_focus = None;
                         cx.notify();
                     },
@@ -341,7 +342,7 @@ impl Workspace {
             self.pending_places.retain(|p| p.name != name);
             self.pending_places.push(PendingPlace { name: name.clone(), lat, lon, exid });
         }
-        target.update(cx, |s, cx| s.set_value(name, window, cx));
+        target.update(cx, |s, cx| s.set_value(place_label(&name), window, cx));
         self.new_place = None;
         self.place_focus = None;
         cx.notify();
@@ -579,6 +580,15 @@ impl Workspace {
                 .child(body)
                 .into_any_element(),
         )
+    }
+}
+
+/// Valeur `PLAC` d'un lieu saisi (le champ affiche le lieu sans ses juridictions vides).
+pub(super) fn place_value(ged: Option<&Gedcom>, pending: &[PendingPlace], typed: &str) -> String {
+    let created: Vec<String> = pending.iter().map(|p| p.name.clone()).collect();
+    match ged {
+        Some(g) => g.place_value(typed, &created),
+        None => typed.trim().to_string(),
     }
 }
 

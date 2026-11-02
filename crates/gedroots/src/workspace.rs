@@ -743,7 +743,8 @@ impl Workspace {
         let Some(ed) = self.editor.take() else { return };
         self.checkpoint();
         let doc = self.doc.as_mut().unwrap();
-        let result = ed.apply_form(&mut doc.ged, cx);
+        let created: Vec<String> = self.pending_places.iter().map(|p| p.name.clone()).collect();
+        let result = ed.apply_form(&mut doc.ged, &created, cx);
         let renamed = ed.place_name(cx);
         self.editor = Some(ed);
         if result.is_ok() {
@@ -882,6 +883,19 @@ impl Workspace {
         self.checkpoint();
         let Some(doc) = &mut self.doc else { return };
         let base = doc.path.as_ref().and_then(|p| p.parent()).map(std::path::Path::to_path_buf);
+        // Champs de lieu : le libellé affiché redevient la valeur `PLAC` complète.
+        let created: Vec<String> = self.pending_places.iter().map(|p| p.name.clone()).collect();
+        let mut act = act.clone();
+        act.place = doc.ged.place_value(&act.place, &created);
+        for p in &mut act.participants {
+            for f in [PersonField::Residence, PersonField::Birthplace] {
+                let v = p.get(f).to_string();
+                if !v.is_empty() {
+                    p.set(f, doc.ged.place_value(&v, &created));
+                }
+            }
+        }
+        let act = &act;
         match act.save(&mut doc.ged) {
             Ok(res) => {
                 // Images de l'acte : copiées (ou déplacées) et nommées selon Réglages du fichier › Médias.

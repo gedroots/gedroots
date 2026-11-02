@@ -203,7 +203,7 @@ impl RecordEditor {
             ($label:expr, $v:expr) => {
                 fields.push(Field {
                     label: $label.into(),
-                    state: FieldState::Text(input(window, cx, &$v, "")),
+                    state: FieldState::Text(input(window, cx, &place_label(&$v), "")),
                     place: true,
                 })
             };
@@ -326,12 +326,12 @@ impl RecordEditor {
     }
 
     /// Événement (date + lieu) des champs `n` (date) et `n + 1` (lieu).
-    fn event(&self, n: usize, cx: &App) -> Result<EventForm, String> {
+    fn event(&self, n: usize, v: &[String], cx: &App) -> Result<EventForm, String> {
         let (date, phrase) = match &self.fields[n].state {
             FieldState::Date(e) => e.read(cx).value(cx)?,
             other => (other.value(cx), String::new()),
         };
-        Ok(EventForm { date, phrase, place: self.fields[n + 1].state.value(cx) })
+        Ok(EventForm { date, phrase, place: v[n + 1].clone() })
     }
 
     fn long_value(&self, cx: &App) -> String {
@@ -354,8 +354,14 @@ impl RecordEditor {
     }
 
     /// Applique le formulaire visuel au document. Renvoie un message de résultat.
-    pub fn apply_form(&self, ged: &mut Gedcom, cx: &App) -> Result<String, String> {
-        let v = self.values(cx);
+    /// `created` : lieux créés pas encore écrits dans le fichier.
+    pub fn apply_form(&self, ged: &mut Gedcom, created: &[String], cx: &App) -> Result<String, String> {
+        // Champs de lieu : le libellé affiché redevient la valeur `PLAC` complète.
+        let v: Vec<String> = self
+            .fields
+            .iter()
+            .map(|f| if f.place { ged.place_value(&f.state.value(cx), created) } else { f.state.value(cx) })
+            .collect();
         let note = self.long_value(cx);
         match &self.target {
             Target::Place(old) => {
@@ -372,8 +378,8 @@ impl RecordEditor {
                         surname: v[1].clone(),
                         sex: v[2].clone(),
                         occupation: v[3].clone(),
-                        birth: self.event(4, cx)?,
-                        death: self.event(6, cx)?,
+                        birth: self.event(4, &v, cx)?,
+                        death: self.event(6, &v, cx)?,
                         note,
                     }
                     .apply(node),
