@@ -90,6 +90,11 @@ et suit le [design system GEDRoots](design.md) (fonds neutres et touches de viol
   logiciel, liste ce qu'il contient de non standard et propose de le convertir en GEDCOM 7
   (annulable). Premier contrôle : les balises `_URL` deviennent des liens multimédia (`WWW`
   pour les dépôts). Les contrôles sont dans `crates/gedcom/src/import.rs`.
+- **Export GEDZIP** (Fichier › « Exporter en GEDZIP… ») : une archive `.gdz` (GEDCOM 7,
+  chapitre 4) avec `gedcom.ged` et les fichiers des médias, pour transmettre l'arbre complet.
+  Les chemins relatifs gardent leur dossier (`Actes/…`), les fichiers hors du dossier du .ged
+  vont dans `media/`, les `FILE` sont réécrits pour l'archive ; le .ged et les médias ne sont
+  pas modifiés. Les fichiers introuvables sont listés à la fin, chacun menant à son média.
 - **Réglages du fichier** (⌘ / Ctrl + `,` ; menu GEDRoots sur macOS, Fichier ailleurs) : auteur, e-mail, droits,
   description, langue et individu racine, plus la liste des anomalies masquées (« Réafficher »).
   Tout est rangé dans l'en-tête du .ged en GEDCOM 7 standard (`HEAD.SUBM`, `COPR`, `NOTE`,
@@ -235,8 +240,8 @@ Sous Linux, installer d'abord les dépendances de GPUI :
 
 | Crate | Rôle |
 | --- | --- |
-| [`crates/gedcom`](crates/gedcom) | Lecture/écriture GEDCOM 7 sans perte, vues typées (individus, familles, sources, lieux, médias), recadrage `CROP` (`crop.rs`), médias multipages (`multipage.rs`), liens web (`weblink.rs`) et assistant d'import (`import.rs`), formulaires d'édition, dates, coordonnées (`geo.rs`), outils d'analyse (`analysis/`), contrôles de la page Qualité (`quality.rs`), recherche (`search.rs`), ajout/liaison de proches et médias (`relations.rs`), descendance (`pedigree.rs`) et actes des sources (`act.rs`). Sans dépendance. |
-| [`crates/gedroots`](crates/gedroots) | Application GPUI : `commands.rs` (toutes les commandes, raccourcis et menus), `workspace.rs` (fenêtre et vues) et `workspace/` (`commands.rs` commandes et palette, `tree.rs` arbres, `relatives.rs` proches/sélecteur/médias, `add.rs` fenêtres d'ajout et de modification d'événement, `menus.rs` menus du clic droit, `photo.rs` recadrage et personnes sur les photos, `pages.rs` médias multipages et fusion, `weblinks.rs` liens web, `import.rs` assistant d'import, `filters.rs` filtres rapides, `quality.rs` page Qualité, `insights.rs` page Statistiques et lien de parenté), `editor.rs` (éditeurs visuel et brut), `act_editor.rs` (éditeur d'acte), `map.rs` (carte des lieux), `theme.rs` (palette de la maquette). |
+| [`crates/gedcom`](crates/gedcom) | Lecture/écriture GEDCOM 7 sans perte, vues typées (individus, familles, sources, lieux, médias), recadrage `CROP` (`crop.rs`), médias multipages (`multipage.rs`), liens web (`weblink.rs`), assistant d'import (`import.rs`), préparation de l'export GEDZIP (`gedzip.rs`), formulaires d'édition, dates, coordonnées (`geo.rs`), outils d'analyse (`analysis/`), contrôles de la page Qualité (`quality.rs`), recherche (`search.rs`), ajout/liaison de proches et médias (`relations.rs`), descendance (`pedigree.rs`) et actes des sources (`act.rs`). Sans dépendance. |
+| [`crates/gedroots`](crates/gedroots) | Application GPUI : `commands.rs` (toutes les commandes, raccourcis et menus), `workspace.rs` (fenêtre et vues) et `workspace/` (`commands.rs` commandes et palette, `tree.rs` arbres, `relatives.rs` proches/sélecteur/médias, `add.rs` fenêtres d'ajout et de modification d'événement, `menus.rs` menus du clic droit, `photo.rs` recadrage et personnes sur les photos, `pages.rs` médias multipages et fusion, `weblinks.rs` liens web, `import.rs` assistant d'import, `export.rs` export GEDZIP, `filters.rs` filtres rapides, `quality.rs` page Qualité, `insights.rs` page Statistiques et lien de parenté), `editor.rs` (éditeurs visuel et brut), `act_editor.rs` (éditeur d'acte), `gedzip.rs` (écriture de l'archive `.gdz`), `map.rs` (carte des lieux), `theme.rs` (palette de la maquette). |
 
 ## Tests
 

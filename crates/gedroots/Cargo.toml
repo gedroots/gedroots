@@ -15,3 +15,5 @@ serde_json = "1.0.154"
 # Fichiers ouverts depuis le Finder, transmis à la boucle de l'app.
 async-channel = "2"
 imagesize = "0.14"
+# Export GEDZIP (.gdz) : archive zip, gedcom.ged compressé, médias stockés tels quels.
+zip = { version = "9.2.2", default-features = false, features = ["deflate-flate2"] }
