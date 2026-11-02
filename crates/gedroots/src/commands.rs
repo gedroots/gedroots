@@ -34,6 +34,7 @@ actions!(
         // Edit
         Undo,
         Redo,
+        EditRecord,
         DeleteRecord,
         CopyId,
         CopyName,
@@ -181,6 +182,8 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new(shortcut!("shift-n"), NewIndividual, WS),
         KeyBinding::new(shortcut!("f"), FocusSearch, WS),
         KeyBinding::new(shortcut!("e"), EnterRecord, WS),
+        // Like Contacts: ⌘L edits the record, and saves it when pressed again.
+        KeyBinding::new(shortcut!("l"), EditRecord, WS),
         KeyBinding::new(shortcut!("enter"), AcceptProposal, WS),
         KeyBinding::new(shortcut!("backspace"), RejectProposal, WS),
         KeyBinding::new(shortcut!("shift-m"), MediaGallery, WS),
@@ -430,6 +433,7 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
             Item::Os(t!("cmd.paste").into(), Box::new(input::Paste), OsAction::Paste),
             Item::Os(t!("cmd.select_all").into(), Box::new(input::SelectAll), OsAction::SelectAll),
             Sep,
+            a(t!("cmd.edit_record"), EditRecord),
             a(label::media_gallery(), MediaGallery),
             a(t!("cmd.add_web_link"), AddWebLink),
             Sep,

@@ -278,6 +278,8 @@ pub struct Workspace {
     kinship: Option<(String, String)>,
     /// Event shown read-only (click in a timeline).
     event_detail: Option<event_detail::EventDetail>,
+    /// The record's fields are being edited (Edit › Edit Record); otherwise it is shown as text.
+    editing: bool,
     /// Record page: also show the relatives' events (View › Relatives' Events).
     show_relative_events: bool,
     /// Statistics of the file (Statistics page).
@@ -350,6 +352,7 @@ impl Workspace {
             quality: quality::QualityState { stale: true, ..Default::default() },
             kinship: None,
             event_detail: None,
+            editing: false,
             show_relative_events: false,
             stats: None,
             recent_gen: (crate::recent::generation(), crate::commands::search_sites_generation()),
@@ -693,6 +696,7 @@ impl Workspace {
     }
 
     fn refresh_editor(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.editing = false;
         let (Some(doc), Some(key), None) = (&self.doc, &self.selected, self.view.page()) else {
             self.editor = None;
             return;
@@ -740,6 +744,8 @@ impl Workspace {
         self.rebuild_rows(cx);
         self.select(x.clone(), window, cx);
         self.tab = CenterTab::Form;
+        // A new record opens on its fields.
+        self.start_edit(window, cx);
         self.set_status(t!("ws.created", kind = crate::i18n::record_kind(kind)), false);
     }
 
@@ -1826,82 +1832,62 @@ impl Workspace {
     fn render_form(&self, ed: &RecordEditor, cx: &mut Context<Self>) -> impl IntoElement {
         let preview = self.media_preview(ed, cx);
         let confirm = self.pending_delete.is_some() && self.pending_delete == self.selected;
+        let editable = !ed.fields.is_empty() || !ed.pickers.is_empty() || ed.long_text.is_some();
+        let editing = self.editing && editable;
+        // Deletion: Edit › Delete Item, then confirmation here.
+        let confirm_buttons = confirm.then(|| {
+            h_flex()
+                .gap_2()
+                .child(Button::new("cancel-delete").ghost().small().label(t!("ws.keep")).on_click(cx.listener(
+                    |this, _, _, cx| {
+                        this.pending_delete = None;
+                        cx.notify();
+                    },
+                )))
+                .child(
+                    Button::new("delete")
+                        .danger()
+                        .small()
+                        .icon(IconName::Trash)
+                        .label(match &ed.target {
+                            Target::Place(_) => t!("ws.confirm_remove_place"),
+                            _ => t!("ws.confirm_delete"),
+                        })
+                        .on_click(cx.listener(|this, _, w, cx| this.delete_selected(w, cx))),
+                )
+        });
         div().id("form-scroll").flex_1().overflow_y_scroll().child(
             v_flex()
                 .p_4()
                 .gap_3()
-                .when(!ed.pickers.is_empty(), |d| {
-                    d.child(div().grid().grid_cols(2).gap_3().children(ed.pickers.iter().map(|p| {
-                        v_flex().gap_1().child(label_caps(p.label.clone())).child(
-                            Select::new(&p.state)
-                                .small()
-                                .cleanable(true)
-                                .placeholder(p.placeholder.clone())
-                                .search_placeholder(t!("event_dialog.search")),
-                        )
-                    })))
+                .when(editing, |d| d.child(self.render_form_fields(ed, cx)))
+                .when(!editing && editable, |d| d.child(self.render_form_read(ed, cx)))
+                .when(editing || confirm, |d| {
+                    d.child(
+                        h_flex()
+                            .gap_2()
+                            .when(editing, |d| {
+                                d.child(
+                                    Button::new("cancel-form")
+                                        .ghost()
+                                        .small()
+                                        .label(t!("ws.cancel_edit"))
+                                        .tooltip(t!("ws.cancel_edit_tip"))
+                                        .on_click(cx.listener(|this, _, w, cx| this.cancel_edit(w, cx))),
+                                )
+                                .child(
+                                    Button::new("apply-form")
+                                        .primary()
+                                        .small()
+                                        .icon(IconName::Check)
+                                        .label(t!("ws.done"))
+                                        .on_click(cx.listener(|this, _, w, cx| this.apply_form(w, cx))),
+                                )
+                            })
+                            .child(div().flex_1())
+                            .children(confirm_buttons),
+                    )
                 })
-                .child(div().grid().grid_cols(2).gap_3().children(ed.fields.iter().map(|f| {
-                    v_flex()
-                        .gap_1()
-                        .min_w_0()
-                        .child(label_caps(f.label.clone()))
-                        .child(match &f.state {
-                            FieldState::Text(e) => Input::new(e).small().into_any_element(),
-                            FieldState::Choice(e) => Select::new(e)
-                                .small()
-                                .cleanable(true)
-                                .placeholder(t!("event_dialog.choose"))
-                                .into_any_element(),
-                            FieldState::Date(e) => e.clone().into_any_element(),
-                        })
-                        .children(match &f.state {
-                            FieldState::Text(e) if f.place => self.place_suggestions(e, cx),
-                            _ => None,
-                        })
-                })))
-                .when_some(ed.long_text.as_ref(), |d, (label, state)| {
-                    d.child(v_flex().gap_1().child(label_caps(label.clone())).child(Textarea::new(state).h(px(120.))))
-                })
-                .child(
-                    h_flex()
-                        .gap_2()
-                        .child(
-                            Button::new("apply-form")
-                                .primary()
-                                .small()
-                                .icon(IconName::Check)
-                                .label(t!("ws.apply"))
-                                .on_click(cx.listener(|this, _, w, cx| this.apply_form(w, cx))),
-                        )
-                        .child(Button::new("reset-form").ghost().small().label(t!("ws.revert")).on_click(cx.listener(
-                            |this, _, w, cx| {
-                                this.refresh_editor(w, cx);
-                                cx.notify();
-                            },
-                        )))
-                        .child(div().flex_1())
-                        // Deletion: Edit › Delete Item, then confirmation here.
-                        .when(confirm, |d| {
-                            d.child(Button::new("cancel-delete").ghost().small().label(t!("ws.keep")).on_click(
-                                cx.listener(|this, _, _, cx| {
-                                    this.pending_delete = None;
-                                    cx.notify();
-                                }),
-                            ))
-                            .child(
-                                Button::new("delete")
-                                    .danger()
-                                    .small()
-                                    .icon(IconName::Trash)
-                                    .label(match &ed.target {
-                                        Target::Place(_) => t!("ws.confirm_remove_place"),
-                                        _ => t!("ws.confirm_delete"),
-                                    })
-                                    .on_click(cx.listener(|this, _, w, cx| this.delete_selected(w, cx))),
-                            )
-                        }),
-                )
                 .when_some(
                     match &ed.target {
                         Target::Record { xref, kind: RecordKind::Source } => Some(xref.clone()),
@@ -1912,6 +1898,118 @@ impl Workspace {
                 .when_some(preview, |d, p| d.child(p))
                 .when_some(self.record_images(ed, cx), |d, p| d.child(p)),
         )
+    }
+
+    /// Fields of the record being edited (Edit › Edit Record).
+    fn render_form_fields(&self, ed: &RecordEditor, cx: &mut Context<Self>) -> impl IntoElement {
+        v_flex()
+            .gap_3()
+            .when(!ed.pickers.is_empty(), |d| {
+                d.child(div().grid().grid_cols(2).gap_3().children(ed.pickers.iter().map(|p| {
+                    v_flex().gap_1().child(label_caps(p.label.clone())).child(
+                        Select::new(&p.state)
+                            .small()
+                            .cleanable(true)
+                            .placeholder(p.placeholder.clone())
+                            .search_placeholder(t!("event_dialog.search")),
+                    )
+                })))
+            })
+            .child(div().grid().grid_cols(2).gap_3().children(ed.fields.iter().map(|f| {
+                v_flex()
+                    .gap_1()
+                    .min_w_0()
+                    .child(label_caps(f.label.clone()))
+                    .child(match &f.state {
+                        FieldState::Text(e) => Input::new(e).small().into_any_element(),
+                        FieldState::Choice(e) => Select::new(e)
+                            .small()
+                            .cleanable(true)
+                            .placeholder(t!("event_dialog.choose"))
+                            .into_any_element(),
+                        FieldState::Date(e) => e.clone().into_any_element(),
+                    })
+                    .children(match &f.state {
+                        FieldState::Text(e) if f.place => self.place_suggestions(e, cx),
+                        _ => None,
+                    })
+            })))
+            .when_some(ed.long_text.as_ref(), |d, (label, state)| {
+                d.child(v_flex().gap_1().child(label_caps(label.clone())).child(Textarea::new(state).h(px(120.))))
+            })
+    }
+
+    /// The record as it is saved, in text: empty values hidden, linked records clickable. The
+    /// pencil (and Edit › Edit Record) switches to the fields, in place.
+    fn render_form_read(&self, ed: &RecordEditor, cx: &mut Context<Self>) -> impl IntoElement {
+        let g = self.doc.as_ref().map(|d| &d.ged);
+        let row = |label: SharedString, value: AnyElement| {
+            h_flex()
+                .gap_3()
+                .items_start()
+                .child(div().w(px(140.)).flex_none().text_xs().pt_0p5().text_color(theme::muted()).child(label))
+                .child(div().flex_1().min_w_0().child(value))
+        };
+        let pickers = ed.pickers.iter().enumerate().filter_map(|(n, p)| {
+            let x = p.shown.clone()?;
+            let name = g?.record_label(&x);
+            let link = div()
+                .id(("form-link", n))
+                .cursor_pointer()
+                .text_color(theme::accent())
+                .hover(|d| d.underline())
+                .child(name)
+                .on_click(cx.listener(move |this, _, w, cx| this.goto(x.clone(), w, cx)));
+            Some(row(p.label.clone(), link.into_any_element()))
+        });
+        let fields = ed
+            .fields
+            .iter()
+            .filter(|f| !f.shown.trim().is_empty())
+            .map(|f| row(f.label.clone(), div().child(f.shown.clone()).into_any_element()));
+        let long = ed.long_text.as_ref().and_then(|(label, state)| {
+            let text = state.read(cx).value().to_string();
+            (!text.trim().is_empty())
+                .then(|| row(label.clone(), div().whitespace_normal().child(text).into_any_element()))
+        });
+        let edit = Button::new("edit-record")
+            .ghost()
+            .xsmall()
+            .icon(IconName::Pencil)
+            .tooltip_with_action(t!("cmd.edit_record"), &EditRecord, Some("Workspace"))
+            .on_click(cx.listener(|this, _, w, cx| this.start_edit(w, cx)));
+        h_flex()
+            .gap_2()
+            .items_start()
+            .child(v_flex().flex_1().min_w_0().gap_2().children(pickers).children(fields).children(long))
+            .child(edit)
+    }
+
+    /// Edit › Edit Record: the record's fields, in place; a second time, saves (like Done).
+    pub(super) fn start_edit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.editing {
+            self.apply_form(window, cx);
+            return;
+        }
+        self.tab = CenterTab::Form;
+        self.editing = true;
+        if let Some(f) = self.editor.as_ref().and_then(|ed| ed.fields.first()) {
+            match &f.state {
+                FieldState::Text(e) => e.update(cx, |e, cx| e.focus(window, cx)),
+                FieldState::Date(e) => {
+                    let input = e.read(cx).input().clone();
+                    input.update(cx, |e, cx| e.focus(window, cx))
+                }
+                FieldState::Choice(_) => {}
+            }
+        }
+        cx.notify();
+    }
+
+    /// Cancel (or Esc): the typed values are dropped, back to reading.
+    pub(super) fn cancel_edit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.refresh_editor(window, cx);
+        cx.notify();
     }
 
     /// Images linked to a source, shown large under the record.
@@ -2902,6 +3000,8 @@ impl Render for Workspace {
                         this.cancel_draw(cx);
                     } else if this.kinship.take().is_some() || this.close_event_detail(cx) {
                         cx.notify();
+                    } else if this.editing {
+                        this.cancel_edit(w, cx);
                     }
                 }
             }))

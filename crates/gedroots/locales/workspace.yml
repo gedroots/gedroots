@@ -90,9 +90,15 @@ ws.history_tip:
 ws.tree_gens:
   en: "%{mode} · %{n} gen."
   fr: "%{mode} · %{n} gén."
-ws.apply:
-  en: Apply
-  fr: Appliquer
+ws.done:
+  en: Done
+  fr: Terminé
+ws.cancel_edit:
+  en: Cancel
+  fr: Annuler
+ws.cancel_edit_tip:
+  en: Drop the changes (Esc)
+  fr: Abandonner les modifications (Échap)
 ws.revert:
   en: Revert
   fr: Rétablir

@@ -22,6 +22,8 @@ pub struct Field {
     pub state: FieldState,
     /// Place: suggests the places already in the file.
     pub place: bool,
+    /// Saved value as read in the record (date in words, label of a choice); empty: hidden.
+    pub shown: String,
 }
 
 /// Free input, choice from a list of fixed values (sex…), or date.
@@ -49,6 +51,19 @@ fn sexes() -> [(&'static str, String); 4] {
         ("X", t!("sex.other").into()),
         ("U", t!("sex.unknown").into()),
     ]
+}
+
+/// Label of the value `v` among `options`, ignoring case; empty if it is not one of them.
+fn choice_label(options: &[(&str, &str)], v: &str) -> String {
+    options.iter().find(|(o, _)| o.eq_ignore_ascii_case(v.trim())).map(|(_, l)| l.to_string()).unwrap_or_default()
+}
+
+/// A GEDCOM date in words (“12 March 1854”), or its phrase when it has one.
+fn date_words(date: &str, phrase: &str) -> String {
+    if !phrase.trim().is_empty() {
+        return phrase.trim().to_string();
+    }
+    if date.trim().is_empty() { String::new() } else { Date::parse(date).display() }
 }
 
 /// Drop-down list of fixed values (GEDCOM value, label).
@@ -122,6 +137,8 @@ pub struct Picker {
     pub label: SharedString,
     pub placeholder: SharedString,
     pub state: Entity<PickerState>,
+    /// Saved linked record, shown as a link when reading.
+    pub shown: Option<String>,
 }
 
 fn picks(ged: &Gedcom, kind: RecordKind) -> Vec<Pick> {
@@ -201,6 +218,7 @@ impl RecordEditor {
                     label: $label.into(),
                     state: FieldState::Text(input(window, cx, &$v, $hint)),
                     place: false,
+                    shown: $v.to_string(),
                 })
             };
         }
@@ -210,6 +228,7 @@ impl RecordEditor {
                     label: $label.into(),
                     state: FieldState::Date(date_field(&$ev.date, &$ev.phrase, window, cx)),
                     place: false,
+                    shown: date_words(&$ev.date, &$ev.phrase),
                 })
             };
         }
@@ -219,6 +238,7 @@ impl RecordEditor {
                     label: $label.into(),
                     state: FieldState::Text(input(window, cx, &place_label(&$v), "")),
                     place: true,
+                    shown: place_label(&$v),
                 })
             };
         }
@@ -235,6 +255,7 @@ impl RecordEditor {
                             label: j.replace('_', " ").into(),
                             state: FieldState::Text(input(window, cx, part, "")),
                             place: false,
+                            shown: part.to_string(),
                         });
                     }
                 } else {
@@ -274,6 +295,7 @@ impl RecordEditor {
                             label: t!("editor.sex").into(),
                             state: FieldState::Choice(sex),
                             place: false,
+                            shown: choice_label(&sexes, &f.sex),
                         });
                         field!(t!("editor.occupation"), "", f.occupation);
                         date_field!(t!("editor.birth_date"), f.birth);
@@ -295,6 +317,7 @@ impl RecordEditor {
                         field!(t!("editor.acts"), t!("editor.acts_placeholder"), content.events_label());
                         fields.push(Field {
                             label: t!("editor.period").into(),
+                            shown: date_words(&content.period, ""),
                             state: FieldState::Date(cx.new(|cx| {
                                 DateField::new(&content.period, "", window, cx).with_placeholder(
                                     t!("editor.period_placeholder"),
@@ -309,6 +332,8 @@ impl RecordEditor {
                             label: t!("editor.repository").into(),
                             placeholder: t!("editor.choose_repository").into(),
                             state,
+                            shown: Some(f.repository.trim().trim_matches('@').to_string())
+                                .filter(|x| ged.get(x).is_some()),
                         });
                         long_text = Some((t!("editor.source_text").into(), textarea(window, cx, &f.text)));
                     }
@@ -329,6 +354,7 @@ impl RecordEditor {
                             label: t!("editor.medium").into(),
                             state: FieldState::Choice(medi),
                             place: false,
+                            shown: choice_label(&options, medium(node).unwrap_or("")),
                         });
                     }
                     RecordKind::SharedNote => {
