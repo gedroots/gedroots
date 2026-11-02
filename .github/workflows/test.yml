@@ -1,0 +1,44 @@
+name: Test
+
+# Tools and commands come from mise.toml (and mise.lock): the workflow runs the same task as a
+# local machine (`mise run ci`). The installers are built by the Release workflow.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  # No incremental compilation in CI: useless on a fresh machine, and it
+  # bloats the target/ cache.
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: GPUI system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-dev libfontconfig-dev libwayland-dev libxcb1-dev libvulkan-dev
+      # mise installs Rust with rustup: the toolchain goes into mise's data
+      # folder, so that the mise-action cache keeps it.
+      - name: Rust toolchain in the mise folder
+        run: echo "MISE_RUSTUP_HOME=$HOME/.local/share/mise/rustup" >> "$GITHUB_ENV"
+      - uses: jdx/mise-action@v5
+        with:
+          version: 2026.10.25
+      # Downloaded crates and build outputs: they follow Cargo.lock.
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: ${{ github.job }}-${{ runner.os }}-${{ hashFiles('mise.lock', 'Cargo.lock') }}
+          restore-keys: ${{ github.job }}-${{ runner.os }}-
+      - run: mise run ci
