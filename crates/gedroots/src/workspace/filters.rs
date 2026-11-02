@@ -10,11 +10,12 @@ const QUICK: &[(&str, &str)] = &[
     ("Sans source", "sans:source"),
     ("Sans parents", "sans:parents"),
     ("Sans date", "sans:date"),
+    ("Unions sans mariage", "sans:mariage"),
     ("Avec média", "avec:média"),
 ];
 
 const HELP: &str = "Critères : né:1850 · né:1800-1850 · né:<1800 · mort:… · vécu:1870 · lieu:troyes · \
-                    prof:meunier · sexe:h/f · sans:source/parents/date/famille/média · avec:média/note · \
+                    prof:meunier · sexe:h/f · sans:source/parents/date/famille/mariage/média · avec:média/note/mariage · \
                     sosa:1-63 · id:I00012";
 
 impl Workspace {

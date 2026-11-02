@@ -17,7 +17,8 @@
 //! | `prof:meunier` | profession (`OCCU`) |
 //! | `sexe:h` / `sexe:f` / `sexe:?` | sexe (h/m = homme, f = femme, ? = inconnu) |
 //! | `sans:source`, `sans:parents`, `sans:date`, `sans:famille`, `sans:média` | ce qui manque |
-//! | `avec:média`, `avec:note`, `avec:source` | ce qui est présent |
+//! | `sans:mariage` | a une union sans mariage (`MARR`) |
+//! | `avec:média`, `avec:note`, `avec:source`, `avec:mariage` | ce qui est présent |
 //! | `sosa`, `sosa:1-63` | porte un numéro Sosa (ascendant du de cujus) |
 //! | `id:I00012` ou `@I00012@` | identifiant GEDCOM (recherche avancée) |
 //!
@@ -64,6 +65,9 @@ pub enum Feature {
     Family,
     Media,
     Note,
+    /// Mariage d'une union. `sans:mariage` : une union au moins n'a pas de mariage
+    /// (une personne sans union ne compte pas).
+    Marriage,
 }
 
 impl Feature {
@@ -75,6 +79,7 @@ impl Feature {
             "famille" | "conjoint" => Feature::Family,
             "media" | "photo" | "image" => Feature::Media,
             "note" => Feature::Note,
+            "mariage" => Feature::Marriage,
             _ => return None,
         })
     }
@@ -94,6 +99,15 @@ impl Feature {
             Feature::Family => !i.fams().is_empty(),
             Feature::Media => i.node.child("OBJE").is_some(),
             Feature::Note => i.node.child("NOTE").is_some() || i.node.child("SNOTE").is_some(),
+            Feature::Marriage => i.fams().iter().any(|f| g.family(f).is_some_and(|f| f.marriage().is_some())),
+        }
+    }
+
+    /// Ce qui manque, pour `sans:`.
+    fn missing(self, g: &Gedcom, i: &Individual) -> bool {
+        match self {
+            Feature::Marriage => i.fams().iter().any(|f| g.family(f).is_some_and(|f| f.marriage().is_none())),
+            _ => !self.present(g, i),
         }
     }
 }
@@ -252,7 +266,7 @@ impl IndividualQuery {
                 _ => return false,
             }
         }
-        self.without.iter().all(|f| !f.present(g, i)) && self.with.iter().all(|f| f.present(g, i))
+        self.without.iter().all(|f| f.missing(g, i)) && self.with.iter().all(|f| f.present(g, i))
     }
 }
 

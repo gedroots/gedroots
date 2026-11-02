@@ -37,17 +37,14 @@ impl Workspace {
         let sel = self.selected.clone();
         let sel_kind = sel.as_ref().and_then(|x| g?.get(x)).and_then(|n| RecordKind::from_tag(&n.tag));
         let indi = sel.clone().filter(|_| sel_kind == Some(RecordKind::Individual));
-        let fam = sel.clone().filter(|_| sel_kind == Some(RecordKind::Family));
         let media = sel.clone().filter(|_| sel_kind == Some(RecordKind::Media));
         let parents = indi.as_ref().and_then(|x| Some(g?.parents(x))).unwrap_or((None, None));
-        let fam_full =
-            fam.as_ref().and_then(|f| g?.family(f)).is_some_and(|f| f.husband().is_some() && f.wife().is_some());
         let photo = media.as_ref().and_then(|x| self.photo_file(x)).filter(|_| self.photo_draw.is_none());
         let root = g.and_then(|g| g.root());
         let is_root = indi.is_some() && root == indi;
         let can_undo = doc.is_some_and(|d| !d.history.is_empty());
         let individuals = has_doc && self.view == View::Individuals && self.act_editor.is_none();
-        let attachable = matches!(sel_kind, Some(RecordKind::Individual | RecordKind::Family | RecordKind::Source));
+        let attachable = matches!(sel_kind, Some(RecordKind::Individual | RecordKind::Source));
         let web_linkable = sel.as_ref().is_some_and(|x| g.is_some_and(|g| g.can_have_web_links(x)));
 
         let d = on!(d, cx, OpenFile, |this, w, cx| this.open_file(&OpenFile, w, cx));
@@ -71,7 +68,6 @@ impl Workspace {
 
         // Créations : on passe dans la bonne liste puis on crée.
         let d = on!(d, cx, NewIndividual, |this, w, cx| this.create_in(View::Individuals, w, cx));
-        let d = on!(d, cx, NewFamily, |this, w, cx| this.create_in(View::Families, w, cx));
         // Nouvelle source : elle s'ouvre sur un acte vide (une source sans acte reste possible : « ‹ »).
         let d = on!(d, cx, NewSource, |this, w, cx| {
             this.create_in(View::Sources, w, cx);
@@ -83,7 +79,6 @@ impl Workspace {
 
         // Vues.
         let d = on!(d, cx, ShowIndividuals, |this, w, cx| this.show_view(View::Individuals, w, cx));
-        let d = on!(d, cx, ShowFamilies, |this, w, cx| this.show_view(View::Families, w, cx));
         let d = on!(d, cx, ShowSources, |this, w, cx| this.show_view(View::Sources, w, cx));
         let d = on!(d, cx, ShowPlaces, |this, w, cx| this.show_view(View::Places, w, cx));
         let d = on!(d, cx, ShowMedia, |this, w, cx| this.show_view(View::Media, w, cx));
@@ -140,6 +135,7 @@ impl Workspace {
                 let d = on!(d, cx, FilterUnsourced, |this, w, cx| this.toggle_filter("sans:source", w, cx));
                 let d = on!(d, cx, FilterNoParents, |this, w, cx| this.toggle_filter("sans:parents", w, cx));
                 let d = on!(d, cx, FilterNoDate, |this, w, cx| this.toggle_filter("sans:date", w, cx));
+                let d = on!(d, cx, FilterNoMarriage, |this, w, cx| this.toggle_filter("sans:mariage", w, cx));
                 on!(d, cx, FilterWithMedia, |this, w, cx| this.toggle_filter("avec:média", w, cx))
             })
             // Individu sélectionné.
@@ -184,7 +180,7 @@ impl Workspace {
                     })
                 })
             })
-            .when(indi.is_some() || fam.is_some(), |d| {
+            .when(indi.is_some(), |d| {
                 on!(d, cx, AddEvent, |this, w, cx| {
                     if let Some(x) = this.selected.clone() {
                         this.open_event_dialog(x, None, w, cx)
@@ -203,26 +199,6 @@ impl Workspace {
                     if let Some(x) = this.selected.clone() {
                         this.choose_files(x, w, cx)
                     }
-                })
-            })
-            // Famille sélectionnée.
-            .when(fam.is_some(), |d| {
-                let d = on!(d, cx, NewFamilyChild, |this, w, cx| {
-                    if let Some(f) = this.selected.clone() {
-                        this.add_family_child(f, w, cx)
-                    }
-                });
-                let d = on!(d, cx, LinkFamilyChild, |this, w, cx| {
-                    if let Some(fam) = this.selected.clone() {
-                        this.open_picker(PickPurpose::FamilyChild { fam }, w, cx)
-                    }
-                });
-                d.when(!fam_full, |d| {
-                    on!(d, cx, LinkFamilyParent, |this, w, cx| {
-                        if let Some(fam) = this.selected.clone() {
-                            this.open_picker(PickPurpose::FamilySpouse { fam }, w, cx)
-                        }
-                    })
                 })
             })
             .when(photo.is_some(), |d| on!(d, cx, TagPerson, |this, w, cx| this.tag_person_on_photo(cx)))

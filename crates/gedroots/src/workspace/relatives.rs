@@ -8,8 +8,6 @@ use gpui_kit::component::IconName;
 pub enum PickPurpose {
     /// `other` devient le `rel` de `indi`.
     Relative { indi: String, rel: Relation },
-    /// La personne choisie devient un parent de la famille.
-    FamilySpouse { fam: String },
     /// La personne choisie devient un enfant de la famille.
     FamilyChild { fam: String },
     /// Le média est rattaché à l'enregistrement choisi.
@@ -34,8 +32,7 @@ impl PickPurpose {
             PickPurpose::Relative { indi, rel } => {
                 format!("Choisir {} de {}", rel_article(*rel), g.record_label(indi))
             }
-            PickPurpose::FamilySpouse { fam } => format!("Choisir un parent pour {}", g.record_label(fam)),
-            PickPurpose::FamilyChild { fam } => format!("Choisir un enfant pour {}", g.record_label(fam)),
+            PickPurpose::FamilyChild { fam } => format!("Choisir un enfant de {}", g.record_label(fam)),
             PickPurpose::MediaTo { media } => format!("Rattacher « {} » à…", g.record_label(media)),
             PickPurpose::TagPerson { .. } => "Qui est sur cette zone de la photo ?".into(),
             PickPurpose::Kinship { indi } => format!("Lien de parenté de {} avec…", g.record_label(indi)),
@@ -401,10 +398,6 @@ impl Workspace {
                         None,
                     ))
                 }
-                PickPurpose::FamilySpouse { fam } => {
-                    g.set_spouse(&fam, &chosen)?;
-                    Ok((format!("{who} ajouté(e) comme parent"), None))
-                }
                 PickPurpose::FamilyChild { fam } => {
                     g.add_child_to_family(&fam, &chosen)?;
                     Ok((format!("{who} ajouté(e) comme enfant"), None))
@@ -583,58 +576,6 @@ impl Workspace {
                     return None;
                 }
                 section().child(self.render_media_drop(&key, media_keys, cx))
-            }
-            View::Families => {
-                let fam = g.family(&key)?;
-                let members: Vec<(&'static str, String)> = [("Parent", fam.husband()), ("Parent", fam.wife())]
-                    .into_iter()
-                    .filter_map(|(r, x)| x.map(|x| (r, x.to_string())))
-                    .chain(fam.children().into_iter().map(|c| ("Enfant", c.to_string())))
-                    .collect();
-                // Ajouter un enfant, lier un parent : menu Famille.
-                section()
-                    .child(section_header("Membres", {
-                        let f = key.clone();
-                        super::add::plus_button("add-member")
-                            .tooltip("Ajouter un enfant ou un parent")
-                            .on_click(cx.listener(move |this, _, _, cx| this.open_relatives_dialog(f.clone(), cx)))
-                    }))
-                    .children(members.into_iter().map(|(role, x)| {
-                        let (who, fam) = (x.clone(), key.clone());
-                        let open = x.clone();
-                        h_flex()
-                            .id(SharedString::from(format!("member-{x}")))
-                            .gap_2()
-                            .px_2()
-                            .py_0p5()
-                            .rounded(theme::RADIUS_SM)
-                            .cursor_pointer()
-                            .hover(|d| d.bg(theme::hover()))
-                            .items_center()
-                            .child(div().w(px(52.)).text_xs().text_color(theme::muted()).child(role))
-                            .child(
-                                div()
-                                    .flex_1()
-                                    .overflow_hidden()
-                                    .whitespace_nowrap()
-                                    .text_ellipsis()
-                                    .child(g.record_label(&x)),
-                            )
-                            .child(
-                                Button::new(SharedString::from(format!("fam-unlink-{x}")))
-                                    .xsmall()
-                                    .ghost()
-                                    .icon(IconName::Close)
-                                    .tooltip("Retirer de la famille")
-                                    .on_click(cx.listener(move |this, _, w, cx| {
-                                        cx.stop_propagation();
-                                        this.unlink(who.clone(), fam.clone(), w, cx)
-                                    })),
-                            )
-                            .on_click(cx.listener(move |this, _, w, cx| this.goto(open.clone(), w, cx)))
-                            .with_menu(self.person_menu(&x, super::MenuFrom::Member(key.clone()), cx))
-                    }))
-                    .child(self.render_media_drop(&key, vec![], cx))
             }
             View::Sources => {
                 let keys = keywords(&g.record_label(&key));

@@ -122,6 +122,36 @@ fn link_and_unlink() {
 }
 
 #[test]
+fn marriage_criterion() {
+    let mut g = Gedcom::parse(SAMPLE).unwrap();
+    assert!(names(&g, "sans:mariage").is_empty());
+    assert_eq!(names(&g, "avec:mariage"), vec!["Jeanne", "Émile"]);
+    // Une union sans mariage ; une personne sans union ne compte pas.
+    g.add_relative("I00001", Relation::Spouse, None).unwrap();
+    let mut without = names(&g, "sans:mariage");
+    without.retain(|n| !n.is_empty());
+    assert_eq!(without, vec!["Paul Émile"]);
+}
+
+#[test]
+fn spouse_joins_single_parent_union() {
+    let mut g = Gedcom::parse(SAMPLE).unwrap();
+    // Paul a un enfant sans conjoint connu : l'union n'a qu'un parent.
+    let kid = g.add_relative("I00001", Relation::Child, None).unwrap();
+    let families = g.count(RecordKind::Family);
+    // Le conjoint ajouté ensuite complète cette union au lieu d'en créer une autre.
+    let wife = g.add_relative("I00001", Relation::Spouse, None).unwrap();
+    assert_eq!(g.count(RecordKind::Family), families);
+    assert_eq!(g.parents(&kid).1.unwrap().xref(), wife);
+    // Union complète : un second conjoint ouvre une nouvelle union.
+    let x = g.create_individual("Louise", "BERTIN", "F");
+    g.link_relative("I00001", Relation::Spouse, &x).unwrap();
+    assert_eq!(g.count(RecordKind::Family), families + 1);
+    assert_eq!(g.parents(&kid).1.unwrap().xref(), wife);
+    consistent(&g);
+}
+
+#[test]
 fn delete_cleans_up() {
     let mut g = Gedcom::parse(SAMPLE).unwrap();
     let wife = g.add_relative("I00001", Relation::Spouse, None).unwrap();

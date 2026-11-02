@@ -21,8 +21,6 @@ pub(super) enum From {
     Link,
     /// Une case de l'arbre libre.
     Tree,
-    /// Un membre affiché dans la fiche d'une famille.
-    Member(String),
     /// Une image rattachée à l'enregistrement donné (vignettes du panneau).
     Attached(String),
     /// Un média d'un événement (enregistrement porteur, position de l'événement).
@@ -140,11 +138,6 @@ impl Workspace {
                 return menu;
             };
             let (o1, o2, o3, o4) = (owner.clone(), owner.clone(), owner.clone(), owner.clone());
-            // Événement d'une union vu depuis la fiche d'un individu : ouvrir la famille.
-            let family = read(&ws, cx, |this, g| {
-                (g.family(&owner).is_some() && this.selected.as_deref() != Some(owner.as_str())).then(|| owner.clone())
-            })
-            .flatten();
             menu.item(act(&ws, "Modifier l'événement…", move |this, w, cx| {
                 this.open_event_dialog(o1.clone(), Some(ix), w, cx)
             }))
@@ -156,9 +149,6 @@ impl Workspace {
                 this.open_picker(PickPurpose::MediaToEvent { owner: o4.clone(), ix }, w, cx)
             }))
             .separator()
-            .when_some(family, |m, f| {
-                m.item(act(&ws, "Ouvrir la famille", move |this, w, cx| this.goto(f.clone(), w, cx)))
-            })
             .when_some(place, |m, p| {
                 m.item(act(&ws, "Afficher le lieu", move |this, w, cx| this.goto_place(p.clone(), w, cx)))
             })
@@ -199,7 +189,6 @@ impl Workspace {
             };
             let new = match view.kind() {
                 Some(RecordKind::Individual) => Some("Nouvel individu"),
-                Some(RecordKind::Family) => Some("Nouvelle famille"),
                 Some(RecordKind::Source) => Some("Nouvelle source"),
                 Some(RecordKind::Media) => Some("Nouveau média"),
                 Some(RecordKind::Repository) => Some("Nouveau dépôt"),
@@ -348,16 +337,6 @@ pub(super) fn person_menu(ws: Ws, x: String, from: From) -> MenuBuilder {
         })
         .when_some(
             match &from {
-                From::Member(fam) => Some(fam.clone()),
-                _ => None,
-            },
-            |m, fam| {
-                let x = x.clone();
-                m.item(act(&ws, "Retirer de la famille", move |this, w, cx| this.unlink(x.clone(), fam.clone(), w, cx)))
-            },
-        )
-        .when_some(
-            match &from {
                 From::Relative(indi, fam, label) => Some((indi.clone(), fam.clone(), *label)),
                 _ => None,
             },
@@ -370,31 +349,11 @@ pub(super) fn person_menu(ws: Ws, x: String, from: From) -> MenuBuilder {
     })
 }
 
+/// Union citée dans un lien (source, média…) : elle s'ouvre sur la fiche d'un conjoint.
 fn family_menu(ws: Ws, x: String, from: From) -> MenuBuilder {
-    Rc::new(move |menu, _, cx| {
-        let Some(full) =
-            read(&ws, cx, |_, g| g.family(&x).is_some_and(|f| f.husband().is_some() && f.wife().is_some()))
-        else {
-            return menu;
-        };
-        let (x1, x2, x3, x4, x5, x6) = (x.clone(), x.clone(), x.clone(), x.clone(), x.clone(), x.clone());
-        menu.item(act(&ws, "Ouvrir la fiche", move |this, w, cx| this.open_in(x1.clone(), CenterTab::Form, w, cx)))
-            .separator()
-            .item(act(&ws, "Ajouter un événement…", move |this, w, cx| {
-                this.open_event_dialog(x2.clone(), None, w, cx)
-            }))
-            .item(act(&ws, "Ajouter un nouvel enfant", move |this, w, cx| this.add_family_child(x3.clone(), w, cx)))
-            .item(act(&ws, "Lier un enfant existant…", move |this, w, cx| {
-                this.open_picker(PickPurpose::FamilyChild { fam: x4.clone() }, w, cx)
-            }))
-            .when(!full, |m| {
-                m.item(act(&ws, "Lier un parent existant…", move |this, w, cx| {
-                    this.open_picker(PickPurpose::FamilySpouse { fam: x5.clone() }, w, cx)
-                }))
-            })
-            .item(act(&ws, "Rattacher des photos ou documents…", move |this, w, cx| {
-                this.choose_files(x6.clone(), w, cx)
-            }))
+    Rc::new(move |menu, _, _| {
+        let x1 = x.clone();
+        menu.item(act(&ws, "Ouvrir la fiche", move |this, w, cx| this.goto(x1.clone(), w, cx)))
             .map(|m| tail(m, &ws, &x, &from))
     })
 }

@@ -42,7 +42,6 @@ mod weblinks;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum View {
     Individuals,
-    Families,
     Sources,
     Places,
     Media,
@@ -53,9 +52,8 @@ pub enum View {
 }
 
 impl View {
-    const ALL: [View; 9] = [
+    const ALL: [View; 8] = [
         View::Individuals,
-        View::Families,
         View::Sources,
         View::Places,
         View::Media,
@@ -68,7 +66,6 @@ impl View {
     fn label(self) -> &'static str {
         match self {
             View::Individuals => "Individus",
-            View::Families => "Familles",
             View::Sources => "Sources",
             View::Places => "Lieux",
             View::Media => "Médias",
@@ -82,7 +79,6 @@ impl View {
     fn short(self) -> &'static str {
         match self {
             View::Individuals => "IND",
-            View::Families => "FAM",
             View::Sources => "SRC",
             View::Places => "LIEU",
             View::Media => "MÉD",
@@ -96,7 +92,6 @@ impl View {
     fn icon(self) -> IconName {
         match self {
             View::Individuals => IconName::Users,
-            View::Families => IconName::Heart,
             View::Sources => IconName::BookOpen,
             View::Places => IconName::MapPin,
             View::Media => IconName::Image,
@@ -115,7 +110,6 @@ impl View {
     fn kind(self) -> Option<RecordKind> {
         Some(match self {
             View::Individuals => RecordKind::Individual,
-            View::Families => RecordKind::Family,
             View::Sources => RecordKind::Source,
             View::Media => RecordKind::Media,
             View::Repositories => RecordKind::Repository,
@@ -126,8 +120,8 @@ impl View {
 
     fn for_kind(kind: RecordKind) -> View {
         match kind {
-            RecordKind::Individual => View::Individuals,
-            RecordKind::Family => View::Families,
+            // Les unions s'affichent sur la fiche de chaque conjoint.
+            RecordKind::Individual | RecordKind::Family => View::Individuals,
             RecordKind::Source => View::Sources,
             RecordKind::Media => View::Media,
             RecordKind::Repository => View::Repositories,
@@ -512,9 +506,16 @@ impl Workspace {
 
     /// Ouvre un enregistrement quelconque (lien depuis une fiche).
     pub(crate) fn goto(&mut self, xref: String, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(kind) = self.doc.as_ref().and_then(|d| d.ged.get(&xref)).and_then(|n| RecordKind::from_tag(&n.tag))
-        else {
-            return;
+        let Some(g) = self.doc.as_ref().map(|d| &d.ged) else { return };
+        let Some(kind) = g.get(&xref).and_then(|n| RecordKind::from_tag(&n.tag)) else { return };
+        // Une union s'ouvre sur la fiche d'un des conjoints (à défaut, d'un enfant).
+        let member = g
+            .family(&xref)
+            .map(|f| [f.husband(), f.wife()].into_iter().flatten().chain(f.children()).next().map(str::to_string));
+        let xref = match member {
+            Some(Some(x)) => x,
+            Some(None) => return self.set_status("Famille sans aucun membre", true),
+            None => xref,
         };
         self.open_location(View::for_kind(kind), Some(xref), window, cx);
     }
@@ -937,21 +938,6 @@ impl Workspace {
                 v.sort_by_cached_key(|r| (sort_key(&r.strong), sort_key(&r.title)));
                 v
             }
-            View::Families => g
-                .records_of(RecordKind::Family)
-                .map(|r| {
-                    let f = Family::new(r);
-                    let x = f.xref().to_string();
-                    Row {
-                        title: g.record_label(&x),
-                        strong: String::new(),
-                        meta: f.marriage().and_then(|m| m.date()).map(|d| d.short_year()).unwrap_or_default(),
-                        dot: None,
-                        flagged: f.marriage().is_none(),
-                        key: x,
-                    }
-                })
-                .collect(),
             View::Sources => g
                 .records_of(RecordKind::Source)
                 .map(|r| {
@@ -1075,7 +1061,6 @@ impl Workspace {
     fn flag_label(&self) -> &'static str {
         match self.view {
             View::Individuals => "",
-            View::Families => "Sans mariage",
             View::Sources => "Sans média",
             View::Places => "Sans coordonnées",
             View::Media => "Fichier absent",
@@ -1643,10 +1628,10 @@ impl Workspace {
         )
     }
 
-    /// Images liées à une source, une famille… affichées en grand sous la fiche.
+    /// Images liées à une source, affichées en grand sous la fiche.
     fn record_images(&self, ed: &RecordEditor, cx: &mut Context<Self>) -> Option<AnyElement> {
         let Target::Record { xref, kind } = &ed.target else { return None };
-        if !matches!(kind, RecordKind::Source | RecordKind::Family) {
+        if *kind != RecordKind::Source {
             return None;
         }
         let doc = self.doc.as_ref()?;
@@ -1701,20 +1686,31 @@ impl Workspace {
 
     /// Vignettes des images liées, dans le panneau de détail.
     /// `add` : « + » à côté du titre (ajouter des photos, lier ou recadrer un média),
-    /// et le titre reste affiché même sans image.
+    /// et le titre reste affiché même sans image. Pour un individu, les images de
+    /// ses unions (photo de mariage…) suivent les siennes.
     fn render_gallery(&self, xref: &str, large: bool, add: bool, cx: &mut Context<Self>) -> Option<AnyElement> {
         let doc = self.doc.as_ref()?;
-        let images = doc.ged.images_of(xref);
+        // (enregistrement qui porte le lien, image)
+        let mut images: Vec<(String, Media)> =
+            doc.ged.images_of(xref).into_iter().map(|m| (xref.to_string(), m)).collect();
+        for fam in doc.ged.individual(xref).map(|i| i.fams()).unwrap_or_default() {
+            for m in doc.ged.images_of(fam) {
+                if !images.iter().any(|(_, x)| x.xref() == m.xref()) {
+                    images.push((fam.to_string(), m));
+                }
+            }
+        }
         if images.is_empty() && !add {
             return None;
         }
         let n = images.len();
         let add_button = add.then(|| self.add_image_button(xref, cx));
-        let tiles = images.into_iter().map(|m| {
+        let tiles = images.into_iter().map(|(owner, m)| {
+            let owner = owner.as_str();
             let target = m.xref().to_string();
-            let menu = self.record_menu(m.xref(), MenuFrom::Attached(xref.to_string()), cx);
+            let menu = self.record_menu(m.xref(), MenuFrom::Attached(owner.to_string()), cx);
             let page_count = m.page_count();
-            let path = pages::page_path(doc, &m, doc.ged.link_page(xref, m.xref())).filter(|p| p.exists());
+            let path = pages::page_path(doc, &m, doc.ged.link_page(owner, m.xref())).filter(|p| p.exists());
             let tile = div()
                 .relative()
                 .id(SharedString::from(format!("thumb-{target}")))
@@ -1727,7 +1723,7 @@ impl Workspace {
                 .hover(|d| d.border_color(theme::accent()))
                 .on_click(cx.listener(move |this, _, w, cx| this.goto(target.clone(), w, cx)));
             let tile = if large { tile.w_full().h(px(220.)) } else { tile.h(px(96.)) };
-            let crop = doc.ged.link_crop(xref, m.xref());
+            let crop = doc.ged.link_crop(owner, m.xref());
             // Nombre de pages d'un média multipage, en coin.
             let badge = (page_count > 1).then(|| {
                 div()
@@ -1923,9 +1919,8 @@ impl Workspace {
         // Déposer des photos ou documents n'importe où sur le panneau les rattache.
         // Sur un média, ils deviennent de nouvelles pages.
         let kind = g.get(key).and_then(|n| RecordKind::from_tag(&n.tag));
-        let attachable = kind.is_some_and(|k| {
-            matches!(k, RecordKind::Individual | RecordKind::Family | RecordKind::Source | RecordKind::Media)
-        });
+        let attachable =
+            kind.is_some_and(|k| matches!(k, RecordKind::Individual | RecordKind::Source | RecordKind::Media));
         let panel = if attachable {
             let (record, entity) = (key.clone(), cx.entity().downgrade());
             let as_pages = kind == Some(RecordKind::Media);
@@ -1995,13 +1990,6 @@ impl Workspace {
                     })
                     .unwrap_or_default();
                 let kind = node.and_then(|n| RecordKind::from_tag(&n.tag));
-                // Famille : les membres sont déjà listés (section « Membres »).
-                let (outgoing, refs): (Vec<String>, Vec<String>) = if kind == Some(RecordKind::Family) {
-                    let not_person = |x: &String| g.individual(x).is_none();
-                    (outgoing.into_iter().filter(not_person).collect(), refs.into_iter().filter(not_person).collect())
-                } else {
-                    (outgoing, refs)
-                };
                 let gallery = self.render_gallery(key, kind == Some(RecordKind::Source), false, cx);
                 let shown_under_photo = kind == Some(RecordKind::Media)
                     && self.tab == CenterTab::Form
@@ -2033,7 +2021,6 @@ impl Workspace {
                             ),
                     )
                     .children(actions)
-                    .when(kind == Some(RecordKind::Family), |d| d.child(self.render_events(key, cx)))
                     .when_some(gallery, |d, el| d.child(el))
                     .when_some(web, |d, el| d.child(el))
                     .when(!outgoing.is_empty(), |d| d.child(self.render_links("Liens", outgoing, cx)))
@@ -2067,30 +2054,14 @@ impl Workspace {
         )
     }
 
-    /// Section « Événements » d'un individu ou d'une famille. Pour un individu,
-    /// les événements de ses unions (mariage, divorce…) sont dans la même
-    /// chronologie. Un clic ouvre l'événement en modification, clic droit pour
-    /// les autres actions ; déposer des fichiers sur un événement les y rattache.
+    /// Section « Événements » d'un individu : les siens et ceux de ses unions
+    /// (mariage, divorce…) dans la même chronologie. Un clic ouvre l'événement
+    /// en modification, clic droit pour les autres actions ; déposer des
+    /// fichiers sur un événement les y rattache.
     fn render_events(&self, owner: &str, cx: &mut Context<Self>) -> AnyElement {
         let doc = self.doc.as_ref().unwrap();
         let g = &doc.ged;
-        let events: Vec<PersonEvent> = if g.individual(owner).is_some() {
-            g.person_events(owner)
-        } else {
-            let mut v: Vec<PersonEvent> = g
-                .events_of(owner)
-                .into_iter()
-                .map(|(index, event)| PersonEvent {
-                    owner: owner.to_string(),
-                    index,
-                    event,
-                    family: false,
-                    spouse: None,
-                })
-                .collect();
-            v.sort_by_key(|e| e.event.date().map(|d| d.sort_key()).unwrap_or((i32::MAX, 0, 0)));
-            v
-        };
+        let events: Vec<PersonEvent> = g.person_events(owner);
         let person = g.individual(owner);
         // Événements des proches pendant la vie de la personne (naissance d'un
         // enfant, décès d'un parent…), affichés à la demande.
@@ -2474,16 +2445,23 @@ impl Workspace {
                     .with_menu(self.person_menu(&x, MenuFrom::Relative(unlink.0, unlink.1, unlink.2), cx))
             }));
 
-        let images: Vec<String> = g.images_of(&xref).iter().map(|m| m.xref().to_string()).collect();
-        let media: Vec<String> = i
-            .media_xrefs()
-            .iter()
-            .map(|s| s.to_string())
-            .filter(|x| !images.contains(x) && !weblinks::is_web_media(g, x))
+        // Médias et notes de ses unions aussi (rattachés au couple).
+        let unions: Vec<gedcom::Family> = i.fams().into_iter().filter_map(|f| g.family(f)).collect();
+        let images: Vec<String> = std::iter::once(xref.as_str())
+            .chain(unions.iter().map(|f| f.xref()))
+            .flat_map(|x| g.images_of(x))
+            .map(|m| m.xref().to_string())
             .collect();
+        let mut media: Vec<String> = Vec::new();
+        for x in i.media_xrefs().into_iter().chain(unions.iter().flat_map(|f| f.media_xrefs())) {
+            if !images.iter().any(|m| m == x) && !weblinks::is_web_media(g, x) && !media.iter().any(|m| m == x) {
+                media.push(x.to_string());
+            }
+        }
         let web = self.render_web_links(&xref, cx);
         let gallery = self.render_gallery(&xref, false, true, cx);
-        let notes = i.notes();
+        let mut notes = i.notes();
+        notes.extend(unions.iter().flat_map(|f| f.notes()));
         v_flex()
             .child(header)
             .when_some(gallery, |d, el| d.child(el))
