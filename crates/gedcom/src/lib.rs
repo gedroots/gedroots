@@ -11,6 +11,7 @@
 //! - [`relations`] : ajout/liaison/suppression de proches, lieux et médias ;
 //! - [`events`] : modification et suppression des événements ;
 //! - [`import`] : contrôles de l'assistant d'import (balises non standard → GEDCOM 7) ;
+//! - [`custom`] : format des lieux (`HEAD.PLAC.FORM`) et types d'événements personnalisés ;
 //! - [`settings`] : réglages du fichier (auteur, droits, langue…) dans l'en-tête ;
 //! - [`weblink`] : liens web en GEDCOM 7 standard (`OBJE` dont le `FILE` est une URL) ;
 //! - [`crop`] : recadrage des médias (`CROP`) et personnes identifiées sur les photos ;
@@ -22,6 +23,7 @@
 pub mod analysis;
 pub mod complete;
 pub mod crop;
+pub mod custom;
 pub mod date;
 pub mod document;
 pub mod entry;
@@ -41,6 +43,7 @@ pub mod template;
 pub mod weblink;
 
 pub use crop::{Crop, MediaLink, Rect};
+pub use custom::{EventType, Jurisdiction, PlaceRewrite};
 pub use date::{Calendar, Date, DateKind, Parsed as DateInput, SimpleDate, parse_input as parse_date_input};
 pub use document::{Gedcom, RecordKind};
 pub use entry::{Entry, EntryResult, MediaChoice, Participant, PersonChoice, SourceChoice, Suggestion};
