@@ -294,7 +294,7 @@ mod tests {
             folders: vec![MediaFolder {
                 dir: "Actes".into(),
                 types: vec!["BIRT".into()],
-                template: "{type:1}_{nom:simple}_{prenom}".into(),
+                template: "{type:1}_{surname:simple}_{given}".into(),
             }],
         });
         // Un fichier du dossier déjà utilisé par un autre média ne doit pas bouger.

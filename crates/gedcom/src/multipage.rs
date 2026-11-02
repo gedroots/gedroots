@@ -146,14 +146,14 @@ fn dedupe_links(n: &mut Node, p: &str) {
 
 impl Gedcom {
     fn media_node(&self, media: &str) -> Result<&Node, String> {
-        self.get(media).filter(|n| n.tag == "OBJE").ok_or_else(|| "média introuvable".to_string())
+        self.get(media).filter(|n| n.tag == "OBJE").ok_or_else(|| rust_i18n::t!("error.media_not_found").into_owned())
     }
 
     /// Média qui peut avoir des pages : pas un lien web (`FILE https://…`).
     fn paged_media(&self, media: &str) -> Result<&Node, String> {
         let n = self.media_node(media)?;
         if Media::new(n).is_web() {
-            return Err("un lien web ne peut pas avoir de pages".into());
+            return Err(rust_i18n::t!("error.web_no_pages").into());
         }
         Ok(n)
     }
@@ -212,10 +212,10 @@ impl Gedcom {
     pub fn remove_media_page(&mut self, media: &str, page: usize) -> Result<(), String> {
         let n = Media::new(self.media_node(media)?).page_count();
         if n < 2 {
-            return Err("un média garde au moins une page".into());
+            return Err(rust_i18n::t!("error.media_one_page").into());
         }
         if page == 0 || page > n {
-            return Err("page introuvable".into());
+            return Err(rust_i18n::t!("error.page_not_found").into());
         }
         let base = base_title(self.get(media).unwrap());
         let node = self.get_mut(media).unwrap();
@@ -245,7 +245,7 @@ impl Gedcom {
     pub fn move_media_page(&mut self, media: &str, from: usize, to: usize) -> Result<(), String> {
         let n = Media::new(self.media_node(media)?).page_count();
         if from == 0 || to == 0 || from > n || to > n {
-            return Err("page introuvable".into());
+            return Err(rust_i18n::t!("error.page_not_found").into());
         }
         if from == to {
             return Ok(());
@@ -293,7 +293,7 @@ impl Gedcom {
             }
         }
         if list.len() < 2 {
-            return Err("choisissez au moins deux médias à fusionner".into());
+            return Err(rust_i18n::t!("error.merge_two").into());
         }
         let target = list[0].to_string();
         // Titre commun : « Acte de mariage (1/2) » et « (2/2) » → « Acte de mariage ».
@@ -360,10 +360,10 @@ impl Gedcom {
         let m = Media::new(self.media_node(media)?);
         let n = m.page_count();
         if n < 2 {
-            return Err("ce média n'a qu'une page".into());
+            return Err(rust_i18n::t!("error.single_page").into());
         }
         if page == 0 || page > n {
-            return Err("page introuvable".into());
+            return Err(rust_i18n::t!("error.page_not_found").into());
         }
         let base = base_title(m.node);
         let node = self.get_mut(media).unwrap();

@@ -166,11 +166,11 @@ impl Gedcom {
         crop: Option<Crop>,
     ) -> Result<(), String> {
         if self.get(media).is_none_or(|m| m.tag != "OBJE") {
-            return Err("média introuvable".into());
+            return Err(rust_i18n::t!("error.media_not_found").into());
         }
         let page = page.max(1);
         let p = ptr(media);
-        let r = self.get_mut(owner).ok_or("enregistrement introuvable")?;
+        let r = self.get_mut(owner).ok_or_else(|| rust_i18n::t!("error.record_not_found"))?;
         let find = |r: &Node| {
             let link = |c: &Node| c.tag == "OBJE" && c.val() == p;
             r.children.iter().position(|c| link(c) && page_of_link(c) == page).or_else(|| {
@@ -225,7 +225,7 @@ impl Gedcom {
     /// Identifie une personne sur une photo : lie le média à l'individu avec ce recadrage.
     pub fn tag_person(&mut self, indi: &str, media: &str, crop: Crop) -> Result<(), String> {
         if self.get(indi).is_none_or(|n| n.tag != "INDI") {
-            return Err("personne introuvable".into());
+            return Err(rust_i18n::t!("error.person_not_found").into());
         }
         self.set_link_crop(indi, media, Some(crop))
     }
@@ -233,7 +233,7 @@ impl Gedcom {
     /// Identifie une personne sur la page `page` d'un média.
     pub fn tag_person_on(&mut self, indi: &str, media: &str, page: usize, crop: Crop) -> Result<(), String> {
         if self.get(indi).is_none_or(|n| n.tag != "INDI") {
-            return Err("personne introuvable".into());
+            return Err(rust_i18n::t!("error.person_not_found").into());
         }
         self.set_link_crop_on(indi, media, page, Some(crop))
     }

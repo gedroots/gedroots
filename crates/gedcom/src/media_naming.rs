@@ -41,17 +41,17 @@ pub const MEDIA_TOKENS: &[&str] = &[
     "type",
     "type:1",
     "date",
-    "annee",
-    "lieu",
-    "nom",
-    "nom:simple",
-    "prenom",
-    "conjoint",
+    "year",
+    "place",
+    "surname",
+    "surname:simple",
+    "given",
+    "spouse",
     "sosa:6",
-    "fratrie",
+    "branch",
     "source",
     "page",
-    "titre",
+    "title",
     "n",
 ];
 
@@ -112,8 +112,8 @@ pub fn media_type_labels(types: &[String]) -> String {
     let mut out: Vec<String> = Vec::new();
     for t in types {
         let l = match t.as_str() {
-            "INDI" => "portrait".into(),
-            "FAM" => "famille".into(),
+            "INDI" => rust_i18n::t!("media_naming.portrait").into_owned(),
+            "FAM" => rust_i18n::t!("media_naming.family").into_owned(),
             _ => event_label(t).map(|l| l.to_lowercase()).unwrap_or_else(|| crate::model::event_type_label(t)),
         };
         if !out.contains(&l) {
@@ -156,7 +156,7 @@ pub struct MediaContext {
 
 impl MediaContext {
     /// Valeur d'une variable, avec ses options : `{sosa:6}` complète un nombre
-    /// par des zéros, `{type:1}` garde les premières lettres, `{nom:simple}`
+    /// par des zéros, `{type:1}` garde les premières lettres, `{surname:simple}`
     /// retire accents, espaces et apostrophes.
     fn value(&self, token: &str) -> String {
         let mut opts = token.split(':').map(str::trim);
@@ -180,20 +180,20 @@ impl MediaContext {
                 }
                 _ => date.year().map(|y| y.to_string()).unwrap_or_default(),
             },
-            "annee" => date.year().map(|y| y.to_string()).unwrap_or_default(),
-            "lieu" => {
+            "year" => date.year().map(|y| y.to_string()).unwrap_or_default(),
+            "place" => {
                 let s = short_place(&self.place);
                 s.split(" (").next().unwrap_or("").to_string()
             }
-            "nom" => self.surname.clone(),
-            "prenom" => self.given.split_whitespace().next().unwrap_or("").to_string(),
-            "prenoms" => self.given.clone(),
-            "conjoint" => self.spouse.clone(),
+            "surname" => self.surname.clone(),
+            "given" => self.given.split_whitespace().next().unwrap_or("").to_string(),
+            "given_names" => self.given.clone(),
+            "spouse" => self.spouse.clone(),
             "sosa" => self.number.as_ref().map(|n| n.sosa.to_string()).unwrap_or_default(),
-            "fratrie" => self.number.as_ref().map(|n| n.branch.clone()).unwrap_or_default(),
+            "branch" => self.number.as_ref().map(|n| n.branch.clone()).unwrap_or_default(),
             "source" => self.source.clone(),
             "page" => self.page.clone(),
-            "titre" => self.title.clone(),
+            "title" => self.title.clone(),
             _ => String::new(),
         };
         let v = if simple { simplify(&v) } else { v };
@@ -388,7 +388,10 @@ impl Gedcom {
                         .child_val(TYPES_TAG)
                         .map(|v| v.split(',').map(|t| t.trim().to_string()).filter(|t| !t.is_empty()).collect())
                         .unwrap_or_default(),
-                    template: d.child_val(NAME_TAG).unwrap_or("").to_string(),
+                    template: crate::keywords::template_from_french(
+                        d.child_val(NAME_TAG).unwrap_or(""),
+                        crate::keywords::MEDIA_VARIABLES,
+                    ),
                 })
                 .collect(),
         }
@@ -787,12 +790,12 @@ mod tests {
         assert!(g.media_naming().is_empty());
         let n = naming(
             "Médias/",
-            vec![folder("Actes", &["BIRT", "MARR"], "{type}/{annee} {nom} {prenom}"), folder("Divers", &[], "")],
+            vec![folder("Actes", &["BIRT", "MARR"], "{type}/{year} {surname} {given}"), folder("Divers", &[], "")],
         );
         assert!(g.set_media_naming(&n));
         let out = g.to_gedcom_string();
         assert!(out.contains(
-            "1 _GR_MEDIA Médias\n2 _GR_DIR Actes\n3 _GR_TYPES BIRT, MARR\n3 _GR_NAME {type}/{annee} {nom} {prenom}\n2 _GR_DIR Divers\n"
+            "1 _GR_MEDIA Médias\n2 _GR_DIR Actes\n3 _GR_TYPES BIRT, MARR\n3 _GR_NAME {type}/{year} {surname} {given}\n2 _GR_DIR Divers\n"
         ));
         assert!(out.contains("2 TAG _GR_MEDIA https://") && out.contains("2 TAG _GR_TYPES https://"));
         let back = Gedcom::parse(&out).unwrap().media_naming();
@@ -859,13 +862,13 @@ mod tests {
     fn renders_paths() {
         let mut g = Gedcom::parse(G).unwrap();
         g.set_root("I1");
-        let actes = "{sosa:6}_{fratrie}_{type:1}_{nom:simple}_{prenom}_{conjoint:simple}_{n}";
+        let actes = "{sosa:6}_{branch}_{type:1}_{surname:simple}_{given}_{spouse:simple}_{n}";
         g.set_media_naming(&naming(
             "Médias",
             vec![
                 folder("Actes", &["BIRT", "MARR", "DEAT"], actes),
-                folder("Portraits", &["INDI"], "{sosa:6}_{nom}_{prenom}"),
-                folder("Autres", &[], "{type}/{date} {nom} {prenoms} - {lieu} - {page}"),
+                folder("Portraits", &["INDI"], "{sosa:6}_{surname}_{given}"),
+                folder("Autres", &[], "{type}/{date} {surname} {given_names} - {place} - {page}"),
             ],
         ));
         let r = g.media_renames("M1");
@@ -876,7 +879,7 @@ mod tests {
         assert_eq!(g.media_renames("M3")[0].2, "Médias/Actes/000002_1_D_GUYOT_Pierre.jpg");
         // Pas de séparateur orphelin, pages « p2 » sans {n}, sans dossier : chemin inchangé.
         let ctx = MediaContext { kind: "Naissance".into(), surname: "GUYOT".into(), ..Default::default() };
-        let n = naming("", vec![folder("", &["BIRT"], "{type}/{date} {nom} {prenom} - {page}")]);
+        let n = naming("", vec![folder("", &["BIRT"], "{type}/{date} {surname} {given} - {page}")]);
         let birth = MediaContext { event: "BIRT".into(), ..ctx.clone() };
         assert_eq!(media_path(&n, &birth, "a/b.JPG", Some(2)), "Naissance/GUYOT p2.jpg");
         assert_eq!(media_path(&n, &ctx, "a/b.JPG", None), "a/b.JPG");

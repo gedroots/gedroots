@@ -105,7 +105,7 @@ impl Gedcom {
                 _ => records.push(Arc::new(n)),
             }
         }
-        let header = header.ok_or(ParseError { line: 1, message: "en-tête HEAD manquant".into() })?;
+        let header = header.ok_or(ParseError { line: 1, message: rust_i18n::t!("error.parse.no_header").into() })?;
         let mut g = Gedcom { header, records, format, index: HashMap::new() };
         g.reindex();
         Ok(g)
@@ -226,9 +226,9 @@ impl Gedcom {
     /// les pointeurs vers l'ancien identifiant sont alors mis à jour.
     pub fn replace(&mut self, xref: &str, node: Node) -> Result<(), String> {
         let i = *self.index.get(xref).ok_or_else(|| format!("@{xref}@ introuvable"))?;
-        let new_xref = node.xref.clone().ok_or("l'enregistrement doit garder un identifiant @…@")?;
+        let new_xref = node.xref.clone().ok_or_else(|| rust_i18n::t!("error.keep_xref"))?;
         if new_xref != xref && self.index.contains_key(&new_xref) {
-            return Err(format!("l'identifiant @{new_xref}@ est déjà utilisé"));
+            return Err(rust_i18n::t!("error.xref_used", xref = format!("@{new_xref}@")).into());
         }
         self.records[i] = Arc::new(node);
         if new_xref != xref {

@@ -1,0 +1,227 @@
+_version: 2
+# Consistency checks (crates/gedcom/src/analysis/check.rs).
+check.severity.error:
+  en: "Error"
+  fr: "Erreur"
+check.severity.warning:
+  en: "To Check"
+  fr: "À vérifier"
+check.severity.info:
+  en: "Information"
+  fr: "Information"
+check.code.death_before_birth:
+  en: "Death before birth"
+  fr: "Décès avant la naissance"
+check.code.burial_before_death:
+  en: "Burial before death"
+  fr: "Inhumation avant le décès"
+check.code.event_before_birth:
+  en: "Event before birth"
+  fr: "Événement avant la naissance"
+check.code.event_after_death:
+  en: "Event after death"
+  fr: "Événement après le décès"
+check.code.too_old:
+  en: "Implausible lifespan"
+  fr: "Durée de vie invraisemblable"
+check.code.parent_too_young:
+  en: "Parent too young"
+  fr: "Parent trop jeune"
+check.code.father_too_old:
+  en: "Very old father"
+  fr: "Père très âgé"
+check.code.mother_too_old:
+  en: "Very old mother"
+  fr: "Mère très âgée"
+check.code.birth_after_mother_death:
+  en: "Birth after the mother's death"
+  fr: "Naissance après le décès de la mère"
+check.code.birth_after_father_death:
+  en: "Birth long after the father's death"
+  fr: "Naissance longtemps après le décès du père"
+check.code.child_before_parent:
+  en: "Child born before their parent"
+  fr: "Enfant né avant son parent"
+check.code.marriage_too_young:
+  en: "Very young marriage"
+  fr: "Mariage très jeune"
+check.code.marriage_after_death:
+  en: "Marriage after a death"
+  fr: "Mariage après un décès"
+check.code.marriage_age_gap:
+  en: "Large age gap between spouses"
+  fr: "Grand écart d'âge entre époux"
+check.code.siblings_too_close:
+  en: "Births too close together"
+  fr: "Naissances trop rapprochées"
+check.code.husband_not_male:
+  en: "Female husband"
+  fr: "Époux de sexe féminin"
+check.code.wife_not_female:
+  en: "Male wife"
+  fr: "Épouse de sexe masculin"
+check.code.own_ancestor:
+  en: "Person is their own ancestor"
+  fr: "Personne ancêtre d'elle-même"
+check.code.broken_link:
+  en: "Link to a missing record"
+  fr: "Lien vers un enregistrement absent"
+check.code.missing_backlink:
+  en: "One-way family link"
+  fr: "Lien familial à sens unique"
+check.code.unsourced:
+  en: "Unsourced event"
+  fr: "Événement sans source"
+check.code.tag_not_allowed:
+  en: "Tag not allowed here"
+  fr: "Balise non permise à cet endroit"
+check.code.missing_required:
+  en: "Required information missing"
+  fr: "Information obligatoire absente"
+check.code.too_many:
+  en: "Too much information"
+  fr: "Information en trop"
+check.code.wrong_pointer:
+  en: "Link to the wrong kind of record"
+  fr: "Lien vers le mauvais type d'enregistrement"
+check.code.invalid_value:
+  en: "Invalid value"
+  fr: "Valeur invalide"
+check.code.empty_fact:
+  en: "Empty event"
+  fr: "Événement vide"
+check.code.empty_note:
+  en: "Empty note"
+  fr: "Note vide"
+check.code.empty_family:
+  en: "Empty family"
+  fr: "Famille vide"
+check.code.unused_record:
+  en: "Record used nowhere"
+  fr: "Enregistrement utilisé nulle part"
+check.code.disconnected:
+  en: "Not connected to the root person"
+  fr: "Sans lien avec l'individu racine"
+check.code.missing_file:
+  en: "File not found"
+  fr: "Fichier introuvable"
+check.code.moved_file:
+  en: "File moved"
+  fr: "Fichier déplacé"
+check.code.duplicate_media:
+  en: "Duplicate media"
+  fr: "Médias en double"
+check.code.missing_form:
+  en: "File format missing"
+  fr: "Format de fichier absent"
+check.code.unattached_file:
+  en: "File without media"
+  fr: "Fichier sans média"
+check.code.missing_coords:
+  en: "Place without coordinates"
+  fr: "Lieu sans coordonnées"
+check.code.bad_coords:
+  en: "Unreadable coordinates"
+  fr: "Coordonnées illisibles"
+check.code.place_variant:
+  en: "Variant of another place"
+  fr: "Variante d'un autre lieu"
+check.code.place_hierarchy:
+  en: "Inconsistent hierarchy"
+  fr: "Rattachement incohérent"
+check.code.role_sex_mismatch:
+  en: "Role inconsistent with sex"
+  fr: "Rôle incohérent avec le sexe"
+check.code.outside_source_period:
+  en: "Record outside its source's period"
+  fr: "Acte hors de la période de sa source"
+check.code.other:
+  en: "Anomaly"
+  fr: "Anomalie"
+check.less_than_a_year:
+  en: "less than a year"
+  fr: "moins d'un an"
+check.years.one:
+  en: "%{n} year"
+  fr: "%{n} an"
+check.years.other:
+  en: "%{n} years"
+  fr: "%{n} ans"
+check.msg.broken_link:
+  en: "%{who} (%{tag}) points to %{target}, which does not exist"
+  fr: "%{who} (%{tag}) pointe vers %{target}, qui n'existe pas"
+check.msg.death_before_birth:
+  en: "%{who}: death before birth"
+  fr: "%{who} : décès avant la naissance"
+check.msg.too_old:
+  en: "%{who} would have lived at least %{years}"
+  fr: "%{who} aurait vécu au moins %{years}"
+check.msg.burial_before_death:
+  en: "%{who}: buried before death"
+  fr: "%{who} : inhumé(e) avant son décès"
+check.msg.event_before_birth:
+  en: "%{who}: %{event} before birth"
+  fr: "%{who} : %{event} avant la naissance"
+check.msg.event_after_death:
+  en: "%{who}: %{event} after death"
+  fr: "%{who} : %{event} après le décès"
+check.msg.unsourced:
+  en: "%{who}: %{event} without a source"
+  fr: "%{who} : %{event} sans source"
+check.msg.missing_backlink:
+  en: "%{who} claims to belong to the family %{family}, which does not list them"
+  fr: "%{who} se dit membre de la famille %{family} qui ne le mentionne pas"
+check.msg.husband_not_male:
+  en: "%{who} is HUSB but female"
+  fr: "%{who} est HUSB mais de sexe féminin"
+check.msg.wife_not_female:
+  en: "%{who} is WIFE but male"
+  fr: "%{who} est WIFE mais de sexe masculin"
+check.msg.marriage_too_young:
+  en: "%{who} marries at %{years}"
+  fr: "%{who} se marie à %{years}"
+check.msg.marriage_after_death:
+  en: "%{who}: marriage after death"
+  fr: "%{who} : mariage après son décès"
+check.msg.marriage_age_gap:
+  en: "%{family}: %{years} between the spouses"
+  fr: "%{family} : %{years} d'écart entre les époux"
+check.msg.child_before_parent:
+  en: "%{child} was born before their parent %{parent}"
+  fr: "%{child} est né(e) avant son parent %{parent}"
+check.msg.parent_too_young:
+  en: "%{parent} was at most %{years} old when %{child} was born"
+  fr: "%{parent} avait au plus %{years} à la naissance de %{child}"
+check.msg.parent_too_old:
+  en: "%{parent} was at least %{years} old when %{child} was born"
+  fr: "%{parent} avait au moins %{years} à la naissance de %{child}"
+check.msg.birth_after_death:
+  en: "%{child} was born after the death of %{parent}"
+  fr: "%{child} est né(e) après le décès de %{parent}"
+check.msg.siblings_too_close:
+  en: "%{first} and %{second} were born %{days} days apart"
+  fr: "%{first} et %{second} sont nés à %{days} jours d'intervalle"
+check.msg.own_ancestor:
+  en: "%{who} appears among their own ancestors"
+  fr: "%{who} figure dans sa propre ascendance"
+check.msg.role_sex_female:
+  en: "%{who}: role %{role} in “%{source}” but female"
+  fr: "%{who} : rôle %{role} dans « %{source} » mais de sexe féminin"
+check.msg.role_sex_male:
+  en: "%{who}: role %{role} in “%{source}” but male"
+  fr: "%{who} : rôle %{role} dans « %{source} » mais de sexe masculin"
+check.msg.outside_source_period:
+  en: "%{who}: record dated %{date} in “%{source}”, which covers %{period}"
+  fr: "%{who} : acte daté %{date} dans « %{source} », qui couvre %{period}"
+check.role.father:
+  en: "father"
+  fr: "père"
+check.role.mother:
+  en: "mother"
+  fr: "mère"
+check.role.husband:
+  en: "husband"
+  fr: "époux"
+check.role.wife:
+  en: "wife"
+  fr: "épouse"

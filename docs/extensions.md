@@ -109,13 +109,13 @@ type pour un sous-dossier le retire des autres.
 1 _GR_MEDIA
 2 _GR_DIR Matricules
 3 _GR_TYPES military service, military discharge
-3 _GR_NAME {sosa:6}_{fratrie}_{nom:simple}_{prenom}_{n}
+3 _GR_NAME {sosa:6}_{branch}_{surname:simple}_{given}_{n}
 2 _GR_DIR Actes
 3 _GR_TYPES BIRT, BAPM, CHR, MARR, DEAT, BURI
-3 _GR_NAME {sosa:6}_{fratrie}_{type:1}_{nom:simple}_{prenom}_{conjoint:simple}_{n}
+3 _GR_NAME {sosa:6}_{branch}_{type:1}_{surname:simple}_{given}_{spouse:simple}_{n}
 2 _GR_DIR Portraits
 3 _GR_TYPES INDI
-3 _GR_NAME {sosa:6}_{nom:simple}_{prenom}
+3 _GR_NAME {sosa:6}_{surname:simple}_{given}
 2 _GR_DIR Divers
 ```
 
@@ -124,15 +124,16 @@ Variables du modèle (`/` crée un sous-dossier) :
 | Variable | Valeur |
 |---|---|
 | `{type}` | type de l'événement (« Naissance », ou le `TYPE` d'un `EVEN`) |
-| `{date}`, `{annee}`, `{lieu}` | date (AAAA-MM-JJ), année et commune de l'événement |
-| `{nom}`, `{prenom}`, `{prenoms}` | nom, premier prénom, tous les prénoms ; pour un couple, le mari |
-| `{conjoint}` | pour un couple, le nom de l'épouse |
-| `{sosa}`, `{fratrie}` | numéro Sosa-d'Aboville calculé depuis l'individu racine : `58` et `2` pour le 2e enfant du Sosa 58, `B1` pour le 1er enfant de sa 2e union, `2.3` pour un petit-enfant |
-| `{source}`, `{page}`, `{titre}` | titre de la source, cote (`PAGE`), titre du média |
+| `{date}`, `{year}`, `{place}` | date (AAAA-MM-JJ), année et commune de l'événement |
+| `{surname}`, `{given}`, `{given_names}` | nom, premier prénom, tous les prénoms ; pour un couple, le mari |
+| `{spouse}` | pour un couple, le nom de l'épouse |
+| `{sosa}`, `{branch}` | numéro Sosa-d'Aboville calculé depuis l'individu racine : `58` et `2` pour le 2e enfant du Sosa 58, `B1` pour le 1er enfant de sa 2e union, `2.3` pour un petit-enfant |
+| `{source}`, `{page}`, `{title}` | titre de la source, cote (`PAGE`), titre du média |
 | `{n}` | numéro de page d'un média à plusieurs fichiers (sinon « p2 », « p3 »… en fin de nom) |
 
 Options : `{sosa:6}` complète un nombre par des zéros, `{type:1}` garde les premières
-lettres (N, M, D…), `{nom:simple}` retire accents, espaces et apostrophes. Une variable
+lettres (N, M, D…), `{surname:simple}` retire accents, espaces et apostrophes. Les variables sont en anglais ;
+celles des versions précédentes, en français (`{nom}`, `{prenom}`…), sont converties à la lecture. Une variable
 vide disparaît avec le séparateur qui la précède.
 
 Les variables sont tirées de l'événement qui porte le média (`2 OBJE`), le cite, ou cite une
@@ -368,9 +369,10 @@ une personne. Se règle dans **Fichier › Réglages du fichier… › Recherche
 - **Valeur** : nom du site.
 - **Sous-structures** : `_GR_URL <modèle>` : adresse de la recherche, où chaque variable
   entre accolades est remplacée par la donnée de la personne, encodée pour l'URL (vide si
-  inconnue) : `{nom}`, `{prenom}`, `{naissance}` et `{deces}` (années), `{lieu}` (commune
-  de naissance), `{nom_pere}`, `{prenom_pere}`, `{nom_mere}`, `{prenom_mere}`,
-  `{nom_conjoint}`, `{prenom_conjoint}`.
+  inconnue) : `{surname}`, `{given}`, `{birth}` et `{death}` (années), `{place}` (commune
+  de naissance), `{father_surname}`, `{father_given}`, `{mother_surname}`, `{mother_given}`,
+  `{spouse_surname}`, `{spouse_given}`. Les variables françaises des versions précédentes
+  (`{nom}`, `{prenom_pere}`…) sont converties à la lecture.
 
 Sans `_GR_WEB`, GEDRoots propose Geneanet et FamilySearch. Un `_GR_WEB` seul, sans valeur ni
 `_GR_URL`, indique qu'aucun site n'est voulu.
@@ -381,7 +383,7 @@ Sans `_GR_WEB`, GEDRoots propose Geneanet et FamilySearch. Un `_GR_WEB` seul, sa
 2 TAG _GR_WEB https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_web
 2 TAG _GR_URL https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_web
 1 _GR_WEB Geneanet
-2 _GR_URL https://www.geneanet.org/fonds/individus/?go=1&nom={nom}&prenom={prenom}&type_periode=between&from={naissance}&to={deces}
+2 _GR_URL https://www.geneanet.org/fonds/individus/?go=1&nom={surname}&prenom={given}&type_periode=between&from={birth}&to={death}
 1 _GR_WEB Google
-2 _GR_URL https://www.google.com/search?q=%22{prenom}%20{nom}%22%20{lieu}
+2 _GR_URL https://www.google.com/search?q=%22{given}%20{surname}%22%20{place}
 ```

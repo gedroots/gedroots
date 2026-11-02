@@ -2126,7 +2126,7 @@ impl Act {
         let spouses_of = |x: &str, out: &mut Vec<Suggestion>| {
             let who = ged.record_label(x);
             for (s, _) in ged.spouses_and_children(x) {
-                out.extend(s.and_then(|s| mk(s.xref(), format!("conjoint de {who}"))));
+                out.extend(s.and_then(|s| mk(s.xref(), t!("act.reason.spouse_of", name = who).into_owned())));
             }
         };
         match me.role {
@@ -2136,7 +2136,7 @@ impl Act {
                     let (f, m) = ged.parents(&c);
                     let p = if me.role == ActRole::Father { f } else { m };
                     let child = ged.record_label(&c);
-                    out.extend(p.and_then(|p| mk(p.xref(), format!("parent de {child}"))));
+                    out.extend(p.and_then(|p| mk(p.xref(), t!("act.reason.parent_of", name = child).into_owned())));
                 }
                 // L'autre parent est lié : on propose son conjoint.
                 let other = if me.role == ActRole::Father { ActRole::Mother } else { ActRole::Father };
@@ -2157,7 +2157,7 @@ impl Act {
                     let who = ged.record_label(&par);
                     for (_, kids) in ged.spouses_and_children(&par) {
                         for kid in kids {
-                            out.extend(mk(kid.xref(), format!("enfant de {who}")));
+                            out.extend(mk(kid.xref(), t!("act.reason.child_of", name = who).into_owned()));
                         }
                     }
                 }

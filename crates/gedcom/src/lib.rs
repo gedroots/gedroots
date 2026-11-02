@@ -93,8 +93,7 @@ pub use websearch::{SearchSite, WEB_TOKENS};
 /// Charge un fichier GEDCOM depuis le disque.
 pub fn load(path: impl AsRef<std::path::Path>) -> Result<Gedcom, String> {
     let bytes = std::fs::read(path.as_ref()).map_err(|e| e.to_string())?;
-    let text =
-        String::from_utf8(bytes).map_err(|_| "le fichier n'est pas en UTF-8 (GEDCOM 7 exige UTF-8)".to_string())?;
+    let text = String::from_utf8(bytes).map_err(|_| rust_i18n::t!("error.not_utf8").into_owned())?;
     Gedcom::parse(&text).map_err(|e| e.to_string())
 }
 

@@ -73,33 +73,33 @@ impl Gedcom {
     /// Comme [`Gedcom::set_spouse`], en imposant la place (`HUSB` ou `WIFE`).
     /// Refuse une personne dont le sexe connu contredit la place demandée.
     pub fn set_parent_slot(&mut self, fam: &str, indi: &str, slot: Option<&str>) -> Result<(), String> {
-        let f = self.family(fam).ok_or("famille introuvable")?;
+        let f = self.family(fam).ok_or_else(|| rust_i18n::t!("error.family_not_found"))?;
         if f.husband() == Some(indi) || f.wife() == Some(indi) {
             return Ok(());
         }
         if f.children().contains(&indi) {
-            return Err("cette personne est déjà un enfant de la famille".into());
+            return Err(rust_i18n::t!("error.already_child").into());
         }
-        let person = self.individual(indi).ok_or("personne introuvable")?;
+        let person = self.individual(indi).ok_or_else(|| rust_i18n::t!("error.person_not_found"))?;
         let sex = person.sex().to_string();
         let tag = match (slot, sex.as_str(), f.husband(), f.wife()) {
             (Some("HUSB"), "F", ..) => {
-                return Err(format!("{} est une femme : elle ne peut pas être le père", person.display_name()));
+                return Err(rust_i18n::t!("error.woman_not_father", name = person.display_name()).into());
             }
             (Some("WIFE"), "M", ..) => {
-                return Err(format!("{} est un homme : il ne peut pas être la mère", person.display_name()));
+                return Err(rust_i18n::t!("error.man_not_mother", name = person.display_name()).into());
             }
-            (Some("HUSB"), _, Some(_), _) => return Err("la famille a déjà un père".into()),
-            (Some("WIFE"), _, _, Some(_)) => return Err("la famille a déjà une mère".into()),
+            (Some("HUSB"), _, Some(_), _) => return Err(rust_i18n::t!("error.family_has_father").into()),
+            (Some("WIFE"), _, _, Some(_)) => return Err(rust_i18n::t!("error.family_has_mother").into()),
             (Some(t @ ("HUSB" | "WIFE")), ..) => t,
             (_, s, h, w) => match (s, h, w) {
                 ("M", None, _) => "HUSB",
                 ("F", _, None) => "WIFE",
-                ("M", Some(_), _) => return Err("la famille a déjà un père".into()),
-                ("F", _, Some(_)) => return Err("la famille a déjà une mère".into()),
+                ("M", Some(_), _) => return Err(rust_i18n::t!("error.family_has_father").into()),
+                ("F", _, Some(_)) => return Err(rust_i18n::t!("error.family_has_mother").into()),
                 (_, None, _) => "HUSB",
                 (_, _, None) => "WIFE",
-                _ => return Err("la famille a déjà deux parents".into()),
+                _ => return Err(rust_i18n::t!("error.family_has_parents").into()),
             },
         };
         let node = self.get_mut(fam).unwrap();
@@ -113,12 +113,12 @@ impl Gedcom {
 
     /// Ajoute `child` aux enfants de la famille.
     pub fn add_child_to_family(&mut self, fam: &str, child: &str) -> Result<(), String> {
-        let f = self.family(fam).ok_or("famille introuvable")?;
+        let f = self.family(fam).ok_or_else(|| rust_i18n::t!("error.family_not_found"))?;
         if f.husband() == Some(child) || f.wife() == Some(child) {
-            return Err("un parent ne peut pas être son propre enfant".into());
+            return Err(rust_i18n::t!("error.parent_own_child").into());
         }
         if self.is_ancestor_of(child, fam) {
-            return Err("cette personne est un ascendant de la famille".into());
+            return Err(rust_i18n::t!("error.ancestor_of_family").into());
         }
         if !f.children().contains(&child) {
             let node = self.get_mut(fam).unwrap();
@@ -159,7 +159,7 @@ impl Gedcom {
 
     /// Famille d'origine de la personne, créée si besoin.
     fn ensure_parents_family(&mut self, indi: &str) -> Result<String, String> {
-        let i = self.individual(indi).ok_or("personne introuvable")?;
+        let i = self.individual(indi).ok_or_else(|| rust_i18n::t!("error.person_not_found"))?;
         if let Some(f) = i.famc().first() {
             return Ok(f.to_string());
         }
@@ -172,10 +172,10 @@ impl Gedcom {
     /// `detail` : la profession pour OCCU, le type pour un événement libre
     /// (EVEN), sinon un complément (`TYPE`). La source est citée si donnée.
     pub fn add_event(&mut self, owner: &str, ev: &NewEvent) -> Result<(), String> {
-        let node = self.get_mut(owner).ok_or("enregistrement introuvable")?;
+        let node = self.get_mut(owner).ok_or_else(|| rust_i18n::t!("error.record_not_found"))?;
         let detail = ev.detail.trim();
         if ev.tag == "EVEN" && detail.is_empty() {
-            return Err("précisez le type de l'événement".into());
+            return Err(rust_i18n::t!("error.event_type_needed").into());
         }
         let attribute = matches!(ev.tag.as_str(), "OCCU" | "EDUC" | "RELI" | "TITL" | "NATI" | "RESI" | "FACT");
         let mut e = Node::new(ev.tag.as_str());
@@ -204,17 +204,17 @@ impl Gedcom {
     /// Crée une nouvelle personne liée à `indi` et renvoie son identifiant.
     /// `family` choisit l'union pour un enfant quand il y en a plusieurs.
     pub fn add_relative(&mut self, indi: &str, rel: Relation, family: Option<&str>) -> Result<String, String> {
-        let i = self.individual(indi).ok_or("personne introuvable")?;
+        let i = self.individual(indi).ok_or_else(|| rust_i18n::t!("error.person_not_found"))?;
         let surname = i.surname();
         let sex = i.sex().to_string();
         match rel {
             Relation::Father | Relation::Mother => {
                 let (f, m) = self.parents(indi);
                 if rel == Relation::Father && f.is_some() {
-                    return Err("cette personne a déjà un père".into());
+                    return Err(rust_i18n::t!("error.has_father").into());
                 }
                 if rel == Relation::Mother && m.is_some() {
-                    return Err("cette personne a déjà une mère".into());
+                    return Err(rust_i18n::t!("error.has_mother").into());
                 }
                 let fam = self.ensure_parents_family(indi)?;
                 let new = if rel == Relation::Father {
@@ -272,18 +272,20 @@ impl Gedcom {
     /// Lie deux personnes existantes : `other` devient le `rel` de `indi`.
     pub fn link_relative(&mut self, indi: &str, rel: Relation, other: &str) -> Result<(), String> {
         if indi == other {
-            return Err("on ne peut pas lier une personne à elle-même".into());
+            return Err(rust_i18n::t!("error.link_self").into());
         }
-        self.individual(other).ok_or("personne introuvable")?;
+        self.individual(other).ok_or_else(|| rust_i18n::t!("error.person_not_found"))?;
         match rel {
             Relation::Father | Relation::Mother => {
                 let (f, m) = self.parents(indi);
                 let slot = if rel == Relation::Father { f } else { m };
                 if slot.is_some() {
-                    return Err(format!(
-                        "cette personne a déjà un{}",
-                        if rel == Relation::Father { " père" } else { "e mère" }
-                    ));
+                    return Err(if rel == Relation::Father {
+                        rust_i18n::t!("error.has_father")
+                    } else {
+                        rust_i18n::t!("error.has_mother")
+                    }
+                    .into());
                 }
                 // Le parent rejoint la famille d'origine existante (celle de l'autre parent), sinon une nouvelle.
                 let place = if rel == Relation::Father { "HUSB" } else { "WIFE" };
@@ -308,7 +310,7 @@ impl Gedcom {
                     .iter()
                     .any(|f| self.family(f).is_some_and(|f| f.husband() == Some(other) || f.wife() == Some(other)));
                 if already {
-                    return Err("ces deux personnes forment déjà un couple".into());
+                    return Err(rust_i18n::t!("error.already_couple").into());
                 }
                 let fam = self.union_for_spouse(indi)?;
                 self.set_spouse(&fam, other)
@@ -347,12 +349,15 @@ impl Gedcom {
     /// Union où placer un nouveau conjoint de `indi` : son union encore sans
     /// conjoint (parent seul avec ses enfants), sinon une nouvelle union.
     fn union_for_spouse(&mut self, indi: &str) -> Result<String, String> {
-        let open = self.individual(indi).ok_or("personne introuvable")?.fams().into_iter().find(|f| {
-            self.family(f).is_some_and(|f| {
-                let spouses: Vec<&str> = [f.husband(), f.wife()].into_iter().flatten().collect();
-                spouses == [indi]
-            })
-        });
+        let open =
+            self.individual(indi).ok_or_else(|| rust_i18n::t!("error.person_not_found"))?.fams().into_iter().find(
+                |f| {
+                    self.family(f).is_some_and(|f| {
+                        let spouses: Vec<&str> = [f.husband(), f.wife()].into_iter().flatten().collect();
+                        spouses == [indi]
+                    })
+                },
+            );
         if let Some(f) = open {
             return Ok(f.to_string());
         }
@@ -443,12 +448,12 @@ impl Gedcom {
 
     /// Rattache un média à un enregistrement (personne, famille, source…).
     pub fn attach_media(&mut self, record: &str, media: &str) -> Result<(), String> {
-        let tag = self.get(record).ok_or("enregistrement introuvable")?.tag.clone();
+        let tag = self.get(record).ok_or_else(|| rust_i18n::t!("error.record_not_found"))?.tag.clone();
         if !matches!(tag.as_str(), "INDI" | "FAM" | "SOUR" | "SUBM") {
-            return Err("on ne peut rattacher un média qu'à une personne, une famille ou une source".into());
+            return Err(rust_i18n::t!("error.media_owner").into());
         }
         if self.get(media).is_none_or(|m| m.tag != "OBJE") {
-            return Err("média introuvable".into());
+            return Err(rust_i18n::t!("error.media_not_found").into());
         }
         self.push_link(record, "OBJE", media);
         Ok(())

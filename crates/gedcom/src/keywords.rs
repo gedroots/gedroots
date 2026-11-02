@@ -3,7 +3,8 @@
 //! The search language (`born:1850`, `without:source`, `sex:f`…) is technical: it is in
 //! English whatever the interface language, and only the labels shown for it are translated.
 //! Earlier versions used French keywords (`né:1850`, `sans:source`); searches saved in a file
-//! with those keywords are converted when they are read.
+//! with those keywords are converted when they are read, as are the French variables of
+//! file-name templates (`{nom}`) and search-site URLs (`{prenom}`).
 
 use crate::model::sort_key;
 use crate::query::{Scope, words};
@@ -71,6 +72,61 @@ pub(crate) fn from_french(scope: Scope, query: &str) -> String {
     out
 }
 
+/// Media file-name variables of earlier versions (`{nom:simple}` → `{surname:simple}`).
+pub(crate) const MEDIA_VARIABLES: &[(&str, &str)] = &[
+    ("annee", "year"),
+    ("lieu", "place"),
+    ("nom", "surname"),
+    ("prenoms", "given_names"),
+    ("prenom", "given"),
+    ("conjoint", "spouse"),
+    ("fratrie", "branch"),
+    ("titre", "title"),
+];
+
+/// Search-site variables of earlier versions (`{prenom_pere}` → `{father_given}`).
+pub(crate) const WEB_VARIABLES: &[(&str, &str)] = &[
+    ("nom", "surname"),
+    ("prenom", "given"),
+    ("naissance", "birth"),
+    ("deces", "death"),
+    ("lieu", "place"),
+    ("nom_pere", "father_surname"),
+    ("prenom_pere", "father_given"),
+    ("nom_mere", "mother_surname"),
+    ("prenom_mere", "mother_given"),
+    ("nom_conjoint", "spouse_surname"),
+    ("prenom_conjoint", "spouse_given"),
+];
+
+/// The template with the French variables of earlier versions in English. Only the text
+/// between braces changes, options included (`{nom:simple}`).
+pub(crate) fn template_from_french(template: &str, variables: &[(&str, &str)]) -> String {
+    let mut out = String::with_capacity(template.len());
+    let mut rest = template;
+    while let Some(start) = rest.find('{') {
+        out.push_str(&rest[..=start]);
+        rest = &rest[start + 1..];
+        let Some(end) = rest.find('}') else { break };
+        let inner = &rest[..end];
+        let (name, opts) = inner.split_once(':').map_or((inner, None), |(n, o)| (n, Some(o)));
+        match variables.iter().find(|(fr, _)| *fr == name.trim()) {
+            Some((_, en)) => {
+                out.push_str(en);
+                if let Some(o) = opts {
+                    out.push(':');
+                    out.push_str(o);
+                }
+            }
+            None => out.push_str(inner),
+        }
+        out.push('}');
+        rest = &rest[end + 1..];
+    }
+    out.push_str(rest);
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -83,5 +139,21 @@ mod tests {
         assert_eq!(from_french(Scope::Places, "en:Manche sans:coordonnées"), "in:Manche without:coordinates");
         assert_eq!(from_french(Scope::Media, "nom:guyot sans:lien"), "person:guyot without:link");
         assert_eq!(from_french(Scope::Individuals, "born:1850 10:30"), "born:1850 10:30");
+    }
+
+    #[test]
+    fn french_template_variables_become_english() {
+        assert_eq!(
+            template_from_french("{sosa:6}_{fratrie}_{type:1}_{nom:simple}_{prenom}_{n}", MEDIA_VARIABLES),
+            "{sosa:6}_{branch}_{type:1}_{surname:simple}_{given}_{n}"
+        );
+        assert_eq!(
+            template_from_french("{annee} {prenoms} {surname}", MEDIA_VARIABLES),
+            "{year} {given_names} {surname}"
+        );
+        assert_eq!(
+            template_from_french("https://x.org/?nom={nom}&p={prenom_pere}&q={", WEB_VARIABLES),
+            "https://x.org/?nom={surname}&p={father_given}&q={"
+        );
     }
 }

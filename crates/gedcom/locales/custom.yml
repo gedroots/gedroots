@@ -1,0 +1,44 @@
+_version: 2
+# Types given to extension events at import (crates/gedcom/src/custom.rs).
+custom.event.military:
+  en: "Military Service"
+  fr: "Service militaire"
+custom.event.medical:
+  en: "Medical Information"
+  fr: "Informations médicales"
+custom.event.degree:
+  en: "Degree"
+  fr: "Diplôme"
+custom.event.election:
+  en: "Election"
+  fr: "Élection"
+custom.event.employment:
+  en: "Employment"
+  fr: "Emploi"
+custom.event.excommunication:
+  en: "Excommunication"
+  fr: "Excommunication"
+custom.event.funeral:
+  en: "Funeral"
+  fr: "Funérailles"
+custom.event.ordination:
+  en: "Ordination"
+  fr: "Ordination"
+custom.event.circumcision:
+  en: "Circumcision"
+  fr: "Circoncision"
+custom.event.destination:
+  en: "Destination"
+  fr: "Destination"
+custom.event.separation:
+  en: "Separation"
+  fr: "Séparation"
+custom.event.hospitalization:
+  en: "Hospitalization"
+  fr: "Hospitalisation"
+custom.event.arrival:
+  en: "Arrival"
+  fr: "Arrivée"
+custom.event.departure:
+  en: "Departure"
+  fr: "Départ"

@@ -84,21 +84,21 @@ pub fn host(url: &str) -> &str {
 pub fn normalize_url(input: &str) -> Result<String, String> {
     let s = input.trim();
     if s.is_empty() {
-        return Err("Saisissez une adresse web".into());
+        return Err(rust_i18n::t!("error.web.empty").into());
     }
     if s.chars().any(char::is_whitespace) {
-        return Err("L'adresse ne doit pas contenir d'espace".into());
+        return Err(rust_i18n::t!("error.web.space").into());
     }
     let url = if is_web_url(s) {
         s.to_string()
     } else if s.contains("://") {
-        return Err("Seules les adresses http:// et https:// sont acceptées".into());
+        return Err(rust_i18n::t!("error.web.scheme").into());
     } else {
         format!("https://{s}")
     };
     let h = host(&url);
     if h.is_empty() || !h.contains('.') && !h.starts_with("localhost") {
-        return Err("Adresse web invalide".into());
+        return Err(rust_i18n::t!("error.web.invalid").into());
     }
     Ok(url)
 }
@@ -178,21 +178,21 @@ impl Gedcom {
     /// Ajoute un lien web : lien multimédia (`OBJE`), ou `WWW` pour un dépôt.
     pub fn add_web_link(&mut self, record: &str, url: &str, title: &str) -> Result<(), String> {
         let url = normalize_url(url)?;
-        let tag = self.get(record).ok_or("enregistrement introuvable")?.tag.clone();
+        let tag = self.get(record).ok_or_else(|| rust_i18n::t!("error.record_not_found"))?.tag.clone();
         if tag == "REPO" {
             let n = self.get_mut(record).unwrap();
             if n.children_with("WWW").any(|w| w.val() == url) {
                 return Ok(());
             }
             if n.children_with("WWW").count() >= 3 {
-                return Err("Un dépôt a au plus trois adresses web".into());
+                return Err(rust_i18n::t!("error.web.repository_max").into());
             }
             n.insert_child(Node::with_value("WWW", url));
             n.touch();
             return Ok(());
         }
         if !accepts_media(&tag) {
-            return Err("Ce type d'élément ne peut pas porter de lien web".into());
+            return Err(rust_i18n::t!("error.web.not_allowed").into());
         }
         let media = self.web_media_for(&url, title);
         let p = format!("@{media}@");
@@ -209,7 +209,10 @@ impl Gedcom {
         let url = normalize_url(url)?;
         match kind {
             WebLinkKind::Media(m) => {
-                let node = self.get_mut(m).filter(|n| n.tag == "OBJE").ok_or("média introuvable")?;
+                let node = self
+                    .get_mut(m)
+                    .filter(|n| n.tag == "OBJE")
+                    .ok_or_else(|| rust_i18n::t!("error.media_not_found"))?;
                 let f = node.ensure_child("FILE");
                 f.value = Some(url);
                 f.set_child_val("FORM", WEB_FORM);
@@ -218,8 +221,13 @@ impl Gedcom {
                 Ok(())
             }
             WebLinkKind::Www(i) => {
-                let n = self.get_mut(record).ok_or("enregistrement introuvable")?;
-                let w = n.children.iter_mut().filter(|c| c.tag == "WWW").nth(*i).ok_or("adresse introuvable")?;
+                let n = self.get_mut(record).ok_or_else(|| rust_i18n::t!("error.record_not_found"))?;
+                let w = n
+                    .children
+                    .iter_mut()
+                    .filter(|c| c.tag == "WWW")
+                    .nth(*i)
+                    .ok_or_else(|| rust_i18n::t!("error.address_not_found"))?;
                 w.value = Some(url);
                 n.touch();
                 Ok(())
@@ -395,7 +403,7 @@ mod tests {
     #[test]
     fn urls() {
         assert_eq!(normalize_url("archives.cg54.fr").unwrap(), "https://archives.cg54.fr");
-        assert_eq!(normalize_url(" http://x.fr/a b ").unwrap_err(), "L'adresse ne doit pas contenir d'espace");
+        assert_eq!(normalize_url(" http://x.fr/a b ").unwrap_err(), "The address must not contain spaces");
         assert!(normalize_url("ftp://x.fr").is_err());
         assert!(normalize_url("bonjour").is_err());
         assert_eq!(host("https://www.archives43.fr/ark:47539/s005?x=1"), "www.archives43.fr");

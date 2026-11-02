@@ -445,7 +445,7 @@ fn act_with_several_files_makes_one_paged_media_named_by_template() {
         folders: vec![MediaFolder {
             dir: "Actes".into(),
             types: vec!["BIRT".into()],
-            template: "{type:1}_{nom}_{prenom}".into(),
+            template: "{type:1}_{surname}_{given}".into(),
         }],
     });
     let mut e = Act::new("S00001", "BIRT");

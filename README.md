@@ -140,7 +140,7 @@ et suit le [design system GEDRoots](design.md) (fonds neutres et touches de viol
 - **Rechercher sur** (Individu, et clic droit sur une personne) : ouvre dans le navigateur la
   recherche de la personne sur un site (Geneanet et FamilySearch par défaut). Les sites se
   règlent dans Réglages du fichier › Recherche : un nom et un modèle d'URL dont les variables
-  (`{nom}`, `{prenom}`, `{naissance}`, `{deces}`, `{lieu}`, parents, conjoint) sont remplacées
+  (`{surname}`, `{given}`, `{birth}`, `{death}`, `{place}`, parents, conjoint) sont remplacées
   par les données de la personne. Rangés dans le .ged (`_GR_WEB`).
 - **Réglages du fichier** (⌘ / Ctrl + `,` ; menu GEDRoots sur macOS, Fichier ailleurs) : auteur, e-mail, droits,
   description, langue et individu racine.
@@ -155,7 +155,7 @@ et suit le [design system GEDRoots](design.md) (fonds neutres et touches de viol
     pour `TYPE military service`) ; un nouveau type ou un libellé est déclaré par l'extension
     [`_GR_EVEN`](docs/extensions.md#_gr_even). Ils sont proposés dans « Ajouter un événement… ».
   - **Médias** : dossier des médias et sous-dossiers (Actes, Portraits…), chacun avec les
-    événements qu'il reçoit (menu à cocher) et son modèle de nom (`{sosa:6}_{fratrie}_{type:1}_{nom}_{prenom}`…,
+    événements qu'il reçoit (menu à cocher) et son modèle de nom (`{sosa:6}_{branch}_{type:1}_{surname}_{given}`…,
     numéros Sosa-d'Aboville calculés depuis la racine), extension
     [`_GR_MEDIA`](docs/extensions.md#_gr_media), avec un exemple par sous-dossier. Un fichier
     rattaché depuis l'extérieur est copié à sa place ; Média › « Renommer selon le modèle… »
