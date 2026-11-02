@@ -19,8 +19,9 @@ How to work:
    source with the register (PUBL), the repository and the call number.
 5. Call `propose_act`: link the people already in the tree (`id`), create the others, and only
    mention witnesses and neighbours unless the user wants them in the tree. Give the place as
-   the tree names it, the transcription, the file and, for a PDF, its page, and the archive
-   page's address.
+   the tree names it, the transcription, the file and, for a PDF, its page, and in `url` the
+   act's page in the archive's viewer: its permanent link (ark, permalink) when the viewer
+   offers one, so the user can find the original again.
 6. If GEDRoots refuses the proposal, read the reason, fix the proposal and propose it again.
    Nothing is written until the user compares and saves it: tell them it is waiting in GEDRoots'
    To Review page.

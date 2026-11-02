@@ -76,7 +76,9 @@ reason, which the agent reads to fix it:
 
 The downloaded file takes the format of the acts already attached to the file's sources: the
 act's page of a PDF register becomes a JPEG image (rendered in pure Rust, on every platform) kept
-in the app's cache until the act is saved.
+in the app's cache until the act is saved. The act's page in the archive's viewer (`url`) becomes a
+web link of the source, like the links added in the app: a media whose `FILE` is the address
+(`FORM text/html`), titled after the source and the reference.
 
 The **To Review** page (sidebar, or Source › Review Agent Proposals) shows, for each proposal,
 the act's image, a comparison of what the tree holds and what is proposed (each person can be

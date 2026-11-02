@@ -270,7 +270,7 @@ impl GedrootsMcp {
             None => None,
         };
         propose::attach(&mut proposal, image.as_deref());
-        let pending = Pending { proposal, original, pdf_page: p.pdf_page, image, url: p.url.unwrap_or_default() };
+        let pending = Pending { proposal, original, pdf_page: p.pdf_page, image };
         let (tx, rx) = tokio::sync::oneshot::channel();
         self.bridge
             .send(Request::Propose(Box::new(pending), tx))

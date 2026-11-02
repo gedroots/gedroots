@@ -43,6 +43,8 @@ pub struct Proposal {
     pub source: SourceChoice,
     /// L'acte ; sa source (`act.source`) est remplacée par celle créée si elle est nouvelle.
     pub act: Act,
+    /// Page web de l'acte (visionneuse des archives), gardée comme lien web de la source.
+    pub url: String,
 }
 
 /// Ce qu'une ligne de la comparaison change.
@@ -167,7 +169,24 @@ impl Proposal {
                 act.source = x;
             }
         }
+        self.link_page(ged, &act)?;
         Ok(act)
+    }
+
+    /// Lien web vers la page de l'acte, comme le reste de l'app : média `FILE <url>`
+    /// (`FORM text/html`) lié à la source, là où va aussi l'image de l'acte.
+    fn link_page(&self, ged: &mut Gedcom, act: &Act) -> Result<(), String> {
+        if self.url.trim().is_empty() {
+            return Ok(());
+        }
+        let url = crate::weblink::normalize_url(&self.url).map_err(|e| format!("url: {e}"))?;
+        let source = match ged.get(&act.source).and_then(|n| n.child("TITL")).map(|t| t.text()) {
+            Some(t) if !t.trim().is_empty() => t,
+            _ => act.auto_title(),
+        };
+        let title =
+            [source, act.page.trim().to_string()].into_iter().filter(|s| !s.is_empty()).collect::<Vec<_>>().join(", ");
+        ged.add_web_link(&act.source, &url, &title)
     }
 
     /// Écrit la proposition dans l'arbre (source si nouvelle, puis l'acte).
@@ -175,8 +194,17 @@ impl Proposal {
         let mut copy = ged.clone();
         let act = self.materialize(&mut copy)?;
         let mut res = act.save(&mut copy)?;
-        if matches!(self.source, SourceChoice::New(_)) && !res.touched.contains(&act.source) {
+        if (matches!(self.source, SourceChoice::New(_)) || !self.url.trim().is_empty())
+            && !res.touched.contains(&act.source)
+        {
             res.touched.insert(0, act.source.clone());
+        }
+        if let Ok(url) = crate::weblink::normalize_url(&self.url)
+            && let Some(m) = copy.media_by_file(&url)
+            && !res.touched.contains(&m)
+            && ged.get(&m).is_none_or(|before| Some(before) != copy.get(&m))
+        {
+            res.touched.push(m);
         }
         *ged = copy;
         Ok(res)
@@ -536,7 +564,7 @@ mod tests {
             Participant { choice: PersonChoice::Link("I3".into()), ..Participant::new(ActRole::Father) },
             Participant::new(ActRole::Mother).with(PersonField::Given, "Marie").with(PersonField::Surname, "DURAND"),
         ];
-        Proposal { source, act }
+        Proposal { source, act, url: String::new() }
     }
 
     fn new_source() -> SourceChoice {
@@ -607,6 +635,29 @@ mod tests {
         let mut p = birth(new_source());
         p.act.date = "31 FEB 1802".into();
         assert!(p.check(&g, 2026).is_err());
+    }
+
+    #[test]
+    fn act_page_becomes_a_web_link_of_the_source() {
+        let g = ged();
+        let mut p = birth(new_source());
+        p.url = "https://archives.ille-et-vilaine.fr/ark:/12345/v45".into();
+        p.check(&g, 2026).unwrap();
+        let diff = p.diff(&g).unwrap();
+        assert!(
+            diff.iter()
+                .any(|(c, l)| *c == '+' && l.contains("FILE https://archives.ille-et-vilaine.fr/ark:/12345/v45")),
+            "{diff:?}"
+        );
+        assert!(diff.iter().any(|(c, l)| *c == '+' && l.contains("FORM text/html")));
+        let mut after = g.clone();
+        let res = p.apply(&mut after).unwrap();
+        let source = after.get(&res.touched[0]).unwrap().xref.clone().unwrap();
+        let links = after.web_links(&source);
+        assert_eq!(links.len(), 1);
+        assert_eq!(links[0].title.as_deref(), Some(format!("{}, vue 45", p.act.auto_title()).as_str()));
+        p.url = "not a url".into();
+        assert!(p.check(&g, 2026).unwrap_err().starts_with("url:"));
     }
 
     #[test]
