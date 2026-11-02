@@ -554,14 +554,6 @@ impl Workspace {
                                         )
                                         .on_click(cx.listener(move |this, _, w, cx| this.pick(target.clone(), w, cx)))
                                 })),
-                        )
-                        .child(
-                            div()
-                                .px_3()
-                                .py_2()
-                                .border_t_1()
-                                .border_color(theme::border())
-                                .child(mono(t!("picker.keys"))),
                         ),
                 )
                 .into_any_element(),

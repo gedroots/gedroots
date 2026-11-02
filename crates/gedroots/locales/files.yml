@@ -39,9 +39,12 @@ export.files.one:
 export.files.other:
   en: "%{n} files"
   fr: "%{n} fichiers"
-export.missing:
-  en: " · %{count} not found"
-  fr: " · %{count} introuvable(s)"
+export.missing.one:
+  en: " · %{n} not found"
+  fr: " · %{n} introuvable"
+export.missing.other:
+  en: " · %{n} not found"
+  fr: " · %{n} introuvables"
 export.failed:
   en: "GEDZIP export failed: %{error}"
   fr: "Échec de l'export GEDZIP : %{error}"
@@ -54,9 +57,12 @@ import.prompt:
 import.already_conform:
   en: "%{file} imported · already GEDCOM 7 compliant"
   fr: "%{file} importé · déjà conforme à GEDCOM 7"
-import.normalized:
-  en: "%{file} imported · %{n} item(s) normalized to GEDCOM 7"
-  fr: "%{file} importé · %{n} élément(s) normalisé(s) en GEDCOM 7"
+import.normalized.one:
+  en: "%{file} imported · %{n} item normalized to GEDCOM 7"
+  fr: "%{file} importé · %{n} élément normalisé en GEDCOM 7"
+import.normalized.other:
+  en: "%{file} imported · %{n} items normalized to GEDCOM 7"
+  fr: "%{file} importé · %{n} éléments normalisés en GEDCOM 7"
 import.title:
   en: "Import · %{file}"
   fr: "Importer · %{file}"

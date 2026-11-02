@@ -132,8 +132,8 @@ cmd:
     en: Add Relative
     fr: Ajouter un proche
   link_person:
-    en: Link Existing Person
-    fr: Lier une personne existante
+    en: Link to Existing Person
+    fr: Lier à une personne existante
   father:
     en: Father
     fr: Père

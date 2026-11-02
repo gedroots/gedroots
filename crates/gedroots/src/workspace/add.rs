@@ -170,6 +170,10 @@ impl Workspace {
     }
 
     pub(super) fn close_add_dialog(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        // Settings have no Save button: closing the window applies them.
+        if matches!(self.add_dialog, Some(AddDialog::Settings(_))) {
+            return self.save_settings(window, cx);
+        }
         self.add_dialog = None;
         self.new_place = None;
         window.focus(&self.focus, cx);

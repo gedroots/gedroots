@@ -27,8 +27,8 @@ review:
     en: "Sosa %{n}"
     fr: "Sosa %{n}"
   record:
-    en: RECORD
-    fr: FICHE
+    en: Record
+    fr: Fiche
   in_tree:
     en: In the Tree
     fr: Dans l'arbre
@@ -66,8 +66,8 @@ review:
     en: "= existing"
     fr: "= existant"
   attachment:
-    en: ATTACHMENT
-    fr: RATTACHEMENT
+    en: Attachment
+    fr: Rattachement
   repository:
     en: Repository
     fr: Dépôt
@@ -99,8 +99,8 @@ review:
     en: No image
     fr: Pas d'image
   transcription:
-    en: TRANSCRIPTION
-    fr: TRANSCRIPTION
+    en: Transcription
+    fr: Transcription
   open_page:
     en: Open the Archive Page
     fr: Ouvrir la page des archives

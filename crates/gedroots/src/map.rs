@@ -46,7 +46,6 @@ type TileKey = (u8, u32, u32);
 pub struct MapView {
     markers: Vec<Marker>,
     /// Number of places without coordinates.
-    missing: usize,
     selected: Option<String>,
     /// Center of the view, in “world” coordinates at zoom 0.
     center: (f64, f64),
@@ -83,7 +82,6 @@ impl MapView {
             .build();
         Self {
             markers: Vec::new(),
-            missing: 0,
             selected: None,
             center: project(46.6, 2.4),
             zoom: 5,
@@ -136,16 +134,14 @@ impl MapView {
     pub fn set_places(&mut self, places: &[Place], cx: &mut Context<Self>) {
         let had_markers = !self.markers.is_empty();
         self.markers.clear();
-        self.missing = 0;
         for p in places {
-            match p.coords() {
-                Some((lat, lon)) => self.markers.push(Marker {
+            if let Some((lat, lon)) = p.coords() {
+                self.markers.push(Marker {
                     name: p.name.clone(),
-                    label: format!("{} · {} ×", p.short(), p.uses).into(),
+                    label: format!("{} · {}", p.short(), crate::tn!("places.uses", p.uses)).into(),
                     world: project(lat, lon),
                     uses: p.uses,
-                }),
-                None => self.missing += 1,
+                });
             }
         }
         // The most used drawn last, so on top.
@@ -199,7 +195,7 @@ impl MapView {
         self.center.1 = self.center.1.clamp(0., TILE_SIZE);
     }
 
-    fn zoom_by(&mut self, delta: i32, around: Option<Point<Pixels>>, cx: &mut Context<Self>) {
+    pub fn zoom_by(&mut self, delta: i32, around: Option<Point<Pixels>>, cx: &mut Context<Self>) {
         let z = (i32::from(self.zoom) + delta).clamp(MIN_ZOOM.into(), MAX_ZOOM.into()) as u8;
         if z == self.zoom {
             return;
@@ -217,7 +213,7 @@ impl MapView {
     }
 
     /// Fits the view to every marker.
-    fn fit(&mut self) {
+    pub fn fit(&mut self) {
         let (w, h) = (f64::from(f32::from(self.bounds.size.width)), f64::from(f32::from(self.bounds.size.height)));
         if self.markers.is_empty() || w < 1. || h < 1. {
             return;
@@ -396,14 +392,14 @@ impl MapView {
         out
     }
 
+    /// Zoom buttons of the place picker. The main map has none: View › Zoom, the scroll wheel and
+    /// the context menu do it.
     fn render_toolbar(&self, cx: &mut Context<Self>) -> impl IntoElement {
         h_flex()
             .absolute()
             .top_2()
             .left_2()
-            .right_2()
             .gap_1()
-            .flex_wrap()
             .items_center()
             // Clicks on the bar do not move the map.
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
@@ -414,6 +410,7 @@ impl MapView {
                             .ghost()
                             .xsmall()
                             .label("+")
+                            .tooltip(t!("cmd.zoom_in"))
                             .on_click(cx.listener(|this, _, _, cx| this.zoom_by(1, None, cx))),
                     )
                     .child(
@@ -421,33 +418,10 @@ impl MapView {
                             .ghost()
                             .xsmall()
                             .label("−")
+                            .tooltip(t!("cmd.zoom_out"))
                             .on_click(cx.listener(|this, _, _, cx| this.zoom_by(-1, None, cx))),
-                    )
-                    .when(!self.picker, |d| {
-                        d.child(Button::new("fit").ghost().xsmall().label(t!("map.fit")).on_click(cx.listener(
-                            |this, _, _, cx| {
-                                this.fit();
-                                cx.notify();
-                            },
-                        )))
-                    }),
-            )
-            .when(!self.picker, |d| {
-                d.child(
-                    pill().child(
-                        Button::new("online")
-                            .ghost()
-                            .xsmall()
-                            .label(if self.online { t!("map.online") } else { t!("map.offline") })
-                            .tooltip(if self.online { t!("map.online_tip") } else { t!("map.offline_tip") })
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.online = !this.online;
-                                this.failed.clear();
-                                cx.notify();
-                            })),
                     ),
-                )
-            })
+            )
     }
 }
 
@@ -470,8 +444,6 @@ impl Render for MapView {
         let tiles = self.render_tiles(cx);
         let markers = self.render_markers(cx);
         let entity = cx.entity().downgrade();
-        let shown = self.markers.len();
-        let missing = self.missing;
         div()
             .id("map")
             .flex_1()
@@ -568,26 +540,41 @@ impl Render for MapView {
                     this.zoom_by(step, Some(ev.position), cx);
                 }
             }))
-            .child(self.render_toolbar(cx))
+            .when(self.picker, |d| d.child(self.render_toolbar(cx)))
+            // Corner of the map: connection state (click to switch) and the required attribution.
             .child(
                 h_flex()
                     .absolute()
                     .bottom_0()
-                    .left_0()
                     .right_0()
                     .px_2()
                     .py_0p5()
-                    .gap_3()
+                    .gap_2()
                     .text_xs()
+                    .rounded_tl(theme::RADIUS_SM)
                     .bg(theme::panel().opacity(0.85))
                     .text_color(theme::muted())
+                    .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                     .when(!self.picker, |d| {
-                        d.child(t!("map.shown", n = shown).to_string()).when(missing > 0, |d| {
-                            d.child(div().text_color(theme::warn()).child(t!("map.missing", n = missing).to_string()))
-                        })
+                        d.child(
+                            div()
+                                .id("online")
+                                .cursor_pointer()
+                                .hover(|d| d.text_color(theme::text()))
+                                .child(if self.online { t!("map.online") } else { t!("map.offline") })
+                                .tooltip({
+                                    let tip: SharedString =
+                                        if self.online { t!("map.online_tip") } else { t!("map.offline_tip") }.into();
+                                    move |w, cx| Tooltip::new(tip.clone()).build(w, cx)
+                                })
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    this.online = !this.online;
+                                    this.failed.clear();
+                                    cx.notify();
+                                })),
+                        )
+                        .child("·")
                     })
-                    .child(div().flex_1())
-                    .when(!self.picker, |d| d.child(t!("map.zoom", n = self.zoom).to_string()))
                     .child(t!("map.attribution")),
             )
             .context_menu(background_menu(cx.entity().downgrade()))

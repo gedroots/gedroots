@@ -86,7 +86,8 @@ forces it (screenshots, tests).
 | `surface()` | Cards, fields | `#F4EFE6` | `#222222` |
 | `hover()` | Hover, subtle selection | `#EEE7DA` | `#2B2B2B` |
 | `border()` | Separators | `#E6DED0` | `#2E2E2E` |
-| `border_strong()` | Field outlines, tree boxes | `#D5CAB7` | `#3D3D3D` |
+| `border_strong()` | Tree boxes, strong separators | `#D5CAB7` | `#3D3D3D` |
+| `field_border()` | Text field outlines | `#D5CAB7` | `#6E6E6E` (3:1 on `surface`) |
 | `text()` | Main text | `#1F1B16` | `#ECECEC` |
 | `muted()` | Secondary text | `#6B6257` | `#A3A3A3` |
 | `accent()` | Violet: actions, links, selection | `#6D3DF0` | `#B997FF` |

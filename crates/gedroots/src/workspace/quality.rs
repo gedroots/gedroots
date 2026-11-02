@@ -6,7 +6,7 @@
 
 use super::*;
 use gedcom::analysis::check::{self, Issue, Severity};
-use gedcom::quality::{self, Category, Group};
+use gedcom::quality::{self, Category};
 use gpui::PathPromptOptions;
 use gpui_kit::component::menu::PopupMenu;
 use rust_i18n::t;
@@ -68,10 +68,7 @@ impl Workspace {
                     title: c.label().to_string(),
                     strong: String::new(),
                     meta: n.to_string(),
-                    dot: Some(match c.group() {
-                        Group::Fix => theme::warn(),
-                        Group::Complete => theme::accent(),
-                    }),
+                    dot: None,
                     flagged: false,
                 })
             })
@@ -216,9 +213,10 @@ impl Workspace {
         batches.retain(|b| b.2 > 1);
         let entity = cx.entity().downgrade();
         let menu_issue = self.quality.menu_issue.clone();
-        v_flex()
-            .flex_1()
-            .min_h_0()
+        // One readable column, like the records.
+        let column = v_flex()
+            .size_full()
+            .max_w(px(720.))
             .child(
                 h_flex()
                     .px_4()
@@ -326,8 +324,8 @@ impl Workspace {
                         .text_sm(),
                     )
                     .with_menu(self.issue_menu(cx)),
-            )
-            .into_any_element()
+            );
+        h_flex().flex_1().min_h_0().justify_center().child(column).into_any_element()
     }
 
     /// Right-click menu of an issue.
