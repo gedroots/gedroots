@@ -17,3 +17,13 @@ async-channel = "2"
 imagesize = "0.14"
 # Export GEDZIP (.gdz) : archive zip, gedcom.ged compressé, médias stockés tels quels.
 zip = { version = "9.2.2", default-features = false, features = ["deflate-flate2"] }
+
+# Fichiers récents : liste du système sous macOS (NSDocumentController)…
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "NSDocumentController"] }
+objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSArray", "NSString", "NSURL"] }
+
+# … petit fichier dans le dossier de configuration de la plateforme ailleurs.
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+dirs = "6"

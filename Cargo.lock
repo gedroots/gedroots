@@ -1829,11 +1829,15 @@ name = "gedroots"
 version = "0.1.0"
 dependencies = [
  "async-channel",
+ "dirs 6.0.0",
  "gedcom",
  "gpui-kit",
  "image",
  "imagesize 0.14.0",
  "lsp-types",
+ "objc2 0.6.5",
+ "objc2-app-kit 0.3.2",
+ "objc2-foundation 0.3.2",
  "serde_json",
  "ureq",
  "zip",

@@ -15,6 +15,7 @@ actions!(
         // Fichier
         NewFile,
         OpenFile,
+        ClearRecent,
         ImportFile,
         OpenFileSettings,
         SaveFile,
@@ -105,6 +106,13 @@ actions!(
     ]
 );
 
+/// Ouvre un fichier de Fichier › Ouvrir récent.
+#[derive(Clone, PartialEq, Action)]
+#[action(namespace = gedroots, no_json)]
+pub struct OpenRecent {
+    pub path: std::path::PathBuf,
+}
+
 /// Raccourci avec ⌘ sur macOS, Ctrl ailleurs.
 macro_rules! shortcut {
     ($k:literal) => {
@@ -194,10 +202,23 @@ pub mod label {
 /// Une entrée de menu.
 enum Item {
     Action(&'static str, Box<dyn Action>),
+    /// Fichier récent : libellé calculé.
+    Recent(String, Box<dyn Action>),
     /// Action standard du système (copier, coller…) : macOS la relie aux champs de saisie.
     Os(&'static str, Box<dyn Action>, OsAction),
     Sub(&'static str, Vec<Item>),
     Separator,
+}
+
+impl Item {
+    /// Libellé et action d'une commande (ni sous-menu, ni séparateur, ni action d'édition).
+    fn into_command(self) -> Option<(String, Box<dyn Action>)> {
+        match self {
+            Item::Action(name, action) => Some((name.to_string(), action)),
+            Item::Recent(name, action) => Some((name, action)),
+            Item::Os(..) | Item::Sub(..) | Item::Separator => None,
+        }
+    }
 }
 
 fn a(label: &'static str, action: impl Action) -> Item {
@@ -206,6 +227,11 @@ fn a(label: &'static str, action: impl Action) -> Item {
 
 /// Le modèle de menus, commun à toutes les plateformes.
 fn model() -> Vec<(&'static str, Vec<Item>)> {
+    model_with(&crate::recent::list())
+}
+
+/// Le modèle de menus, avec les fichiers récents donnés.
+fn model_with(recents: &[std::path::PathBuf]) -> Vec<(&'static str, Vec<Item>)> {
     use Item::{Separator as Sep, Sub};
     let mac = cfg!(target_os = "macos");
     let mut menus = Vec::new();
@@ -213,16 +239,23 @@ fn model() -> Vec<(&'static str, Vec<Item>)> {
         // Sur macOS, les réglages vont à leur place habituelle : menu de l'application, ⌘,.
         menus.push(("GEDRoots", vec![a("Réglages du fichier…", OpenFileSettings), Sep, a("Quitter GEDRoots", Quit)]));
     }
-    let mut file = vec![
-        a("Nouveau fichier", NewFile),
-        a("Ouvrir…", OpenFile),
+    let mut file = vec![a("Nouveau fichier", NewFile), a("Ouvrir…", OpenFile)];
+    // Sous-menu masqué tant qu'aucun fichier n'a été ouvert.
+    if !recents.is_empty() {
+        let names = crate::recent::labels(recents);
+        let mut items: Vec<Item> =
+            recents.iter().zip(names).map(|(p, n)| Item::Recent(n, Box::new(OpenRecent { path: p.clone() }))).collect();
+        items.extend([Sep, a("Effacer le menu", ClearRecent)]);
+        file.push(Sub("Ouvrir récent", items));
+    }
+    file.extend([
         a("Importer un GEDCOM…", ImportFile),
         Sep,
         a("Enregistrer", SaveFile),
         a("Enregistrer sous…", SaveFileAs),
         Sep,
         a("Exporter en GEDZIP…", ExportGedzip),
-    ];
+    ]);
     if !mac {
         file.extend([Sep, a("Réglages du fichier…", OpenFileSettings), Sep, a("Quitter", Quit)]);
     }
@@ -389,6 +422,9 @@ fn to_menu_items(items: Vec<Item>) -> Vec<MenuItem> {
             Item::Action(name, action) => {
                 MenuItem::Action { name: name.into(), action, os_action: None, checked: false, disabled: false }
             }
+            Item::Recent(name, action) => {
+                MenuItem::Action { name: name.into(), action, os_action: None, checked: false, disabled: false }
+            }
             Item::Os(name, action, os) => {
                 MenuItem::Action { name: name.into(), action, os_action: Some(os), checked: false, disabled: false }
             }
@@ -422,7 +458,8 @@ pub fn palette_entries() -> Vec<PaletteEntry> {
     fn walk(prefix: &str, items: Vec<Item>, out: &mut Vec<PaletteEntry>) {
         for i in items {
             match i {
-                Item::Action(name, action) => {
+                i @ (Item::Action(..) | Item::Recent(..)) => {
+                    let Some((name, action)) = i.into_command() else { continue };
                     let path = format!("{prefix} › {}", name.trim_end_matches('…'));
                     if !out.iter().any(|e| e.action.partial_eq(action.as_ref())) {
                         out.push(PaletteEntry { path, action });
@@ -442,8 +479,9 @@ pub fn palette_entries() -> Vec<PaletteEntry> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Item, model, palette_entries};
+    use super::{Item, model_with, palette_entries};
     use gpui_kit::Action;
+    use std::path::PathBuf;
 
     /// Une commande n'a qu'une place dans la barre de menus.
     #[test]
@@ -451,7 +489,8 @@ mod tests {
         fn walk(path: &str, items: Vec<Item>, seen: &mut Vec<(String, Box<dyn Action>)>) {
             for i in items {
                 match i {
-                    Item::Action(name, action) => {
+                    i @ (Item::Action(..) | Item::Recent(..)) => {
+                        let Some((name, action)) = i.into_command() else { continue };
                         let here = format!("{path} › {name}");
                         if let Some((other, _)) = seen.iter().find(|(_, a)| a.partial_eq(action.as_ref())) {
                             panic!("« {here} » double « {other} »");
@@ -464,7 +503,8 @@ mod tests {
             }
         }
         let mut seen = Vec::new();
-        for (menu, items) in model() {
+        let recents = [PathBuf::from("/a/Guyot.ged"), PathBuf::from("/b/Guyot.ged")];
+        for (menu, items) in model_with(&recents) {
             walk(menu, items, &mut seen);
         }
     }

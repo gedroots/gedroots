@@ -11,6 +11,7 @@ mod editor;
 mod gedzip;
 mod images;
 mod map;
+mod recent;
 mod theme;
 mod workspace;
 
