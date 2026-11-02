@@ -12,7 +12,7 @@ et suit la maquette « Lignée » (thème sombre, barre d'activité, liste, arbr
 ## Fonctionnalités
 
 - **Tout est dans la barre de menus** (Fichier, Édition, Individu, Famille, Source, Média,
-  Affichage, Analyses, Aide) : pas de barre d'outils, l'écran reste aux données. Menus natifs
+  Affichage, Aide) : pas de barre d'outils, l'écran reste aux données. Menus natifs
   sous macOS ; sous Linux et Windows, les mêmes menus dans le haut de la fenêtre. Les commandes
   qui ne s'appliquent pas à la sélection sont grisées (macOS) ou sans effet.
 - **Palette de commandes** (`⌘⇧P` / `Ctrl+Maj+P`) : toutes les commandes applicables, recherche
@@ -28,8 +28,10 @@ et suit la maquette « Lignée » (thème sombre, barre d'activité, liste, arbr
   la même fenêtre que l'ajout (type, précision, date, lieu suggéré, source) ; on peut aussi le
   supprimer. Notes, âge, médias et autres citations de l'événement sont conservés.
 - **Chronologie unifiée** : la fiche d'un individu montre ses événements et ceux de ses unions
-  (mariage, divorce… « avec » le conjoint) dans une seule liste par date ; on y ajoute aussi un
-  mariage directement. Chaque événement affiche ses médias (`2 OBJE`, GEDCOM 7 standard) :
+  (mariage, divorce… « avec » le conjoint) dans une seule liste par date, avec son âge à chaque
+  événement ; on y ajoute aussi un mariage directement. Le bouton à côté du « + » (ou
+  Affichage › Événements des proches) y mêle les naissances et décès de ses parents, frères et
+  sœurs, conjoints, enfants et petits-enfants survenus de son vivant. Chaque événement affiche ses médias (`2 OBJE`, GEDCOM 7 standard) :
   déposer des fichiers sur l'événement les y rattache, le clic droit permet d'en rattacher,
   de lier un média existant ou d'en détacher.
 - **Individus** : liste avec recherche sans accents ni casse et critères
@@ -126,15 +128,21 @@ et suit la maquette « Lignée » (thème sombre, barre d'activité, liste, arbr
 - Créer / supprimer un enregistrement (avec confirmation ; un lieu peut être retiré de tous
   les événements), annuler (50 niveaux), date de modification `CHAN`
   mise à jour comme dans Ancestris.
-- **Analyses** (`⌘⇧A` / `Ctrl+Shift+A`, ou menu Analyses) :
-  - *Cohérence* : dates impossibles, âges invraisemblables, liens cassés ou à sens unique,
-    boucles d'ascendance… Chaque anomalie ouvre la fiche concernée ; « Ignorer » la masque
-    avec l'extension [`_GR_IGNORE`](docs/extensions.md) (annulable).
-  - *Lien de parenté* : « cousine issue de germain », « oncle à la mode de Bretagne »,
-    demi-frère, beau-père… avec le chemin par l'ancêtre commun et le degré civil.
-  - *Chronologie* : âge à chaque événement, avec les naissances, mariages et décès des proches.
-  - *Statistiques* : patronymes et prénoms fréquents, longévité par siècle, âge au mariage,
-    complétude de l'ascendance par génération et implexe.
+- **Qualité des données** (`⌘8` / `Ctrl+8`, menu Affichage) : une page dans
+  la barre de gauche, avec le nombre d'anomalies à corriger, par catégorie : dates et âges
+  impossibles, liens familiaux incohérents, structure GEDCOM 7 (balise non permise,
+  information obligatoire absente ou en double, date illisible, valeur inconnue, lien
+  cassé), éléments vides ou isolés (événements et notes vides, familles sans membre,
+  enregistrements cités nulle part, arbres séparés de la racine) et événements sans
+  source. Un clic ouvre l'élément (`⌘[` revient), le bouton de la ligne corrige quand
+  c'est sûr (supprimer, rétablir un lien à sens unique, retirer un lien cassé), et en lot
+  avec confirmation. Clic droit › « Masquer » écrit [`_GR_IGNORE`](docs/extensions.md).
+- **Lien de parenté** (menu Individu › Lien de parenté avec…) : « cousine issue de germain »,
+  « oncle à la mode de Bretagne », demi-frère, beau-père… avec le chemin par l'ancêtre commun
+  et le degré civil, affiché dans le panneau de l'individu.
+- **Statistiques** (`⌘9` / `Ctrl+9`, menu Affichage) : une page avec les patronymes et prénoms
+  fréquents, la longévité par siècle, l'âge au mariage, la complétude de l'ascendance de
+  l'individu racine par génération et l'implexe.
 - Enregistrement **sans perte** : un fichier relu puis réécrit est identique à l'octet près
   (balises propriétaires `_SOSADABOVILLE`, `_TODO`… comprises). Une copie `.ged.bak` est
   gardée à chaque enregistrement.
@@ -169,8 +177,8 @@ Sous Linux, installer d'abord les dépendances de GPUI :
 
 | Crate | Rôle |
 | --- | --- |
-| [`crates/gedcom`](crates/gedcom) | Lecture/écriture GEDCOM 7 sans perte, vues typées (individus, familles, sources, lieux, médias), recadrage `CROP` (`crop.rs`), médias multipages (`multipage.rs`), liens web (`weblink.rs`) et assistant d'import (`import.rs`), formulaires d'édition, dates, coordonnées (`geo.rs`), outils d'analyse (`analysis/`), recherche (`search.rs`), ajout/liaison de proches et médias (`relations.rs`), descendance (`pedigree.rs`), modèles d'actes (`template.rs`) et saisie guidée (`entry.rs`). Sans dépendance. |
-| [`crates/gedroots`](crates/gedroots) | Application GPUI : `commands.rs` (toutes les commandes, raccourcis et menus), `workspace.rs` (fenêtre et vues) et `workspace/` (`commands.rs` commandes et palette, `tree.rs` arbres, `relatives.rs` proches/sélecteur/médias, `add.rs` fenêtres d'ajout et de modification d'événement, `menus.rs` menus du clic droit, `photo.rs` recadrage et personnes sur les photos, `pages.rs` médias multipages et fusion, `weblinks.rs` liens web, `import.rs` assistant d'import, `filters.rs` filtres rapides), `editor.rs` (éditeurs visuel et brut), `entry_form.rs` (saisie d'acte), `map.rs` (carte des lieux), `theme.rs` (palette de la maquette), `analyses.rs` (fenêtre Analyses). |
+| [`crates/gedcom`](crates/gedcom) | Lecture/écriture GEDCOM 7 sans perte, vues typées (individus, familles, sources, lieux, médias), recadrage `CROP` (`crop.rs`), médias multipages (`multipage.rs`), liens web (`weblink.rs`) et assistant d'import (`import.rs`), formulaires d'édition, dates, coordonnées (`geo.rs`), outils d'analyse (`analysis/`), contrôles de la page Qualité (`quality.rs`), recherche (`search.rs`), ajout/liaison de proches et médias (`relations.rs`), descendance (`pedigree.rs`), modèles d'actes (`template.rs`) et saisie guidée (`entry.rs`). Sans dépendance. |
+| [`crates/gedroots`](crates/gedroots) | Application GPUI : `commands.rs` (toutes les commandes, raccourcis et menus), `workspace.rs` (fenêtre et vues) et `workspace/` (`commands.rs` commandes et palette, `tree.rs` arbres, `relatives.rs` proches/sélecteur/médias, `add.rs` fenêtres d'ajout et de modification d'événement, `menus.rs` menus du clic droit, `photo.rs` recadrage et personnes sur les photos, `pages.rs` médias multipages et fusion, `weblinks.rs` liens web, `import.rs` assistant d'import, `filters.rs` filtres rapides, `quality.rs` page Qualité, `insights.rs` page Statistiques et lien de parenté), `editor.rs` (éditeurs visuel et brut), `entry_form.rs` (saisie d'acte), `map.rs` (carte des lieux), `theme.rs` (palette de la maquette). |
 
 ## Tests
 

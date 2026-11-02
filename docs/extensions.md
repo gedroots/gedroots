@@ -134,9 +134,10 @@ met à jour `_GR_FILE` et tous les pointeurs du fichier, citations comprises.
 
 ## `_GR_IGNORE`
 
-Masque une anomalie du contrôle de cohérence (fenêtre **Analyses → Cohérence**) que
-l'utilisateur a vérifiée et jugée correcte, par exemple un mariage réellement célébré
-très jeune.
+Masque une anomalie de la page **Qualité des données** que l'utilisateur a vérifiée et
+jugée correcte, par exemple un mariage réellement célébré très jeune (clic droit sur
+l'anomalie › **Masquer** ; **Affichage › Filtrer la liste › Anomalies masquées** les
+réaffiche, et **Ne plus masquer** retire la balise).
 
 - **Sous** : n'importe quel enregistrement (`INDI`, `FAM`…), au niveau 1.
 - **Valeur** : le code de l'anomalie (voir ci-dessous). Une ligne par anomalie masquée.
@@ -175,9 +176,23 @@ la liste) porte la balise avec le bon code.
 | `own_ancestor` | Personne présente dans sa propre ascendance |
 | `broken_link` | Pointeur vers un enregistrement absent |
 | `missing_backlink` | `FAMC`/`FAMS` sans le `CHIL`/`HUSB`/`WIFE` correspondant |
-| `unsourced` | Événement sans source (signalé seulement sur demande) |
+| `unsourced` | Événement sans source |
+| `tag_not_allowed` | Balise standard non permise à cet endroit par le schéma GEDCOM 7 |
+| `missing_required` | Sous-structure obligatoire absente (ex. `NAME` d'un dépôt) |
+| `too_many` | Sous-structure présente plusieurs fois alors qu'une seule est permise |
+| `wrong_pointer` | Pointeur vers un enregistrement du mauvais type |
+| `invalid_value` | Valeur invalide : date illisible ou inexistante, valeur énumérée inconnue… |
+| `empty_fact` | Événement sans aucune donnée (ni valeur ni sous-structure) |
+| `empty_note` | Note vide (`NOTE` sans texte, ou note partagée `SNOTE` vide) |
+| `empty_family` | Famille sans aucun membre |
+| `unused_record` | Média, source, dépôt ou note partagée cité nulle part |
+| `disconnected` | Individu (ou groupe d'individus) sans aucun lien familial ni `ASSO` avec l'individu racine |
+
 | `role_sex_mismatch` | Rôle `FATH`/`HUSB` d'une femme ou `MOTH`/`WIFE` d'un homme dans une citation |
 | `outside_source_period` | Acte daté hors de la période que sa source déclare pour ce type d'acte |
+
+Le contrôle du schéma GEDCOM 7 ne s'applique qu'aux fichiers en version 7 ; les balises
+d'extension (`_XXX`) ne sont jamais signalées.
 
 Les dates imprécises (`ABT`, `BEF`, `BET … AND …`, année seule) sont traitées comme des
 intervalles : une anomalie n'est signalée que si elle est certaine pour toutes les dates

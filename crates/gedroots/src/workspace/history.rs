@@ -95,6 +95,8 @@ impl Workspace {
         let Some(doc) = &self.doc else { return false };
         match loc.view {
             View::Places => doc.ged.places().iter().any(|p| p.name == loc.key),
+            View::Quality => gedcom::quality::Category::from_id(&loc.key).is_some(),
+            View::Stats => true,
             _ => doc.ged.get(&loc.key).is_some(),
         }
     }
