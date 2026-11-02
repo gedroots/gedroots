@@ -11,6 +11,7 @@ use gedcom::analysis::check::{self, Issue, Severity};
 use gedcom::quality::{self, Category, Group};
 use gpui::PathPromptOptions;
 use gpui_kit::component::menu::PopupMenu;
+use rust_i18n::t;
 use std::cell::RefCell;
 
 /// État de la page.
@@ -91,7 +92,7 @@ impl Workspace {
 
     pub(super) fn fix_issue(&mut self, issue: Issue, window: &mut Window, cx: &mut Context<Self>) {
         let Some(fix) = quality::fix_of(issue.code) else { return };
-        let msg = format!("{} : {}", fix.label, issue.message);
+        let msg = t!("quality.labelled", label = fix.label, message = issue.message).to_string();
         self.quality_edit(|g| g.fix_issue(&issue), msg, window, cx);
     }
 
@@ -107,7 +108,7 @@ impl Workspace {
         self.quality.confirm = None;
         let issues: Vec<Issue> = self.quality.issues.iter().filter(|i| i.code == code && !i.ignored).cloned().collect();
         let n = issues.len();
-        let msg = format!("{} : {n} élément{} corrigé{}", check::code_label(code), plural(n), plural(n));
+        let msg = crate::tn!("quality.fixed", n, label = check::code_label(code)).to_string();
         self.quality_edit(|g| g.fix_issues(&issues) > 0, msg, window, cx);
     }
 
@@ -136,7 +137,7 @@ impl Workspace {
             files: true,
             directories: false,
             multiple: false,
-            prompt: Some("Localiser le fichier".into()),
+            prompt: Some(t!("quality.locate_prompt").into()),
         });
         cx.spawn_in(window, async move |this, cx| {
             if let Ok(Ok(Some(paths))) = rx.await
@@ -144,7 +145,7 @@ impl Workspace {
             {
                 let _ = this.update_in(cx, |this, window, cx| {
                     let value = this.file_value(p);
-                    let msg = format!("Fichier localisé : {value}");
+                    let msg = t!("quality.located", value = value).to_string();
                     this.quality_edit(|g| g.set_media_file(&issue.xref, &issue.path, &value), msg, window, cx);
                 });
             }
@@ -160,7 +161,8 @@ impl Workspace {
         cx: &mut Context<Self>,
     ) {
         let label = check::code_label(issue.code);
-        let msg = if ignore { format!("« {label} » masqué") } else { format!("« {label} » de nouveau affiché") };
+        let msg =
+            if ignore { t!("quality.hidden", label = label) } else { t!("quality.shown", label = label) }.to_string();
         let (x, code) = (issue.xref.clone(), issue.code);
         self.quality_edit(
             move |g| if ignore { g.ignore_issue(&x, code) } else { g.unignore_issue(&x, code) },
@@ -191,7 +193,7 @@ impl Workspace {
                 .items_center()
                 .justify_center()
                 .text_color(if empty { theme::ok() } else { theme::muted() })
-                .child(if empty { "Aucune anomalie" } else { "Choisissez une catégorie" })
+                .child(if empty { t!("quality.no_issue") } else { t!("quality.choose_category") })
                 .into_any_element();
         };
         let q = self.filter.read(cx).value().trim().to_lowercase();
@@ -238,7 +240,7 @@ impl Workspace {
                             .when(confirming, |b| b.danger())
                             .when(!confirming, |b| b.ghost())
                             .label(if confirming {
-                                format!("Confirmer : {label} ({n})")
+                                t!("quality.confirm", label = label, n = n).to_string()
                             } else {
                                 format!("{label} ({n})")
                             })
@@ -295,7 +297,7 @@ impl Workspace {
                                                 Button::new(("locate", n))
                                                     .ghost()
                                                     .xsmall()
-                                                    .label("Localiser…")
+                                                    .label(t!("quality.locate"))
                                                     .on_click(move |_, w, cx| {
                                                         cx.stop_propagation();
                                                         let issue = issue.clone();
@@ -341,12 +343,12 @@ impl Workspace {
             // Fichier sans média : rien à ouvrir ni où écrire `_GR_IGNORE`.
             let record = !issue.xref.is_empty();
             let menu = if record || place_issue(&issue) {
-                menu.item(menus::act(&ws, "Ouvrir", move |this, w, cx| this.open_issue(&a, w, cx)))
+                menu.item(menus::act(&ws, t!("quality.open"), move |this, w, cx| this.open_issue(&a, w, cx)))
             } else {
                 menu
             };
             let menu = if locatable(issue.code) && !issue.ignored {
-                menu.item(menus::act(&ws, "Localiser…", move |this, w, cx| this.locate_file(d.clone(), w, cx)))
+                menu.item(menus::act(&ws, t!("quality.locate"), move |this, w, cx| this.locate_file(d.clone(), w, cx)))
             } else {
                 menu
             };
@@ -360,7 +362,7 @@ impl Workspace {
             }
             menu.separator().item(menus::act(
                 &ws,
-                if ignored { "Ne plus masquer" } else { "Masquer" },
+                if ignored { t!("quality.unhide") } else { t!("quality.hide") },
                 move |this, w, cx| this.set_issue_ignored(c.clone(), !ignored, w, cx),
             ))
         })
@@ -375,10 +377,6 @@ fn place_issue(i: &Issue) -> bool {
 /// Anomalies avec un bouton « Localiser… ».
 fn locatable(code: &str) -> bool {
     matches!(code, "missing_file" | "missing_coords" | "bad_coords")
-}
-
-fn plural(n: usize) -> &'static str {
-    if n > 1 { "s" } else { "" }
 }
 
 fn severity_color(s: Severity) -> Hsla {

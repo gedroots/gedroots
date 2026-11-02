@@ -14,6 +14,7 @@ use super::add::AddDialog;
 use super::*;
 use crate::gedzip::{self, Entry};
 use gedcom::gedcom551::Flavor;
+use rust_i18n::t;
 use std::path::Path;
 
 /// Fichiers qui manquaient à l'archive : (média, valeur `FILE`).
@@ -27,7 +28,7 @@ impl Workspace {
         let Some(doc) = &self.doc else { return };
         let dir = doc.path.as_ref().and_then(|p| p.parent()).map(Path::to_path_buf).unwrap_or_else(dirs_home);
         let stem = doc.path.as_ref().and_then(|p| p.file_stem()).map(|s| s.to_string_lossy().to_string());
-        let name = format!("{}.{}", stem.as_deref().unwrap_or("arbre"), gedcom::gedzip::EXTENSION);
+        let name = format!("{}.{}", stem.as_deref().unwrap_or(&t!("export.default_name")), gedcom::gedzip::EXTENSION);
         let rx = cx.prompt_for_new_path(&dir, Some(&name));
         cx.spawn_in(window, async move |this, cx| {
             if let Ok(Ok(Some(p))) = rx.await {
@@ -60,7 +61,7 @@ impl Workspace {
         let same =
             |p: &Path| std::fs::canonicalize(p).ok().is_some_and(|p| std::fs::canonicalize(&dest).ok() == Some(p));
         if doc.path.as_deref().is_some_and(same) {
-            self.set_status("Choisissez un autre nom : l'export remplacerait le fichier ouvert", true);
+            self.set_status(t!("export.replaces_open"), true);
             cx.notify();
             return;
         }
@@ -81,14 +82,14 @@ impl Workspace {
             let _ = this.update(cx, |this, cx| {
                 match res {
                     Ok(dest) => {
-                        let mut msg = format!("Exporté dans {}", dest.display());
+                        let mut msg = t!("export.exported", path = dest.display()).into_owned();
                         if flavor == Flavor::Geneanet {
                             cx.open_url(gedcom::gedcom551::GENEANET_IMPORT_URL);
-                            msg.push_str(" · déposez-le sur la page Geneanet qui vient de s'ouvrir");
+                            msg.push_str(&t!("export.geneanet_upload"));
                         }
                         this.set_status(msg, false);
                     }
-                    Err(e) => this.set_status(format!("Échec de l'export : {e}"), true),
+                    Err(e) => this.set_status(t!("export.gedcom_failed", error = e), true),
                 }
                 cx.notify();
             });
@@ -113,14 +114,14 @@ impl Workspace {
         let same =
             |p: &Path| std::fs::canonicalize(p).ok().is_some_and(|p| std::fs::canonicalize(&dest).ok() == Some(p));
         if doc.path.as_deref().is_some_and(same) || entries.iter().any(|e| same(&e.source)) {
-            self.set_status("Choisissez un autre nom pour l'archive : ce fichier fait partie de l'arbre", true);
+            self.set_status(t!("export.name_taken"), true);
             cx.notify();
             return;
         }
         let text = packed.ged.to_gedcom_string();
         let count = entries.len();
         let file = dest.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-        self.set_status(format!("Export de {file}…"), false);
+        self.set_status(t!("export.exporting", file = file), false);
         cx.notify();
         let task = cx.background_spawn(async move { gedzip::write(&dest, &text, &entries).map(|()| dest) });
         cx.spawn_in(window, async move |this, cx| {
@@ -129,18 +130,17 @@ impl Workspace {
                 match res {
                     Ok(dest) => {
                         let files = match count {
-                            0 => "sans fichier".to_string(),
-                            1 => "1 fichier".to_string(),
-                            n => format!("{n} fichiers"),
+                            0 => t!("export.no_file"),
+                            n => crate::tn!("export.files", n),
                         };
-                        let mut msg = format!("Exporté dans {} · {files}", dest.display());
+                        let mut msg = t!("export.done", path = dest.display(), files = files).to_string();
                         if !missing.is_empty() {
-                            msg.push_str(&format!(" · {} introuvable(s)", missing.len()));
+                            msg.push_str(&t!("export.missing", count = missing.len()));
                             this.add_dialog = Some(AddDialog::Gedzip(Box::new(GedzipReport { file, missing })));
                         }
                         this.set_status(msg, false);
                     }
-                    Err(e) => this.set_status(format!("Échec de l'export GEDZIP : {e}"), true),
+                    Err(e) => this.set_status(t!("export.failed", error = e), true),
                 }
                 cx.notify();
             });
@@ -149,7 +149,7 @@ impl Workspace {
     }
 
     pub(super) fn gedzip_title(&self, d: &GedzipReport) -> String {
-        format!("{} · fichiers introuvables", d.file)
+        t!("export.missing_title", file = d.file).to_string()
     }
 
     pub(super) fn gedzip_body(&self, d: &GedzipReport, cx: &mut Context<Self>) -> AnyElement {

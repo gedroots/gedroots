@@ -35,8 +35,55 @@ fn choose(preferred: impl IntoIterator<Item = String>) -> &'static str {
         .unwrap_or(LANGUAGES[0])
 }
 
+/// Whether `n` takes the singular in the current language: only 1 in English, 0 and 1 in French.
+pub fn is_one(n: usize) -> bool {
+    match &*rust_i18n::locale() {
+        "fr" => n <= 1,
+        _ => n == 1,
+    }
+}
+
+/// A string that depends on a number: `tn!(key, n)` reads `key.one` or `key.other`, with the
+/// number as `%{n}` and any other named values, like `t!`.
+#[macro_export]
+macro_rules! tn {
+    ($key:literal, $n:expr $(, $name:ident = $value:expr)* $(,)?) => {{
+        let n: usize = $n;
+        if $crate::i18n::is_one(n) {
+            rust_i18n::t!(concat!($key, ".one"), n = n $(, $name = $value)*)
+        } else {
+            rust_i18n::t!(concat!($key, ".other"), n = n $(, $name = $value)*)
+        }
+    }};
+}
+
+/// Name of a relative, e.g. “Father”.
+pub fn relation(rel: gedcom::Relation) -> gpui_kit::SharedString {
+    use crate::commands::label;
+    match rel {
+        gedcom::Relation::Father => label::father(),
+        gedcom::Relation::Mother => label::mother(),
+        gedcom::Relation::Spouse => label::spouse(),
+        gedcom::Relation::Child => label::child(),
+        gedcom::Relation::Sibling => label::sibling(),
+    }
+}
+
+/// Name of a kind of record, e.g. “Source”.
+pub fn record_kind(kind: gedcom::RecordKind) -> std::borrow::Cow<'static, str> {
+    use gedcom::RecordKind as K;
+    match kind {
+        K::Individual => rust_i18n::t!("kind.individual"),
+        K::Family => rust_i18n::t!("kind.family"),
+        K::Source => rust_i18n::t!("kind.source"),
+        K::Repository => rust_i18n::t!("kind.repository"),
+        K::Media => rust_i18n::t!("kind.media"),
+        K::SharedNote => rust_i18n::t!("kind.shared_note"),
+        K::Submitter => rust_i18n::t!("kind.submitter"),
+    }
+}
+
 /// The current interface language, e.g. `"fr"`.
-#[allow(dead_code)]
 pub fn language() -> impl Deref<Target = str> {
     rust_i18n::locale()
 }
@@ -111,16 +158,20 @@ mod tests {
                 } else if path.extension().is_some_and(|e| e == "rs") {
                     let source = std::fs::read_to_string(&path).unwrap();
                     let mut rest = source.as_str();
-                    while let Some(at) = rest.find("t!(\"") {
-                        let before = rest[..at].chars().next_back();
-                        let chunk = &rest[at + 4..];
-                        rest = chunk;
-                        if before.is_some_and(|c| c.is_alphanumeric() || c == '_') {
-                            continue; // another macro, such as `shortcut!`
-                        }
+                    while let Some(at) = rest.find("!(") {
+                        let name = rest[..at].rsplit(|c: char| !(c.is_alphanumeric() || c == '_')).next().unwrap();
+                        rest = &rest[at + 2..];
+                        let Some(chunk) = rest.trim_start().strip_prefix('"') else { continue };
                         let key = chunk.split('"').next().unwrap();
-                        assert!(catalog.contains_key(key), "{}: « {key} » is not in locales/", path.display());
-                        used.insert(key.to_string());
+                        let keys = match name {
+                            "t" => vec![key.to_string()],
+                            "tn" => vec![format!("{key}.one"), format!("{key}.other")],
+                            _ => continue, // another macro, such as `format!`
+                        };
+                        for key in keys {
+                            assert!(catalog.contains_key(&key), "{}: « {key} » is not in locales/", path.display());
+                            used.insert(key);
+                        }
                     }
                 }
             }

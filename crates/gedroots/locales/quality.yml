@@ -1,0 +1,44 @@
+_version: 2
+# Data Quality page.
+quality.labelled:
+  en: "%{label}: %{message}"
+  fr: "%{label} : %{message}"
+quality.fixed.one:
+  en: "%{label}: %{n} item fixed"
+  fr: "%{label} : %{n} élément corrigé"
+quality.fixed.other:
+  en: "%{label}: %{n} items fixed"
+  fr: "%{label} : %{n} éléments corrigés"
+quality.locate_prompt:
+  en: Locate the File
+  fr: Localiser le fichier
+quality.located:
+  en: "File located: %{value}"
+  fr: "Fichier localisé : %{value}"
+quality.hidden:
+  en: "“%{label}” hidden"
+  fr: "« %{label} » masqué"
+quality.shown:
+  en: "“%{label}” shown again"
+  fr: "« %{label} » de nouveau affiché"
+quality.no_issue:
+  en: No Issues
+  fr: Aucune anomalie
+quality.choose_category:
+  en: Choose a category
+  fr: Choisissez une catégorie
+quality.confirm:
+  en: "Confirm: %{label} (%{n})"
+  fr: "Confirmer : %{label} (%{n})"
+quality.locate:
+  en: Locate…
+  fr: Localiser…
+quality.open:
+  en: Open
+  fr: Ouvrir
+quality.unhide:
+  en: Stop Hiding
+  fr: Ne plus masquer
+quality.hide:
+  en: Hide
+  fr: Masquer

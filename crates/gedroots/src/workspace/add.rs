@@ -5,6 +5,7 @@ use super::relatives::PickPurpose;
 use super::*;
 use crate::date_field::{DateField, date_field};
 use crate::editor::{PickerState, choice, picker};
+use rust_i18n::t;
 
 pub(super) enum AddDialog {
     Event(Box<EventDialog>),
@@ -63,7 +64,16 @@ impl Workspace {
         let tags = if family { FAMILY_EVENTS } else { INDIVIDUAL_EVENTS };
         let mut options: Vec<(String, String)> = tags
             .iter()
-            .map(|t| (t.to_string(), if *t == "EVEN" { "Autre…" } else { event_label(t).unwrap_or(t) }.to_string()))
+            .map(|t| {
+                (
+                    t.to_string(),
+                    if *t == "EVEN" {
+                        t!("event_dialog.other").into_owned()
+                    } else {
+                        event_label(t).unwrap_or(t).to_string()
+                    },
+                )
+            })
             .collect();
         // Types d'événements personnalisés (Réglages du fichier › Événements), avant « Autre… ».
         let types = g.event_types();
@@ -83,8 +93,8 @@ impl Workspace {
                 .into_iter()
                 .map(|(fam, spouse)| {
                     let label = match spouse {
-                        Some(s) => format!("Avec {}", g.record_label(&s)),
-                        None => "Union sans conjoint connu".into(),
+                        Some(s) => t!("event_dialog.with", name = g.record_label(&s)).into_owned(),
+                        None => t!("event_dialog.no_spouse").into_owned(),
                     };
                     (fam, label)
                 })
@@ -125,12 +135,12 @@ impl Workspace {
         };
         let kind = choice(&options, default_kind, window, cx);
         let cur = current.clone().unwrap_or_default();
-        let text = |ph: &'static str, value: String, window: &mut Window, cx: &mut Context<Self>| {
+        let text = |ph: SharedString, value: String, window: &mut Window, cx: &mut Context<Self>| {
             cx.new(|cx| InputState::new(window, cx).placeholder(ph).default_value(value))
         };
-        let detail = text("", cur.detail, window, cx);
+        let detail = text("".into(), cur.detail, window, cx);
         let date = date_field(&cur.date, &cur.date_phrase, window, cx);
-        let place = text("Commune…", place_label(&cur.place), window, cx);
+        let place = text(t!("event_dialog.town").into(), place_label(&cur.place), window, cx);
         let source = picker(g, RecordKind::Source, cur.source.as_deref().unwrap_or(""), window, cx);
         let sub =
             cx.subscribe_in(&place, window, |this, input, ev: &InputEvent, _, cx| this.on_place_input(input, ev, cx));
@@ -167,7 +177,7 @@ impl Workspace {
         let Some(AddDialog::Event(d)) = &mut self.add_dialog else { return };
         let tag = d.kind.read(cx).selected_value().cloned().unwrap_or_default();
         if tag.is_empty() {
-            d.error = Some("Choisissez le type d'événement".into());
+            d.error = Some(t!("event_dialog.choose_type").into());
             cx.notify();
             return;
         }
@@ -200,7 +210,7 @@ impl Workspace {
                 None => d.unions.first().map(|(f, _)| f.clone()),
             };
             let Some(fam) = fam else {
-                d.error = Some("Choisissez l'union".into());
+                d.error = Some(t!("event_dialog.choose_union").into());
                 cx.notify();
                 return;
             };
@@ -234,11 +244,11 @@ impl Workspace {
             match editing {
                 Some(ix) => {
                     g.update_event(&owner, ix, &ev)?;
-                    Ok((format!("{label} de {who} modifié(e)"), None))
+                    Ok((t!("event_dialog.edited", label = label, who = who).into_owned(), None))
                 }
                 None => {
                     g.add_event(&owner, &ev)?;
-                    Ok((format!("{label} ajouté(e) à {who}"), None))
+                    Ok((t!("event_dialog.added", label = label, who = who).into_owned(), None))
                 }
             }
         });
@@ -253,7 +263,7 @@ impl Workspace {
         self.mutate(window, cx, move |g| {
             let who = g.record_label(&owner);
             let label = g.delete_event(&owner, ix)?;
-            Ok((format!("{label} retiré(e) de {who} (Annuler pour revenir en arrière)"), None))
+            Ok((t!("event_dialog.deleted", label = label, who = who).into_owned(), None))
         });
         window.focus(&self.focus, cx);
     }
@@ -264,17 +274,22 @@ impl Workspace {
             AddDialog::Event(d) => {
                 let what = match d.editing.and_then(|ix| g.event_title(&d.owner, ix)) {
                     Some(t) => t,
-                    None => "Nouvel événement".into(),
+                    None => t!("event_dialog.new").into_owned(),
                 };
                 (format!("{what} · {}", g.record_label(&d.owner)), self.event_body(d, cx))
             }
-            AddDialog::Relatives { target } => {
-                (format!("Proches · {}", g.record_label(target)), self.relatives_body(target, cx))
-            }
+            AddDialog::Relatives { target } => (
+                t!("event_dialog.relatives_title", name = g.record_label(target)).into_owned(),
+                self.relatives_body(target, cx),
+            ),
             AddDialog::WebLink(d) => (self.weblink_dialog_title(d), self.weblink_body(d, cx)),
             AddDialog::Import(d) => (self.import_title(d), self.import_body(d, cx)),
-            AddDialog::Settings(d) => ("Réglages du fichier".into(), self.settings_body(d, cx)),
-            AddDialog::RenameMedia(d) => ("Renommer selon le modèle".into(), self.rename_body(d, cx)),
+            AddDialog::Settings(d) => {
+                (t!("cmd.file_settings").trim_end_matches('…').to_string(), self.settings_body(d, cx))
+            }
+            AddDialog::RenameMedia(d) => {
+                (t!("cmd.rename_media_files").trim_end_matches('…').to_string(), self.rename_body(d, cx))
+            }
             AddDialog::Gedzip(d) => (self.gedzip_title(d), self.gedzip_body(d, cx)),
         };
         Some(
@@ -336,48 +351,54 @@ impl Workspace {
         let tag = d.kind.read(cx).selected_value().cloned().unwrap_or_default();
         let detail_label = match tag.trim_start_matches("FAM:") {
             t if t.starts_with("EVEN:") => None,
-            "OCCU" => Some("Profession"),
-            "EDUC" => Some("Établissement ou diplôme"),
-            "EVEN" => Some("Type d'événement"),
+            "OCCU" => Some(t!("editor.occupation")),
+            "EDUC" => Some(t!("event_dialog.education")),
+            "EVEN" => Some(t!("event_dialog.event_type")),
             "RESI" | "" => None,
             // Le `TYPE` d'un événement standard ne se saisit pas ici (éditeur GEDCOM) ;
             // celui d'un événement modifié est gardé tel quel.
             _ => None,
         };
-        let field = |label: &'static str, el: AnyElement| v_flex().gap_1().min_w_0().child(label_caps(label)).child(el);
+        let field = |label: std::borrow::Cow<'static, str>, el: AnyElement| {
+            v_flex().gap_1().min_w_0().child(label_caps(label)).child(el)
+        };
         v_flex()
             .gap_3()
             .child(
                 h_flex()
                     .gap_3()
                     .child(
-                        field("Type", Select::new(&d.kind).small().placeholder("Choisir…").into_any_element()).flex_1(),
+                        field(
+                            t!("event_dialog.type"),
+                            Select::new(&d.kind).small().placeholder(t!("event_dialog.choose")).into_any_element(),
+                        )
+                        .flex_1(),
                     )
                     .when_some(detail_label, |row, label| {
                         row.child(field(label, Input::new(&d.detail).small().into_any_element()).flex_1())
                     }),
             )
             .when_some(d.union.as_ref().filter(|_| tag.starts_with("FAM:")), |v, u| {
-                v.child(field("Union", Select::new(u).small().into_any_element()))
+                v.child(field(t!("event_dialog.union"), Select::new(u).small().into_any_element()))
             })
             .child(
                 h_flex()
                     .gap_3()
                     .items_start()
-                    .child(field("Date", d.date.clone().into_any_element()).w(px(230.)).flex_none())
+                    .child(field(t!("event_dialog.date"), d.date.clone().into_any_element()).w(px(230.)).flex_none())
                     .child(
-                        field("Lieu", Input::new(&d.place).small().into_any_element())
+                        field(t!("editor.place"), Input::new(&d.place).small().into_any_element())
                             .flex_1()
                             .children(self.place_suggestions(&d.place, cx)),
                     ),
             )
             .child(field(
-                "Source",
+                t!("kind.source"),
                 Select::new(&d.source)
                     .small()
                     .cleanable(true)
-                    .placeholder("Aucune")
-                    .search_placeholder("Rechercher…")
+                    .placeholder(t!("event_dialog.none"))
+                    .search_placeholder(t!("event_dialog.search"))
                     .into_any_element(),
             ))
             .when_some(d.error.clone(), |v, e| v.child(div().text_sm().text_color(theme::danger()).child(e)))
@@ -391,7 +412,7 @@ impl Workspace {
                                 .ghost()
                                 .small()
                                 .icon(IconName::Delete)
-                                .label("Supprimer")
+                                .label(t!("common.delete"))
                                 .on_click(
                                     cx.listener(move |this, _, w, cx| this.delete_event(owner.clone(), ix, w, cx)),
                                 ),
@@ -403,7 +424,7 @@ impl Workspace {
                             .primary()
                             .small()
                             .icon(IconName::Check)
-                            .label(if d.editing.is_some() { "Enregistrer" } else { "Ajouter" })
+                            .label(if d.editing.is_some() { t!("common.save") } else { t!("common.add") })
                             .on_click(cx.listener(|this, _, w, cx| this.save_event(w, cx))),
                     ),
             )
@@ -431,7 +452,7 @@ impl Workspace {
                         .xsmall()
                         .ghost()
                         .icon(IconName::Plus)
-                        .label("Nouvelle personne")
+                        .label(t!("event_dialog.new_person"))
                         .on_click(cx.listener(move |this, _, w, cx| {
                             this.add_dialog = None;
                             new(this, w, cx);
@@ -442,7 +463,7 @@ impl Workspace {
                 Button::new(SharedString::from(format!("rel-link-{label}")))
                     .xsmall()
                     .ghost()
-                    .label("Personne existante…")
+                    .label(t!("event_dialog.existing_person"))
                     .on_click(cx.listener(move |this, _, w, cx| {
                         this.add_dialog = None;
                         existing(this, w, cx);
@@ -464,8 +485,8 @@ impl Workspace {
                 Relation::Child if unions.len() > 1 => {
                     for (fam, spouse) in &unions {
                         let label = match spouse {
-                            Some(s) => format!("Enfant avec {}", g.record_label(s)),
-                            None => "Enfant (conjoint inconnu)".into(),
+                            Some(s) => t!("event_dialog.child_with", name = g.record_label(s)).into_owned(),
+                            None => t!("event_dialog.child_unknown").into_owned(),
                         };
                         let (a, b) = (fam.clone(), fam.clone());
                         rows.push(self.relative_row(
@@ -483,7 +504,7 @@ impl Workspace {
             }
             let (a, b) = (indi.to_string(), indi.to_string());
             rows.push(self.relative_row(
-                rel.label_fr().to_string(),
+                crate::i18n::relation(rel).to_string(),
                 Some(Box::new(move |this, w, cx| this.add_relative(a.clone(), rel, w, cx))),
                 Box::new(move |this, w, cx| this.open_picker(PickPurpose::Relative { indi: b.clone(), rel }, w, cx)),
                 cx,

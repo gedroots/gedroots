@@ -7,6 +7,7 @@
 use super::add::{AddDialog, plus_button};
 use super::*;
 use gpui_kit::component::tooltip::Tooltip;
+use rust_i18n::t;
 
 pub(super) struct WebLinkDialog {
     owner: String,
@@ -36,7 +37,7 @@ impl Workspace {
         let (u, t) = editing.as_ref().map(|l| (l.url.clone(), l.title.clone().unwrap_or_default())).unwrap_or_default();
         let url = cx.new(|cx| InputState::new(window, cx).placeholder("https://…").default_value(u));
         let title =
-            cx.new(|cx| InputState::new(window, cx).placeholder("ex. Registre paroissial, 1850").default_value(t));
+            cx.new(|cx| InputState::new(window, cx).placeholder(t!("weblinks.title_placeholder")).default_value(t));
         url.update(cx, |s, cx| s.focus(window, cx));
         self.add_dialog = Some(AddDialog::WebLink(Box::new(WebLinkDialog {
             owner,
@@ -65,7 +66,7 @@ impl Workspace {
             cx.notify();
             return;
         }
-        let msg = if d.editing.is_some() { "Lien web modifié" } else { "Lien web ajouté" };
+        let msg = if d.editing.is_some() { t!("weblinks.edited") } else { t!("weblinks.added") };
         self.add_dialog = None;
         self.mutate(window, cx, move |g| apply(g).map(|_| (msg.to_string(), None)));
         window.focus(&self.focus, cx);
@@ -74,22 +75,24 @@ impl Workspace {
     fn remove_weblink(&mut self, owner: String, kind: WebLinkKind, window: &mut Window, cx: &mut Context<Self>) {
         self.mutate(window, cx, move |g| {
             g.remove_web_link(&owner, &kind);
-            Ok(("Lien web retiré".into(), None))
+            Ok((t!("weblinks.removed").into(), None))
         });
     }
 
     pub(super) fn weblink_dialog_title(&self, d: &WebLinkDialog) -> String {
         let g = &self.doc.as_ref().unwrap().ged;
-        let what = if d.editing.is_some() { "Modifier le lien web" } else { "Nouveau lien web" };
+        let what = if d.editing.is_some() { t!("weblinks.edit_title") } else { t!("weblinks.new_title") };
         format!("{what} · {}", g.record_label(&d.owner))
     }
 
     pub(super) fn weblink_body(&self, d: &WebLinkDialog, cx: &mut Context<Self>) -> AnyElement {
-        let field = |label: &'static str, el: AnyElement| v_flex().gap_1().min_w_0().child(label_caps(label)).child(el);
+        let field = |label: std::borrow::Cow<'static, str>, el: AnyElement| {
+            v_flex().gap_1().min_w_0().child(label_caps(label)).child(el)
+        };
         v_flex()
             .gap_3()
-            .child(field("Adresse", Input::new(&d.url).small().into_any_element()))
-            .when(d.titled, |v| v.child(field("Titre", Input::new(&d.title).small().into_any_element())))
+            .child(field(t!("weblinks.address"), Input::new(&d.url).small().into_any_element()))
+            .when(d.titled, |v| v.child(field(t!("weblinks.title"), Input::new(&d.title).small().into_any_element())))
             .when_some(d.error.clone(), |v, e| v.child(div().text_sm().text_color(theme::danger()).child(e)))
             .child(
                 h_flex().gap_2().justify_end().child(
@@ -97,7 +100,7 @@ impl Workspace {
                         .primary()
                         .small()
                         .icon(IconName::Check)
-                        .label(if d.editing.is_some() { "Enregistrer" } else { "Ajouter" })
+                        .label(if d.editing.is_some() { t!("common.save") } else { t!("common.add") })
                         .on_click(cx.listener(|this, _, w, cx| this.save_weblink(w, cx))),
                 ),
             )
@@ -117,10 +120,10 @@ impl Workspace {
             return None;
         }
         let owner = record.to_string();
-        let header = section_header("Liens web", {
+        let header = section_header(t!("weblinks.section"), {
             let x = owner.clone();
             plus_button("add-weblink")
-                .tooltip("Ajouter un lien web")
+                .tooltip(t!("cmd.add_web_link").trim_end_matches('…').to_string())
                 .on_click(cx.listener(move |this, _, w, cx| this.open_weblink_dialog(x.clone(), None, w, cx)))
         });
         let rows = links.into_iter().enumerate().map(|(n, l)| {
@@ -182,7 +185,7 @@ impl Workspace {
                                 .xsmall()
                                 .ghost()
                                 .icon(IconName::Pencil)
-                                .tooltip("Modifier")
+                                .tooltip(t!("common.edit"))
                                 .on_click(cx.listener(move |this, _, w, cx| {
                                     cx.stop_propagation();
                                     this.open_weblink_dialog(o1.clone(), Some(edit.clone()), w, cx)
@@ -193,7 +196,7 @@ impl Workspace {
                                 .xsmall()
                                 .ghost()
                                 .icon(IconName::Close)
-                                .tooltip("Retirer")
+                                .tooltip(t!("common.remove"))
                                 .on_click(cx.listener(move |this, _, w, cx| {
                                     cx.stop_propagation();
                                     this.remove_weblink(o2.clone(), remove.clone(), w, cx)

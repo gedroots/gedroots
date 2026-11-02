@@ -20,6 +20,7 @@ use gpui_kit::component::{Disableable, Icon, Sizable, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 use menus::{From as MenuFrom, WithMenu};
+use rust_i18n::t;
 use std::path::PathBuf;
 use std::rc::Rc;
 
@@ -62,17 +63,18 @@ impl View {
     /// des fiches et la recherche.
     const SIDEBAR: [View; 4] = [View::Individuals, View::Sources, View::Places, View::Media];
 
-    fn label(self) -> &'static str {
+    fn label(self) -> SharedString {
         match self {
-            View::Individuals => "Individus",
-            View::Sources => "Sources",
-            View::Places => "Lieux",
-            View::Media => "Médias",
-            View::Repositories => "Dépôts",
-            View::Notes => "Notes",
-            View::Quality => "Qualité",
-            View::Stats => "Stats",
+            View::Individuals => t!("cmd.individuals"),
+            View::Sources => t!("cmd.sources"),
+            View::Places => t!("cmd.places"),
+            View::Media => t!("cmd.media_list"),
+            View::Repositories => t!("cmd.repositories"),
+            View::Notes => t!("cmd.notes"),
+            View::Quality => t!("ws.quality"),
+            View::Stats => t!("ws.stats"),
         }
+        .into()
     }
 
     fn icon(self) -> IconName {
@@ -136,13 +138,14 @@ enum CenterTab {
 }
 
 impl CenterTab {
-    fn label(self) -> &'static str {
+    fn label(self) -> SharedString {
         match self {
-            CenterTab::Tree => "Arbre",
-            CenterTab::Map => "Carte",
-            CenterTab::Form => "Fiche",
-            CenterTab::Raw => "GEDCOM",
+            CenterTab::Tree => t!("cmd.show_tree"),
+            CenterTab::Map => t!("ws.map"),
+            CenterTab::Form => t!("cmd.show_form"),
+            CenterTab::Raw => t!("ws.gedcom"),
         }
+        .into()
     }
 
     fn icon(self) -> IconName {
@@ -278,7 +281,7 @@ pub struct Workspace {
 
 impl Workspace {
     pub fn new(path: Option<PathBuf>, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let filter = cx.new(|cx| InputState::new(window, cx).placeholder("Rechercher un nom, un lieu…"));
+        let filter = cx.new(|cx| InputState::new(window, cx).placeholder(t!("ws.search_people")));
         let sub = cx.subscribe_in(&filter, window, |this, _, ev: &InputEvent, window, cx| {
             if matches!(ev, InputEvent::Change) {
                 this.on_search_changed(window, cx);
@@ -393,7 +396,7 @@ impl Workspace {
                 }
                 self.status = None;
             }
-            Err(e) => self.set_status(format!("Impossible d'ouvrir {} : {e}", path.display()), true),
+            Err(e) => self.set_status(t!("ws.open_failed", path = path.display(), error = e), true),
         }
         cx.notify();
     }
@@ -424,7 +427,7 @@ impl Workspace {
             files: true,
             directories: false,
             multiple: false,
-            prompt: Some("Ouvrir un fichier GEDCOM".into()),
+            prompt: Some(t!("ws.open_prompt").into()),
         });
         cx.spawn_in(window, async move |this, cx| {
             if let Ok(Ok(Some(mut paths))) = rx.await
@@ -442,7 +445,8 @@ impl Workspace {
             Some(p) => self.write_to(p, cx),
             None => {
                 let dir = dirs_home();
-                let rx = cx.prompt_for_new_path(&dir, Some("arbre.ged"));
+                let name = format!("{}.ged", t!("file.default_name"));
+                let rx = cx.prompt_for_new_path(&dir, Some(&name));
                 cx.spawn_in(window, async move |this, cx| {
                     if let Ok(Ok(Some(p))) = rx.await {
                         let _ = this.update_in(cx, |this, _, cx| this.write_to(p, cx));
@@ -464,9 +468,9 @@ impl Workspace {
                 doc.path = Some(path.clone());
                 doc.dirty = false;
                 self.rescan_media();
-                self.set_status(format!("Enregistré dans {}", path.display()), false);
+                self.set_status(t!("ws.saved", path = path.display()), false);
             }
-            Err(e) => self.set_status(format!("Échec de l'enregistrement : {e}"), true),
+            Err(e) => self.set_status(t!("ws.save_failed", error = e), true),
         }
         cx.notify();
     }
@@ -478,7 +482,7 @@ impl Workspace {
             doc.dirty = true;
             self.rebuild_rows(cx);
             self.refresh_editor(window, cx);
-            self.set_status("Modification annulée", false);
+            self.set_status(t!("ws.undone"), false);
         }
         cx.notify();
     }
@@ -490,7 +494,7 @@ impl Workspace {
             doc.dirty = true;
             self.rebuild_rows(cx);
             self.refresh_editor(window, cx);
-            self.set_status("Modification rétablie", false);
+            self.set_status(t!("ws.redone"), false);
         }
         cx.notify();
     }
@@ -548,10 +552,10 @@ impl Workspace {
         self.selected = None;
         self.editor = None;
         let placeholder = match view {
-            View::Sources => "Rechercher une source, un type d'acte…",
-            View::Places => "Rechercher un lieu, un département…",
-            View::Media => "Rechercher un média, une personne…",
-            _ => "Rechercher un nom, un lieu…",
+            View::Sources => t!("ws.search_sources"),
+            View::Places => t!("ws.search_places"),
+            View::Media => t!("ws.search_media"),
+            _ => t!("ws.search_people"),
         };
         self.filter.update(cx, |f, cx| {
             f.set_value("", window, cx);
@@ -603,7 +607,7 @@ impl Workspace {
             .map(|f| [f.husband(), f.wife()].into_iter().flatten().chain(f.children()).next().map(str::to_string));
         let xref = match member {
             Some(Some(x)) => x,
-            Some(None) => return self.set_status("Famille sans aucun membre", true),
+            Some(None) => return self.set_status(t!("ws.empty_family"), true),
             None => xref,
         };
         self.open_location(View::for_kind(kind), Some(xref), window, cx);
@@ -629,7 +633,7 @@ impl Workspace {
                 if self.selected.as_deref() == Some(name.as_str()) {
                     self.refresh_editor(window, cx);
                 }
-                self.set_status(format!("{} : {la} {lo} ({n} occurrence(s))", short_place(name)), false);
+                self.set_status(t!("places.located", place = short_place(name), lat = la, lon = lo, n = n), false);
                 cx.notify();
             }
         }
@@ -652,13 +656,13 @@ impl Workspace {
             None => key.to_string(),
         };
         cx.write_to_clipboard(ClipboardItem::new_string(name));
-        self.set_status("Nom copié", false);
+        self.set_status(t!("ws.name_copied"), false);
         cx.notify();
     }
 
     fn copy_id(&mut self, xref: &str, cx: &mut Context<Self>) {
         cx.write_to_clipboard(ClipboardItem::new_string(xref.to_string()));
-        self.set_status(format!("Identifiant {xref} copié"), false);
+        self.set_status(t!("ws.id_copied", id = xref), false);
         cx.notify();
     }
 
@@ -710,7 +714,7 @@ impl Workspace {
         self.rebuild_rows(cx);
         self.select(x.clone(), window, cx);
         self.tab = CenterTab::Form;
-        self.set_status(format!("{} créé(e)", kind.label_fr()), false);
+        self.set_status(t!("ws.created", kind = crate::i18n::record_kind(kind)), false);
     }
 
     /// Premier clic : demande confirmation ; second clic : supprime.
@@ -728,14 +732,11 @@ impl Workspace {
             Some(_) => {
                 let label = doc.ged.record_label(&key);
                 doc.ged.delete_record(&key);
-                format!("« {label} » supprimé (Annuler pour revenir en arrière)")
+                t!("ws.deleted", label = label)
             }
             None => {
                 let n = doc.ged.delete_place(&key);
-                format!(
-                    "Lieu retiré de {n} événement{} (Annuler pour revenir en arrière)",
-                    if n > 1 { "s" } else { "" }
-                )
+                crate::tn!("ws.place_removed", n)
             }
         };
         let pos = self.rows.iter().position(|r| r.key == key).unwrap_or(0);
@@ -767,7 +768,7 @@ impl Workspace {
             let doc = self.doc.as_mut().unwrap();
             let _ = doc;
             self.drop_checkpoint();
-            self.set_status("Aucune modification", false);
+            self.set_status(t!("ws.no_change"), false);
             cx.notify();
             return;
         }
@@ -803,13 +804,13 @@ impl Workspace {
                 self.selected = Some(new_xref.clone());
                 self.rebuild_rows(cx);
                 self.refresh_editor(window, cx);
-                self.set_status("GEDCOM appliqué", false);
+                self.set_status(t!("ws.gedcom_applied"), false);
             }
             Err(e) => {
                 self.drop_checkpoint();
                 ed.error = Some(e.clone().into());
                 self.editor = Some(ed);
-                self.set_status(format!("GEDCOM invalide : {e}"), true);
+                self.set_status(t!("ws.gedcom_invalid", error = e), true);
             }
         }
         cx.notify();
@@ -942,7 +943,7 @@ impl Workspace {
         self.mutate(window, cx, |g| {
             let title = g.act(&source, &key).map(|a| a.title()).unwrap_or_default();
             g.remove_act(&source, &key);
-            Ok((format!("Acte supprimé : {title}"), None))
+            Ok((t!("ws.act_deleted", title = title).into_owned(), None))
         });
     }
 
@@ -956,16 +957,16 @@ impl Workspace {
                     .gap_1()
                     .items_center()
                     .child(label_caps(if self.source_acts.is_empty() {
-                        "Actes".to_string()
+                        t!("editor.acts").into_owned()
                     } else {
-                        format!("Actes · {}", self.source_acts.len())
+                        t!("ws.acts_count", n = self.source_acts.len()).into_owned()
                     }))
                     .child(
                         Button::new("add-act")
                             .ghost()
                             .xsmall()
                             .icon(IconName::Plus)
-                            .tooltip("Saisir un acte")
+                            .tooltip(t!("cmd.enter_act").trim_end_matches('…').to_string())
                             .on_click(cx.listener(move |this, _, w, cx| this.open_act(s.clone(), None, w, cx))),
                     ),
             )
@@ -1102,7 +1103,7 @@ impl Workspace {
                         strong: String::new(),
                         meta: match web {
                             Some(u) => host(u).to_string(),
-                            None if files.len() > 1 => format!("{} p.", files.len()),
+                            None if files.len() > 1 => t!("ws.pages_short", n = files.len()).into_owned(),
                             None => String::new(),
                         },
                         dot: missing.then(theme::warn),
@@ -1175,13 +1176,12 @@ impl Workspace {
         self.rows = Rc::new(rows);
     }
 
-    fn flag_label(&self) -> &'static str {
+    fn flag_label(&self) -> SharedString {
         match self.view {
-            View::Individuals => "",
-            View::Sources => "Sans média",
-            View::Places => "Sans coordonnées",
-            View::Media => "Fichier absent",
-            _ => "",
+            View::Sources => t!("ws.flag_no_media").into(),
+            View::Places => t!("places.no_coords").into(),
+            View::Media => t!("ws.flag_no_file").into(),
+            _ => "".into(),
         }
     }
 }
@@ -1209,12 +1209,12 @@ fn dirs_home() -> PathBuf {
 // ======================================================================
 
 /// Titre de section avec un bouton (« + ») à droite.
-fn section_header(title: &'static str, button: impl IntoElement) -> Div {
+fn section_header(title: impl Into<SharedString>, button: impl IntoElement) -> Div {
     h_flex().items_center().justify_between().child(label_caps(title)).child(button)
 }
 
 /// Emplacement en pointillés « + … » pour ajouter une personne.
-fn add_slot(id: impl Into<SharedString>, label: &'static str) -> Stateful<Div> {
+fn add_slot(id: impl Into<SharedString>, label: impl Into<SharedString>) -> Stateful<Div> {
     h_flex()
         .id(ElementId::Name(id.into()))
         .p_2()
@@ -1229,7 +1229,7 @@ fn add_slot(id: impl Into<SharedString>, label: &'static str) -> Stateful<Div> {
         .cursor_pointer()
         .hover(|d| d.border_color(theme::accent()).text_color(theme::accent()))
         .child(icon(IconName::Plus))
-        .child(label)
+        .child(label.into())
 }
 
 fn label_caps(s: impl Into<SharedString>) -> Div {
@@ -1305,7 +1305,7 @@ impl Workspace {
                 .as_ref()
                 .and_then(|p| p.file_name())
                 .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_else(|| "Nouveau fichier".into());
+                .unwrap_or_else(|| t!("cmd.new_file").into());
             if d.dirty { format!("{name} •") } else { name }
         });
         h_flex()
@@ -1367,9 +1367,9 @@ impl Workspace {
         let arrow = |back: bool| {
             let dest = self.next_label(back);
             let (id, icon, verb) = if back {
-                ("history-back", IconName::ChevronLeft, "Précédent")
+                ("history-back", IconName::ChevronLeft, t!("cmd.back"))
             } else {
-                ("history-forward", IconName::ChevronRight, "Suivant")
+                ("history-forward", IconName::ChevronRight, t!("cmd.forward"))
             };
             let action: &dyn Action = if back { &GoBack } else { &GoForward };
             Button::new(id)
@@ -1377,7 +1377,9 @@ impl Workspace {
                 .xsmall()
                 .icon(icon)
                 .disabled(dest.is_none())
-                .when_some(dest, |b, dest| b.tooltip_with_action(format!("{verb} : {dest}"), action, Some("Workspace")))
+                .when_some(dest, |b, dest| {
+                    b.tooltip_with_action(t!("ws.history_tip", verb = verb, dest = dest), action, Some("Workspace"))
+                })
                 .on_click(cx.listener(
                     move |this, _, w, cx| {
                         if back { this.go_back(w, cx) } else { this.go_forward(w, cx) }
@@ -1643,7 +1645,7 @@ impl Workspace {
                                         tree::TreeMode::Fan => {
                                             let r = self.tree_mode.generations();
                                             let gens = self.tree_gens.clamp(*r.start(), *r.end());
-                                            format!("{} · {gens} gén.", self.tree_mode.label())
+                                            t!("ws.tree_gens", mode = self.tree_mode.label(), n = gens).into_owned()
                                         }
                                         m => m.label().to_string(),
                                     },
@@ -1688,12 +1690,12 @@ impl Workspace {
                 .gap_3()
                 .when(!ed.pickers.is_empty(), |d| {
                     d.child(div().grid().grid_cols(2).gap_3().children(ed.pickers.iter().map(|p| {
-                        v_flex().gap_1().child(label_caps(p.label)).child(
+                        v_flex().gap_1().child(label_caps(p.label.clone())).child(
                             Select::new(&p.state)
                                 .small()
                                 .cleanable(true)
-                                .placeholder(p.placeholder)
-                                .search_placeholder("Rechercher…"),
+                                .placeholder(p.placeholder.clone())
+                                .search_placeholder(t!("event_dialog.search")),
                         )
                     })))
                 })
@@ -1704,9 +1706,11 @@ impl Workspace {
                         .child(label_caps(f.label.clone()))
                         .child(match &f.state {
                             FieldState::Text(e) => Input::new(e).small().into_any_element(),
-                            FieldState::Choice(e) => {
-                                Select::new(e).small().cleanable(true).placeholder("Choisir…").into_any_element()
-                            }
+                            FieldState::Choice(e) => Select::new(e)
+                                .small()
+                                .cleanable(true)
+                                .placeholder(t!("event_dialog.choose"))
+                                .into_any_element(),
                             FieldState::Date(e) => e.clone().into_any_element(),
                         })
                         .children(match &f.state {
@@ -1715,7 +1719,7 @@ impl Workspace {
                         })
                 })))
                 .when_some(ed.long_text.as_ref(), |d, (label, state)| {
-                    d.child(v_flex().gap_1().child(label_caps(*label)).child(Textarea::new(state).h(px(120.))))
+                    d.child(v_flex().gap_1().child(label_caps(label.clone())).child(Textarea::new(state).h(px(120.))))
                 })
                 .child(
                     h_flex()
@@ -1725,10 +1729,10 @@ impl Workspace {
                                 .primary()
                                 .small()
                                 .icon(IconName::Check)
-                                .label("Appliquer")
+                                .label(t!("ws.apply"))
                                 .on_click(cx.listener(|this, _, w, cx| this.apply_form(w, cx))),
                         )
-                        .child(Button::new("reset-form").ghost().small().label("Rétablir").on_click(cx.listener(
+                        .child(Button::new("reset-form").ghost().small().label(t!("ws.revert")).on_click(cx.listener(
                             |this, _, w, cx| {
                                 this.refresh_editor(w, cx);
                                 cx.notify();
@@ -1737,20 +1741,20 @@ impl Workspace {
                         .child(div().flex_1())
                         // Suppression : Édition › Supprimer l'élément, puis confirmation ici.
                         .when(confirm, |d| {
-                            d.child(Button::new("cancel-delete").ghost().small().label("Garder").on_click(cx.listener(
-                                |this, _, _, cx| {
+                            d.child(Button::new("cancel-delete").ghost().small().label(t!("ws.keep")).on_click(
+                                cx.listener(|this, _, _, cx| {
                                     this.pending_delete = None;
                                     cx.notify();
-                                },
-                            )))
+                                }),
+                            ))
                             .child(
                                 Button::new("delete")
                                     .danger()
                                     .small()
                                     .icon(IconName::Trash)
                                     .label(match &ed.target {
-                                        Target::Place(_) => "Confirmer : retirer ce lieu partout",
-                                        _ => "Confirmer la suppression",
+                                        Target::Place(_) => t!("ws.confirm_remove_place"),
+                                        _ => t!("ws.confirm_delete"),
                                     })
                                     .on_click(cx.listener(|this, _, w, cx| this.delete_selected(w, cx))),
                             )
@@ -1782,7 +1786,7 @@ impl Workspace {
         Some(
             v_flex()
                 .gap_2()
-                .child(label_caps(format!("Images · {}", images.len())))
+                .child(label_caps(t!("ws.images_count", n = images.len())))
                 .children(images.into_iter().map(|m| {
                     let target = m.xref().to_string();
                     let title = m.title();
@@ -1801,7 +1805,7 @@ impl Workspace {
                                 .into_any_element(),
                             None => div()
                                 .text_color(theme::warn())
-                                .child(format!("Fichier introuvable : {}", m.page_file(page).unwrap_or("")))
+                                .child(t!("act.file_missing", path = m.page_file(page).unwrap_or("")))
                                 .into_any_element(),
                         }
                     }));
@@ -1875,7 +1879,7 @@ impl Workspace {
                     .bg(theme::image_label_bg())
                     .text_xs()
                     .text_color(theme::image_text())
-                    .child(format!("{page_count} p."))
+                    .child(t!("ws.pages_short", n = page_count))
             });
             let tile = match path {
                 Some(p) if crop.is_some() => {
@@ -1895,7 +1899,7 @@ impl Workspace {
                         .text_xs()
                         .text_color(theme::warn())
                         .child(icon(IconName::Image))
-                        .child("Introuvable"),
+                        .child(t!("ws.not_found")),
                 ),
             };
             tile.children(badge).with_menu(menu)
@@ -1911,7 +1915,11 @@ impl Workspace {
                         .gap_2()
                         .items_center()
                         .child(icon(IconName::Images))
-                        .child(label_caps(if n > 0 { format!("Images · {n}") } else { "Images".into() }))
+                        .child(label_caps(if n > 0 {
+                            t!("ws.images_count", n = n).into_owned()
+                        } else {
+                            t!("ws.images").into_owned()
+                        }))
                         .child(div().flex_1())
                         .children(add_button),
                 )
@@ -1930,7 +1938,7 @@ impl Workspace {
     fn add_image_button(&self, xref: &str, cx: &mut Context<Self>) -> AnyElement {
         let owner = xref.to_string();
         add::plus_button("add-image")
-            .tooltip("Médias… (⌘⇧M)")
+            .tooltip(t!("ws.media_tooltip"))
             .on_click(cx.listener(move |this, _, w, cx| this.open_gallery(GalleryTarget::Record(owner.clone()), w, cx)))
             .into_any_element()
     }
@@ -1948,7 +1956,7 @@ impl Workspace {
                         Button::new("open-web-media")
                             .small()
                             .icon(IconName::ExternalLink)
-                            .label(format!("Ouvrir {}", host(url)))
+                            .label(t!("ws.open_host", host = host(url)))
                             .on_click(move |_, _, cx| cx.open_url(&href)),
                     )
                     .into_any_element(),
@@ -1967,9 +1975,9 @@ impl Workspace {
             // Fichier présent mais sans aperçu (PDF…) : rien à signaler.
             Some(p) if p.exists() => None,
             Some(_) => {
-                Some(div().text_color(theme::warn()).child(format!("Fichier introuvable : {file}")).into_any_element())
+                Some(div().text_color(theme::warn()).child(t!("act.file_missing", path = file)).into_any_element())
             }
-            None => Some(div().text_color(theme::muted()).child("Aucun fichier local associé").into_any_element()),
+            None => Some(div().text_color(theme::muted()).child(t!("ws.no_local_file")).into_any_element()),
         };
         if strip.is_none() && el.is_none() {
             return None;
@@ -2008,10 +2016,10 @@ impl Workspace {
                         Button::new("apply-raw")
                             .primary()
                             .small()
-                            .label("Appliquer le GEDCOM")
+                            .label(t!("ws.apply_gedcom"))
                             .on_click(cx.listener(|this, _, w, cx| this.apply_raw(w, cx))),
                     )
-                    .child(Button::new("reset-raw").ghost().small().label("Rétablir").on_click(cx.listener(
+                    .child(Button::new("reset-raw").ghost().small().label(t!("ws.revert")).on_click(cx.listener(
                         |this, _, w, cx| {
                             this.refresh_editor(w, cx);
                             cx.notify();
@@ -2080,8 +2088,10 @@ impl Workspace {
                             .child(div().text_xl().font_weight(FontWeight::SEMIBOLD).child(short_place(key)))
                             .children(place.iter().map(|p| {
                                 mono(match (&p.latitude, &p.longitude) {
-                                    (Some(a), Some(b)) => format!("{a} · {b} · {} occurrence(s)", p.uses),
-                                    _ => format!("Sans coordonnées · {} occurrence(s)", p.uses),
+                                    (Some(a), Some(b)) => {
+                                        t!("ws.place_coords", lat = a, lon = b, n = p.uses).into_owned()
+                                    }
+                                    _ => t!("ws.place_no_coords", n = p.uses).into_owned(),
                                 })
                             }))
                             .children(place.iter().map(|p| {
@@ -2090,7 +2100,7 @@ impl Workspace {
                             })),
                     )
                     .children(place.as_ref().and_then(|p| self.render_locate(p, cx)))
-                    .child(self.render_links("Cité par", refs, cx))
+                    .child(self.render_links(t!("ws.cited_by").into(), refs, cx))
                     .into_any_element()
             }
             _ => {
@@ -2141,15 +2151,15 @@ impl Workspace {
                     )
                     .when_some(gallery, |d, el| d.child(el))
                     .when_some(web, |d, el| d.child(el))
-                    .when(!outgoing.is_empty(), |d| d.child(self.render_links("Liens", outgoing, cx)))
+                    .when(!outgoing.is_empty(), |d| d.child(self.render_links(t!("ws.links").into(), outgoing, cx)))
                     // Photo : la liste « Utilisée par » est sous l'image, avec les cadres.
-                    .when(show_refs, |d| d.child(self.render_links("Utilisé par", refs, cx)))
+                    .when(show_refs, |d| d.child(self.render_links(t!("ws.used_by").into(), refs, cx)))
                     .into_any_element()
             }
         }
     }
 
-    fn render_links(&self, title: &'static str, xrefs: Vec<String>, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render_links(&self, title: SharedString, xrefs: Vec<String>, cx: &mut Context<Self>) -> impl IntoElement {
         let g = &self.doc.as_ref().unwrap().ged;
         v_flex().p_4().gap_1().child(label_caps(format!("{title} · {}", xrefs.len()))).children(
             xrefs.into_iter().take(300).map(|x| {
@@ -2202,7 +2212,7 @@ impl Workspace {
                 let place = e.place().map(|p| p.to_string());
                 let sources: Vec<String> = e.source_xrefs().iter().map(|s| s.to_string()).collect();
                 let label = match e.value() {
-                    Some(v) => format!("{} : {v}", e.label()),
+                    Some(v) => t!("ws.event_value", label = e.label(), value = v).into_owned(),
                     None => e.label(),
                 };
                 let key = format!("{ev_owner}-{ix}");
@@ -2255,7 +2265,7 @@ impl Workspace {
                                 .id(SharedString::from(format!("ev-spouse-{key}")))
                                 .text_color(theme::muted())
                                 .hover(|d| d.text_color(theme::accent()))
-                                .child(format!("avec {}", g.record_label(&s)))
+                                .child(t!("ws.with", name = g.record_label(&s)))
                                 .on_click(cx.listener(move |this, _, w, cx| {
                                     cx.stop_propagation();
                                     this.goto(target.clone(), w, cx)
@@ -2310,7 +2320,7 @@ impl Workspace {
                 .icon(IconName::Users)
                 .when(show_relatives, |b| b.primary())
                 .when(!show_relatives, |b| b.ghost())
-                .tooltip("Événements des proches")
+                .tooltip(t!("cmd.relative_events"))
                 .on_click(cx.listener(|this, _, _, cx| this.toggle_relative_events(cx)))
         });
         v_flex()
@@ -2319,10 +2329,10 @@ impl Workspace {
             .border_b_1()
             .border_color(theme::border())
             .child(section_header(
-                "Événements",
+                t!("settings.events"),
                 h_flex().gap_1().children(toggle).child(
                     add::plus_button("add-event")
-                        .tooltip("Ajouter un événement")
+                        .tooltip(t!("cmd.add_event").trim_end_matches('…').to_string())
                         .on_click(cx.listener(move |this, _, w, cx| this.open_event_dialog(x.clone(), None, w, cx))),
                 ),
             ))
@@ -2469,7 +2479,7 @@ impl Workspace {
                     .child(div().text_color(theme::muted()).child(format!(
                         "{} · {}{}",
                         i.sex_label(),
-                        if i.years().is_empty() { "dates inconnues".into() } else { i.years() },
+                        if i.years().is_empty() { t!("ws.unknown_dates").into() } else { i.years() },
                         sosa.map(|s| format!(" · Sosa {s}")).unwrap_or_default(),
                     )))
                     .when(is_root, |d| {
@@ -2480,7 +2490,7 @@ impl Workspace {
                                 .text_xs()
                                 .text_color(theme::accent())
                                 .child(icon(IconName::House))
-                                .child("Individu racine"),
+                                .child(t!("settings.root")),
                         )
                     })
                     .child(
@@ -2495,7 +2505,7 @@ impl Workspace {
                                     .bg(theme::border())
                                     .child(div().h_full().rounded_full().bg(theme::ok()).w(px(120. * pct))),
                             )
-                            .child(mono(format!("{sourced}/{total} sourcés"))),
+                            .child(mono(t!("ws.sourced", sourced = sourced, total = total))),
                     ),
             );
 
@@ -2503,13 +2513,13 @@ impl Workspace {
 
         // Famille : parents, conjoints, enfants.
         // (rôle, proche, lien à défaire au clic droit : (individu, famille, libellé)).
-        type Unlink = (String, String, &'static str);
+        type Unlink = (String, String, SharedString);
         // Quatrième champ : années d'une union terminée (« 1932–1950 »).
-        let mut family: Vec<(&'static str, String, Unlink, Option<String>)> = Vec::new();
+        let mut family: Vec<(SharedString, String, Unlink, Option<String>)> = Vec::new();
         if let Some(fam) = i.famc().first().and_then(|f| g.family(f)) {
-            let link = (xref.clone(), fam.xref().to_string(), "Détacher de ses parents");
-            family.extend(fam.husband().map(|p| ("Père", p.to_string(), link.clone(), None)));
-            family.extend(fam.wife().map(|p| ("Mère", p.to_string(), link, None)));
+            let link = (xref.clone(), fam.xref().to_string(), t!("ws.detach_parents").into());
+            family.extend(fam.husband().map(|p| (label::father(), p.to_string(), link.clone(), None)));
+            family.extend(fam.wife().map(|p| (label::mother(), p.to_string(), link, None)));
         }
         for fam in i.fams().into_iter().filter_map(|f| g.family(f)) {
             let f = fam.xref().to_string();
@@ -2523,14 +2533,12 @@ impl Workspace {
                     None => format!("–{end}"),
                 }
             });
-            family.extend(
-                spouse.map(|s| ("Conjoint", s.to_string(), (xref.clone(), f.clone(), "Détacher de cette union"), end)),
-            );
-            family.extend(
-                fam.children()
-                    .into_iter()
-                    .map(|k| ("Enfant", k.to_string(), (k.to_string(), f.clone(), "Retirer cet enfant"), None)),
-            );
+            family.extend(spouse.map(|s| {
+                (label::spouse(), s.to_string(), (xref.clone(), f.clone(), t!("ws.detach_union").into()), end)
+            }));
+            family.extend(fam.children().into_iter().map(|k| {
+                (label::child(), k.to_string(), (k.to_string(), f.clone(), t!("ws.remove_child").into()), None)
+            }));
         }
         family.retain(|(_, x, _, _)| g.individual(x).is_some());
         let family_el = v_flex()
@@ -2538,10 +2546,10 @@ impl Workspace {
             .gap_1()
             .border_b_1()
             .border_color(theme::border())
-            .child(section_header("Famille", {
+            .child(section_header(t!("ws.family"), {
                 let x = xref.clone();
                 add::plus_button("add-relative")
-                    .tooltip("Ajouter ou lier un proche")
+                    .tooltip(t!("ws.add_relative"))
                     .on_click(cx.listener(move |this, _, _, cx| this.open_relatives_dialog(x.clone(), cx)))
             }))
             .children(family.into_iter().map(|(role, x, unlink, end)| {
@@ -2587,13 +2595,13 @@ impl Workspace {
             .child(events_el)
             .child(family_el)
             .when_some(web, |d, el| d.child(el))
-            .when(!media.is_empty(), |d| d.child(self.render_links("Autres médias", media, cx)))
+            .when(!media.is_empty(), |d| d.child(self.render_links(t!("ws.other_media").into(), media, cx)))
             .when(!notes.is_empty(), |d| {
                 d.child(
                     v_flex()
                         .p_4()
                         .gap_1()
-                        .child(label_caps("Notes"))
+                        .child(label_caps(t!("cmd.notes")))
                         .children(notes.into_iter().map(|n| div().text_color(theme::muted()).child(n))),
                 )
             })
@@ -2620,13 +2628,13 @@ impl Workspace {
                     .child(
                         Button::new("welcome-open")
                             .primary()
-                            .label("Ouvrir un fichier GEDCOM…")
+                            .label(t!("ws.open_file"))
                             .on_click(cx.listener(|this, _, w, cx| this.open_file(&OpenFile, w, cx))),
                     )
                     .child(
                         Button::new("welcome-new")
                             .ghost()
-                            .label("Nouveau fichier")
+                            .label(t!("cmd.new_file"))
                             .on_click(cx.listener(|this, _, w, cx| this.new_file(&NewFile, w, cx))),
                     ),
             )
@@ -2643,7 +2651,7 @@ impl Workspace {
             return None;
         }
         // Le dossier est affiché à droite : le nom du fichier suffit à gauche.
-        Some(v_flex().w(px(440.)).gap_1().child(div().px_3().child(label_caps("Récents"))).children(
+        Some(v_flex().w(px(440.)).gap_1().child(div().px_3().child(label_caps(t!("ws.recent")))).children(
             paths.into_iter().enumerate().map(|(i, path)| {
                 let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
                 let folder = crate::recent::folder(&path);
@@ -2679,7 +2687,7 @@ impl Render for Workspace {
                     .as_ref()
                     .and_then(|p| p.file_name())
                     .map(|n| n.to_string_lossy().to_string())
-                    .unwrap_or_else(|| "Nouveau fichier".into()),
+                    .unwrap_or_else(|| t!("cmd.new_file").into()),
                 if d.dirty { " •" } else { "" }
             ),
             None => "GEDRoots".into(),

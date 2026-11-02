@@ -40,7 +40,7 @@ pub fn search(q: &str, limit: usize) -> Result<Vec<Candidate>, String> {
         .get(&url)
         .query("q", q)
         .query("limit", &limit.to_string())
-        .query("lang", "fr")
+        .query("lang", &crate::i18n::language())
         .query("osm_tag", "place")
         .call()
         .map_err(|e| e.to_string())?;

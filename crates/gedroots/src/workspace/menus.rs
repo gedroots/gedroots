@@ -15,6 +15,7 @@ use super::relatives::PickPurpose;
 use super::*;
 use crate::commands::label;
 use gpui_kit::component::menu::{ContextMenu, ContextMenuExt, PopupMenu, PopupMenuItem};
+use rust_i18n::t;
 
 /// Fonction de construction d'un menu, pour `.context_menu(…)`.
 pub(super) type MenuBuilder = Rc<dyn Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu>;
@@ -34,7 +35,7 @@ pub(super) enum From {
     OnEvent(String, usize),
     /// Un proche dans la section « Famille » d'un individu : le lien (individu,
     /// famille) que « Détacher » défait, et le libellé de la commande.
-    Relative(String, String, &'static str),
+    Relative(String, String, SharedString),
 }
 
 type Ws = WeakEntity<Workspace>;
@@ -109,11 +110,11 @@ impl Workspace {
         let source = source.to_string();
         Rc::new(move |menu, _, _| {
             let (s1, k1, s2, k2) = (source.clone(), key.clone(), source.clone(), key.clone());
-            menu.item(act(&ws, "Modifier l'acte", move |this, w, cx| {
+            menu.item(act(&ws, t!("context.edit_act"), move |this, w, cx| {
                 this.open_act(s1.clone(), Some(k1.clone()), w, cx)
             }))
             .separator()
-            .item(act(&ws, "Supprimer l'acte", move |this, w, cx| this.delete_act(s2.clone(), k2.clone(), w, cx)))
+            .item(act(&ws, t!("context.delete_act"), move |this, w, cx| this.delete_act(s2.clone(), k2.clone(), w, cx)))
         })
     }
 
@@ -139,7 +140,7 @@ impl Workspace {
                 return menu;
             };
             let (o1, o2, o3) = (owner.clone(), owner.clone(), owner.clone());
-            menu.item(act(&ws, "Modifier l'événement…", move |this, w, cx| {
+            menu.item(act(&ws, t!("context.edit_event"), move |this, w, cx| {
                 this.open_event_dialog(o1.clone(), Some(ix), w, cx)
             }))
             .separator()
@@ -148,17 +149,17 @@ impl Workspace {
             }))
             .separator()
             .when_some(place, |m, p| {
-                m.item(act(&ws, "Afficher le lieu", move |this, w, cx| this.goto_place(p.clone(), w, cx)))
+                m.item(act(&ws, t!("context.show_place"), move |this, w, cx| this.goto_place(p.clone(), w, cx)))
             })
             .map(|m| {
                 sources.into_iter().fold(m, |m, (s, title)| {
-                    m.item(act(&ws, format!("Ouvrir la source « {} »", ellipsize(&title, 40)), move |this, w, cx| {
+                    m.item(act(&ws, t!("context.open_source", title = ellipsize(&title, 40)), move |this, w, cx| {
                         this.goto(s.clone(), w, cx)
                     }))
                 })
             })
             .separator()
-            .item(act(&ws, "Supprimer l'événement", move |this, w, cx| this.delete_event(o2.clone(), ix, w, cx)))
+            .item(act(&ws, t!("context.delete_event"), move |this, w, cx| this.delete_event(o2.clone(), ix, w, cx)))
         })
     }
 
@@ -232,11 +233,11 @@ impl Workspace {
 pub(super) fn place_menu(ws: Ws, name: String, from: From) -> MenuBuilder {
     Rc::new(move |menu, _, _| {
         let (n1, n2, n3, n4) = (name.clone(), name.clone(), name.clone(), name.clone());
-        menu.item(act(&ws, "Afficher sur la carte", move |this, w, cx| {
+        menu.item(act(&ws, t!("context.show_on_map"), move |this, w, cx| {
             this.goto_place(n1.clone(), w, cx);
             this.tab = CenterTab::Map;
         }))
-        .item(act(&ws, "Ouvrir la fiche du lieu", move |this, w, cx| {
+        .item(act(&ws, t!("context.open_place"), move |this, w, cx| {
             this.goto_place(n2.clone(), w, cx);
             this.tab = CenterTab::Form;
         }))
@@ -313,7 +314,9 @@ pub(super) fn person_menu(ws: Ws, x: String, from: From) -> MenuBuilder {
                 this.goto(x1.clone(), w, cx);
                 this.center_chart_on(x1.clone(), w, cx)
             }))
-            .item(act(&ws, "Ouvrir la fiche", move |this, w, cx| this.open_in(x2.clone(), CenterTab::Form, w, cx)))
+            .item(act(&ws, t!("context.open_details"), move |this, w, cx| {
+                this.open_in(x2.clone(), CenterTab::Form, w, cx)
+            }))
             .separator()
             .submenu(label::add_relative(), window, cx, move |m, _, _| {
                 rels.iter().fold(m, |m, (rel, label, _)| {
@@ -345,7 +348,7 @@ pub(super) fn person_menu(ws: Ws, x: String, from: From) -> MenuBuilder {
         };
         menu.when_some(
             match &from {
-                From::Relative(indi, fam, label) => Some((indi.clone(), fam.clone(), *label)),
+                From::Relative(indi, fam, label) => Some((indi.clone(), fam.clone(), label.clone())),
                 _ => None,
             },
             |m, (indi, fam, label)| {
@@ -360,7 +363,7 @@ pub(super) fn person_menu(ws: Ws, x: String, from: From) -> MenuBuilder {
 fn family_menu(ws: Ws, x: String, from: From) -> MenuBuilder {
     Rc::new(move |menu, _, _| {
         let x1 = x.clone();
-        menu.item(act(&ws, "Ouvrir la fiche", move |this, w, cx| this.goto(x1.clone(), w, cx)))
+        menu.item(act(&ws, t!("context.open_details"), move |this, w, cx| this.goto(x1.clone(), w, cx)))
             .map(|m| tail(m, &ws, &x, &from))
     })
 }
@@ -393,87 +396,89 @@ fn other_menu(ws: Ws, x: String, kind: RecordKind, from: From) -> MenuBuilder {
         };
         let (x6, x7) = (x.clone(), x.clone());
         let (x1, x2, x3, x4, x5) = (x.clone(), x.clone(), x.clone(), x.clone(), x.clone());
-        menu.item(act(&ws, "Ouvrir la fiche", move |this, w, cx| this.open_in(x1.clone(), CenterTab::Form, w, cx)))
-            .when(kind == RecordKind::Source, |m| {
-                m.separator()
-                    .item(act(&ws, label::enter_act(), move |this, w, cx| {
-                        this.goto(x2.clone(), w, cx);
-                        this.enter_act(w, cx)
+        menu.item(act(&ws, t!("context.open_details"), move |this, w, cx| {
+            this.open_in(x1.clone(), CenterTab::Form, w, cx)
+        }))
+        .when(kind == RecordKind::Source, |m| {
+            m.separator()
+                .item(act(&ws, label::enter_act(), move |this, w, cx| {
+                    this.goto(x2.clone(), w, cx);
+                    this.enter_act(w, cx)
+                }))
+                .item(act(&ws, label::media_gallery(), move |this, w, cx| {
+                    this.open_gallery(GalleryTarget::Record(x3.clone()), w, cx)
+                }))
+        })
+        .when(kind == RecordKind::Media, |m| {
+            m.separator()
+                .item(act(&ws, label::attach_media_to(), move |this, w, cx| {
+                    this.open_picker(PickPurpose::MediaTo { media: x4.clone() }, w, cx)
+                }))
+                .when(photo, |m| {
+                    m.item(act(&ws, label::tag_person(), move |this, w, cx| {
+                        this.open_in(x5.clone(), CenterTab::Form, w, cx);
+                        this.tag_person_on_photo(cx)
                     }))
-                    .item(act(&ws, label::media_gallery(), move |this, w, cx| {
-                        this.open_gallery(GalleryTarget::Record(x3.clone()), w, cx)
+                })
+                .separator()
+                .when(marked.len() >= 2, |m| {
+                    let list = marked.clone();
+                    m.item(act(&ws, label::merge_selected_media(), move |this, w, cx| {
+                        this.merge_media(list.clone(), w, cx)
                     }))
-            })
-            .when(kind == RecordKind::Media, |m| {
-                m.separator()
-                    .item(act(&ws, label::attach_media_to(), move |this, w, cx| {
-                        this.open_picker(PickPurpose::MediaTo { media: x4.clone() }, w, cx)
+                })
+                .when(marked.is_empty(), |m| {
+                    m.item(act(&ws, label::merge_with_media(), move |this, w, cx| {
+                        this.open_picker(PickPurpose::MergeInto { media: x6.clone() }, w, cx)
                     }))
-                    .when(photo, |m| {
-                        m.item(act(&ws, label::tag_person(), move |this, w, cx| {
-                            this.open_in(x5.clone(), CenterTab::Form, w, cx);
-                            this.tag_person_on_photo(cx)
-                        }))
-                    })
-                    .separator()
-                    .when(marked.len() >= 2, |m| {
-                        let list = marked.clone();
-                        m.item(act(&ws, label::merge_selected_media(), move |this, w, cx| {
-                            this.merge_media(list.clone(), w, cx)
-                        }))
-                    })
-                    .when(marked.is_empty(), |m| {
-                        m.item(act(&ws, label::merge_with_media(), move |this, w, cx| {
-                            this.open_picker(PickPurpose::MergeInto { media: x6.clone() }, w, cx)
-                        }))
-                    })
-                    .item(act(&ws, label::add_pages(), move |this, w, cx| this.choose_pages(x7.clone(), w, cx)))
-            })
-            .when_some(portrait_of, |m, owner| {
+                })
+                .item(act(&ws, label::add_pages(), move |this, w, cx| this.choose_pages(x7.clone(), w, cx)))
+        })
+        .when_some(portrait_of, |m, owner| {
+            let media = x.clone();
+            m.separator().item(act(&ws, t!("context.set_portrait"), move |this, w, cx| {
+                let (owner, media) = (owner.clone(), media.clone());
+                this.mutate(w, cx, move |g| {
+                    g.set_portrait(&owner, &media);
+                    Ok((t!("context.portrait_set", name = g.record_label(&owner)).to_string(), None))
+                })
+            }))
+        })
+        .when_some(
+            match &from {
+                From::OnEvent(owner, ix) => Some((owner.clone(), *ix)),
+                _ => None,
+            },
+            |m, (owner, ix)| {
                 let media = x.clone();
-                m.separator().item(act(&ws, "Définir comme portrait", move |this, w, cx| {
+                m.separator().item(act(&ws, t!("context.detach_event"), move |this, w, cx| {
                     let (owner, media) = (owner.clone(), media.clone());
                     this.mutate(w, cx, move |g| {
-                        g.set_portrait(&owner, &media);
-                        Ok((format!("Portrait de {} défini", g.record_label(&owner)), None))
+                        let what = g.record_label(&media);
+                        let from = g.event_title(&owner, ix).unwrap_or_default().to_lowercase();
+                        g.detach_media_from_event(&owner, ix, &media)?;
+                        Ok((t!("context.detached_event", what = what, from = from).to_string(), None))
                     })
                 }))
-            })
-            .when_some(
-                match &from {
-                    From::OnEvent(owner, ix) => Some((owner.clone(), *ix)),
-                    _ => None,
-                },
-                |m, (owner, ix)| {
-                    let media = x.clone();
-                    m.separator().item(act(&ws, "Détacher de l'événement", move |this, w, cx| {
-                        let (owner, media) = (owner.clone(), media.clone());
-                        this.mutate(w, cx, move |g| {
-                            let what = g.record_label(&media);
-                            let from = g.event_title(&owner, ix).unwrap_or_default().to_lowercase();
-                            g.detach_media_from_event(&owner, ix, &media)?;
-                            Ok((format!("« {what} » détaché de l'événement {from}"), None))
-                        })
-                    }))
-                },
-            )
-            .when_some(
-                match &from {
-                    From::Attached(owner) => Some(owner.clone()),
-                    _ => None,
-                },
-                |m, owner| {
-                    let media = x.clone();
-                    m.separator().item(act(&ws, "Détacher de cet élément", move |this, w, cx| {
-                        let (owner, media) = (owner.clone(), media.clone());
-                        this.mutate(w, cx, move |g| {
-                            let (what, from) = (g.record_label(&media), g.record_label(&owner));
-                            g.detach_media(&owner, &media);
-                            Ok((format!("« {what} » détaché de {from}"), None))
-                        })
-                    }))
-                },
-            )
-            .map(|m| tail(m, &ws, &x, &from))
+            },
+        )
+        .when_some(
+            match &from {
+                From::Attached(owner) => Some(owner.clone()),
+                _ => None,
+            },
+            |m, owner| {
+                let media = x.clone();
+                m.separator().item(act(&ws, t!("context.detach"), move |this, w, cx| {
+                    let (owner, media) = (owner.clone(), media.clone());
+                    this.mutate(w, cx, move |g| {
+                        let (what, from) = (g.record_label(&media), g.record_label(&owner));
+                        g.detach_media(&owner, &media);
+                        Ok((t!("context.detached", what = what, from = from).to_string(), None))
+                    })
+                }))
+            },
+        )
+        .map(|m| tail(m, &ws, &x, &from))
     })
 }

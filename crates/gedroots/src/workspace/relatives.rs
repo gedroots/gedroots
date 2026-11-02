@@ -2,6 +2,7 @@
 
 use super::*;
 use gpui_kit::component::IconName;
+use rust_i18n::t;
 
 /// Ce que fera le choix dans le sélecteur.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -25,27 +26,26 @@ pub enum PickPurpose {
 impl PickPurpose {
     fn title(&self, g: &Gedcom) -> String {
         match self {
-            PickPurpose::Relative { indi, rel } => {
-                format!("Choisir {} de {}", rel_article(*rel), g.record_label(indi))
-            }
-            PickPurpose::FamilyChild { fam } => format!("Choisir un enfant de {}", g.record_label(fam)),
-            PickPurpose::MediaTo { media } => format!("Rattacher « {} » à…", g.record_label(media)),
-            PickPurpose::TagPerson { .. } => "Qui est sur cette zone de la photo ?".into(),
-            PickPurpose::Kinship { indi } => format!("Lien de parenté de {} avec…", g.record_label(indi)),
-            PickPurpose::MergeInto { media } => format!("Ajouter à « {} » les pages du média…", g.record_label(media)),
-            PickPurpose::ActSource => "Saisir un acte dans la source…".into(),
+            PickPurpose::Relative { indi, rel } => rel_title(*rel, &g.record_label(indi)),
+            PickPurpose::FamilyChild { fam } => t!("picker.choose_child", name = g.record_label(fam)).into_owned(),
+            PickPurpose::MediaTo { media } => t!("picker.attach_to", name = g.record_label(media)).into_owned(),
+            PickPurpose::TagPerson { .. } => t!("picker.who").into(),
+            PickPurpose::Kinship { indi } => t!("picker.kinship", name = g.record_label(indi)).into_owned(),
+            PickPurpose::MergeInto { media } => t!("picker.merge_into", name = g.record_label(media)).into_owned(),
+            PickPurpose::ActSource => t!("picker.act_source").into(),
         }
     }
 }
 
-fn rel_article(rel: Relation) -> &'static str {
+fn rel_title(rel: Relation, name: &str) -> String {
     match rel {
-        Relation::Father => "le père",
-        Relation::Mother => "la mère",
-        Relation::Spouse => "un conjoint",
-        Relation::Child => "un enfant",
-        Relation::Sibling => "un frère ou une sœur",
+        Relation::Father => t!("picker.choose_father", name = name),
+        Relation::Mother => t!("picker.choose_mother", name = name),
+        Relation::Spouse => t!("picker.choose_spouse", name = name),
+        Relation::Child => t!("picker.choose_child", name = name),
+        Relation::Sibling => t!("picker.choose_sibling", name = name),
     }
+    .into_owned()
 }
 
 pub struct Picker {
@@ -152,17 +152,17 @@ impl Workspace {
         self.mutate(window, cx, |g| {
             let name = g.record_label(&indi);
             let x = g.add_relative(&indi, rel, None)?;
-            Ok((format!("{} de {name} ajouté(e) : complétez sa fiche", rel.label_fr()), Some(x)))
+            Ok((t!("picker.relative_added", rel = crate::i18n::relation(rel), name = name).into_owned(), Some(x)))
         });
     }
 
     pub(super) fn add_family_child(&mut self, fam: String, window: &mut Window, cx: &mut Context<Self>) {
         self.mutate(window, cx, |g| {
-            let f = g.family(&fam).ok_or("famille introuvable")?;
+            let f = g.family(&fam).ok_or_else(|| t!("picker.family_not_found").to_string())?;
             let surname = f.husband().and_then(|h| g.individual(h)).map(|h| h.surname()).unwrap_or_default();
             let x = g.create_individual("", &surname, "U");
             g.add_child_to_family(&fam, &x)?;
-            Ok(("Enfant ajouté : complétez sa fiche".into(), Some(x)))
+            Ok((t!("picker.child_added").into(), Some(x)))
         });
     }
 
@@ -170,15 +170,15 @@ impl Workspace {
         self.mutate(window, cx, |g| {
             let (who, from) = (g.record_label(&indi), g.record_label(&fam));
             g.unlink_from_family(&indi, &fam);
-            Ok((format!("{who} détaché(e) de {from}"), None))
+            Ok((t!("picker.detached", who = who, from = from).into_owned(), None))
         });
     }
 
     pub(super) fn open_picker(&mut self, purpose: PickPurpose, window: &mut Window, cx: &mut Context<Self>) {
         let hint = match purpose {
-            PickPurpose::MergeInto { .. } => "Titre ou fichier du média…",
-            PickPurpose::ActSource => "Titre de la source, ou d'une nouvelle source…",
-            _ => "Nom, prénom… (critères : né:1850 lieu:troyes)",
+            PickPurpose::MergeInto { .. } => t!("picker.media_hint"),
+            PickPurpose::ActSource => t!("picker.source_hint"),
+            _ => t!("picker.person_hint"),
         };
         let input = cx.new(|cx| InputState::new(window, cx).placeholder(hint));
         let sub = cx.subscribe_in(&input, window, |this, _, ev: &InputEvent, window, cx| match ev {
@@ -355,31 +355,38 @@ impl Workspace {
                 PickPurpose::Relative { indi, rel } => {
                     g.link_relative(&indi, rel, &chosen)?;
                     Ok((
-                        format!("{who} lié(e) comme {} de {}", rel.label_fr().to_lowercase(), g.record_label(&indi)),
+                        t!(
+                            "picker.linked_as",
+                            who = who,
+                            rel = crate::i18n::relation(rel).to_lowercase(),
+                            name = g.record_label(&indi)
+                        )
+                        .into_owned(),
                         None,
                     ))
                 }
                 PickPurpose::FamilyChild { fam } => {
                     g.add_child_to_family(&fam, &chosen)?;
-                    Ok((format!("{who} ajouté(e) comme enfant"), None))
+                    Ok((t!("picker.added_child", who = who).into_owned(), None))
                 }
                 PickPurpose::MediaTo { media } => {
                     g.attach_media(&chosen, &media)?;
-                    Ok((format!("Média rattaché à {who}"), None))
+                    Ok((t!("picker.media_attached", who = who).into_owned(), None))
                 }
                 PickPurpose::MergeInto { media } => {
-                    let n = Media::new(g.get(&chosen).ok_or("média introuvable")?).page_count();
+                    let n = Media::new(g.get(&chosen).ok_or_else(|| t!("picker.media_not_found").to_string())?)
+                        .page_count();
                     g.merge_media(&[media.clone(), chosen])?;
-                    Ok((format!("« {who} » ajouté au média ({n} page{})", plural(n)), Some(media)))
+                    Ok((crate::tn!("picker.added_to_media", n, who = who).into_owned(), Some(media)))
                 }
                 // Traité avant (n'écrit rien par lui-même).
                 PickPurpose::ActSource => Ok((String::new(), None)),
                 PickPurpose::TagPerson { media, page, crop } => {
                     g.tag_person_on(&chosen, &media, page, crop)?;
-                    Ok((format!("{who} identifié(e) sur la photo"), None))
+                    Ok((t!("picker.tagged", who = who).into_owned(), None))
                 }
                 // Traité avant : rien à modifier.
-                PickPurpose::Kinship { .. } => Err("lien de parenté".into()),
+                PickPurpose::Kinship { .. } => Err(t!("stats.kinship_title").into()),
             }
         });
     }
@@ -463,7 +470,9 @@ impl Workspace {
                                 .overflow_y_scroll()
                                 .pb_2()
                                 .when(results.is_empty(), |d| {
-                                    d.child(div().px_3().py_2().text_color(theme::muted()).child("Aucun résultat"))
+                                    d.child(
+                                        div().px_3().py_2().text_color(theme::muted()).child(t!("picker.no_result")),
+                                    )
                                 })
                                 .children(results.into_iter().enumerate().map(|(n, x)| {
                                     let kind = g.get(&x).and_then(|r| RecordKind::from_tag(&r.tag));
@@ -479,9 +488,15 @@ impl Workspace {
                                         }
                                         None if kind == Some(RecordKind::Media) => {
                                             let n = g.get(&x).map(|r| Media::new(r).page_count()).unwrap_or(0);
-                                            if n > 1 { format!("{n} pages") } else { "Média".into() }
+                                            if n > 1 {
+                                                t!("picker.pages", n = n).into_owned()
+                                            } else {
+                                                t!("kind.media").into_owned()
+                                            }
                                         }
-                                        None => kind.map(|k| k.label_fr().to_string()).unwrap_or_default(),
+                                        None => {
+                                            kind.map(|k| crate::i18n::record_kind(k).into_owned()).unwrap_or_default()
+                                        }
                                     };
                                     let target = x.clone();
                                     h_flex()
@@ -496,7 +511,7 @@ impl Workspace {
                                         .child(
                                             div().flex_1().overflow_hidden().whitespace_nowrap().text_ellipsis().child(
                                                 if x.is_empty() {
-                                                    "+ Nouvelle source".to_string()
+                                                    t!("picker.new_source").into_owned()
                                                 } else {
                                                     g.record_label(&x)
                                                 },
@@ -512,14 +527,10 @@ impl Workspace {
                                 .py_2()
                                 .border_t_1()
                                 .border_color(theme::border())
-                                .child(mono("Entrée : premier résultat · Échap : fermer")),
+                                .child(mono(t!("picker.keys"))),
                         ),
                 )
                 .into_any_element(),
         )
     }
-}
-
-fn plural(n: usize) -> &'static str {
-    if n > 1 { "s" } else { "" }
 }

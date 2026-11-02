@@ -21,6 +21,7 @@ use gpui_kit::component::select::{Select, SelectEvent};
 use gpui_kit::component::{Disableable, Sizable, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
+use rust_i18n::t;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
@@ -96,7 +97,9 @@ pub struct ActEditor {
 
 impl EventEmitter<ActEditorEvent> for ActEditor {}
 
-const QUALITY: [&str; 4] = ["Peu fiable", "Douteuse", "Indirecte", "Directe"];
+fn quality_labels() -> [std::borrow::Cow<'static, str>; 4] {
+    [t!("act.quality_0"), t!("act.quality_1"), t!("act.quality_2"), t!("act.quality_3")]
+}
 
 /// Événements individuels proposés (les familiaux viennent de [`gedcom::act::FAMILY_ACT_EVENTS`]).
 const INDIVIDUAL_ACT_EVENTS: &[&str] = &[
@@ -139,8 +142,8 @@ impl ActEditor {
             let fam = if t.family { "FAM:" } else { "" };
             options.push((format!("{fam}EVEN:{}", t.ty), t.label.clone()));
         }
-        options.push(("EVEN".into(), "Autre événement…".into()));
-        options.push(("FAM:EVEN".into(), "Autre événement familial…".into()));
+        options.push(("EVEN".into(), t!("act.other_event").into()));
+        options.push(("FAM:EVEN".into(), t!("act.other_family_event").into()));
         let current = event_value(&act, &custom);
         if !options.iter().any(|(v, _)| *v == current) {
             options.insert(0, (current.clone(), act.event_label()));
@@ -153,12 +156,14 @@ impl ActEditor {
         };
         let custom_type =
             if current == "EVEN" || current == "FAM:EVEN" { act.event_type.clone() } else { String::new() };
-        let event_type = mk(cx, window, "ex. Registre matricule", &custom_type);
-        let page = mk(cx, window, "Acte n° 27, vue 12", &act.page);
-        let place = mk(cx, window, "Commune…", &place_label(&act.place));
+        let event_type = mk(cx, window, &t!("act.type_placeholder"), &custom_type);
+        let page = mk(cx, window, &t!("act.page_placeholder"), &act.page);
+        let place = mk(cx, window, &t!("event_dialog.town"), &place_label(&act.place));
         // Colonnes étroites (grille à 4) : exemple sans « ex. » pour qu'il ne soit pas tronqué.
         let short = |value: &str, phrase: &str, window: &mut Window, cx: &mut Context<Self>| {
-            cx.new(|cx| DateField::new(value, phrase, window, cx).with_placeholder("3 mars 1912", window, cx))
+            cx.new(|cx| {
+                DateField::new(value, phrase, window, cx).with_placeholder(t!("act.date_placeholder"), window, cx)
+            })
         };
         let date = short(&act.date, &act.date_phrase, window, cx);
         let record_date = short(&act.record_date, &act.record_date_phrase, window, cx);
@@ -293,11 +298,11 @@ impl ActEditor {
                     _ => Kind::Plain,
                 };
                 let ph = match f {
-                    PersonField::Age => "32 ans",
-                    PersonField::Kinship => "fils, épouse, voisin",
-                    _ => "",
+                    PersonField::Age => t!("act.age_placeholder"),
+                    PersonField::Kinship => t!("act.kinship_placeholder"),
+                    _ => "".into(),
                 }
-                .to_string();
+                .into_owned();
                 let v = match kind {
                     Kind::Place => place_label(p.get(f)),
                     _ => p.get(f).to_string(),
@@ -447,7 +452,7 @@ impl ActEditor {
             files: true,
             directories: false,
             multiple: true,
-            prompt: Some("Image de l'acte".into()),
+            prompt: Some(t!("act.image").into()),
         });
         cx.spawn_in(window, async move |this, cx| {
             if let Ok(Ok(Some(paths))) = rx.await {
@@ -474,7 +479,7 @@ impl ActEditor {
             let mime = mime_for(&p.to_string_lossy());
             mime.starts_with("image/") || mime == "application/pdf"
         });
-        self.error = (!rejected.is_empty()).then(|| "Seuls les images et les PDF peuvent être joints à un acte".into());
+        self.error = (!rejected.is_empty()).then(|| t!("act.only_images").into());
         let files: Vec<String> = ok.into_iter().map(|p| self.file_value(p)).collect();
         if !files.is_empty() {
             let mut all = match (&self.media, append) {
@@ -724,7 +729,7 @@ impl ActEditor {
         let label = match (&self.media, &file) {
             (MediaChoice::Existing(x), _) => self.ged.get(x).map(|n| Media::new(n).title()).unwrap_or_default(),
             (_, Some(p)) => name(p),
-            _ => "Image de l'acte".into(),
+            _ => t!("act.image").into(),
         };
         let zoom = self.zoom;
         let is_image = |p: &Path| mime_for(&p.to_string_lossy()).starts_with("image/");
@@ -761,7 +766,7 @@ impl ActEditor {
                         Button::new("open-doc")
                             .ghost()
                             .small()
-                            .label("Ouvrir")
+                            .label(t!("quality.open"))
                             .on_click(move |_, _, cx| cx.open_with_system(&target)),
                     )
                     .into_any_element()
@@ -772,7 +777,7 @@ impl ActEditor {
                 .justify_center()
                 .p_4()
                 .text_color(theme::warn())
-                .child(format!("Fichier introuvable : {}", p.display()))
+                .child(t!("act.file_missing", path = p.display()))
                 .into_any_element(),
             None => v_flex()
                 .flex_1()
@@ -780,7 +785,7 @@ impl ActEditor {
                 .justify_center()
                 .p_4()
                 .text_color(theme::muted())
-                .child("Aucune image")
+                .child(t!("act.no_image"))
                 .into_any_element(),
         };
         let new_files = match &self.media {
@@ -840,7 +845,7 @@ impl ActEditor {
                             cx.notify();
                         }),
                     ))
-                    .child(mono(format!("{:.0} %", zoom * 100.)))
+                    .child(mono(t!("stats.percent", value = format!("{:.0}", zoom * 100.))))
                     .child(Button::new("zoom-in").ghost().xsmall().label("+").on_click(cx.listener(
                         |this, _, _, cx| {
                             this.zoom = (this.zoom * 1.25).min(6.0);
@@ -871,16 +876,16 @@ impl ActEditor {
                         div().w(px(170.)).child(
                             Select::new(&self.media_picker)
                                 .xsmall()
-                                .placeholder("Média existant…")
+                                .placeholder(t!("act.existing_media"))
                                 .menu_width(px(360.))
-                                .search_placeholder("Rechercher…"),
+                                .search_placeholder(t!("event_dialog.search")),
                         ),
                     )
                     .child(
                         Button::new("pick-file")
                             .ghost()
                             .xsmall()
-                            .label("Autre fichier…")
+                            .label(t!("act.other_file"))
                             .on_click(cx.listener(|this, _, w, cx| this.pick_file(w, cx))),
                     )
                     .when(self.media != MediaChoice::None, |d| {
@@ -888,7 +893,7 @@ impl ActEditor {
                             Button::new("no-media")
                                 .ghost()
                                 .xsmall()
-                                .label("Sans image")
+                                .label(t!("act.without_image"))
                                 .on_click(cx.listener(|this, _, _, cx| this.set_media(MediaChoice::None, cx))),
                         )
                     }),
@@ -909,7 +914,7 @@ impl ActEditor {
                         .drag_over::<ExternalPaths>(|d, _, _, _| d.bg(theme::accent_soft()))
                         .text_color(theme::accent())
                         .font_weight(FontWeight::MEDIUM)
-                        .child("Déposer les images ou PDF de l'acte"),
+                        .child(t!("act.drop")),
                 )
             })
     }
@@ -921,7 +926,7 @@ impl ActEditor {
             let v = self.event.read(cx).selected_value().cloned().unwrap_or_default();
             v == "EVEN" || v == "FAM:EVEN"
         };
-        section("Acte")
+        section(t!("act.section"))
             .child(
                 div()
                     .grid()
@@ -932,25 +937,25 @@ impl ActEditor {
                             .gap_1()
                             .min_w_0()
                             .col_span(if free_type { 1 } else { 2 })
-                            .child(caps("Événement"))
+                            .child(caps(t!("act.event")))
                             .child(
                                 Select::new(&self.event)
                                     .small()
-                                    .placeholder("Choisir…")
-                                    .search_placeholder("Rechercher…"),
+                                    .placeholder(t!("event_dialog.choose"))
+                                    .search_placeholder(t!("event_dialog.search")),
                             ),
                     )
-                    .when(free_type, |d| d.child(field("Type", &self.event_type)))
-                    .child(date_cell("Date", &self.date))
-                    .child(date_cell("Date de l'acte", &self.record_date))
-                    .child(field("Lieu", &self.place).col_span(2))
-                    .child(field("Référence", &self.page).col_span(2)),
+                    .when(free_type, |d| d.child(field(t!("event_dialog.type"), &self.event_type)))
+                    .child(date_cell(t!("event_dialog.date"), &self.date))
+                    .child(date_cell(t!("act.record_date"), &self.record_date))
+                    .child(field(t!("editor.place"), &self.place).col_span(2))
+                    .child(field(t!("act.reference"), &self.page).col_span(2)),
             )
             .when_some(place_hints, |d, h| d.child(h))
-            .child(h_flex().gap_1().items_center().child(caps("Qualité").mr_1()).children(
-                QUALITY.iter().enumerate().map(|(q, label)| {
+            .child(h_flex().gap_1().items_center().child(caps(t!("act.quality")).mr_1()).children(
+                quality_labels().into_iter().enumerate().map(|(q, label)| {
                     let on = self.quality == Some(q as u8);
-                    chip(format!("quay-{q}"), *label, on).on_click(cx.listener(move |this, _, _, cx| {
+                    chip(format!("quay-{q}"), label, on).on_click(cx.listener(move |this, _, _, cx| {
                         this.quality = if this.quality == Some(q as u8) { None } else { Some(q as u8) };
                         this.preview = None;
                         cx.notify();
@@ -966,24 +971,19 @@ impl ActEditor {
                 .gap_1()
                 .text_xs()
                 .text_color(theme::ok())
-                .child(format!("Lié à {}", self.ged.record_label(x)))
+                .child(t!("act.linked_to", name = self.ged.record_label(x)))
                 .child(mono(self.ged.individual(x).map(|i| i.years()).unwrap_or_default()))
                 .into_any_element(),
             PersonChoice::Mention => {
-                div().text_xs().text_color(theme::muted()).child("Mentionné sans créer d'individu").into_any_element()
+                div().text_xs().text_color(theme::muted()).child(t!("act.mentioned")).into_any_element()
             }
             PersonChoice::Create if row.suggestions.is_empty() => {
-                div().text_xs().text_color(theme::muted()).child("Nouvel individu").into_any_element()
+                div().text_xs().text_color(theme::muted()).child(t!("cmd.new_individual")).into_any_element()
             }
             PersonChoice::Create => div()
                 .text_xs()
                 .text_color(theme::warn())
-                .child(format!(
-                    "{} correspondance{} possible{}",
-                    row.suggestions.len(),
-                    if row.suggestions.len() > 1 { "s" } else { "" },
-                    if row.suggestions.len() > 1 { "s" } else { "" }
-                ))
+                .child(crate::tn!("act.matches", row.suggestions.len()))
                 .into_any_element(),
         };
         // Père, mère ou conjoint de quelle personne principale ?
@@ -991,7 +991,7 @@ impl ActEditor {
         let of_chips: Vec<Stateful<Div>> = if row.role.relative() && principals > 1 {
             (0..principals)
                 .map(|k| {
-                    chip(format!("of-{idx}-{k}"), format!("de {}", act.principal_name(k)), row.of == k)
+                    chip(format!("of-{idx}-{k}"), t!("act.of", name = act.principal_name(k)), row.of == k)
                         .on_click(cx.listener(move |this, _, _, cx| this.set_of(idx, k, cx)))
                 })
                 .collect()
@@ -1024,7 +1024,11 @@ impl ActEditor {
                             Button::new(SharedString::from(format!("unlink-{idx}")))
                                 .ghost()
                                 .xsmall()
-                                .label(if matches!(row.choice, PersonChoice::Link(_)) { "Délier" } else { "Annuler" })
+                                .label(if matches!(row.choice, PersonChoice::Link(_)) {
+                                    t!("act.unlink")
+                                } else {
+                                    t!("common.cancel")
+                                })
                                 .on_click(
                                     cx.listener(move |this, _, w, cx| {
                                         this.set_choice(idx, PersonChoice::Create, w, cx)
@@ -1037,7 +1041,7 @@ impl ActEditor {
                             .ghost()
                             .xsmall()
                             .icon(IconName::Close)
-                            .tooltip("Retirer de l'acte")
+                            .tooltip(t!("act.remove_person"))
                             .on_click(cx.listener(move |this, _, w, cx| this.remove_person(idx, w, cx))),
                     ),
             )
@@ -1050,8 +1054,8 @@ impl ActEditor {
                 ),
             )
             .when_some(row.sex.clone(), |d, current| {
-                d.child(h_flex().gap_1().items_center().child(caps("Sexe")).children(
-                    [("M", "Homme"), ("F", "Femme")].into_iter().map(|(v, label)| {
+                d.child(h_flex().gap_1().items_center().child(caps(t!("editor.sex"))).children(
+                    [("M", t!("sex.male")), ("F", t!("sex.female"))].into_iter().map(|(v, label)| {
                         chip(format!("sex-{idx}-{v}"), label, current == v).on_click(cx.listener(
                             move |this, _, _, cx| {
                                 if let Some(r) = this.rows.get_mut(idx) {
@@ -1077,9 +1081,9 @@ impl ActEditor {
                             chip(
                                 format!("sug-{idx}-{}", s.xref),
                                 if s.reason.is_empty() {
-                                    format!("Lier à {}", s.label)
+                                    t!("act.link_to", name = s.label)
                                 } else {
-                                    format!("Lier à {} · {}", s.label, s.reason)
+                                    t!("act.link_to_reason", name = s.label, reason = s.reason)
                                 },
                                 false,
                             )
@@ -1088,7 +1092,7 @@ impl ActEditor {
                             }))
                         }))
                         .when(row.role != ActRole::Principal, |d| {
-                            d.child(chip(format!("mention-{idx}"), "Mentionner sans créer", false).on_click(
+                            d.child(chip(format!("mention-{idx}"), t!("act.mention"), false).on_click(
                                 cx.listener(move |this, _, w, cx| this.set_choice(idx, PersonChoice::Mention, w, cx)),
                             ))
                         }),
@@ -1108,7 +1112,7 @@ impl ActEditor {
             .ghost()
             .xsmall()
             .icon(IconName::Plus)
-            .tooltip("Ajouter une personne")
+            .tooltip(t!("act.add_person"))
             .dropdown_menu(move |mut menu, _, _| {
                 for role in ActRole::ALL {
                     let label = role.label(&event, family, if role == ActRole::Principal { next_principal } else { 0 });
@@ -1129,13 +1133,13 @@ impl ActEditor {
             .border_1()
             .border_color(theme::border())
             .bg(theme::panel())
-            .child(h_flex().gap_1().items_center().child(caps("Personnes")).child(add))
+            .child(h_flex().gap_1().items_center().child(caps(t!("act.people"))).child(add))
             .children(rows)
             .when(self.rows.iter().any(|r| r.inputs.iter().any(|(f, _)| *f == PersonField::Age)), |d| {
                 d.child(
                     Checkbox::new("estimate")
                         .checked(self.estimate_births)
-                        .label("Naissance estimée d'après l'âge déclaré")
+                        .label(t!("act.estimate").into_owned())
                         .on_click(cx.listener(|this, checked: &bool, _, cx| {
                             this.estimate_births = *checked;
                             this.preview = None;
@@ -1150,17 +1154,15 @@ impl ActEditor {
         let to_decide =
             self.rows.iter().filter(|r| r.choice == PersonChoice::Create && !r.suggestions.is_empty()).count();
         let mentions = self.rows.iter().filter(|r| r.choice == PersonChoice::Mention).count();
-        let mut summary = format!("{linked} lié{}", if linked > 1 { "s" } else { "" });
+        let mut summary = crate::tn!("act.linked", linked).into_owned();
         if mentions > 0 {
-            summary += &format!(" · {mentions} mention{}", if mentions > 1 { "s" } else { "" });
+            summary += &crate::tn!("act.mentions", mentions);
         }
         if to_decide > 0 {
-            summary += &format!(" · {to_decide} à décider");
+            summary += &t!("act.to_decide", n = to_decide);
         }
         if self.saved_count > 0 {
-            let n = self.saved_count;
-            summary +=
-                &format!(" · {n} acte{} enregistré{}", if n > 1 { "s" } else { "" }, if n > 1 { "s" } else { "" });
+            summary += &crate::tn!("act.saved", self.saved_count);
         }
         h_flex()
             .h(px(48.))
@@ -1180,20 +1182,20 @@ impl ActEditor {
                 Button::new("preview")
                     .ghost()
                     .small()
-                    .label(if self.preview.is_some() { "Masquer l'aperçu" } else { "Aperçu GEDCOM" })
+                    .label(if self.preview.is_some() { t!("act.hide_preview") } else { t!("act.preview") })
                     .on_click(cx.listener(|this, _, _, cx| this.toggle_preview(cx))),
             )
             .child(
                 Button::new("save-act")
                     .small()
-                    .label("Enregistrer")
+                    .label(t!("common.save"))
                     .on_click(cx.listener(|this, _, _, cx| this.save(false, cx))),
             )
             .child(
                 Button::new("save-next")
                     .primary()
                     .small()
-                    .label("Enregistrer et acte suivant")
+                    .label(t!("act.save_next"))
                     .on_click(cx.listener(|this, _, _, cx| this.save(true, cx))),
             )
     }
@@ -1202,7 +1204,7 @@ impl ActEditor {
 impl Render for ActEditor {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let act = self.collect(cx);
-        let title = if self.base.original.is_some() { act.title() } else { "Nouvel acte".to_string() };
+        let title = if self.base.original.is_some() { act.title() } else { t!("act.new").into_owned() };
         let header = h_flex()
             .px_3()
             .h(px(40.))
@@ -1218,7 +1220,7 @@ impl Render for ActEditor {
                     .small()
                     .icon(IconName::ChevronLeft)
                     .label(self.ged.record_label(&self.base.source))
-                    .tooltip("Retour à la fiche de la source")
+                    .tooltip(t!("act.back"))
                     .on_click(cx.listener(|_, _, _, cx| cx.emit(ActEditorEvent::Close))),
             )
             .child(div().text_color(theme::muted()).child("›"))
@@ -1233,19 +1235,19 @@ impl Render for ActEditor {
                 .child(self.render_act(&act, cx))
                 .child(self.render_people(&act, cx))
                 .child(
-                    section("Transcription").child(Textarea::new(&self.transcription).h(px(110.))).child(
+                    section(t!("act.transcription")).child(Textarea::new(&self.transcription).h(px(110.))).child(
                         h_flex().gap_2().items_center().child(
                             Button::new("auto-text")
                                 .ghost()
                                 .xsmall()
-                                .label("Générer un résumé")
+                                .label(t!("act.summary"))
                                 .on_click(cx.listener(|this, _, w, cx| this.fill_transcription(w, cx))),
                         ),
                     ),
                 )
                 .when_some(preview, |d, p| {
                     d.child(
-                        section("Aperçu GEDCOM").child(match p {
+                        section(t!("act.preview")).child(match p {
                             Ok(text) => div()
                                 .font_family("monospace")
                                 .text_xs()

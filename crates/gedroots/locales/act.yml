@@ -1,0 +1,155 @@
+_version: 2
+# Record entry (crates/gedroots/src/act_editor.rs).
+act.quality_0:
+  en: Unreliable
+  fr: Peu fiable
+act.quality_1:
+  en: Questionable
+  fr: Douteuse
+act.quality_2:
+  en: Secondary
+  fr: Indirecte
+act.quality_3:
+  en: Primary
+  fr: Directe
+act.other_event:
+  en: Other Event…
+  fr: Autre événement…
+act.other_family_event:
+  en: Other Family Event…
+  fr: Autre événement familial…
+act.type_placeholder:
+  en: e.g. Military register
+  fr: ex. Registre matricule
+act.page_placeholder:
+  en: Record no. 27, image 12
+  fr: Acte n° 27, vue 12
+act.date_placeholder:
+  en: 3 March 1912
+  fr: 3 mars 1912
+act.age_placeholder:
+  en: 32 years
+  fr: 32 ans
+act.kinship_placeholder:
+  en: son, wife, neighbour
+  fr: fils, épouse, voisin
+act.image:
+  en: Record Image
+  fr: "Image de l'acte"
+act.only_images:
+  en: Only images and PDFs can be attached to a record
+  fr: Seuls les images et les PDF peuvent être joints à un acte
+act.file_missing:
+  en: "File not found: %{path}"
+  fr: "Fichier introuvable : %{path}"
+act.no_image:
+  en: No Image
+  fr: Aucune image
+act.existing_media:
+  en: Existing media…
+  fr: Média existant…
+act.other_file:
+  en: Other File…
+  fr: Autre fichier…
+act.without_image:
+  en: No Image
+  fr: Sans image
+act.drop:
+  en: Drop the record’s images or PDFs here
+  fr: "Déposer les images ou PDF de l'acte"
+act.section:
+  en: Record
+  fr: Acte
+act.event:
+  en: Event
+  fr: Événement
+act.record_date:
+  en: Record Date
+  fr: "Date de l'acte"
+act.reference:
+  en: Reference
+  fr: Référence
+act.quality:
+  en: Quality
+  fr: Qualité
+act.linked_to:
+  en: "Linked to %{name}"
+  fr: "Lié à %{name}"
+act.mentioned:
+  en: Mentioned without creating a person
+  fr: "Mentionné sans créer d'individu"
+act.matches.one:
+  en: "%{n} possible match"
+  fr: "%{n} correspondance possible"
+act.matches.other:
+  en: "%{n} possible matches"
+  fr: "%{n} correspondances possibles"
+act.of:
+  en: "of %{name}"
+  fr: "de %{name}"
+act.unlink:
+  en: Unlink
+  fr: Délier
+act.remove_person:
+  en: Remove from Record
+  fr: "Retirer de l'acte"
+act.link_to:
+  en: "Link to %{name}"
+  fr: "Lier à %{name}"
+act.link_to_reason:
+  en: "Link to %{name} · %{reason}"
+  fr: "Lier à %{name} · %{reason}"
+act.mention:
+  en: Mention Without Creating
+  fr: Mentionner sans créer
+act.add_person:
+  en: Add a Person
+  fr: Ajouter une personne
+act.people:
+  en: People
+  fr: Personnes
+act.estimate:
+  en: Birth estimated from the stated age
+  fr: "Naissance estimée d'après l'âge déclaré"
+act.linked.one:
+  en: "%{n} linked"
+  fr: "%{n} lié"
+act.linked.other:
+  en: "%{n} linked"
+  fr: "%{n} liés"
+act.mentions.one:
+  en: " · %{n} mention"
+  fr: " · %{n} mention"
+act.mentions.other:
+  en: " · %{n} mentions"
+  fr: " · %{n} mentions"
+act.to_decide:
+  en: " · %{n} to decide"
+  fr: " · %{n} à décider"
+act.saved.one:
+  en: " · %{n} record saved"
+  fr: " · %{n} acte enregistré"
+act.saved.other:
+  en: " · %{n} records saved"
+  fr: " · %{n} actes enregistrés"
+act.hide_preview:
+  en: Hide Preview
+  fr: "Masquer l'aperçu"
+act.preview:
+  en: GEDCOM Preview
+  fr: Aperçu GEDCOM
+act.save_next:
+  en: Save and Next Record
+  fr: Enregistrer et acte suivant
+act.new:
+  en: New Record
+  fr: Nouvel acte
+act.back:
+  en: Back to the Source
+  fr: Retour à la fiche de la source
+act.transcription:
+  en: Transcription
+  fr: Transcription
+act.summary:
+  en: Generate a Summary
+  fr: Générer un résumé

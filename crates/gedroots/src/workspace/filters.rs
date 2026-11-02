@@ -9,6 +9,7 @@
 use super::*;
 use gedcom::query::{Suggestion, words};
 use gpui_kit::component::input::{InlineToken, InputContent};
+use rust_i18n::t;
 
 /// Nombre maximal de propositions affichées.
 const MAX_SUGGESTIONS: usize = 8;
@@ -60,9 +61,9 @@ fn chip_options(word: &str) -> Vec<ChipOption> {
 impl ChipOption {
     fn label(&self) -> String {
         match self {
-            ChipOption::Margin { margin: 0, .. } => "Exactement".into(),
-            ChipOption::Margin { margin, .. } => format!("± {margin} ans"),
-            ChipOption::Variants { .. } => "Inclure les variantes".into(),
+            ChipOption::Margin { margin: 0, .. } => t!("filters.exactly").into(),
+            ChipOption::Margin { margin, .. } => t!("filters.margin", n = margin).into(),
+            ChipOption::Variants { .. } => t!("filters.variants").into(),
         }
     }
 
@@ -331,9 +332,10 @@ impl Workspace {
         if has_options {
             list = list.child(div().my_0p5().h(px(1.)).bg(theme::border()));
         }
-        list = list.child(row(99, "Retirer".into(), false).on_click(cx.listener(move |this, _, window, cx| {
-            this.replace_criterion(range.clone(), "", window, cx);
-        })));
+        list =
+            list.child(row(99, t!("common.remove").into(), false).on_click(cx.listener(move |this, _, window, cx| {
+                this.replace_criterion(range.clone(), "", window, cx);
+            })));
         Some(
             deferred(anchored().position(m.at).snap_to_window_with_margin(px(8.)).child(list))
                 .with_priority(1)
@@ -409,7 +411,7 @@ impl Workspace {
                 .pb_2()
                 .text_xs()
                 .text_color(theme::warn())
-                .child(format!("Critère non compris : {}", unknown.join(", ")))
+                .child(t!("filters.unknown", criteria = unknown.join(", ")).to_string())
         })
     }
 
@@ -446,7 +448,7 @@ impl Workspace {
         };
         h_flex().id("media-types").when(types.len() >= 2, |d| {
             let mut d = d.px_3().pb_2().gap_1().overflow_x_scroll();
-            d = d.child(pill(0, "Tous".into(), None, current.is_none(), cx));
+            d = d.child(pill(0, t!("filters.all").into(), None, current.is_none(), cx));
             for (i, t) in types.iter().enumerate() {
                 let on = current.as_deref() == Some(t.as_str());
                 d = d.child(pill(i + 1, t.clone(), Some(t.clone()), on, cx));

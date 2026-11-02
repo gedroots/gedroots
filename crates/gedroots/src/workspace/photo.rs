@@ -9,6 +9,7 @@ use super::relatives::PickPurpose;
 use super::*;
 pub(super) use crate::images::image_size;
 use crate::images::{picture, picture_region};
+use rust_i18n::t;
 use std::cell::Cell;
 use std::path::Path;
 
@@ -107,13 +108,13 @@ impl Workspace {
 
     pub(super) fn start_draw(&mut self, media: String, owner: Option<String>, path: &Path, cx: &mut Context<Self>) {
         let Some(size) = image_size(path) else {
-            self.set_status("Impossible de lire les dimensions de l'image", true);
+            self.set_status(t!("photo.no_size"), true);
             cx.notify();
             return;
         };
         let page = self.current_page(&media);
         self.photo_draw = Some(PhotoDraw { media, owner, page, start: None, current: None, size, back: None });
-        self.set_status("Tracez un cadre sur la photo (Échap pour annuler)", false);
+        self.set_status(t!("photo.draw_hint"), false);
         cx.notify();
     }
 
@@ -124,7 +125,7 @@ impl Workspace {
         self.goto(media.clone(), window, cx);
         self.tab = CenterTab::Form;
         let Some(path) = self.photo_file(&media) else {
-            self.set_status("Image introuvable pour ce média", true);
+            self.set_status(t!("photo.no_image"), true);
             cx.notify();
             return;
         };
@@ -166,7 +167,7 @@ impl Workspace {
             Some(owner) => {
                 self.mutate(window, cx, |g| {
                     g.set_link_crop_on(&owner, &d.media, d.page, Some(crop))?;
-                    let msg = format!("Zone de {} enregistrée", g.record_label(&owner));
+                    let msg = t!("photo.area_saved", name = g.record_label(&owner)).to_string();
                     Ok((msg, d.back.map(|_| owner.clone())))
                 });
                 if let Some(tab) = d.back {
@@ -180,14 +181,14 @@ impl Workspace {
     fn remove_crop(&mut self, owner: String, media: String, page: usize, window: &mut Window, cx: &mut Context<Self>) {
         self.mutate(window, cx, |g| {
             g.set_link_crop_on(&owner, &media, page, None)?;
-            Ok((format!("Recadrage retiré pour {}", g.record_label(&owner)), None))
+            Ok((t!("photo.crop_removed", name = g.record_label(&owner)).to_string(), None))
         });
     }
 
     fn untag(&mut self, indi: String, media: String, page: usize, window: &mut Window, cx: &mut Context<Self>) {
         self.mutate(window, cx, |g| {
             g.untag_person_on(&indi, &media, page);
-            Ok((format!("{} retiré(e) de la photo", g.record_label(&indi)), None))
+            Ok((t!("photo.untagged", name = g.record_label(&indi)).to_string(), None))
         });
     }
 
@@ -318,9 +319,7 @@ impl Workspace {
         let toolbar = h_flex()
             .gap_2()
             .items_center()
-            .when(people > 0, |d| {
-                d.child(label_caps(format!("{people} personne{} identifiée{}", plural(people), plural(people))))
-            })
+            .when(people > 0, |d| d.child(label_caps(crate::tn!("photo.people", people))))
             .child(div().flex_1())
             // Identifier une personne : menu Média (le tracé se fait ensuite sur la photo).
             .when(drawing, |d| {
@@ -329,15 +328,15 @@ impl Workspace {
                         .small()
                         .ghost()
                         .icon(IconName::Close)
-                        .label("Annuler le tracé")
+                        .label(t!("photo.cancel_draw"))
                         .on_click(cx.listener(|this, _, _, cx| this.cancel_draw(cx))),
                 )
             });
 
         let hint = draw.map(|d| {
             mono(match &d.owner {
-                Some(o) => format!("Tracez la zone pour {} — Échap pour annuler", g.record_label(o)),
-                None => "Tracez un cadre autour du visage, puis choisissez la personne — Échap pour annuler".into(),
+                Some(o) => t!("photo.draw_for", name = g.record_label(o)).to_string(),
+                None => t!("photo.draw_face").into(),
             })
         });
 
@@ -387,15 +386,15 @@ impl Workspace {
                         Button::new(SharedString::from(format!("goto-page-{owner}-{n}")))
                             .xsmall()
                             .ghost()
-                            .label(format!("page {link_page}"))
+                            .label(t!("photo.page", n = link_page))
                             .on_click(cx.listener(move |this, _, _, cx| this.show_page(link_page, cx))),
                     )
                 })
                 .when(!elsewhere, |d| {
                     d.child(mono(match l.crop {
                         Some(c) => c.describe(),
-                        None if multipage => "document entier".into(),
-                        None => "image entière".into(),
+                        None if multipage => t!("photo.whole_document").into(),
+                        None => t!("photo.whole_image_lower").into(),
                     }))
                 })
                 .when(!elsewhere, |d| {
@@ -404,7 +403,7 @@ impl Workspace {
                             .xsmall()
                             .ghost()
                             .icon(IconName::Crop)
-                            .label(if l.crop.is_some() { "Redessiner" } else { "Délimiter" })
+                            .label(if l.crop.is_some() { t!("photo.redraw") } else { t!("photo.delimit") })
                             .disabled(drawing)
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 this.start_draw(media_a.clone(), Some(o2.clone()), &path_c, cx)
@@ -416,7 +415,7 @@ impl Workspace {
                         Button::new(SharedString::from(format!("uncrop-{owner}-{n}")))
                             .xsmall()
                             .ghost()
-                            .label("Image entière")
+                            .label(t!("photo.whole_image"))
                             .disabled(drawing)
                             .on_click(cx.listener(move |this, _, w, cx| {
                                 this.remove_crop(o3.clone(), media_b.clone(), link_page, w, cx)
@@ -471,7 +470,7 @@ impl Workspace {
             )
             .children(hint)
             .when(!links.is_empty(), |d| {
-                d.child(label_caps(format!("Utilisée par · {}", links.len()))).child(v_flex().children(rows))
+                d.child(label_caps(t!("photo.used_by", n = links.len()))).child(v_flex().children(rows))
             })
             .into_any_element()
     }
@@ -479,8 +478,4 @@ impl Workspace {
 
 fn display_scale((w, h): (u32, u32), max_w: f32) -> f32 {
     (max_w.min(MAX_W) / w.max(1) as f32).min(MAX_H / h.max(1) as f32).min(2.)
-}
-
-fn plural(n: usize) -> &'static str {
-    if n > 1 { "s" } else { "" }
 }

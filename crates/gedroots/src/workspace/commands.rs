@@ -9,6 +9,7 @@ use super::tree::TreeMode;
 use super::*;
 use gedcom::gedcom551::Flavor;
 use gpui_kit::component::command::{Command, CommandItem, CommandState};
+use rust_i18n::t;
 
 /// Déclare un gestionnaire d'action sur l'élément racine.
 macro_rules! on {
@@ -255,7 +256,8 @@ impl Workspace {
             ),
             None => (dirs_home(), None),
         };
-        let rx = cx.prompt_for_new_path(&dir, Some(name.as_deref().unwrap_or("arbre.ged")));
+        let rx =
+            cx.prompt_for_new_path(&dir, Some(name.as_deref().unwrap_or(&format!("{}.ged", t!("file.default_name")))));
         cx.spawn_in(window, async move |this, cx| {
             if let Ok(Ok(Some(p))) = rx.await {
                 let _ = this.update_in(cx, |this, _, cx| this.write_to(p, cx));
@@ -394,8 +396,8 @@ impl Workspace {
         let (e1, e2) = (cx.entity().downgrade(), cx.entity().downgrade());
         let command = Command::new(&p.state)
             .items(p.items.iter().cloned())
-            .placeholder("Rechercher une commande…")
-            .empty(|_, _, _| div().p_4().text_color(theme::muted()).child("Aucune commande ne correspond."))
+            .placeholder(t!("palette.placeholder"))
+            .empty(|_, _, _| div().p_4().text_color(theme::muted()).child(t!("palette.empty")))
             .max_h(px(420.))
             .on_confirm(move |_, window, cx| {
                 let _ = e1.update(cx, |this, cx| this.close_palette(window, cx));

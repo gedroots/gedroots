@@ -1,0 +1,71 @@
+_version: 2
+# Opening, saving, importing and exporting files.
+export.default_name:
+  en: tree
+  fr: arbre
+export.name_taken:
+  en: "Choose another name for the archive: this file is part of the tree"
+  fr: "Choisissez un autre nom pour l'archive : ce fichier fait partie de l'arbre"
+export.exporting:
+  en: "Exporting %{file}…"
+  fr: "Export de %{file}…"
+export.done:
+  en: "Exported to %{path} · %{files}"
+  fr: "Exporté dans %{path} · %{files}"
+export.no_file:
+  en: no files
+  fr: sans fichier
+export.files.one:
+  en: 1 file
+  fr: 1 fichier
+export.files.other:
+  en: "%{n} files"
+  fr: "%{n} fichiers"
+export.missing:
+  en: " · %{count} not found"
+  fr: " · %{count} introuvable(s)"
+export.failed:
+  en: "GEDZIP export failed: %{error}"
+  fr: "Échec de l'export GEDZIP : %{error}"
+export.missing_title:
+  en: "%{file} · Missing Files"
+  fr: "%{file} · fichiers introuvables"
+import.prompt:
+  en: Import a GEDCOM File
+  fr: Importer un fichier GEDCOM
+import.already_conform:
+  en: "%{file} imported · already GEDCOM 7 compliant"
+  fr: "%{file} importé · déjà conforme à GEDCOM 7"
+import.normalized:
+  en: "%{file} imported · %{n} item(s) normalized to GEDCOM 7"
+  fr: "%{file} importé · %{n} élément(s) normalisé(s) en GEDCOM 7"
+import.title:
+  en: "Import · %{file}"
+  fr: "Importer · %{file}"
+import.keep:
+  en: Keep As Is
+  fr: Garder tel quel
+import.normalize:
+  en: Normalize
+  fr: Normaliser
+file.default_name:
+  en: tree
+  fr: arbre
+palette.placeholder:
+  en: Search for a command…
+  fr: Rechercher une commande…
+palette.empty:
+  en: No matching command.
+  fr: Aucune commande ne correspond.
+export.replaces_open:
+  en: "Choose another name: the export would replace the open file"
+  fr: "Choisissez un autre nom : l'export remplacerait le fichier ouvert"
+export.exported:
+  en: "Exported to %{path}"
+  fr: "Exporté dans %{path}"
+export.geneanet_upload:
+  en: " · upload it on the Geneanet page that just opened"
+  fr: " · déposez-le sur la page Geneanet qui vient de s'ouvrir"
+export.gedcom_failed:
+  en: "Export failed: %{error}"
+  fr: "Échec de l'export : %{error}"

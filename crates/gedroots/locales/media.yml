@@ -1,0 +1,296 @@
+_version: 2
+# Media records, their files and pages.
+media_files.folder_error:
+  en: "folder %{path}: %{error}"
+  fr: "dossier %{path} : %{error}"
+media_files.file_error:
+  en: "%{path}: %{error}"
+  fr: "%{path} : %{error}"
+media_files.outside:
+  en: " — warning: file outside the .ged folder, absolute path saved"
+  fr: " — attention : fichier hors du dossier du .ged, chemin absolu enregistré"
+media_files.copied.one:
+  en: " · %{n} copied to the file’s folder"
+  fr: " · %{n} copié dans le dossier du fichier"
+media_files.copied.other:
+  en: " · %{n} copied to the file’s folder"
+  fr: " · %{n} copiés dans le dossier du fichier"
+media_files.copy_failed:
+  en: " — could not copy: %{error}"
+  fr: " — copie impossible : %{error}"
+media_files.placed_moved.one:
+  en: " · %{n} file moved and named from the template"
+  fr: " · %{n} fichier rangé selon le modèle"
+media_files.placed_moved.other:
+  en: " · %{n} files moved and named from the template"
+  fr: " · %{n} fichiers rangés selon le modèle"
+media_files.placed_copied.one:
+  en: " · %{n} file copied and named from the template"
+  fr: " · %{n} fichier copié selon le modèle"
+media_files.placed_copied.other:
+  en: " · %{n} files copied and named from the template"
+  fr: " · %{n} fichiers copiés selon le modèle"
+media_files.store_failed:
+  en: " — could not file it: %{error}"
+  fr: " — rangement impossible : %{error}"
+media_files.already_named:
+  en: This media’s files already follow the template
+  fr: Les fichiers de ce média portent déjà le nom du modèle
+media_files.save_first:
+  en: Save the .ged file first
+  fr: "Enregistrez d'abord le fichier .ged"
+media_files.renamed.one:
+  en: "%{n} file renamed"
+  fr: "%{n} fichier renommé"
+media_files.renamed.other:
+  en: "%{n} files renamed"
+  fr: "%{n} fichiers renommés"
+media_files.rename_failed:
+  en: "Renaming stopped: %{error}"
+  fr: "Renommage interrompu : %{error}"
+media_files.rename:
+  en: Rename
+  fr: Renommer
+photo.no_size:
+  en: Could not read the image size
+  fr: "Impossible de lire les dimensions de l'image"
+photo.draw_hint:
+  en: Draw a frame on the photo (Esc to cancel)
+  fr: Tracez un cadre sur la photo (Échap pour annuler)
+photo.no_image:
+  en: No image found for this media
+  fr: Image introuvable pour ce média
+photo.area_saved:
+  en: "Area for %{name} saved"
+  fr: "Zone de %{name} enregistrée"
+photo.crop_removed:
+  en: "Crop removed for %{name}"
+  fr: "Recadrage retiré pour %{name}"
+photo.untagged:
+  en: "%{name} removed from the photo"
+  fr: "%{name} retiré(e) de la photo"
+photo.people.one:
+  en: "%{n} Person Tagged"
+  fr: "%{n} personne identifiée"
+photo.people.other:
+  en: "%{n} People Tagged"
+  fr: "%{n} personnes identifiées"
+photo.cancel_draw:
+  en: Cancel Drawing
+  fr: Annuler le tracé
+photo.draw_for:
+  en: "Draw the area for %{name} — Esc to cancel"
+  fr: "Tracez la zone pour %{name} — Échap pour annuler"
+photo.draw_face:
+  en: Draw a frame around the face, then choose the person — Esc to cancel
+  fr: Tracez un cadre autour du visage, puis choisissez la personne — Échap pour annuler
+photo.page:
+  en: "page %{n}"
+  fr: "page %{n}"
+photo.whole_document:
+  en: whole document
+  fr: document entier
+photo.whole_image_lower:
+  en: whole image
+  fr: image entière
+photo.redraw:
+  en: Redraw
+  fr: Redessiner
+photo.delimit:
+  en: Mark Area
+  fr: Délimiter
+photo.whole_image:
+  en: Whole Image
+  fr: Image entière
+photo.used_by:
+  en: "Used By · %{n}"
+  fr: "Utilisée par · %{n}"
+pages.already:
+  en: These files are already part of the media
+  fr: Ces fichiers font déjà partie du média
+pages.added.one:
+  en: "%{n} page added"
+  fr: "%{n} page ajoutée"
+pages.added.other:
+  en: "%{n} pages added"
+  fr: "%{n} pages ajoutées"
+pages.add_prompt:
+  en: Add Pages
+  fr: Ajouter les pages
+pages.moved:
+  en: "Page %{from} moved to position %{to}"
+  fr: "Page %{from} déplacée en position %{to}"
+pages.removed:
+  en: "Page %{page} removed from the media (the file stays on disk)"
+  fr: "Page %{page} retirée du média (le fichier reste sur le disque)"
+pages.split:
+  en: "Page %{page} split into a new media, “%{name}”"
+  fr: "Page %{page} séparée en un nouveau média, « %{name} »"
+pages.merged:
+  en: "%{count} media merged into one %{n}-page media"
+  fr: "%{count} médias fusionnés en un média de %{n} pages"
+pages.section:
+  en: "Pages · %{n}"
+  fr: "Pages · %{n}"
+pages.range:
+  en: "pages %{first} to %{last}"
+  fr: "pages %{first} à %{last}"
+pages.selected:
+  en: "%{count} Media Selected · %{total} Pages"
+  fr: "%{count} médias sélectionnés · %{total} pages"
+pages.merge:
+  en: "Merge into One %{total}-Page Media"
+  fr: "Fusionner en un média de %{total} pages"
+common.cancel:
+  en: Cancel
+  fr: Annuler
+gallery.search:
+  en: Title, file name, person…
+  fr: Titre, nom de fichier, personne…
+gallery.new_act:
+  en: New Record…
+  fr: Nouvel acte…
+gallery.import:
+  en: Import
+  fr: Importer
+gallery.imported.one:
+  en: "%{n} file imported · %{to}"
+  fr: "%{n} fichier importé · %{to}"
+gallery.imported.other:
+  en: "%{n} files imported · %{to}"
+  fr: "%{n} fichiers importés · %{to}"
+gallery.not_found:
+  en: media not found
+  fr: média introuvable
+gallery.title_changed:
+  en: Media title changed
+  fr: Titre du média modifié
+gallery.detached:
+  en: "“%{what}” detached from %{from} (Undo to revert)"
+  fr: "« %{what} » détaché de %{from} (Annuler pour revenir en arrière)"
+gallery.deleted:
+  en: "Media “%{what}” deleted, files kept (Undo to revert)"
+  fr: "Média « %{what} » supprimé, fichiers gardés (Annuler pour revenir en arrière)"
+gallery.linked.one:
+  en: "%{n} item linked · %{to}%{note}"
+  fr: "%{n} élément lié · %{to}%{note}"
+gallery.linked.other:
+  en: "%{n} items linked · %{to}%{note}"
+  fr: "%{n} éléments liés · %{to}%{note}"
+gallery.missing:
+  en: Not Found
+  fr: Introuvable
+gallery.title:
+  en: Media
+  fr: Médias
+gallery.back:
+  en: Back
+  fr: Retour
+gallery.import_files.one:
+  en: "Import %{n} File"
+  fr: "Importer %{n} fichier"
+gallery.import_files.other:
+  en: "Import %{n} Files"
+  fr: "Importer %{n} fichiers"
+gallery.attached:
+  en: "Attached · %{n}"
+  fr: "Rattachés · %{n}"
+gallery.library:
+  en: Library
+  fr: Bibliothèque
+gallery.close:
+  en: Close (Esc)
+  fr: Fermer (Échap)
+gallery.pages:
+  en: "%{n} p."
+  fr: "%{n} p."
+gallery.off_template:
+  en: Name Does Not Match Template
+  fr: Nom hors modèle
+gallery.import_more:
+  en: Import…
+  fr: Importer…
+gallery.new_act_caps:
+  en: New Record
+  fr: Nouvel acte
+gallery.enter_act:
+  en: Enter a Record from Images…
+  fr: Saisir un acte avec des images…
+gallery.attached_to:
+  en: Attached To
+  fr: Joint à
+gallery.files_count:
+  en: "Files · %{n}"
+  fr: "Fichiers · %{n}"
+gallery.rename:
+  en: Rename…
+  fr: Renommer…
+gallery.detach:
+  en: Detach
+  fr: Détacher
+gallery.crop:
+  en: Crop…
+  fr: Recadrer…
+gallery.more:
+  en: More Actions
+  fr: "Plus d'actions"
+gallery.delete:
+  en: Delete Media
+  fr: Supprimer le média
+gallery.media_in:
+  en: "Media · %{dir}/"
+  fr: "Média · %{dir}/"
+gallery.file_in:
+  en: "File · %{dir}/"
+  fr: "Fichier · %{dir}/"
+gallery.suggested:
+  en: Suggested
+  fr: Suggérés
+gallery.all_media:
+  en: "All Media · %{n}"
+  fr: "Tous les médias · %{n}"
+gallery.unattached:
+  en: "Files to Attach · %{n}"
+  fr: "Fichiers à rattacher · %{n}"
+gallery.import_files_button:
+  en: Import Files…
+  fr: Importer des fichiers…
+gallery.attach_to:
+  en: Attach To
+  fr: Joindre à
+gallery.link:
+  en: Link
+  fr: Lier
+gallery.link_n.one:
+  en: "Link %{n} Item"
+  fr: "Lier %{n} élément"
+gallery.link_n.other:
+  en: "Link %{n} Items"
+  fr: "Lier %{n} éléments"
+gallery.copy:
+  en: Copy
+  fr: Copier
+gallery.move:
+  en: Move
+  fr: Déplacer
+gallery.one_media:
+  en: "One Media of %{n} Pages"
+  fr: "Un seul média de %{n} pages"
+gallery.files:
+  en: Files
+  fr: Fichiers
+gallery.no_naming:
+  en: "Media organization not set: names and folders unchanged"
+  fr: "Rangement des médias non réglé : noms et dossiers inchangés"
+gallery.enter_act_go:
+  en: Enter Record
+  fr: "Saisir l'acte"
+gallery.naming_settings:
+  en: Media Organization…
+  fr: Rangement des médias…
+media_files.named.one:
+  en: " · %{n} file named from the template"
+  fr: " · %{n} fichier nommé selon le modèle"
+media_files.named.other:
+  en: " · %{n} files named from the template"
+  fr: " · %{n} fichiers nommés selon le modèle"

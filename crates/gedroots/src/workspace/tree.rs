@@ -2,6 +2,7 @@
 
 use super::*;
 use gpui_kit::component::menu::ContextMenuExt;
+use rust_i18n::t;
 use std::cell::{Cell, RefCell};
 use std::f32::consts::PI;
 
@@ -13,10 +14,10 @@ pub enum TreeMode {
 }
 
 impl TreeMode {
-    pub(super) fn label(self) -> &'static str {
+    pub(super) fn label(self) -> SharedString {
         match self {
-            TreeMode::Chart => "Arbre",
-            TreeMode::Fan => "Éventail",
+            TreeMode::Chart => t!("cmd.tree_chart").into(),
+            TreeMode::Fan => t!("cmd.tree_fan").into(),
         }
     }
 
@@ -272,14 +273,14 @@ impl Workspace {
                                     .gap_2()
                                     .items_center()
                                     .child(dot(theme::paternal()))
-                                    .child("Lignée paternelle"),
+                                    .child(t!("tree.paternal")),
                             )
                             .child(
                                 h_flex()
                                     .gap_2()
                                     .items_center()
                                     .child(dot(theme::maternal()))
-                                    .child("Lignée maternelle"),
+                                    .child(t!("tree.maternal")),
                             ),
                     )
                     .child(fan),

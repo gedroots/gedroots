@@ -1,0 +1,8 @@
+_version: 2
+# Tree and fan chart.
+tree.paternal:
+  en: Paternal Line
+  fr: Lignée paternelle
+tree.maternal:
+  en: Maternal Line
+  fr: Lignée maternelle

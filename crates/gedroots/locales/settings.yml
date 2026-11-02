@@ -1,0 +1,131 @@
+_version: 2
+# File Settings window.
+settings.media_dir_placeholder:
+  en: Records
+  fr: Actes
+settings.email_placeholder:
+  en: "name@example.com"
+  fr: "nom@exemple.fr"
+settings.municipality:
+  en: Town
+  fr: Commune
+settings.saved:
+  en: File settings saved
+  fr: Réglages du fichier enregistrés
+settings.rewritten:
+  en: " · %{places} rewritten"
+  fr: " · %{places} réécrit(s)"
+settings.skipped:
+  en: " · %{places} in another format left unchanged"
+  fr: " · %{places} d'un autre format inchangé(s)"
+settings.general:
+  en: General
+  fr: Général
+settings.events:
+  en: Events
+  fr: Événements
+settings.saved_on:
+  en: ", %{date}"
+  fr: ", le %{date}"
+settings.count_individuals.one:
+  en: "%{n} person"
+  fr: "%{n} individu"
+settings.count_individuals.other:
+  en: "%{n} people"
+  fr: "%{n} individus"
+settings.count_families.one:
+  en: "%{n} family"
+  fr: "%{n} famille"
+settings.count_families.other:
+  en: "%{n} families"
+  fr: "%{n} familles"
+settings.count_sources.one:
+  en: "%{n} source"
+  fr: "%{n} source"
+settings.count_sources.other:
+  en: "%{n} sources"
+  fr: "%{n} sources"
+settings.count_media.one:
+  en: "%{n} media"
+  fr: "%{n} média"
+settings.count_media.other:
+  en: "%{n} media"
+  fr: "%{n} médias"
+settings.author:
+  en: Author
+  fr: Auteur
+settings.email:
+  en: Email
+  fr: E-mail
+settings.copyright:
+  en: Copyright
+  fr: Droits
+settings.language:
+  en: Language
+  fr: Langue
+settings.description:
+  en: Description
+  fr: Description
+settings.root:
+  en: Root Person
+  fr: Individu racine
+settings.place_format:
+  en: Place Format
+  fr: Format des lieux
+settings.add_jurisdiction:
+  en: Add a Jurisdiction
+  fr: Ajouter une juridiction
+settings.jurisdiction:
+  en: Jurisdiction
+  fr: Juridiction
+settings.example:
+  en: "Example: %{example}"
+  fr: "Exemple : %{example}"
+settings.add_type:
+  en: Add a Type
+  fr: Ajouter un type
+settings.label:
+  en: Label
+  fr: Libellé
+settings.individual_events:
+  en: Individual Events
+  fr: Événements individuels
+settings.family_events:
+  en: Family Events
+  fr: Événements familiaux
+settings.everything_else:
+  en: Everything Else
+  fr: Tout le reste
+settings.media_folder:
+  en: Media Folder
+  fr: Dossier des médias
+settings.subfolders:
+  en: Subfolders
+  fr: Sous-dossiers
+settings.add_folder:
+  en: Add a Folder
+  fr: Ajouter un dossier
+settings.portrait:
+  en: Portrait
+  fr: Portrait
+settings.places.one:
+  en: "%{n} place"
+  fr: "%{n} lieu"
+settings.places.other:
+  en: "%{n} places"
+  fr: "%{n} lieux"
+settings.search:
+  en: Search
+  fr: Recherche
+settings.site_name:
+  en: Site Name
+  fr: Nom du site
+settings.site_url:
+  en: "https://example.org/search?nom={nom}&prenom={prenom}"
+  fr: "https://exemple.org/recherche?nom={nom}&prenom={prenom}"
+settings.sites:
+  en: Search Sites
+  fr: Sites de recherche
+settings.add_site:
+  en: Add Site
+  fr: Ajouter un site

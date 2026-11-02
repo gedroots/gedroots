@@ -1,0 +1,23 @@
+_version: 2
+# Date field (crates/gedroots/src/date_field.rs).
+date_field.placeholder:
+  en: e.g. 14 March 1912
+  fr: ex. 14 mars 1912
+date_field.phrase_placeholder:
+  en: as written in the record
+  fr: "tel qu'écrit dans l'acte"
+date_field.invalid:
+  en: "date “%{text}”: %{error}"
+  fr: "date « %{text} » : %{error}"
+date_field.text_only:
+  en: text only, no date
+  fr: texte seul, sans date
+date_field.precision:
+  en: Precision
+  fr: Précision
+date_field.calendar:
+  en: Calendar
+  fr: Calendrier
+date_field.original_text:
+  en: Original Text
+  fr: "Texte d'origine"
