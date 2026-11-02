@@ -1,281 +1,269 @@
 # GEDRoots
 
-Logiciel de généalogie **libre et local**, écrit en Rust avec [GPUI](https://www.gpui.rs/)
-(via [GPUI Kit](https://gpui-kit.com)). Les données restent dans un fichier **GEDCOM 7**
-sur votre disque : pas de base de données, pas de compte, pas de cloud.
+**Free and local** genealogy software, written in Rust with [GPUI](https://www.gpui.rs/)
+(via [GPUI Kit](https://gpui-kit.com)). Your data stays in a **GEDCOM 7** file on your disk:
+no database, no account, no cloud.
 
-L'interface reprend les fonctions principales d'[Ancestris](https://www.ancestris.org)
-et suit le [design system GEDRoots](design.md) (fonds neutres et touches de violet, police Inter, clair ou sombre selon le système).
+The interface covers the main features of [Ancestris](https://www.ancestris.org) and follows
+the [GEDRoots design system](design.md) (neutral backgrounds with touches of violet, Inter
+typeface, light or dark following the system). It is written in English and translated into
+French (see [docs/localization.md](docs/localization.md)).
 
-![Arbre d'ascendance](docs/capture-arbre.png)
+![Pedigree chart](docs/capture-arbre.png)
 
-## Fonctionnalités
+## Features
 
-- **Navigation** : une barre latérale à quatre zones (Individus, Sources, Lieux, Médias), avec
-  leur effectif ; elle se masque avec `⌃⌘S` (`Ctrl+Alt+S`). Dépôts et notes s'ouvrent depuis les
-  fiches qui les citent, la recherche ou le menu Affichage ; Qualité et Statistiques aussi.
-- **Tout est dans la barre de menus** (Fichier, Édition, Individu, Source, Média,
-  Affichage, Aide), une seule fois par commande : pas de barre d'outils, l'écran reste aux données. Menus natifs
-  sous macOS ; sous Linux et Windows, les mêmes menus dans le haut de la fenêtre. Les commandes
-  qui ne s'appliquent pas à la sélection sont grisées (macOS) ou sans effet.
-- **Palette de commandes** (`⌘⇧P` / `Ctrl+Maj+P`) : toutes les commandes applicables, recherche
-  sans accents. Raccourcis : `⌘1`…`⌘4` zones de la barre latérale, `⌘5` dépôts, `⌘6` notes,
-  `⌘7` qualité, `⌘8` statistiques, `⌥⌘1`…`⌥⌘3` arbre/fiche/GEDCOM (ce dernier s'ouvre en onglet
-  qu'on referme), `⌘F` rechercher, `⌘⇧N` nouvel individu, `⌘⇧H` individu racine, `⌘=` / `⌘-` générations de l'éventail,
-  `⌘⇧S` enregistrer sous.
-- **Clic droit partout** : lignes des listes (et le fond, pour créer), cases des arbres et de
-  l'éventail, cases vides (nouvelle personne ou personne existante), événements, proches,
-  liens et vignettes du panneau de détail, repères et fond de la carte
-  (« Placer ce lieu ici »). Le menu agit sur l'élément cliqué sans le sélectionner, avec les
-  mêmes commandes et les mêmes libellés que la barre de menus ; seules les actions sur une
-  partie de fiche (un événement, un média rattaché, un membre) n'existent qu'au clic droit.
-- **Événements modifiables** : un clic sur un événement (individu ou union) le rouvre dans
-  la même fenêtre que l'ajout (type, précision, date, lieu suggéré, source) ; on peut aussi le
-  supprimer. Notes, âge, médias et autres citations de l'événement sont conservés.
-- **Chronologie unifiée** : la fiche d'un individu montre ses événements et ceux de ses unions
-  (mariage, divorce… « avec » le conjoint) dans une seule liste par date, avec son âge à chaque
-  événement ; on y ajoute aussi un mariage directement. Le bouton à côté du « + » (ou
-  Affichage › Événements des proches) y mêle les naissances et décès de ses parents, frères et
-  sœurs, conjoints, enfants et petits-enfants survenus de son vivant. Chaque événement affiche ses médias (`2 OBJE`, GEDCOM 7 standard) :
-  déposer des fichiers sur l'événement les y rattache, le clic droit permet d'en rattacher,
-  de lier un média existant ou d'en détacher.
-- **Recherche** : un champ par liste, sans accents ni casse. Chaque critère complet devient
-  un jeton (« Né 1800–1850 », « Sans source ») et, pendant la frappe, des propositions tirées
-  du fichier (lieux, noms, professions, types d'actes, dépôts…) affichent leur nombre de
-  résultats (↑ ↓ ↵, Échap). Le compteur de la zone dans la barre latérale donne le nombre de
-  résultats. On tape des mots ordinaires : « 1850 » propose « Né en 1850 », « Né vers 1850 »
-  (± 5 ans), « Mort vers 1850 », « Vivant en 1850 » ; un prénom et un nom (« lucien guyot »)
-  proposent ses ascendants, descendants, conjoints, enfants, parents, frères et sœurs (aussi
-  dans Individu › Rechercher ses ascendants / descendants). Un clic sur un jeton règle la marge
-  des années (exactement, ± 2, ± 5, ± 10 ans) ou les variantes d'orthographe d'un nom (Guyot,
-  Guyau, Guillot ; clé phonétique française, `phonetic.rs`), et permet de le retirer.
-  Les mots-clés des critères sont en anglais, quelle que soit la langue de l'interface (seuls
-  leurs libellés sont traduits). Critères des individus : `born:1800-1850`, `born:1850±5`,
-  `died:<1900`, `alive:1870`, `place:troyes`, `name:guyot` (variantes comprises ;
-  `name:=guyot` : exact), `occupation:meunier`, `sex:f`, `ancestors:@I1@`, `descendants:@I1@`,
-  `spouses:@I1@`, `children:@I1@`, `parents:@I1@`, `siblings:@I1@`, `without:source`,
-  `without:parents`, `without:marriage`, `with:media`, `sosa:1-63`… ; des sources :
-  `type:naissance`, `repository:…`, `without:media`, `without:citation` ; des lieux :
-  `in:aube`, `without:coordinates` ; des médias : `event:naissance`, `person:guyot`,
-  `format:pdf`, `medium:photo` (`MEDI`), `without:link`. Une valeur avec des espaces
-  s'écrit entre guillemets. Dans la zone Médias, une ligne de types (Tous · Actes ·
-  Portraits…) reprend les sous-dossiers des réglages, sinon les dossiers des fichiers, sinon
-  le support GEDCOM (`MEDI`) ; les liens web ont leur type.
-  **Recherches enregistrées** : le « + » de la section Recherches de la barre latérale (ou
-  Affichage › Enregistrer la recherche) garde la recherche affichée sous le nom de ses
-  jetons, à retaper aussitôt ; elle s'affiche avec son nombre de résultats et vit dans le
-  `.ged` (`HEAD._GR_FIND`, voir [extensions](docs/extensions.md#_gr_find)).
-- **Individus** : filtres rapides (Affichage › Filtrer la liste) ;
-  fiche avec portrait, galerie d'images, événements (dates en français, calendrier républicain compris), sources citées,
-  famille (parents, conjoints, enfants) cliquable.
-- **Pas d'onglet Familles** : une union (`FAM`) se gère depuis la fiche de chacun des conjoints
-  (événements d'union, enfants, photos et notes du couple). Avec plusieurs unions, la fenêtre
-  « + » propose « Enfant avec … » pour chacune. Un conjoint ajouté à un parent seul rejoint son union existante. Un lien
-  vers une famille (Qualité, « Cité par »…) ouvre la fiche d'un conjoint.
-- **Arbres** : **arbre libre** (ascendants à droite, descendants et conjoints à gauche, frères et
-  sœurs au-dessus ; on s'y déplace en glissant ou à la molette, les générations se chargent au fur et
-  à mesure dans les deux sens, une mini-carte montre où l'on est, double-clic pour recentrer) et
-  **éventail** (2 à 7 générations).
-- **Ajouter un proche** en un clic depuis une personne (père, mère, conjoint, enfant, frère ou
-  sœur), ou **lier une personne existante** via un sélecteur qui propose d'abord les dates
-  plausibles ; détacher une personne d'une famille. Les liens `FAMS`/`FAMC` ↔ `HUSB`/`WIFE`/`CHIL`
-  restent cohérents, et une famille vidée est supprimée.
-- **Photos et actes** : glisser-déposer ou choisir des fichiers sur une personne ou
-  une source ; suggestions des fichiers du dossier (`Actes/`, `Portraits/`…) dont le nom contient
-  celui de la personne ; les fichiers du dossier sans média sont dans Qualité › Fichiers à
-  rattacher (menu Média › Fichiers à rattacher).
-- **Sources, dépôts, médias, notes partagées** : liste, éditeur visuel,
-  et panneau « Utilisé par / Liens » pour naviguer entre les enregistrements.
-- **Lieux** : index de tous les `PLAC` du fichier, renommage global et coordonnées (`MAP`).
-  En saisissant un lieu, le menu propose les lieux du fichier, un lieu-dit d'un lieu connu
-  (« La Borde, Troyes »), des lieux réels d'OpenStreetMap (Photon, pendant la saisie) et
-  « Créer « … » ». Un nouveau lieu s'ouvre dans la fenêtre « Nouveau lieu » : un champ par
-  juridiction du format des lieux du fichier (Réglages du fichier › Lieux), déjà rempli, et une
-  carte où un clic place l'épingle. Les coordonnées vont dans `PLAC.MAP`, l'identifiant
-  OpenStreetMap dans `PLAC.EXID` (GEDCOM 7 standard).
-- **Carte des lieux** : tous les lieux ayant des coordonnées sur une carte OpenStreetMap
-  (glisser pour déplacer, molette pour zoomer, clic sur un repère pour ouvrir le lieu).
-  Les lieux sans coordonnées se localisent un par un depuis leur fiche (« Localiser » propose
-  les lieux correspondants, on choisit le bon) ou Qualité › Lieux sans coordonnées, ou se
-  placent à la main (« Placer sur la carte », ou clic droit sur la carte) ; les coordonnées sont écrites dans le GEDCOM (`PLAC.MAP.LATI/LONG`,
-  format `N49.11652` / `W1.11437`) et s'annulent comme toute modification. Les tuiles sont
-  gardées en cache sur le disque : en mode « Hors ligne », rien ne part sur Internet.
+- **Navigation**: a sidebar with four zones (People, Sources, Places, Media) and their counts;
+  hide it with `⌃⌘S` (`Ctrl+Alt+S`). Repositories and notes open from the records that cite
+  them, from search or from the View menu; so do Quality and Statistics.
+- **Everything is in the menu bar** (File, Edit, Person, Source, Media, View, Help), once per
+  command: no toolbar, the screen is for the data. Native menus on macOS; on Linux and Windows,
+  the same menus at the top of the window. Commands that do not apply to the selection are
+  greyed out (macOS) or do nothing.
+- **Command palette** (`⌘⇧P` / `Ctrl+Shift+P`): every applicable command, accent-insensitive
+  search. Shortcuts: `⌘1`…`⌘4` sidebar zones, `⌘5` repositories, `⌘6` notes, `⌘7` quality,
+  `⌘8` statistics, `⌥⌘1`…`⌥⌘3` chart/record/GEDCOM (the last one opens in a tab you can
+  close), `⌘F` search, `⌘⇧N` new person, `⌘⇧H` root person, `⌘=` / `⌘-` fan chart
+  generations, `⌘⇧S` save as.
+- **Right-click everywhere**: list rows (and the background, to create), chart and fan chart
+  boxes, empty boxes (new person or existing person), events, relatives, links and thumbnails
+  of the detail panel, map markers and background (“Place This Place Here”). The menu acts on
+  the clicked item without selecting it, with the same commands and labels as the menu bar;
+  only actions on part of a record (an event, an attached media, a member) exist only on
+  right-click.
+- **Editable events**: clicking an event (person or union) reopens it in the same window used
+  to add it (type, detail, date, suggested place, source); it can also be deleted. Notes, age,
+  media and other citations of the event are kept.
+- **Unified timeline**: a person's record shows their events and those of their unions
+  (marriage, divorce… “with” the spouse) in a single list by date, with their age at each
+  event; a marriage can also be added there directly. The button next to “+” (or View ›
+  Relatives' Events) mixes in the births and deaths of their parents, siblings, spouses,
+  children and grandchildren during their lifetime. Each event shows its media (`2 OBJE`,
+  standard GEDCOM 7): dropping files on the event attaches them, right-click attaches, links an
+  existing media or detaches.
+- **Search**: one field per list, ignoring accents and case. Each complete criterion becomes a
+  token (“Born 1800–1850”, “Without Sources”) and, while typing, suggestions taken from the file
+  (places, names, occupations, record types, repositories…) show their number of results (↑ ↓
+  ↵, Esc). The zone's counter in the sidebar gives the number of results. Type ordinary words:
+  “1850” suggests “Born in 1850”, “Born about 1850” (± 5 years), “Died about 1850”, “Alive in
+  1850”; a given name and a surname (“lucien guyot”) suggest their ancestors, descendants,
+  spouses, children, parents and siblings (also in Person › Search Ancestors / Descendants).
+  Clicking a token sets the year margin (exactly, ± 2, ± 5, ± 10 years) or the spelling variants
+  of a name (Guyot, Guyau, Guillot; French phonetic key, `phonetic.rs`), and removes it.
+  Criteria keywords are in English whatever the interface language (only their labels are
+  translated). Criteria for people: `born:1800-1850`, `born:1850±5`, `died:<1900`,
+  `alive:1870`, `place:troyes`, `name:guyot` (variants included; `name:=guyot`: exact),
+  `occupation:miller`, `sex:f`, `ancestors:@I1@`, `descendants:@I1@`, `spouses:@I1@`,
+  `children:@I1@`, `parents:@I1@`, `siblings:@I1@`, `without:source`, `without:parents`,
+  `without:marriage`, `with:media`, `sosa:1-63`…; for sources: `type:birth`,
+  `repository:…`, `without:media`, `without:citation`; for places: `in:aube`,
+  `without:coordinates`; for media: `event:birth`, `person:guyot`, `format:pdf`,
+  `medium:photo` (`MEDI`), `without:link`. A value with spaces is written in quotes. In the
+  Media zone, a row of types (All · Records · Portraits…) follows the subfolders of the
+  settings, otherwise the folders of the files, otherwise the GEDCOM medium (`MEDI`); web links
+  have their own type.
+  **Saved searches**: the “+” of the sidebar's Searches section (or View › Save Search) keeps
+  the current search under the name of its tokens, ready to rename; it shows its number of
+  results and lives in the `.ged` (`HEAD._GR_FIND`, see
+  [extensions](docs/extensions.md#_gr_find)).
+- **People**: quick filters (View › Filter List); record with portrait, image gallery, events
+  (dates in the interface language, French Republican calendar included), cited sources,
+  clickable family (parents, spouses, children).
+- **No Families tab**: a union (`FAM`) is managed from the record of either spouse (union
+  events, children, photos and notes of the couple). With several unions, the “+” window offers
+  “Child with …” for each. A spouse added to a single parent joins their existing union. A link
+  to a family (Quality, “Cited by”…) opens the record of a spouse.
+- **Charts**: **free chart** (ancestors on the right, descendants and spouses on the left,
+  siblings above; move around by dragging or with the wheel, generations load as you go in
+  both directions, a minimap shows where you are, double-click to recenter) and **fan chart**
+  (2 to 7 generations).
+- **Add a relative** in one click from a person (father, mother, spouse, child, sibling), or
+  **link an existing person** through a picker that suggests plausible dates first; detach a
+  person from a family. `FAMS`/`FAMC` ↔ `HUSB`/`WIFE`/`CHIL` links stay consistent, and an
+  emptied family is deleted.
+- **Photos and records**: drag and drop or choose files on a person or a source; suggestions
+  of files from the folder (`Actes/`, `Portraits/`…) whose name contains the person's; files in
+  the folder without media are in Quality › Files to Attach (Media › Files to Attach menu).
+- **Sources, repositories, media, shared notes**: list, visual editor, and a “Used by / Links”
+  panel to move between records.
+- **Places**: index of every `PLAC` in the file, global renaming and coordinates (`MAP`). While
+  entering a place, the menu suggests the file's places, a locality within a known place (“La
+  Borde, Troyes”), real places from OpenStreetMap (Photon, while typing) and “Create “…””. A new
+  place opens in the “New Place” window: one field per jurisdiction of the file's place format
+  (File Settings › Places), already filled in, and a map where a click drops the pin.
+  Coordinates go in `PLAC.MAP`, the OpenStreetMap identifier in `PLAC.EXID` (standard GEDCOM 7).
+- **Place map**: every place with coordinates on an OpenStreetMap map (drag to move, wheel to
+  zoom, click a marker to open the place). Places without coordinates are located one at a
+  time from their record (“Locate” suggests matching places, you pick the right one) or from
+  Quality › Places Without Coordinates, or placed by hand (“Place on Map”, or right-click on
+  the map); coordinates are written in the GEDCOM (`PLAC.MAP.LATI/LONG`, format `N49.11652` /
+  `W1.11437`) and can be undone like any change. Tiles are cached on disk: in “Offline” mode,
+  nothing goes out to the Internet.
 
-![Carte des lieux](docs/capture-carte.png)
+![Place map](docs/capture-carte.png)
 
-- **Médias / photos** : portraits des individus, images des sources (actes numérisés)
-  dans la fiche et le panneau de détail, chemins relatifs au fichier `.ged`.
-- **Recadrage et identification des personnes** : sur la fiche d'une photo, Média › « Identifier une
-  personne sur la photo » puis tracer un cadre autour du visage et choisir la personne. C'est le `CROP`
-  standard de GEDCOM 7 sur le lien `INDI → OBJE` (pas d'extension, lisible par les autres
-  logiciels) : la photo de groupe affiche les noms, le portrait et les vignettes de la personne
-  sont recadrés sur son visage. Chaque lien vers une image (source, famille…) peut aussi être
-  délimité, par exemple l'extrait utile d'un registre.
-- **Liens web** (page d'un acte aux archives en ligne, fiche Geneanet…) : section « Liens web »
-  du panneau de détail, cliquable (ouverture dans le navigateur), avec « + », modifier et
-  retirer ; aussi Édition › « Ajouter un lien web… ». Stockés en GEDCOM 7 standard : lien
-  multimédia vers un `OBJE` dont le `FILE` est l'URL (`FORM text/html`), et `WWW` pour les
-  dépôts.
-- **Assistant d'import** (Fichier › « Importer un GEDCOM… ») : ouvre un fichier venu d'un autre
-  logiciel, liste ce qu'il contient de non standard et propose de le convertir en GEDCOM 7
-  (annulable). Premier contrôle : les balises `_URL` deviennent des liens multimédia (`WWW`
-  pour les dépôts) ; les événements à balise d'extension (`_MILT`, `_MILI`, `_DEG`…)
-  deviennent des `EVEN` + `TYPE`. Les contrôles sont dans `crates/gedcom/src/import.rs`.
-- **Export** (Fichier › Exporter) en trois formats.
-- **GEDZIP avec les médias** : une archive `.gdz` (GEDCOM 7,
-  chapitre 4) avec `gedcom.ged` et les fichiers des médias, pour transmettre l'arbre complet.
-  Les chemins relatifs gardent leur dossier (`Actes/…`), les fichiers hors du dossier du .ged
-  vont dans `media/`, les `FILE` sont réécrits pour l'archive ; le .ged et les médias ne sont
-  pas modifiés. Les fichiers introuvables gardent leur `FILE` et sont listés à la fin, chacun
-  menant à son média.
-- **GEDCOM 5.5.1** : un `.ged` pour les logiciels qui ne lisent pas encore GEDCOM 7 (en-tête
-  5.5.1, `SNOTE` → `NOTE`, calendriers `@#DFRENCH R@`, `ROLE` → `RELA`, types MIME → formats,
-  structures propres à GEDCOM 7 et extensions `_GR_*` retirées, `@` doublés, lignes longues
-  en `CONC`). Conversion dans `crates/gedcom/src/gedcom551.rs`.
-- **GEDCOM pour Geneanet** : le même export, adapté à l'import de Geneanet (GeneWeb) : quand
-  la première juridiction du format des lieux est un lieu-dit (`Lieudit`, `Hameau`…), les
-  lieux deviennent `[Lieu-dit] - Commune, …` ; rôles des témoins dans le vocabulaire de
-  GeneWeb (`GODP`, `Civil officer`…). La page d'import de Geneanet s'ouvre ensuite dans le
-  navigateur. Geneanet n'a pas d'API publique : l'envoi reste manuel.
-- **Rechercher sur** (Individu, et clic droit sur une personne) : ouvre dans le navigateur la
-  recherche de la personne sur un site (Geneanet et FamilySearch par défaut). Les sites se
-  règlent dans Réglages du fichier › Recherche : un nom et un modèle d'URL dont les variables
-  (`{surname}`, `{given}`, `{birth}`, `{death}`, `{place}`, parents, conjoint) sont remplacées
-  par les données de la personne. Rangés dans le .ged (`_GR_WEB`).
-- **Réglages du fichier** (⌘ / Ctrl + `,` ; menu GEDRoots sur macOS, Fichier ailleurs) : auteur, e-mail, droits,
-  description, langue et individu racine.
-  Tout est rangé dans l'en-tête du .ged en GEDCOM 7 standard (`HEAD.SUBM`, `COPR`, `NOTE`,
-  `LANG`). À chaque enregistrement, `HEAD.SOUR` et `HEAD.DATE` indiquent GEDRoots et la date.
-  - **Lieux** : format des lieux (`HEAD.PLAC.FORM`) — juridictions à renommer, réordonner,
-    ajouter ou retirer, avec réécriture de tous les lieux du fichier (annulable) et un aperçu.
-    La fiche d'un lieu propose un champ par juridiction, et les libellés courts (« Troyes
-    (Aube) ») suivent ce format.
-  - **Événements** : types d'événements personnalisés (`EVEN` + `TYPE`), déduits du fichier,
-    à renommer ou fusionner, avec un libellé affiché à part du `TYPE` (« Service militaire »
-    pour `TYPE military service`) ; un nouveau type ou un libellé est déclaré par l'extension
-    [`_GR_EVEN`](docs/extensions.md#_gr_even). Ils sont proposés dans « Ajouter un événement… ».
-  - **Médias** : dossier des médias et sous-dossiers (Actes, Portraits…), chacun avec les
-    événements qu'il reçoit (menu à cocher) et son modèle de nom (`{sosa:6}_{branch}_{type:1}_{surname}_{given}`…,
-    numéros Sosa-d'Aboville calculés depuis la racine), extension
-    [`_GR_MEDIA`](docs/extensions.md#_gr_media), avec un exemple par sous-dossier. Un fichier
-    rattaché depuis l'extérieur est copié à sa place ; Média › « Renommer selon le modèle… »
-    range les fichiers d'un média existant.
-- **Médias à plusieurs pages** : un acte sur deux feuillets est un seul média (`OBJE` avec un
-  `FILE` par page, standard GEDCOM 7). Visionneuse page par page (miniatures, ⇞ / ⇟), pages
-  ajoutées par glisser-déposer ou Média › Pages, réordonnées en glissant les miniatures, retirées
-  ou séparées en un nouveau média. Pour fusionner des médias existants : ⌘ / Ctrl + clic ou Maj + clic
-  dans la liste des médias, puis « Fusionner » (ou clic droit, ou Média › Fusionner avec un autre
-  média…). Tous les liens sont réécrits ; une personne située sur la page 2 garde son cadre
-  (extension [`_GR_FILE`](docs/extensions.md#_gr_file)).
+- **Media / photos**: portraits of people, images of sources (scanned records) in the record
+  and the detail panel, paths relative to the `.ged` file.
+- **Cropping and identifying people**: on a photo's record, Media › “Identify a Person in the
+  Photo”, then draw a frame around the face and choose the person. This is the standard GEDCOM 7
+  `CROP` on the `INDI → OBJE` link (no extension, readable by other software): the group photo
+  shows the names, and the person's portrait and thumbnails are cropped to their face. Each link
+  to an image (source, family…) can also be bounded, for example the useful part of a register.
+- **Web links** (a record's page in online archives, a Geneanet profile…): “Web Links” section
+  of the detail panel, clickable (opens in the browser), with “+”, edit and remove; also Edit ›
+  “Add Web Link…”. Stored in standard GEDCOM 7: a multimedia link to an `OBJE` whose `FILE` is
+  the URL (`FORM text/html`), and `WWW` for repositories.
+- **Import assistant** (File › “Import GEDCOM…”): opens a file from other software, lists what
+  it contains that is not standard and offers to convert it to GEDCOM 7 (undoable). First
+  check: `_URL` tags become multimedia links (`WWW` for repositories); events with an
+  extension tag (`_MILT`, `_MILI`, `_DEG`…) become `EVEN` + `TYPE`. The checks are in
+  `crates/gedcom/src/import.rs`.
+- **Export** (File › Export) in three formats.
+- **GEDZIP with media**: a `.gdz` archive (GEDCOM 7, chapter 4) with `gedcom.ged` and the media
+  files, to pass on the complete tree. Relative paths keep their folder (`Actes/…`), files
+  outside the .ged's folder go in `media/`, `FILE`s are rewritten for the archive; the .ged and
+  the media are not modified. Missing files keep their `FILE` and are listed at the end, each
+  leading to its media.
+- **GEDCOM 5.5.1**: a `.ged` for software that does not read GEDCOM 7 yet (5.5.1 header,
+  `SNOTE` → `NOTE`, `@#DFRENCH R@` calendars, `ROLE` → `RELA`, MIME types → formats, structures
+  specific to GEDCOM 7 and `_GR_*` extensions removed, doubled `@`, long lines as `CONC`).
+  Conversion in `crates/gedcom/src/gedcom551.rs`.
+- **GEDCOM for Geneanet**: the same export, adapted to Geneanet's (GeneWeb) import: when the
+  first jurisdiction of the place format is a locality (`Lieudit`, `Hameau`…), places become
+  `[Locality] - Town, …`; witness roles in GeneWeb's vocabulary (`GODP`, `Civil officer`…).
+  Geneanet's import page then opens in the browser. Geneanet has no public API: uploading stays
+  manual.
+- **Search on** (Person, and right-click on a person): opens the person's search on a website
+  in the browser (Geneanet and FamilySearch by default). Sites are set in File Settings ›
+  Search: a name and a URL template whose variables (`{surname}`, `{given}`, `{birth}`,
+  `{death}`, `{place}`, parents, spouse) are replaced with the person's data. Stored in the .ged
+  (`_GR_WEB`).
+- **File settings** (⌘ / Ctrl + `,`; GEDRoots menu on macOS, File elsewhere): author, e-mail,
+  copyright, description, language and root person. Everything is stored in the .ged's header
+  in standard GEDCOM 7 (`HEAD.SUBM`, `COPR`, `NOTE`, `LANG`). On each save, `HEAD.SOUR` and
+  `HEAD.DATE` record GEDRoots and the date.
+  - **Places**: place format (`HEAD.PLAC.FORM`) — jurisdictions to rename, reorder, add or
+    remove, with every place in the file rewritten (undoable) and a preview. A place's record
+    has one field per jurisdiction, and short labels (“Troyes (Aube)”) follow this format.
+  - **Events**: custom event types (`EVEN` + `TYPE`), found in the file, to rename or merge,
+    with a label shown apart from the `TYPE` (“Military Service” for `TYPE military service`);
+    a new type or a label is declared by the [`_GR_EVEN`](docs/extensions.md#_gr_even)
+    extension. They are offered in “Add Event…”.
+  - **Media**: media folder and subfolders (Records, Portraits…), each with the events it
+    receives (checkbox menu) and its name template (`{sosa:6}_{branch}_{type:1}_{surname}_{given}`…,
+    Sosa-d'Aboville numbers computed from the root), extension
+    [`_GR_MEDIA`](docs/extensions.md#_gr_media), with an example per subfolder. A file attached
+    from outside is copied into place; Media › “Rename by Template…” files the files of an
+    existing media.
+- **Multi-page media**: a record on two sheets is a single media (`OBJE` with one `FILE` per
+  page, standard GEDCOM 7). Page-by-page viewer (thumbnails, ⇞ / ⇟), pages added by drag and
+  drop or Media › Pages, reordered by dragging thumbnails, removed or split into a new media. To
+  merge existing media: ⌘ / Ctrl + click or Shift + click in the media list, then “Merge” (or
+  right-click, or Media › Merge with Another Media…). Every link is rewritten; a person framed
+  on page 2 keeps their frame (extension [`_GR_FILE`](docs/extensions.md#_gr_file)).
 
-![Personnes identifiées sur une photo](docs/capture-photo.png)
-- **Individu racine** : enregistré dans le fichier lui-même (extension `_GR_ROOT`, voir
-  [docs/extensions.md](docs/extensions.md)), jamais dans un fichier annexe.
-- Les identifiants GEDCOM n'apparaissent pas dans l'interface : liens choisis par nom
-  (époux, dépôt…), identifiant accessible via **… → Copier l'ID** et l'onglet GEDCOM.
-- **Éditeur visuel** pour les enregistrements courants (individu, source, dépôt,
-  média, note) : seuls les champs affichés sont modifiés, tout le reste est conservé.
-- **Éditeur GEDCOM brut** pour chaque enregistrement, avec validation ; changer un
-  identifiant met à jour tous les pointeurs. **Autocomplétion** selon le schéma GEDCOM 7
-  officiel : balises permises à cet endroit (recherche aussi par libellé français,
-  « nais » → `BIRT`), individus/familles/sources pour les pointeurs, valeurs énumérées,
-  mots-clés et mois des dates (calendrier républicain compris), lieux déjà saisis.
-  `Ctrl+Espace` affiche les suggestions à la demande.
-- **Actes dans la fiche source** : la fiche d'une source liste ses actes (relus depuis les
-  citations qui la désignent, regroupées par référence `PAGE`) ; « + » ou `⌘E` / `Ctrl+E`
-  ouvre un acte vide, un clic rouvre un acte pour le corriger, clic droit pour le supprimer.
-  « Nouvelle source » s'ouvre directement sur un acte vide. L'éditeur est générique, sans
-  modèles : on choisit n'importe quel événement GEDCOM (ou un type personnalisé), puis on
-  ajoute les personnes avec leur rôle standard (enfant, père, mère, époux, témoin, parrain,
-  déclarant, officiant, voisin…) ; les champs et les liens familiaux découlent du rôle.
-  Pour chaque personne, GEDRoots propose les individus existants qui correspondent (nom,
-  âge, et liens déjà connus : « parent de… », « conjoint de… ») ; on peut lier, créer, ou
-  mentionner sans créer. L'enregistrement écrit tout de suite l'événement, les liens
-  familiaux, les témoins (`ASSO`), les professions et domiciles datés, une naissance estimée
-  d'après l'âge, et toutes les citations avec leur rôle (`EVEN`/`ROLE`), sans aucune
-  extension. Aperçu du GEDCOM avant d'écrire, et « Enregistrer et acte suivant » pour
-  dépouiller un registre (le numéro de la référence avance tout seul).
-  Images ou PDF de l'acte : un média du fichier (« Média existant… », recherche par titre),
-  ou des fichiers déposés n'importe où sur l'éditeur (ou « Autre fichier… ») ; un fichier déjà
-  importé reprend son média, sans doublon ;
-  plusieurs fichiers font un seul média à plusieurs pages. À l'enregistrement, ils sont
-  nommés et rangés selon Réglages du fichier › Médias : copiés s'ils viennent d'ailleurs,
-  déplacés s'ils sont déjà dans le dossier et qu'aucun autre média ne les utilise.
-- Créer / supprimer un enregistrement (avec confirmation ; un lieu peut être retiré de tous
-  les événements), annuler (50 niveaux), date de modification `CHAN`
-  mise à jour comme dans Ancestris.
-- **Qualité des données** (`⌘7` / `Ctrl+7`, menu Affichage) : une page avec les anomalies à
-  corriger, par catégorie : dates et âges
-  impossibles, liens familiaux incohérents, structure GEDCOM 7 (balise non permise,
-  information obligatoire absente ou en double, date illisible, valeur inconnue, lien
-  cassé), éléments vides ou isolés (événements et notes vides, familles sans membre,
-  enregistrements cités nulle part, arbres séparés de la racine), médias (fichier
-  introuvable, déplacé dans le dossier, médias en double, format absent), événements sans
-  source, fichiers du dossier à rattacher, lieux (variantes d'un même lieu, rattachement
-  incohérent comme « Loire » tantôt en « Rhône-Alpes », tantôt en « Auvergne-Rhône-Alpes »,
-  coordonnées illisibles) et lieux sans coordonnées. Un clic ouvre l'élément (`⌘[` revient), le
-  bouton de la ligne corrige quand c'est sûr (supprimer, rétablir un lien à sens unique,
-  retirer un lien cassé, corriger le chemin, fusionner, créer le média, harmoniser), et en lot, avec
-  confirmation pour les suppressions et fusions. « Localiser… » choisit à la main le
-  fichier d'un média introuvable, ou ouvre le lieu sur la carte pour le localiser. Clic droit › « Masquer » écrit [`_GR_IGNORE`](docs/extensions.md).
-- **Lien de parenté** (menu Individu › Lien de parenté avec…) : « cousine issue de germain »,
-  « oncle à la mode de Bretagne », demi-frère, beau-père… avec le chemin par l'ancêtre commun
-  et le degré civil, affiché dans le panneau de l'individu.
-- **Statistiques** (`⌘8` / `Ctrl+8`, menu Affichage) : une page avec les patronymes et prénoms
-  fréquents, la longévité par siècle, l'âge au mariage, la complétude de l'ascendance de
-  l'individu racine par génération et l'implexe.
-- **Agents IA** (Fichier › Connecter un agent IA…) : un serveur MCP local, sur `127.0.0.1`,
-  laisse un agent comme Claude Code lire le fichier ouvert (fiches, recherche, actes à chercher
-  parmi les ascendants), sans jamais l'écrire : les actes qu'il trouve attendent dans la page
-  « À relire », où l'on compare ce qui sera écrit avec l'arbre avant d'enregistrer. Les personnes
-  vivantes sont masquées. Deux prompts, `find_record` et `read_record`, donnent à l'agent la
-  méthode pour chercher un acte puis le proposer. Voir [docs/agents.md](docs/agents.md).
-- Enregistrement **sans perte** : un fichier relu puis réécrit est identique à l'octet près
-  (balises propriétaires `_SOSADABOVILLE`, `_TODO`… comprises). Une copie `.ged.bak` est
-  gardée à chaque enregistrement.
+![People identified in a photo](docs/capture-photo.png)
+- **Root person**: stored in the file itself (extension `_GR_ROOT`, see
+  [docs/extensions.md](docs/extensions.md)), never in a sidecar file.
+- GEDCOM identifiers do not appear in the interface: links are chosen by name (spouse,
+  repository…), the identifier is available through **… → Copy ID** and the GEDCOM tab.
+- **Visual editor** for common records (person, source, repository, media, note): only the
+  fields shown are modified, everything else is kept.
+- **Raw GEDCOM editor** for every record, with validation; changing an identifier updates every
+  pointer. **Autocompletion** from the official GEDCOM 7 schema: tags allowed at this place
+  (also searchable by label in the interface language, “birt” or “nais” → `BIRT`),
+  people/families/sources for pointers, enumerated values, date keywords and months (French
+  Republican calendar included), places already entered. `Ctrl+Space` shows suggestions on
+  demand.
+- **Records in the source's page**: a source's page lists its records (read back from the
+  citations that point to it, grouped by `PAGE` reference); “+” or `⌘E` / `Ctrl+E` opens an
+  empty record, a click reopens a record to correct it, right-click deletes it. “New Source”
+  opens directly on an empty record. The editor is generic, without templates: choose any
+  GEDCOM event (or a custom type), then add the people with their standard role (child,
+  father, mother, husband, witness, godfather, informant, officiant, neighbor…); fields and
+  family links follow from the role. For each person, GEDRoots suggests the existing people who
+  match (name, age, and links already known: “parent of…”, “spouse of…”); you can link, create,
+  or mention without creating. Saving writes the event, family links, witnesses (`ASSO`), dated
+  occupations and residences, a birth estimated from the age, and every citation with its role
+  (`EVEN`/`ROLE`) right away, without any extension. GEDCOM preview before writing, and “Save
+  and Next Record” to go through a register (the reference number advances by itself).
+  Images or PDF of the record: a media of the file (“Existing Media…”, search by title), or
+  files dropped anywhere on the editor (or “Other File…”); a file already imported reuses its
+  media, without duplicates; several files make a single multi-page media. On saving, they are
+  named and filed according to File Settings › Media: copied if they come from elsewhere,
+  moved if they are already in the folder and no other media uses them.
+- Create / delete a record (with confirmation; a place can be removed from every event), undo
+  (50 levels), `CHAN` change date updated as in Ancestris.
+- **Data quality** (`⌘7` / `Ctrl+7`, View menu): a page with the anomalies to fix, by category:
+  impossible dates and ages, inconsistent family links, GEDCOM 7 structure (tag not allowed,
+  required information missing or duplicated, unreadable date, unknown value, broken link),
+  empty or isolated items (empty events and notes, families without members, records cited
+  nowhere, trees separated from the root), media (file not found, moved within the folder,
+  duplicate media, missing format), events without sources, files of the folder to attach,
+  places (variants of the same place, inconsistent hierarchy such as “Loire” sometimes in
+  “Rhône-Alpes”, sometimes in “Auvergne-Rhône-Alpes”, unreadable coordinates) and places without
+  coordinates. A click opens the item (`⌘[` goes back), the row's button fixes it when that is
+  safe (delete, restore a one-way link, remove a broken link, fix the path, merge, create the
+  media, harmonize), also in bulk, with confirmation for deletions and merges. “Locate…”
+  chooses the file of a missing media by hand, or opens the place on the map to locate it.
+  Right-click › “Hide” writes [`_GR_IGNORE`](docs/extensions.md).
+- **Relationship** (Person › Relationship With… menu): “second cousin”, “first cousin once
+  removed”, half-brother, father-in-law… (in French: « cousine issue de germain », « oncle à la
+  mode de Bretagne »), with the path through the common ancestor and the civil degree, shown in
+  the person's panel.
+- **Statistics** (`⌘8` / `Ctrl+8`, View menu): a page with frequent surnames and given names,
+  longevity by century, age at marriage, completeness of the root person's ancestry by
+  generation, and pedigree collapse.
+- **AI agents** (File › Connect an AI Agent…): a local MCP server, on `127.0.0.1`, lets an
+  agent such as Claude Code read the open file (records, search, records to look for among the
+  ancestors) without ever writing it: the records it finds wait in the “To Review” page, where
+  you compare what will be written with the tree before saving. Living people are hidden. Two
+  prompts, `find_record` and `read_record`, give the agent the method to look for a record and
+  then propose it. See [docs/agents.md](docs/agents.md).
+- **Lossless** saving: a file read and written back is identical to the byte (proprietary tags
+  `_SOSADABOVILLE`, `_TODO`… included). A `.ged.bak` copy is kept on each save.
 
-![Éventail](docs/capture-eventail.png)
+![Fan chart](docs/capture-eventail.png)
 
-![Lier une personne existante](docs/capture-lier.png)
+![Link an existing person](docs/capture-lier.png)
 
-![Éditeur visuel](docs/capture-fiche.png)
+![Visual editor](docs/capture-fiche.png)
 
-![Acte dans la fiche source](docs/capture-saisie.png)
+![Record in the source's page](docs/capture-saisie.png)
 
-## Environnement de développement
+## Development environment
 
-Les outils (Rust épinglé, avec rustfmt et clippy) et les commandes du projet sont décrits dans
-[`mise.toml`](mise.toml), les versions exactes dans `mise.lock`. Avec [mise](https://mise.jdx.dev) :
+The tools (pinned Rust, with rustfmt and clippy) and the project's commands are described in
+[`mise.toml`](mise.toml), the exact versions in `mise.lock`. With [mise](https://mise.jdx.dev):
 
 ```sh
-mise trust && mise install   # une fois : installe la toolchain du projet
-mise tasks                   # liste des tâches
-mise run app arbre.ged       # lancer l'app
-mise run ci                  # formatage, tests et clippy, comme la CI
-mise run fmt                 # formater
+mise trust && mise install   # once: installs the project's toolchain
+mise tasks                   # list of tasks
+mise run app tree.ged        # launch the app
+mise run ci                  # formatting, tests and clippy, like the CI
+mise run fmt                 # format
 ```
 
-Sous Linux, installer d'abord les dépendances de GPUI :
+On Linux, first install GPUI's dependencies:
 `libxkbcommon-dev libxkbcommon-x11-dev libfontconfig-dev libwayland-dev libvulkan-dev`.
 
-Les réglages propres à une machine vont dans `mise.local.toml` (non versionné), par exemple un
-dossier de compilation hors du dépôt :
+Machine-specific settings go in `mise.local.toml` (not versioned), for example a build folder
+outside the repository:
 
 ```toml
 [env]
 CARGO_TARGET_DIR = "{{env.HOME}}/Developer/gedroots-target"
 ```
 
-Pour changer de version de Rust : modifier `mise.toml`, puis
+To change the Rust version: edit `mise.toml`, then
 `mise lock --platform linux-x64,macos-arm64`.
 
-La CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) lance les mêmes tâches :
-`mise run ci` sur Linux, et `mise run bundle --dmg` sur macOS (sur `main` ou à la demande), dont
-le `.dmg` est téléchargeable dans les artefacts. Le cache de mise-action garde la toolchain
-(rustup est rangé dans le dossier de mise), et un cache indexé sur `Cargo.lock` garde les crates
-et `target/`.
+The CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs the same tasks: `mise run
+ci` on Linux, and `mise run bundle --dmg` on macOS (on `main` or on demand), whose `.dmg` can be
+downloaded from the artifacts. mise-action's cache keeps the toolchain (rustup lives in mise's
+folder), and a cache keyed on `Cargo.lock` keeps the crates and `target/`.
 
-## Installer
+## Install
 
 ### macOS
 
@@ -283,17 +271,17 @@ et `target/`.
 mise run install
 ```
 
-Compile GEDRoots en mode release, construit `GEDRoots.app` (icône, nom dans la barre de menus et
-le Dock, pas de Terminal) et la copie dans `/Applications`. Les fichiers `.ged` s'ouvrent ensuite
-d'un double-clic ou par « Ouvrir avec » dans le Finder. Sans `--install`, l'app reste dans
-`target/release/GEDRoots.app` (`mise run bundle`) ; avec `mise run bundle --dmg`, une image
-disque `GEDRoots.dmg` est créée à côté (utile pour la CI).
+Builds GEDRoots in release mode, makes `GEDRoots.app` (icon, name in the menu bar and the Dock,
+no Terminal) and copies it to `/Applications`. `.ged` files then open with a double-click or
+with “Open With” in the Finder. Without `--install`, the app stays in
+`target/release/GEDRoots.app` (`mise run bundle`); with `mise run bundle --dmg`, a
+`GEDRoots.dmg` disk image is created next to it (useful for the CI).
 
-L'app est signée « ad hoc », ce qui suffit sur le Mac qui l'a compilée. Une app téléchargée
-(le `.dmg` de la CI) est bloquée par Gatekeeper au premier lancement : clic droit › Ouvrir, ou
-`xattr -dr com.apple.quarantine /Applications/GEDRoots.app`. Pour la distribuer sans cet
-avertissement, il faudrait la signer avec un certificat Developer ID et la faire notariser par
-Apple (compte Apple Developer payant).
+The app is signed “ad hoc”, which is enough on the Mac that built it. A downloaded app (the
+CI's `.dmg`) is blocked by Gatekeeper on first launch: right-click › Open, or
+`xattr -dr com.apple.quarantine /Applications/GEDRoots.app`. To distribute it without this
+warning, it would have to be signed with a Developer ID certificate and notarized by Apple
+(paid Apple Developer account).
 
 ### Linux
 
@@ -301,47 +289,48 @@ Apple (compte Apple Developer payant).
 mise run install
 ```
 
-Installe `~/.local/bin/gedroots`, l'icône et l'entrée du menu des applications.
+Installs `~/.local/bin/gedroots`, the icon and the applications menu entry.
 
 ### Windows
 
-`mise run install` (ou `cargo build --release -p gedroots`) produit `target\release\gedroots.exe`, qui s'ouvre sans
-fenêtre de console.
+`mise run install` (or `cargo build --release -p gedroots`) produces
+`target\release\gedroots.exe`, which opens without a console window.
 
-L'icône (`packaging/icon.png`) vient du kit de marque GEDRoots (app icon sombre, posée sur la grille macOS).
+The icon (`packaging/icon.png`) comes from the GEDRoots brand kit (dark app icon, placed on the
+macOS grid).
 
-## Lancer depuis les sources
+## Run from source
 
 ```sh
-mise run app chemin/vers/arbre.ged
+mise run app path/to/tree.ged
 ```
 
-Sans argument, l'app propose d'ouvrir un fichier ou d'en créer un nouveau.
-Raccourcis : `⌘O` / `Ctrl+O` ouvrir, `⌘S` / `Ctrl+S` enregistrer, `⌘N` nouveau,
-`⌘E` saisir un acte, `⌘Z` / `Ctrl+Z` annuler la dernière modification du document, `⌘⇧Z` /
-`Ctrl+Y` (Windows) / `Ctrl+Maj+Z` (Linux) la rétablir, `⌘[` / `Alt+←` revenir à la fiche précédente.
+Without an argument, the app offers to open a file or create a new one. Shortcuts: `⌘O` /
+`Ctrl+O` open, `⌘S` / `Ctrl+S` save, `⌘N` new, `⌘E` enter a record, `⌘Z` / `Ctrl+Z` undo the
+document's last change, `⌘⇧Z` / `Ctrl+Y` (Windows) / `Ctrl+Shift+Z` (Linux) redo it, `⌘[` /
+`Alt+←` go back to the previous record.
 
-Variables d'environnement facultatives pour la carte : `GEDROOTS_OFFLINE=1` (démarrer hors ligne),
-`GEDROOTS_TILE_URL` (autre serveur de tuiles, `{z}/{x}/{y}`), `GEDROOTS_TILE_CACHE` (dossier du
-cache, par défaut `~/Library/Caches/GEDRoots/tiles` ou `~/.cache/gedroots/tiles`),
-`GEDROOTS_GEOCODER` (autre instance de Photon).
+Optional environment variables for the map: `GEDROOTS_OFFLINE=1` (start offline),
+`GEDROOTS_TILE_URL` (another tile server, `{z}/{x}/{y}`), `GEDROOTS_TILE_CACHE` (cache folder,
+by default `~/Library/Caches/GEDRoots/tiles` or `~/.cache/gedroots/tiles`),
+`GEDROOTS_GEOCODER` (another Photon instance).
 
-## Organisation du code
+## Code layout
 
-| Crate | Rôle |
+| Crate | Role |
 | --- | --- |
-| [`crates/gedcom`](crates/gedcom) | Lecture/écriture GEDCOM 7 sans perte, vues typées (individus, familles, sources, lieux, médias), recadrage `CROP` (`crop.rs`), médias multipages (`multipage.rs`), liens web (`weblink.rs`), assistant d'import (`import.rs`), préparation de l'export GEDZIP (`gedzip.rs`), export GEDCOM 5.5.1 et Geneanet (`gedcom551.rs`), sites de recherche en ligne (`websearch.rs`), formulaires d'édition, dates, coordonnées (`geo.rs`), outils d'analyse (`analysis/`), contrôles de la page Qualité (`quality.rs`), recherche (`search.rs`, `query.rs`, `phonetic.rs`, recherches enregistrées `saved.rs`), ajout/liaison de proches et médias (`relations.rs`), descendance (`pedigree.rs`) et actes des sources (`act.rs`). Sans dépendance. |
-| [`crates/gedroots`](crates/gedroots) | Application GPUI : `commands.rs` (toutes les commandes, raccourcis et menus), `workspace.rs` (fenêtre et vues) et `workspace/` (`commands.rs` commandes et palette, `tree.rs` arbres, `relatives.rs` proches/sélecteur/médias, `add.rs` fenêtres d'ajout et de modification d'événement, `menus.rs` menus du clic droit, `photo.rs` recadrage et personnes sur les photos, `pages.rs` médias multipages et fusion, `weblinks.rs` liens web, `import.rs` assistant d'import, `export.rs` exports GEDZIP et GEDCOM 5.5.1, `filters.rs` filtres rapides, `quality.rs` page Qualité, `insights.rs` page Statistiques et lien de parenté), `editor.rs` (éditeurs visuel et brut), `act_editor.rs` (éditeur d'acte), `gedzip.rs` (écriture de l'archive `.gdz`), `map.rs` (carte des lieux), `theme.rs` (palette de la maquette). |
+| [`crates/gedcom`](crates/gedcom) | Lossless GEDCOM 7 reading/writing, typed views (people, families, sources, places, media), `CROP` cropping (`crop.rs`), multi-page media (`multipage.rs`), web links (`weblink.rs`), import assistant (`import.rs`), GEDZIP export preparation (`gedzip.rs`), GEDCOM 5.5.1 and Geneanet export (`gedcom551.rs`), online search sites (`websearch.rs`), editing forms, dates, coordinates (`geo.rs`), analysis tools (`analysis/`), Quality page checks (`quality.rs`), search (`search.rs`, `query.rs`, `phonetic.rs`, saved searches `saved.rs`), adding/linking relatives and media (`relations.rs`), descendants (`pedigree.rs`), source records (`act.rs`) and its own translations (`locales/`). |
+| [`crates/gedroots`](crates/gedroots) | GPUI application: `commands.rs` (every command, shortcut and menu), `workspace.rs` (window and views) and `workspace/` (`commands.rs` commands and palette, `tree.rs` charts, `relatives.rs` relatives/picker/media, `add.rs` windows to add and edit events, `menus.rs` right-click menus, `photo.rs` cropping and people in photos, `pages.rs` multi-page media and merging, `weblinks.rs` web links, `import.rs` import assistant, `export.rs` GEDZIP and GEDCOM 5.5.1 exports, `filters.rs` quick filters, `quality.rs` Quality page, `insights.rs` Statistics page and relationship), `editor.rs` (visual and raw editors), `act_editor.rs` (record editor), `gedzip.rs` (writing the `.gdz` archive), `map.rs` (place map), `theme.rs` (design tokens), `locales/` (English and French texts). |
 
 ## Tests
 
 ```sh
 mise run test
-# Contrôle de cohérence et statistiques d'un fichier, en ligne de commande :
-mise exec -- cargo run -p gedcom --example analyse -- ~/Genealogie/arbre.ged
-# Vérifier qu'un vrai fichier est relu et réécrit à l'identique :
-GEDROOTS_TEST_GED=~/Genealogie/arbre.ged mise run test real_file -- --nocapture
+# Consistency check and statistics of a file, on the command line:
+mise exec -- cargo run -p gedcom --example analyse -- ~/Genealogie/tree.ged
+# Check that a real file is read and written back identically:
+GEDROOTS_TEST_GED=~/Genealogie/tree.ged mise run test real_file -- --nocapture
 ```
 
-Le fichier d'exemple `crates/gedcom/tests/fixtures/exemple.ged` est fictif. Les fichiers
-`.ged` personnels sont ignorés par git.
+The sample file `crates/gedcom/tests/fixtures/exemple.ged` is fictional. Personal `.ged` files
+are ignored by git.

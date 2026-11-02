@@ -66,13 +66,7 @@ impl Gedcom {
         }
         self.header
             .children_with(WEB_TAG)
-            .map(|n| SearchSite {
-                name: n.val().to_string(),
-                url: crate::keywords::template_from_french(
-                    n.child_val(URL_TAG).unwrap_or(""),
-                    crate::keywords::WEB_VARIABLES,
-                ),
-            })
+            .map(|n| SearchSite { name: n.val().to_string(), url: n.child_val(URL_TAG).unwrap_or("").to_string() })
             .filter(|s| !s.url.is_empty())
             .collect()
     }

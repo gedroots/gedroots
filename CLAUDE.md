@@ -1,5 +1,5 @@
 # Claude Code
 
-Les instructions du dépôt sont dans AGENTS.md, et le design dans design.md :
+The repository instructions are in AGENTS.md, and the design in design.md:
 
 @AGENTS.md

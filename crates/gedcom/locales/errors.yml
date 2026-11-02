@@ -153,15 +153,6 @@ import.prim.other:
 import.prim_into:
   en: "first media of the record"
   fr: "premier média de la fiche"
-import.templates.one:
-  en: "%{n} leftover from the old guided entry"
-  fr: "%{n} reste de l'ancienne saisie guidée"
-import.templates.other:
-  en: "%{n} leftovers from the old guided entry"
-  fr: "%{n} restes de l'ancienne saisie guidée"
-import.templates_into:
-  en: "standard GEDCOM 7 records, without templates"
-  fr: "actes en GEDCOM 7 standard, sans modèles"
 import.url.one:
   en: "%{n} _URL link"
   fr: "%{n} lien _URL"
