@@ -5,6 +5,10 @@
 //! professions. Seuls les champs de la fenêtre d'édition (type, précision,
 //! date, lieu, première source) sont touchés : notes, médias, âge, adresse,
 //! sources supplémentaires… restent en place.
+//!
+//! La fiche d'un individu montre ses événements et ceux de ses unions
+//! (mariage, divorce…) dans une seule chronologie : voir [`Gedcom::person_events`].
+//! Chaque événement peut avoir ses médias (`2 OBJE @M1@`, GEDCOM 7 standard).
 
 use crate::document::Gedcom;
 use crate::model::{Event, event_label};
@@ -21,7 +25,101 @@ fn is_attribute(tag: &str) -> bool {
     detail_in_value(tag) || tag == "RESI"
 }
 
+/// Un événement de la chronologie d'une personne.
+#[derive(Debug, Clone)]
+pub struct PersonEvent<'a> {
+    /// Enregistrement qui porte l'événement : l'individu, ou la famille d'une union.
+    pub owner: String,
+    /// Position de l'événement dans `owner`.
+    pub index: usize,
+    pub event: Event<'a>,
+    /// Événement d'une union (porté par la famille, pas par l'individu).
+    pub family: bool,
+    /// Événement d'une union : le conjoint, s'il est connu.
+    pub spouse: Option<String>,
+}
+
 impl Gedcom {
+    /// Chronologie d'un individu : ses propres événements et ceux de ses unions
+    /// (mariage, divorce…), triés par date ; les événements sans date viennent
+    /// à la fin, dans l'ordre du fichier.
+    pub fn person_events(&self, indi: &str) -> Vec<PersonEvent<'_>> {
+        let Some(i) = self.individual(indi) else { return Vec::new() };
+        let mut out: Vec<PersonEvent> = self
+            .events_of(indi)
+            .into_iter()
+            .map(|(index, event)| PersonEvent { owner: indi.to_string(), index, event, spouse: None, family: false })
+            .collect();
+        for (fam, spouse) in i.unions(self) {
+            for (index, event) in self.events_of(&fam) {
+                out.push(PersonEvent { owner: fam.clone(), index, event, spouse: spouse.clone(), family: true });
+            }
+        }
+        out.sort_by_key(|e| e.event.date().map(|d| d.sort_key()).unwrap_or((i32::MAX, 0, 0)));
+        out
+    }
+
+    /// Médias liés à un événement.
+    pub fn event_media(&self, owner: &str, index: usize) -> Vec<&str> {
+        self.event_node(owner, index)
+            .map(|e| e.children_with("OBJE").filter_map(|n| n.pointer()).collect())
+            .unwrap_or_default()
+    }
+
+    /// Lie un média à un événement (`2 OBJE @M1@`). Sans effet s'il l'est déjà.
+    pub fn attach_media_to_event(&mut self, owner: &str, index: usize, media: &str) -> Result<(), String> {
+        if self.get(media).is_none_or(|m| m.tag != "OBJE") {
+            return Err("média introuvable".into());
+        }
+        let p = format!("@{}@", media.trim_matches('@'));
+        let e = self
+            .get_mut(owner)
+            .and_then(|n| n.children.get_mut(index))
+            .filter(|c| event_label(&c.tag).is_some())
+            .ok_or("événement introuvable")?;
+        if e.children.iter().any(|c| c.tag == "OBJE" && c.val() == p) {
+            return Ok(());
+        }
+        // Après les citations et médias existants, sinon à la fin.
+        let at = e
+            .children
+            .iter()
+            .rposition(|c| matches!(c.tag.as_str(), "OBJE" | "SOUR" | "NOTE" | "SNOTE"))
+            .map(|i| i + 1)
+            .unwrap_or(e.children.len());
+        e.children.insert(at, Node::with_value("OBJE", p));
+        // « 1 MARR Y » : l'événement a maintenant un détail.
+        if e.value.as_deref() == Some("Y") {
+            e.value = None;
+        }
+        if let Some(r) = self.get_mut(owner) {
+            r.touch();
+        }
+        Ok(())
+    }
+
+    /// Détache un média d'un événement (le média reste dans le fichier).
+    pub fn detach_media_from_event(&mut self, owner: &str, index: usize, media: &str) -> Result<(), String> {
+        let p = format!("@{}@", media.trim_matches('@'));
+        let e = self
+            .get_mut(owner)
+            .and_then(|n| n.children.get_mut(index))
+            .filter(|c| event_label(&c.tag).is_some())
+            .ok_or("événement introuvable")?;
+        let before = e.children.len();
+        e.children.retain(|c| !(c.tag == "OBJE" && c.val() == p));
+        if e.children.len() == before {
+            return Ok(());
+        }
+        if !is_attribute(&e.tag) && e.value.is_none() && e.children.is_empty() {
+            e.value = Some("Y".into());
+        }
+        if let Some(r) = self.get_mut(owner) {
+            r.touch();
+        }
+        Ok(())
+    }
+
     /// Événements d'un enregistrement, avec leur position.
     pub fn events_of(&self, owner: &str) -> Vec<(usize, Event<'_>)> {
         let Some(node) = self.get(owner) else { return Vec::new() };

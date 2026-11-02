@@ -23,6 +23,11 @@ pub(super) enum From {
     Member(String),
     /// Une image rattachée à l'enregistrement donné (vignettes du panneau).
     Attached(String),
+    /// Un média d'un événement (enregistrement porteur, position de l'événement).
+    OnEvent(String, usize),
+    /// Un proche dans la section « Famille » d'un individu : le lien (individu,
+    /// famille) que « Détacher » défait, et le libellé de la commande.
+    Relative(String, String, &'static str),
 }
 
 type Ws = WeakEntity<Workspace>;
@@ -118,11 +123,26 @@ impl Workspace {
             }) else {
                 return menu;
             };
-            let (o1, o2) = (owner.clone(), owner.clone());
+            let (o1, o2, o3, o4) = (owner.clone(), owner.clone(), owner.clone(), owner.clone());
+            // Événement d'une union vu depuis la fiche d'un individu : ouvrir la famille.
+            let family = read(&ws, cx, |this, g| {
+                (g.family(&owner).is_some() && this.selected.as_deref() != Some(owner.as_str())).then(|| owner.clone())
+            })
+            .flatten();
             menu.item(act(&ws, "Modifier l'événement…", move |this, w, cx| {
                 this.open_event_dialog(o1.clone(), Some(ix), w, cx)
             }))
             .separator()
+            .item(act(&ws, "Rattacher des photos ou documents…", move |this, w, cx| {
+                this.choose_files_for_event(o3.clone(), ix, w, cx)
+            }))
+            .item(act(&ws, "Lier un média existant…", move |this, w, cx| {
+                this.open_picker(PickPurpose::MediaToEvent { owner: o4.clone(), ix }, w, cx)
+            }))
+            .separator()
+            .when_some(family, |m, f| {
+                m.item(act(&ws, "Ouvrir la famille", move |this, w, cx| this.goto(f.clone(), w, cx)))
+            })
             .when_some(place, |m, p| {
                 m.item(act(&ws, "Afficher le lieu", move |this, w, cx| this.goto_place(p.clone(), w, cx)))
             })
@@ -309,6 +329,15 @@ pub(super) fn person_menu(ws: Ws, x: String, from: From) -> MenuBuilder {
                 m.item(act(&ws, "Retirer de la famille", move |this, w, cx| this.unlink(x.clone(), fam.clone(), w, cx)))
             },
         )
+        .when_some(
+            match &from {
+                From::Relative(indi, fam, label) => Some((indi.clone(), fam.clone(), *label)),
+                _ => None,
+            },
+            |m, (indi, fam, label)| {
+                m.item(act(&ws, label, move |this, w, cx| this.unlink(indi.clone(), fam.clone(), w, cx)))
+            },
+        )
         .item(act(&ws, "Copier le nom", move |this, _, cx| this.copy_text(name.clone(), "Nom", cx)))
         .map(|m| tail(m, &ws, &x, &from))
     })
@@ -394,6 +423,24 @@ fn other_menu(ws: Ws, x: String, kind: RecordKind, from: From) -> MenuBuilder {
                     })
                     .item(act(&ws, "Ajouter des pages…", move |this, w, cx| this.choose_pages(x7.clone(), w, cx)))
             })
+            .when_some(
+                match &from {
+                    From::OnEvent(owner, ix) => Some((owner.clone(), *ix)),
+                    _ => None,
+                },
+                |m, (owner, ix)| {
+                    let media = x.clone();
+                    m.separator().item(act(&ws, "Détacher de l'événement", move |this, w, cx| {
+                        let (owner, media) = (owner.clone(), media.clone());
+                        this.mutate(w, cx, move |g| {
+                            let what = g.record_label(&media);
+                            let from = g.event_title(&owner, ix).unwrap_or_default().to_lowercase();
+                            g.detach_media_from_event(&owner, ix, &media)?;
+                            Ok((format!("« {what} » détaché de l'événement {from}"), None))
+                        })
+                    }))
+                },
+            )
             .when_some(
                 match &from {
                     From::Attached(owner) => Some(owner.clone()),
