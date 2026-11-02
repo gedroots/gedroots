@@ -206,8 +206,9 @@ Pour changer de version de Rust : modifier `mise.toml`, puis
 
 La CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) lance les mêmes tâches :
 `mise run ci` sur Linux, et `mise run bundle --dmg` sur macOS (sur `main` ou à la demande), dont
-le `.dmg` est téléchargeable dans les artefacts. La toolchain et les crates sont gardées dans le
-dossier de cache de mise (`mise cache path`), conservé d'une exécution à l'autre avec `target/`.
+le `.dmg` est téléchargeable dans les artefacts. Le cache de mise-action garde la toolchain
+(rustup est rangé dans le dossier de mise), et un cache indexé sur `Cargo.lock` garde les crates
+et `target/`.
 
 ## Installer
 
