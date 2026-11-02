@@ -14,8 +14,8 @@ description = "Compiler tout l'espace de travail"
 run = "cargo build --workspace"
 
 [tasks.test]
-description = "Tests de la bibliothèque GEDCOM"
-run = "cargo test -p gedcom"
+description = "Tests de la bibliothèque GEDCOM et de l'app (traductions comprises)"
+run = "cargo test --workspace"
 
 [tasks.clippy]
 description = "Clippy, avertissements bloquants"

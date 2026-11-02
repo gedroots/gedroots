@@ -130,6 +130,19 @@ impl Workspace {
                 })
             })
             .when(root.is_some(), |d| on!(d, cx, GoToRoot, |this, w, cx| this.goto_root(w, cx)))
+            .when(self.can_save_search(cx), |d| on!(d, cx, SaveSearch, |this, w, cx| this.save_search(w, cx)))
+            .when(self.active_saved(cx).is_some(), |d| {
+                let d = on!(d, cx, RenameSearch, |this, w, cx| {
+                    if let Some(i) = this.active_saved(cx) {
+                        this.start_rename_search(i, w, cx)
+                    }
+                });
+                on!(d, cx, DeleteSearch, |this, w, cx| {
+                    if let Some(i) = this.active_saved(cx) {
+                        this.delete_saved(i, w, cx)
+                    }
+                })
+            })
             // Arbre et filtres de la liste des individus.
             .when(individuals, |d| {
                 let d = on!(d, cx, ShowTree, |this, w, cx| this.show_tab(CenterTab::Tree, cx));

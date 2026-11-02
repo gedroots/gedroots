@@ -979,7 +979,7 @@ impl Workspace {
                                         });
                                     }))
                                     .separator()
-                                    .item(PopupMenuItem::new(label::ADD_PAGES).on_click(move |_, w, cx| {
+                                    .item(PopupMenuItem::new(label::add_pages()).on_click(move |_, w, cx| {
                                         let a = a.clone();
                                         let _ = me1.update(cx, |this, cx| this.choose_pages(a, w, cx));
                                     }))

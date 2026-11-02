@@ -1,0 +1,213 @@
+//! Recherches enregistrées (`HEAD._GR_FIND`), affichées dans la barre latérale.
+//!
+//! ```text
+//! 0 HEAD
+//! 1 _GR_FIND Nés vers 1850
+//! 2 _GR_ZONE INDI
+//! 2 _GR_QUERY né:1850±5 sexe:h
+//! 1 _GR_FIND Actes non rattachés
+//! 2 _GR_ZONE OBJE
+//! 2 _GR_QUERY sans:lien
+//! 2 _GR_TYPE Actes
+//! ```
+
+use crate::document::Gedcom;
+use crate::node::Node;
+use crate::query::{Scope, chip_label, words};
+
+pub const FIND_TAG: &str = "_GR_FIND";
+const ZONE_TAG: &str = "_GR_ZONE";
+const QUERY_TAG: &str = "_GR_QUERY";
+const TYPE_TAG: &str = "_GR_TYPE";
+const URI: &str = "https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_find";
+
+/// Une recherche enregistrée.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SavedSearch {
+    pub name: String,
+    pub scope: Scope,
+    /// Texte de la requête (`né:1850±5 sexe:h`).
+    pub query: String,
+    /// Type de média choisi dans la barre des types (zone Médias).
+    pub media_type: Option<String>,
+}
+
+fn zone_tag(s: Scope) -> &'static str {
+    match s {
+        Scope::Individuals => "INDI",
+        Scope::Sources => "SOUR",
+        Scope::Places => "PLAC",
+        Scope::Media => "OBJE",
+    }
+}
+
+fn zone(tag: &str) -> Option<Scope> {
+    Some(match tag.trim() {
+        "INDI" => Scope::Individuals,
+        "SOUR" => Scope::Sources,
+        "PLAC" => Scope::Places,
+        "OBJE" => Scope::Media,
+        _ => return None,
+    })
+}
+
+impl SavedSearch {
+    fn read(n: &Node) -> Option<Self> {
+        Some(Self {
+            name: n.val().trim().to_string(),
+            scope: zone(n.child_val(ZONE_TAG)?)?,
+            query: n.child_val(QUERY_TAG).unwrap_or("").trim().to_string(),
+            media_type: n.child_val(TYPE_TAG).map(str::trim).filter(|t| !t.is_empty()).map(str::to_string),
+        })
+    }
+
+    fn node(&self) -> Node {
+        let mut n = Node::with_value(FIND_TAG, self.name.trim());
+        n.children.push(Node::with_value(ZONE_TAG, zone_tag(self.scope)));
+        if !self.query.trim().is_empty() {
+            n.children.push(Node::with_value(QUERY_TAG, self.query.trim()));
+        }
+        if let Some(t) = &self.media_type {
+            n.children.push(Node::with_value(TYPE_TAG, t.as_str()));
+        }
+        n
+    }
+
+    /// Même recherche (zone, critères, type), quel que soit le nom.
+    pub fn same(&self, scope: Scope, query: &str, media_type: Option<&str>) -> bool {
+        let norm = |q: &str| q.split_whitespace().collect::<Vec<_>>().join(" ");
+        self.scope == scope && norm(&self.query) == norm(query) && self.media_type.as_deref() == media_type
+    }
+}
+
+/// Nom proposé pour une recherche : ses jetons (« Né vers 1850 (± 5 ans) · Hommes »),
+/// ses mots libres entre guillemets, précédés du type de média.
+pub fn default_name(g: &Gedcom, scope: Scope, query: &str, media_type: Option<&str>) -> String {
+    let mut parts: Vec<String> = media_type.map(str::to_string).into_iter().collect();
+    let mut free: Vec<&str> = Vec::new();
+    for (_, w) in words(query) {
+        match chip_label(scope, w, Some(g)) {
+            Some(l) => parts.push(l),
+            None => free.push(w),
+        }
+    }
+    if !free.is_empty() {
+        parts.push(format!("« {} »", free.join(" ")));
+    }
+    if parts.is_empty() {
+        return "Recherche".into();
+    }
+    parts.join(" · ")
+}
+
+impl Gedcom {
+    pub fn saved_searches(&self) -> Vec<SavedSearch> {
+        self.header.children_with(FIND_TAG).filter_map(SavedSearch::read).collect()
+    }
+
+    /// Ajoute une recherche à la fin de la liste ; renvoie sa position.
+    pub fn save_search(&mut self, s: &SavedSearch) -> usize {
+        for t in [FIND_TAG, ZONE_TAG, QUERY_TAG, TYPE_TAG] {
+            self.declare_extension(t, URI);
+        }
+        let n = self.saved_searches().len();
+        // Après la dernière recherche, sinon en fin d'en-tête.
+        let at =
+            self.header.children.iter().rposition(|c| c.tag == FIND_TAG).map_or(self.header.children.len(), |i| i + 1);
+        self.header.children.insert(at, s.node());
+        n
+    }
+
+    /// `HEAD._GR_FIND` lisibles, dans l'ordre : position dans l'en-tête.
+    fn find_index(&self, i: usize) -> Option<usize> {
+        self.header
+            .children
+            .iter()
+            .enumerate()
+            .filter(|(_, c)| c.tag == FIND_TAG && SavedSearch::read(c).is_some())
+            .nth(i)
+            .map(|(k, _)| k)
+    }
+
+    pub fn rename_search(&mut self, i: usize, name: &str) -> bool {
+        let name = name.trim();
+        match self.find_index(i) {
+            Some(k) if !name.is_empty() => {
+                self.header.children[k].value = Some(name.to_string());
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// Remplace les critères d'une recherche enregistrée (même nom).
+    pub fn update_search(&mut self, i: usize, s: &SavedSearch) -> bool {
+        let Some(k) = self.find_index(i) else { return false };
+        self.header.children[k] = s.node();
+        true
+    }
+
+    pub fn delete_search(&mut self, i: usize) -> Option<SavedSearch> {
+        let k = self.find_index(i)?;
+        let n = self.header.children.remove(k);
+        if !self.header.children.iter().any(|c| c.tag == FIND_TAG) {
+            for t in [FIND_TAG, ZONE_TAG, QUERY_TAG, TYPE_TAG] {
+                self.undeclare_extension(t);
+            }
+        }
+        SavedSearch::read(&n)
+    }
+
+    /// Déplace une recherche enregistrée (ordre de la barre latérale).
+    pub fn move_search(&mut self, from: usize, to: usize) -> bool {
+        let (Some(a), Some(b)) = (self.find_index(from), self.find_index(to)) else { return false };
+        let n = self.header.children.remove(a);
+        self.header.children.insert(b, n);
+        true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const GED: &str = "0 HEAD\n1 GEDC\n2 VERS 7.0\n0 @I1@ INDI\n1 NAME Luc /GUYOT/\n1 BIRT\n2 DATE 1850\n0 TRLR\n";
+
+    #[test]
+    fn saved_searches_round_trip() {
+        let mut g = Gedcom::parse(GED).unwrap();
+        assert!(g.saved_searches().is_empty());
+        let s = SavedSearch {
+            name: default_name(&g, Scope::Individuals, "né:1850±5 guyot", None),
+            scope: Scope::Individuals,
+            query: "né:1850±5 guyot".into(),
+            media_type: None,
+        };
+        assert_eq!(s.name, "Né vers 1850 (± 5 ans) · « guyot »");
+        g.save_search(&s);
+        let m = SavedSearch {
+            name: "Actes".into(),
+            scope: Scope::Media,
+            query: "sans:lien".into(),
+            media_type: Some("Actes".into()),
+        };
+        assert_eq!(g.save_search(&m), 1);
+        let out = g.to_gedcom_string();
+        assert!(
+            out.contains(
+                "1 _GR_FIND Né vers 1850 (± 5 ans) · « guyot »\n2 _GR_ZONE INDI\n2 _GR_QUERY né:1850±5 guyot\n"
+            )
+        );
+        assert!(out.contains("2 TAG _GR_FIND https://"));
+        let g2 = Gedcom::parse(&out).unwrap();
+        assert_eq!(g2.saved_searches(), vec![s.clone(), m.clone()]);
+        assert!(g2.saved_searches()[1].same(Scope::Media, " sans:lien ", Some("Actes")));
+
+        assert!(g.rename_search(0, "Nés vers 1850"));
+        assert!(g.move_search(1, 0));
+        assert_eq!(g.saved_searches()[1].name, "Nés vers 1850");
+        assert_eq!(g.delete_search(0).map(|s| s.name).as_deref(), Some("Actes"));
+        g.delete_search(0);
+        assert!(!g.to_gedcom_string().contains("_GR_"));
+    }
+}

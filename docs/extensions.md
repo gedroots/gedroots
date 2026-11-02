@@ -12,6 +12,7 @@ l'exige GEDCOM 7 :
 2 TAG _GR_FILE https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_file
 2 TAG _GR_EVEN https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_even
 2 TAG _GR_MEDIA https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_media
+2 TAG _GR_FIND https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_find
 ```
 
 Les autres logiciels ignorent ces balises sans perte de données.
@@ -318,3 +319,38 @@ Les versions précédentes de GEDRoots décrivaient des modèles d'actes (`0 @T1
 (**Fichier › Importer un GEDCOM…**) les propose au nettoyage : les modèles et ces balises sont
 retirés, ainsi que leur déclaration dans `HEAD.SCHMA` ; les données de l'acte restent dans
 `PAGE`, `EVEN` et `DATA`.
+
+## `_GR_FIND`
+
+Recherche enregistrée, affichée dans la section **Recherches** de la barre latérale avec
+son nombre de résultats. S'enregistre avec le « + » de la section ou **Affichage ›
+Enregistrer la recherche** ; se renomme (double-clic, clic droit ou **Affichage ›
+Renommer la recherche**) et se supprime de la même façon.
+
+- **Sous** : `HEAD`, au niveau 1. Une occurrence par recherche, dans l'ordre de la barre
+  latérale.
+- **Valeur** : nom de la recherche.
+- **Sous-structures** :
+  - `_GR_ZONE <zone>` (obligatoire) : `INDI`, `SOUR`, `PLAC` ou `OBJE` ;
+  - `_GR_QUERY <requête>` : critères et mots, dans la syntaxe du champ de recherche
+    (`né:1850±5 sexe:h`, `ascendants:@I1@`) ;
+  - `_GR_TYPE <type>` : type de média choisi dans la zone Médias (sous-dossier des
+    réglages ou du fichier).
+
+```
+0 HEAD
+1 SCHMA
+2 TAG _GR_FIND https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_find
+2 TAG _GR_ZONE https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_find
+2 TAG _GR_QUERY https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_find
+2 TAG _GR_TYPE https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_find
+1 _GR_FIND Nés vers 1850
+2 _GR_ZONE INDI
+2 _GR_QUERY né:1850±5
+1 _GR_FIND Actes non rattachés
+2 _GR_ZONE OBJE
+2 _GR_QUERY sans:lien
+2 _GR_TYPE Actes
+```
+
+Supprimer la dernière recherche retire aussi les déclarations.

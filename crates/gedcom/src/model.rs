@@ -520,7 +520,32 @@ fn short_ancestris(raw: &str) -> String {
     }
 }
 
+/// Lieu tel qu'il s'affiche dans un champ de saisie : juridictions vides omises
+/// (« , Troyes, 10000, Aube, , France » → « Troyes, 10000, Aube, France »).
+pub fn place_label(name: &str) -> String {
+    if !name.contains(',') {
+        return name.trim().to_string();
+    }
+    name.split(',').map(str::trim).filter(|s| !s.is_empty()).collect::<Vec<_>>().join(", ")
+}
+
 impl Gedcom {
+    /// Valeur `PLAC` d'un lieu saisi : le lieu du fichier (ou de `extra`, lieux créés pas
+    /// encore écrits) qui s'affiche ainsi, juridictions vides comprises ; sinon la saisie.
+    pub fn place_value(&self, typed: &str, extra: &[String]) -> String {
+        let typed = typed.trim();
+        let places = self.places();
+        if extra.iter().any(|n| n == typed) || places.iter().any(|p| p.name == typed) {
+            return typed.to_string();
+        }
+        extra
+            .iter()
+            .find(|n| place_label(n) == typed)
+            .cloned()
+            .or_else(|| places.into_iter().map(|p| p.name).find(|n| place_label(n) == typed))
+            .unwrap_or_else(|| typed.to_string())
+    }
+
     /// Index des lieux, trié par nom.
     pub fn places(&self) -> Vec<Place> {
         let mut map: std::collections::BTreeMap<String, Place> = Default::default();
