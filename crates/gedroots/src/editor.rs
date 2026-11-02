@@ -54,7 +54,9 @@ pub(crate) fn choice<T: 'static>(
         .iter()
         .map(|(v, l)| Pick { xref: v.to_string(), label: SharedString::from(l.to_string()), search: sort_key(l) })
         .collect();
-    let selected = selected.trim().to_uppercase();
+    // Valeur du fichier, à la casse près (`m` → `M`, `FR` → `fr`).
+    let selected =
+        items.iter().find(|p| p.xref.eq_ignore_ascii_case(selected.trim())).map(|p| p.xref.clone()).unwrap_or_default();
     cx.new(|cx| {
         let mut s = SelectState::new(SearchableVec::new(items), None, window, cx);
         if !selected.is_empty() {

@@ -397,7 +397,8 @@ impl Gedcom {
     /// Retire un lieu de tous les événements (les événements restent). Renvoie le nombre d'occurrences.
     pub fn delete_place(&mut self, name: &str) -> usize {
         let mut count = 0;
-        for r in &mut self.records {
+        let here = |n: &Node| n.tag == "PLAC" && n.val() == name;
+        for r in self.records_where_mut(|r| r.any(&here)) {
             let mut touched = false;
             r.walk_mut(&mut |n| {
                 let before = n.children.len();

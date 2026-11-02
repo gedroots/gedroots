@@ -127,3 +127,93 @@ fn delete_event() {
     assert_eq!(g.events_of("I1").len(), before - 1);
     assert!(g.delete_event("I1", 0).is_err());
 }
+
+const COUPLE: &str = "0 HEAD
+1 GEDC
+2 VERS 7.0
+0 @I1@ INDI
+1 NAME Jean /Guyot/
+1 BIRT
+2 DATE 3 MAR 1850
+1 DEAT
+2 DATE 1920
+1 FAMS @F1@
+1 FAMS @F2@
+0 @I2@ INDI
+1 NAME Marie /Dupont/
+1 FAMS @F1@
+0 @F1@ FAM
+1 HUSB @I1@
+1 WIFE @I2@
+1 MARR
+2 DATE 12 JUN 1875
+2 SOUR @S1@
+1 DIV Y
+0 @F2@ FAM
+1 HUSB @I1@
+1 MARR
+2 DATE 1890
+0 @S1@ SOUR
+1 TITL Registre
+0 @M1@ OBJE
+1 FILE Actes/mariage.jpg
+2 FORM image/jpeg
+0 TRLR
+";
+
+#[test]
+fn person_events_merge_unions_chronologically() {
+    let g = Gedcom::parse(COUPLE).unwrap();
+    let ev = g.person_events("I1");
+    let seq: Vec<(&str, &str, bool)> = ev.iter().map(|e| (e.owner.as_str(), e.event.tag(), e.family)).collect();
+    assert_eq!(
+        seq,
+        vec![
+            ("I1", "BIRT", false),
+            ("F1", "MARR", true),
+            ("F2", "MARR", true),
+            ("I1", "DEAT", false),
+            ("F1", "DIV", true), // sans date : à la fin
+        ]
+    );
+    assert_eq!(ev[1].spouse.as_deref(), Some("I2"));
+    assert_eq!(ev[2].spouse, None);
+    // Le conjoint voit le même mariage, porté par la même famille.
+    let other = g.person_events("I2");
+    assert_eq!(other.len(), 2);
+    assert_eq!(other[0].owner, "F1");
+    assert_eq!(other[0].spouse.as_deref(), Some("I1"));
+}
+
+#[test]
+fn media_on_family_event() {
+    let mut g = Gedcom::parse(COUPLE).unwrap();
+    let marr = g.events_of("F1").iter().find(|(_, e)| e.tag() == "MARR").unwrap().0;
+    g.attach_media_to_event("F1", marr, "M1").unwrap();
+    g.attach_media_to_event("F1", marr, "M1").unwrap(); // pas de doublon
+    assert_eq!(g.event_media("F1", marr), vec!["M1"]);
+    let out = g.to_gedcom_string();
+    assert!(out.contains("1 MARR\n2 DATE 12 JUN 1875\n2 SOUR @S1@\n2 OBJE @M1@\n"), "{out}");
+    // Le média est « utilisé par » la famille.
+    assert!(g.referrers("M1").iter().any(|r| r.xref.as_deref() == Some("F1")));
+
+    // « 1 DIV Y » prend le média et perd son Y ; le retirer le remet.
+    let div = g.events_of("F1").iter().find(|(_, e)| e.tag() == "DIV").unwrap().0;
+    g.attach_media_to_event("F1", div, "M1").unwrap();
+    assert!(g.to_gedcom_string().contains("1 DIV\n2 OBJE @M1@\n"));
+    g.detach_media_from_event("F1", div, "M1").unwrap();
+    assert!(g.to_gedcom_string().contains("1 DIV Y\n"));
+
+    g.detach_media_from_event("F1", marr, "M1").unwrap();
+    assert!(g.event_media("F1", marr).is_empty());
+    assert!(g.attach_media_to_event("F1", marr, "S1").is_err());
+}
+
+#[test]
+fn deleting_media_strips_event_links() {
+    let mut g = Gedcom::parse(COUPLE).unwrap();
+    let marr = g.events_of("F1").iter().find(|(_, e)| e.tag() == "MARR").unwrap().0;
+    g.attach_media_to_event("F1", marr, "M1").unwrap();
+    g.delete_record("M1");
+    assert!(g.event_media("F1", marr).is_empty());
+}

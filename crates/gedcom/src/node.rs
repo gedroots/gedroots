@@ -165,6 +165,11 @@ impl Node {
         }
     }
 
+    /// Vrai si ce nœud ou l'un de ses descendants vérifie `f`.
+    pub fn any(&self, f: &impl Fn(&Node) -> bool) -> bool {
+        f(self) || self.children.iter().any(|c| c.any(f))
+    }
+
     /// Tous les pointeurs contenus dans ce nœud et ses descendants.
     pub fn pointers(&self) -> Vec<String> {
         let mut out = Vec::new();

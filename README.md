@@ -27,6 +27,11 @@ et suit la maquette « Lignée » (thème sombre, barre d'activité, liste, arbr
 - **Événements modifiables** : un clic sur un événement (individu ou famille) le rouvre dans
   la même fenêtre que l'ajout (type, précision, date, lieu suggéré, source) ; on peut aussi le
   supprimer. Notes, âge, médias et autres citations de l'événement sont conservés.
+- **Chronologie unifiée** : la fiche d'un individu montre ses événements et ceux de ses unions
+  (mariage, divorce… « avec » le conjoint) dans une seule liste par date ; on y ajoute aussi un
+  mariage directement. Chaque événement affiche ses médias (`2 OBJE`, GEDCOM 7 standard) :
+  déposer des fichiers sur l'événement les y rattache, le clic droit permet d'en rattacher,
+  de lier un média existant ou d'en détacher.
 - **Individus** : liste avec recherche sans accents ni casse et critères
   (`né:1800-1850`, `mort:<1900`, `vécu:1870`, `lieu:troyes`, `prof:meunier`, `sexe:f`,
   `sans:source`, `sans:parents`, `avec:média`, `sosa:1-63`…), filtres rapides (Affichage › Filtrer la liste) ;
@@ -70,6 +75,10 @@ et suit la maquette « Lignée » (thème sombre, barre d'activité, liste, arbr
   logiciel, liste ce qu'il contient de non standard et propose de le convertir en GEDCOM 7
   (annulable). Premier contrôle : les balises `_URL` deviennent des liens multimédia (`WWW`
   pour les dépôts). Les contrôles sont dans `crates/gedcom/src/import.rs`.
+- **Réglages du fichier** (Fichier › « Réglages du fichier… ») : auteur, e-mail, droits,
+  description, langue et individu racine, plus la liste des anomalies masquées (« Réafficher »).
+  Tout est rangé dans l'en-tête du .ged en GEDCOM 7 standard (`HEAD.SUBM`, `COPR`, `NOTE`,
+  `LANG`). À chaque enregistrement, `HEAD.SOUR` et `HEAD.DATE` indiquent GedRoots et la date.
 - **Médias à plusieurs pages** : un acte sur deux feuillets est un seul média (`OBJE` avec un
   `FILE` par page, standard GEDCOM 7). Visionneuse page par page (miniatures, ⇞ / ⇟), pages
   ajoutées par glisser-déposer ou Média › Pages, réordonnées en glissant les miniatures, retirées

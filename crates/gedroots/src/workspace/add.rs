@@ -14,6 +14,7 @@ pub(super) enum AddDialog {
     },
     WebLink(Box<super::weblinks::WebLinkDialog>),
     Import(Box<super::import::ImportDialog>),
+    Settings(Box<super::settings::SettingsDialog>),
 }
 
 /// Action d'une ligne de la fenêtre des proches.
@@ -28,6 +29,11 @@ pub(super) struct EventDialog {
     date: Entity<DateField>,
     place: Entity<InputState>,
     source: Entity<PickerState>,
+    /// Ajout depuis un individu marié : union qui portera un événement familial
+    /// (types préfixés `FAM:`). `None` si l'individu n'a qu'une union, ou aucune.
+    union: Option<Entity<PickerState>>,
+    /// Unions de l'individu (famille, libellé).
+    unions: Vec<(String, String)>,
     error: Option<SharedString>,
     _subs: Vec<Subscription>,
 }
@@ -53,8 +59,41 @@ impl Workspace {
         };
         let family = g.family(&owner).is_some();
         let tags = if family { FAMILY_EVENTS } else { INDIVIDUAL_EVENTS };
-        let mut options: Vec<(&str, &str)> =
-            tags.iter().map(|t| (*t, if *t == "EVEN" { "Autre…" } else { event_label(t).unwrap_or(t) })).collect();
+        let mut options: Vec<(String, String)> = tags
+            .iter()
+            .map(|t| (t.to_string(), if *t == "EVEN" { "Autre…" } else { event_label(t).unwrap_or(t) }.to_string()))
+            .collect();
+        // Ajout depuis un individu : les événements de ses unions (mariage…) aussi.
+        let unions: Vec<(String, String)> = match (editing, g.individual(&owner)) {
+            (None, Some(i)) => i
+                .unions(g)
+                .into_iter()
+                .map(|(fam, spouse)| {
+                    let label = match spouse {
+                        Some(s) => format!("Avec {}", g.record_label(&s)),
+                        None => "Union sans conjoint connu".into(),
+                    };
+                    (fam, label)
+                })
+                .collect(),
+            _ => Vec::new(),
+        };
+        if !unions.is_empty() {
+            // Mariage et compagnie juste après la naissance et le baptême.
+            let at = options.iter().position(|(t, _)| t == "BAPM").map_or(0, |i| i + 1);
+            options.splice(
+                at..at,
+                FAMILY_EVENTS
+                    .iter()
+                    .filter(|t| **t != "EVEN")
+                    .map(|t| (format!("FAM:{t}"), event_label(t).unwrap_or(t).to_string())),
+            );
+        }
+        let union = (unions.len() > 1).then(|| {
+            let opts: Vec<(&str, &str)> = unions.iter().map(|(f, l)| (f.as_str(), l.as_str())).collect();
+            choice(&opts, &unions[0].0, window, cx)
+        });
+        let mut options: Vec<(&str, &str)> = options.iter().map(|(v, l)| (v.as_str(), l.as_str())).collect();
         // Type absent de la liste proposée à l'ajout (CHR, ADOP…) : on le garde.
         let cur_tag = current.as_ref().map(|e| e.tag.clone()).unwrap_or_default();
         if !cur_tag.is_empty() && !tags.contains(&cur_tag.as_str()) {
@@ -89,6 +128,8 @@ impl Workspace {
             date,
             place,
             source,
+            union,
+            unions,
             error: None,
             _subs: vec![sub, sub_kind],
         })));
@@ -130,7 +171,22 @@ impl Workspace {
             place: d.place.read(cx).value().to_string(),
             source: d.source.read(cx).selected_value().cloned(),
         };
-        let (owner, editing) = (d.owner.clone(), d.editing);
+        let (mut owner, editing) = (d.owner.clone(), d.editing);
+        // Événement d'une union : porté par la famille choisie.
+        let mut ev = ev;
+        if let Some(t) = ev.tag.strip_prefix("FAM:").map(str::to_string) {
+            let fam = match &d.union {
+                Some(u) => u.read(cx).selected_value().cloned(),
+                None => d.unions.first().map(|(f, _)| f.clone()),
+            };
+            let Some(fam) = fam else {
+                d.error = Some("Choisissez l'union".into());
+                cx.notify();
+                return;
+            };
+            ev.tag = t;
+            owner = fam;
+        }
         // Vérification avant la modification, pour garder la fenêtre ouverte en cas d'erreur.
         let mut probe = self.doc.as_ref().unwrap().ged.clone();
         let check = match editing {
@@ -189,6 +245,7 @@ impl Workspace {
             },
             AddDialog::WebLink(d) => (self.weblink_dialog_title(d), self.weblink_body(d, cx)),
             AddDialog::Import(d) => (self.import_title(d), self.import_body(d, cx)),
+            AddDialog::Settings(d) => ("Réglages du fichier".into(), self.settings_body(d, cx)),
         };
         Some(
             div()
@@ -247,7 +304,7 @@ impl Workspace {
 
     fn event_body(&self, d: &EventDialog, cx: &mut Context<Self>) -> AnyElement {
         let tag = d.kind.read(cx).selected_value().cloned().unwrap_or_default();
-        let detail_label = match tag.as_str() {
+        let detail_label = match tag.trim_start_matches("FAM:") {
             "OCCU" => Some("Profession"),
             "EDUC" => Some("Établissement ou diplôme"),
             "EVEN" => Some("Type d'événement"),
@@ -267,6 +324,9 @@ impl Workspace {
                         row.child(field(label, Input::new(&d.detail).small().into_any_element()).flex_1())
                     }),
             )
+            .when_some(d.union.as_ref().filter(|_| tag.starts_with("FAM:")), |v, u| {
+                v.child(field("Union", Select::new(u).small().into_any_element()))
+            })
             .child(
                 h_flex()
                     .gap_3()

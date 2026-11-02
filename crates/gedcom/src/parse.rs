@@ -106,7 +106,7 @@ fn parse_line(line: &str) -> Result<(usize, Node), String> {
 }
 
 /// Sérialise des structures (à partir du niveau `base_level`).
-pub fn write_nodes(nodes: &[Node], base_level: usize, newline: &str, out: &mut String) {
+pub fn write_nodes<'a>(nodes: impl IntoIterator<Item = &'a Node>, base_level: usize, newline: &str, out: &mut String) {
     for n in nodes {
         write_node(n, base_level, newline, out);
     }

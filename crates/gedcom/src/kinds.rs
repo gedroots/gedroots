@@ -321,7 +321,8 @@ impl Gedcom {
     /// de balises retirées.
     pub fn migrate_prim_tags(&mut self) -> usize {
         let mut n = 0;
-        for r in &mut self.records {
+        let has_prim = |r: &Node| r.children.iter().any(|c| c.tag == "OBJE" && c.child(PRIM_TAG).is_some());
+        for r in self.records_where_mut(has_prim) {
             let links: Vec<usize> =
                 r.children.iter().enumerate().filter(|(_, c)| c.tag == "OBJE").map(|(i, _)| i).collect();
             let Some(&first) = links.first() else { continue };

@@ -6,6 +6,7 @@ mod completion;
 mod date_field;
 mod editor;
 mod entry_form;
+mod images;
 mod map;
 mod theme;
 mod workspace;
