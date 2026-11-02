@@ -10,6 +10,7 @@ mod date_field;
 mod editor;
 mod gazetteer;
 mod gedzip;
+mod i18n;
 mod images;
 mod map;
 mod recent;
@@ -21,6 +22,9 @@ use gpui_kit::*;
 use std::borrow::Cow;
 use std::path::PathBuf;
 use workspace::Workspace;
+
+// Interface strings: crates/gedroots/locales/*.yml (see i18n.rs).
+rust_i18n::i18n!("locales", fallback = "en");
 
 // Icônes Lucide utilisées en plus du jeu par défaut de gpui-kit.
 gpui_kit::assets::icon_assets!(
@@ -54,6 +58,8 @@ gpui_kit::assets::icon_assets!(
         Crop,
         UserPlus,
         Calendar,
+        Upload,
+        Link,
     ]
 );
 
@@ -108,6 +114,7 @@ fn main() {
         }
     });
 
+    i18n::init();
     app.run(move |cx| {
         gpui_kit::init(cx);
         theme::install(cx);

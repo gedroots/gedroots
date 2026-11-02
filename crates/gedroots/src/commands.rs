@@ -1,18 +1,21 @@
-//! Commandes de l'application : actions, raccourcis et menus.
+//! Application commands: actions, shortcuts and menus.
 //!
-//! Chaque commande est décrite une seule fois ici, avec son libellé et son
-//! raccourci. Le même modèle alimente :
-//! - la barre de menus native sous macOS (`cx.set_menus`) ;
-//! - la barre de menus dessinée dans la fenêtre sous Linux et Windows ;
-//! - la palette de commandes (⌘⇧P / Ctrl+Maj+P).
+//! Each command is described once, here, with its label and its shortcut. The same model
+//! feeds:
+//! - the native menu bar on macOS (`cx.set_menus`);
+//! - the menu bar drawn inside the window on Linux and Windows;
+//! - the command palette (⌘⇧P / Ctrl+Shift+P).
+//!
+//! Labels are translation keys (`crates/gedroots/locales/commands.yml`).
 
 use gpui_kit::component::input;
 use gpui_kit::*;
+use rust_i18n::t;
 
 actions!(
     gedroots,
     [
-        // Fichier
+        // File
         NewFile,
         OpenFile,
         ClearRecent,
@@ -24,7 +27,7 @@ actions!(
         ExportGedcom551,
         ExportGeneanet,
         Quit,
-        // Édition
+        // Edit
         Undo,
         Redo,
         DeleteRecord,
@@ -36,7 +39,7 @@ actions!(
         DeleteSearch,
         ToggleFlagged,
         AddWebLink,
-        // Individu
+        // Person
         NewIndividual,
         AddFather,
         AddMother,
@@ -51,16 +54,14 @@ actions!(
         GoToRoot,
         SearchAncestors,
         SearchDescendants,
-        AttachFiles,
-        LinkMedia,
-        CropMedia,
+        MediaGallery,
         AddEvent,
         // Source
         NewSource,
         NewRepository,
         NewNote,
         EnterRecord,
-        // Média
+        // Media
         NewMedia,
         AttachMediaTo,
         TagPerson,
@@ -75,7 +76,7 @@ actions!(
         MergeWithMedia,
         MergeSelectedMedia,
         RenameMediaFiles,
-        // Affichage
+        // View
         ToggleSidebar,
         GoBack,
         GoForward,
@@ -107,26 +108,26 @@ actions!(
         FilterNoMarriage,
         FilterWithMedia,
         ClearSearch,
-        // Aide
+        // Help
         CommandPalette,
     ]
 );
 
-/// Ouvre un fichier de Fichier › Ouvrir récent.
+/// Opens a file from File › Open Recent.
 #[derive(Clone, PartialEq, Action)]
 #[action(namespace = gedroots, no_json)]
 pub struct OpenRecent {
     pub path: std::path::PathBuf,
 }
 
-/// Raccourci avec ⌘ sur macOS, Ctrl ailleurs.
+/// Shortcut with ⌘ on macOS, Ctrl elsewhere.
 macro_rules! shortcut {
     ($k:literal) => {
         if cfg!(target_os = "macos") { concat!("cmd-", $k) } else { concat!("ctrl-", $k) }
     };
 }
 
-/// Contexte clavier de la fenêtre principale.
+/// Key context of the main window.
 const WS: Option<&str> = Some("Workspace");
 
 pub fn bind_keys(cx: &mut App) {
@@ -137,18 +138,19 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new(shortcut!("shift-s"), SaveFileAs, WS),
         KeyBinding::new(shortcut!("q"), Quit, None),
         KeyBinding::new(shortcut!("z"), Undo, WS),
-        // Rétablir : ⌘⇧Z (macOS), Ctrl+Y (Windows), Ctrl+Maj+Z (Linux).
+        // Redo: ⌘⇧Z (macOS), Ctrl+Y (Windows), Ctrl+Shift+Z (Linux).
         KeyBinding::new(if cfg!(target_os = "windows") { "ctrl-y" } else { shortcut!("shift-z") }, Redo, WS),
         KeyBinding::new(shortcut!("shift-n"), NewIndividual, WS),
         KeyBinding::new(shortcut!("f"), FocusSearch, WS),
         KeyBinding::new(shortcut!("e"), EnterRecord, WS),
+        KeyBinding::new(shortcut!("shift-m"), MediaGallery, WS),
         KeyBinding::new(shortcut!("shift-h"), GoToRoot, WS),
         KeyBinding::new(shortcut!("shift-p"), CommandPalette, WS),
         KeyBinding::new(shortcut!(","), OpenFileSettings, WS),
-        // Précédent / suivant : ⌘[ ⌘] (macOS), Alt+← Alt+→ (Windows, Linux).
+        // Back / forward: ⌘[ ⌘] (macOS), Alt+← Alt+→ (Windows, Linux).
         KeyBinding::new(if cfg!(target_os = "macos") { "cmd-[" } else { "alt-left" }, GoBack, WS),
         KeyBinding::new(if cfg!(target_os = "macos") { "cmd-]" } else { "alt-right" }, GoForward, WS),
-        // Les quatre zones de la barre latérale, puis les listes et pages du menu Affichage.
+        // The four sidebar areas, then the lists and pages of the View menu.
         KeyBinding::new(shortcut!("1"), ShowIndividuals, WS),
         KeyBinding::new(shortcut!("2"), ShowSources, WS),
         KeyBinding::new(shortcut!("3"), ShowPlaces, WS),
@@ -157,7 +159,7 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new(shortcut!("6"), ShowNotes, WS),
         KeyBinding::new(shortcut!("7"), ShowQuality, WS),
         KeyBinding::new(shortcut!("8"), ShowStats, WS),
-        // Comme le Finder et Mail : ⌃⌘S (Ctrl+Alt+S ailleurs).
+        // Like Finder and Mail: ⌃⌘S (Ctrl+Alt+S elsewhere).
         KeyBinding::new(if cfg!(target_os = "macos") { "ctrl-cmd-s" } else { "ctrl-alt-s" }, ToggleSidebar, WS),
         KeyBinding::new(shortcut!("alt-1"), ShowTree, WS),
         KeyBinding::new(shortcut!("alt-2"), ShowForm, WS),
@@ -166,63 +168,134 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new(shortcut!("-"), FewerGenerations, WS),
         KeyBinding::new("pageup", PreviousPage, WS),
         KeyBinding::new("pagedown", NextPage, WS),
-        // Suggestions de l'éditeur GEDCOM brut à la demande.
+        // Raw GEDCOM editor suggestions on demand.
         KeyBinding::new("ctrl-space", input::ShowCompletions, Some("Input")),
     ]);
 }
 
-/// Libellés partagés entre la barre de menus et les menus contextuels (clic
-/// droit) : une commande porte le même nom partout où elle apparaît.
+/// Labels shared by the menu bar and context menus (right click): a command has the
+/// same name wherever it appears.
 pub mod label {
-    pub const NEW_INDIVIDUAL: &str = "Nouvel individu";
-    pub const NEW_SOURCE: &str = "Nouvelle source";
-    pub const NEW_MEDIA: &str = "Nouveau média";
-    pub const NEW_REPOSITORY: &str = "Nouveau dépôt";
-    pub const NEW_NOTE: &str = "Nouvelle note";
-    pub const ATTACH_FILES: &str = "Rattacher des fichiers…";
-    pub const COPY_ID: &str = "Copier l'ID";
-    pub const COPY_NAME: &str = "Copier le nom";
-    pub const DELETE: &str = "Supprimer l'élément…";
-    pub const ADD_RELATIVE: &str = "Ajouter un proche";
-    pub const LINK_PERSON: &str = "Lier une personne existante";
-    pub const FATHER: &str = "Père";
-    pub const MOTHER: &str = "Mère";
-    pub const SPOUSE: &str = "Conjoint";
-    pub const CHILD: &str = "Enfant";
-    pub const SIBLING: &str = "Frère ou sœur";
-    pub const FATHER_LINK: &str = "Père…";
-    pub const MOTHER_LINK: &str = "Mère…";
-    pub const SPOUSE_LINK: &str = "Conjoint…";
-    pub const CHILD_LINK: &str = "Enfant…";
-    pub const SIBLING_LINK: &str = "Frère ou sœur…";
-    pub const ADD_EVENT: &str = "Ajouter un événement…";
-    pub const GO_TO_ROOT: &str = "Aller à l'individu racine";
-    pub const CENTER_TREE: &str = "Centrer l'arbre sur la personne";
-    pub const ENTER_ACT: &str = "Saisir un acte…";
-    pub const ATTACH_MEDIA_TO: &str = "Rattacher ce média à…";
-    pub const TAG_PERSON: &str = "Identifier une personne sur la photo";
-    pub const MERGE_WITH_MEDIA: &str = "Fusionner avec un autre média…";
-    pub const MERGE_SELECTED_MEDIA: &str = "Fusionner les médias sélectionnés";
-    pub const ADD_PAGES: &str = "Ajouter des pages…";
-    pub const CLEAR_SEARCH: &str = "Effacer la recherche";
-    pub const SAVE_SEARCH: &str = "Enregistrer la recherche";
-    pub const RENAME_SEARCH: &str = "Renommer la recherche";
-    pub const DELETE_SEARCH: &str = "Supprimer la recherche";
+    use gpui_kit::SharedString;
+    use rust_i18n::t;
+
+    pub fn new_individual() -> SharedString {
+        t!("cmd.new_individual").into()
+    }
+    pub fn new_source() -> SharedString {
+        t!("cmd.new_source").into()
+    }
+    pub fn new_media() -> SharedString {
+        t!("cmd.new_media").into()
+    }
+    pub fn new_repository() -> SharedString {
+        t!("cmd.new_repository").into()
+    }
+    pub fn new_note() -> SharedString {
+        t!("cmd.new_note").into()
+    }
+    pub fn media_gallery() -> SharedString {
+        t!("cmd.media_gallery").into()
+    }
+    pub fn copy_id() -> SharedString {
+        t!("cmd.copy_id").into()
+    }
+    pub fn copy_name() -> SharedString {
+        t!("cmd.copy_name").into()
+    }
+    pub fn delete() -> SharedString {
+        t!("cmd.delete").into()
+    }
+    pub fn add_relative() -> SharedString {
+        t!("cmd.add_relative").into()
+    }
+    pub fn link_person() -> SharedString {
+        t!("cmd.link_person").into()
+    }
+    pub fn father() -> SharedString {
+        t!("cmd.father").into()
+    }
+    pub fn mother() -> SharedString {
+        t!("cmd.mother").into()
+    }
+    pub fn spouse() -> SharedString {
+        t!("cmd.spouse").into()
+    }
+    pub fn child() -> SharedString {
+        t!("cmd.child").into()
+    }
+    pub fn sibling() -> SharedString {
+        t!("cmd.sibling").into()
+    }
+    pub fn father_link() -> SharedString {
+        t!("cmd.father_link").into()
+    }
+    pub fn mother_link() -> SharedString {
+        t!("cmd.mother_link").into()
+    }
+    pub fn spouse_link() -> SharedString {
+        t!("cmd.spouse_link").into()
+    }
+    pub fn child_link() -> SharedString {
+        t!("cmd.child_link").into()
+    }
+    pub fn sibling_link() -> SharedString {
+        t!("cmd.sibling_link").into()
+    }
+    pub fn add_event() -> SharedString {
+        t!("cmd.add_event").into()
+    }
+    pub fn go_to_root() -> SharedString {
+        t!("cmd.go_to_root").into()
+    }
+    pub fn center_tree() -> SharedString {
+        t!("cmd.center_tree").into()
+    }
+    pub fn enter_act() -> SharedString {
+        t!("cmd.enter_act").into()
+    }
+    pub fn attach_media_to() -> SharedString {
+        t!("cmd.attach_media_to").into()
+    }
+    pub fn tag_person() -> SharedString {
+        t!("cmd.tag_person").into()
+    }
+    pub fn merge_with_media() -> SharedString {
+        t!("cmd.merge_with_media").into()
+    }
+    pub fn merge_selected_media() -> SharedString {
+        t!("cmd.merge_selected_media").into()
+    }
+    pub fn add_pages() -> SharedString {
+        t!("cmd.add_pages").into()
+    }
+    pub fn clear_search() -> SharedString {
+        t!("cmd.clear_search").into()
+    }
+    pub fn save_search() -> SharedString {
+        t!("cmd.save_search").into()
+    }
+    pub fn rename_search() -> SharedString {
+        t!("cmd.rename_search").into()
+    }
+    pub fn delete_search() -> SharedString {
+        t!("cmd.delete_search").into()
+    }
 }
 
-/// Une entrée de menu.
+/// A menu entry.
 enum Item {
-    Action(&'static str, Box<dyn Action>),
-    /// Fichier récent : libellé calculé.
+    Action(SharedString, Box<dyn Action>),
+    /// Recent file: computed label.
     Recent(String, Box<dyn Action>),
-    /// Action standard du système (copier, coller…) : macOS la relie aux champs de saisie.
-    Os(&'static str, Box<dyn Action>, OsAction),
-    Sub(&'static str, Vec<Item>),
+    /// Standard system action (copy, paste…): macOS wires it to text fields.
+    Os(SharedString, Box<dyn Action>, OsAction),
+    Sub(SharedString, Vec<Item>),
     Separator,
 }
 
 impl Item {
-    /// Libellé et action d'une commande (ni sous-menu, ni séparateur, ni action d'édition).
+    /// Label and action of a command (not a submenu, a separator or a text editing action).
     fn into_command(self) -> Option<(String, Box<dyn Action>)> {
         match self {
             Item::Action(name, action) => Some((name.to_string(), action)),
@@ -232,207 +305,208 @@ impl Item {
     }
 }
 
-fn a(label: &'static str, action: impl Action) -> Item {
-    Item::Action(label, Box::new(action))
+fn a(label: impl Into<SharedString>, action: impl Action) -> Item {
+    Item::Action(label.into(), Box::new(action))
 }
 
-/// Le modèle de menus, commun à toutes les plateformes.
-fn model() -> Vec<(&'static str, Vec<Item>)> {
+/// The menu model, shared by every platform.
+fn model() -> Vec<(SharedString, Vec<Item>)> {
     model_with(&crate::recent::list())
 }
 
-/// Le modèle de menus, avec les fichiers récents donnés.
-fn model_with(recents: &[std::path::PathBuf]) -> Vec<(&'static str, Vec<Item>)> {
+/// The menu model, with the given recent files.
+fn model_with(recents: &[std::path::PathBuf]) -> Vec<(SharedString, Vec<Item>)> {
     use Item::{Separator as Sep, Sub};
     let mac = cfg!(target_os = "macos");
     let mut menus = Vec::new();
     if mac {
-        // Sur macOS, les réglages vont à leur place habituelle : menu de l'application, ⌘,.
-        menus.push(("GEDRoots", vec![a("Réglages du fichier…", OpenFileSettings), Sep, a("Quitter GEDRoots", Quit)]));
+        // On macOS, settings go where they usually are: the application menu, ⌘,.
+        menus.push((
+            "GEDRoots".into(),
+            vec![a(t!("cmd.file_settings"), OpenFileSettings), Sep, a(t!("cmd.quit_app"), Quit)],
+        ));
     }
-    let mut file = vec![a("Nouveau fichier", NewFile), a("Ouvrir…", OpenFile)];
-    // Sous-menu masqué tant qu'aucun fichier n'a été ouvert.
+    let mut file = vec![a(t!("cmd.new_file"), NewFile), a(t!("cmd.open"), OpenFile)];
+    // Submenu hidden until a file has been opened.
     if !recents.is_empty() {
         let names = crate::recent::labels(recents);
         let mut items: Vec<Item> =
             recents.iter().zip(names).map(|(p, n)| Item::Recent(n, Box::new(OpenRecent { path: p.clone() }))).collect();
-        items.extend([Sep, a("Effacer le menu", ClearRecent)]);
-        file.push(Sub("Ouvrir récent", items));
+        items.extend([Sep, a(t!("cmd.clear_recent"), ClearRecent)]);
+        file.push(Sub(t!("menu.open_recent").into(), items));
     }
     file.extend([
-        a("Importer un GEDCOM…", ImportFile),
+        a(t!("cmd.import_gedcom"), ImportFile),
         Sep,
-        a("Enregistrer", SaveFile),
-        a("Enregistrer sous…", SaveFileAs),
+        a(t!("cmd.save"), SaveFile),
+        a(t!("cmd.save_as"), SaveFileAs),
         Sep,
         Sub(
-            "Exporter",
+            t!("menu.export").into(),
             vec![
-                a("GEDZIP avec les médias…", ExportGedzip),
-                a("GEDCOM 5.5.1…", ExportGedcom551),
-                a("GEDCOM pour Geneanet…", ExportGeneanet),
+                a(t!("cmd.export_gedzip"), ExportGedzip),
+                a(t!("cmd.export_gedcom551"), ExportGedcom551),
+                a(t!("cmd.export_geneanet"), ExportGeneanet),
             ],
         ),
     ]);
     if !mac {
-        file.extend([Sep, a("Réglages du fichier…", OpenFileSettings), Sep, a("Quitter", Quit)]);
+        file.extend([Sep, a(t!("cmd.file_settings"), OpenFileSettings), Sep, a(t!("cmd.quit"), Quit)]);
     }
-    menus.push(("Fichier", file));
+    menus.push((t!("menu.file").into(), file));
     menus.push((
-        "Édition",
+        t!("menu.edit").into(),
         vec![
-            a("Annuler la modification", Undo),
-            a("Rétablir la modification", Redo),
+            a(t!("cmd.undo"), Undo),
+            a(t!("cmd.redo"), Redo),
             Sep,
-            Item::Os("Couper", Box::new(input::Cut), OsAction::Cut),
-            Item::Os("Copier", Box::new(input::Copy), OsAction::Copy),
-            Item::Os("Coller", Box::new(input::Paste), OsAction::Paste),
-            Item::Os("Tout sélectionner", Box::new(input::SelectAll), OsAction::SelectAll),
+            Item::Os(t!("cmd.cut").into(), Box::new(input::Cut), OsAction::Cut),
+            Item::Os(t!("cmd.copy").into(), Box::new(input::Copy), OsAction::Copy),
+            Item::Os(t!("cmd.paste").into(), Box::new(input::Paste), OsAction::Paste),
+            Item::Os(t!("cmd.select_all").into(), Box::new(input::SelectAll), OsAction::SelectAll),
             Sep,
-            a(label::ATTACH_FILES, AttachFiles),
-            a("Ajouter un lien web…", AddWebLink),
+            a(label::media_gallery(), MediaGallery),
+            a(t!("cmd.add_web_link"), AddWebLink),
             Sep,
-            a(label::COPY_NAME, CopyName),
-            a(label::COPY_ID, CopyId),
-            a(label::DELETE, DeleteRecord),
+            a(label::copy_name(), CopyName),
+            a(label::copy_id(), CopyId),
+            a(label::delete(), DeleteRecord),
             Sep,
-            a("Rechercher", FocusSearch),
+            a(t!("cmd.find"), FocusSearch),
         ],
     ));
     menus.push((
-        "Individu",
+        t!("menu.person").into(),
         vec![
-            a(label::NEW_INDIVIDUAL, NewIndividual),
+            a(label::new_individual(), NewIndividual),
             Sep,
             Sub(
-                label::ADD_RELATIVE,
+                label::add_relative(),
                 vec![
-                    a(label::FATHER, AddFather),
-                    a(label::MOTHER, AddMother),
-                    a(label::SPOUSE, AddSpouse),
-                    a(label::CHILD, AddChild),
-                    a(label::SIBLING, AddSibling),
+                    a(label::father(), AddFather),
+                    a(label::mother(), AddMother),
+                    a(label::spouse(), AddSpouse),
+                    a(label::child(), AddChild),
+                    a(label::sibling(), AddSibling),
                 ],
             ),
             Sub(
-                label::LINK_PERSON,
+                label::link_person(),
                 vec![
-                    a(label::FATHER_LINK, LinkFather),
-                    a(label::MOTHER_LINK, LinkMother),
-                    a(label::SPOUSE_LINK, LinkSpouse),
-                    a(label::CHILD_LINK, LinkChild),
-                    a(label::SIBLING_LINK, LinkSibling),
+                    a(label::father_link(), LinkFather),
+                    a(label::mother_link(), LinkMother),
+                    a(label::spouse_link(), LinkSpouse),
+                    a(label::child_link(), LinkChild),
+                    a(label::sibling_link(), LinkSibling),
                 ],
             ),
-            a(label::ADD_EVENT, AddEvent),
-            a("Lier un média existant…", LinkMedia),
-            a("Recadrer un média existant…", CropMedia),
+            a(label::add_event(), AddEvent),
             Sep,
-            a(label::GO_TO_ROOT, GoToRoot),
-            a("Lien de parenté avec…", KinshipWith),
-            a("Rechercher ses ascendants", SearchAncestors),
-            a("Rechercher ses descendants", SearchDescendants),
+            a(label::go_to_root(), GoToRoot),
+            a(t!("cmd.kinship_with"), KinshipWith),
+            a(t!("cmd.search_ancestors"), SearchAncestors),
+            a(t!("cmd.search_descendants"), SearchDescendants),
         ],
     ));
-    // Dépôts et notes partagées hors de la barre latérale : on les crée depuis le menu Source.
+    // Repositories and shared notes are not in the sidebar: they are created from the Source menu.
     menus.push((
-        "Source",
+        t!("menu.source").into(),
         vec![
-            a(label::ENTER_ACT, EnterRecord),
+            a(label::enter_act(), EnterRecord),
             Sep,
-            a(label::NEW_SOURCE, NewSource),
-            a(label::NEW_REPOSITORY, NewRepository),
-            a(label::NEW_NOTE, NewNote),
+            a(label::new_source(), NewSource),
+            a(label::new_repository(), NewRepository),
+            a(label::new_note(), NewNote),
         ],
     ));
     menus.push((
-        "Média",
+        t!("menu.media").into(),
         vec![
-            a(label::NEW_MEDIA, NewMedia),
-            a(label::ATTACH_MEDIA_TO, AttachMediaTo),
+            a(label::new_media(), NewMedia),
+            a(label::attach_media_to(), AttachMediaTo),
             Sep,
             Sub(
-                "Pages",
+                t!("menu.pages").into(),
                 vec![
-                    a("Page précédente", PreviousPage),
-                    a("Page suivante", NextPage),
+                    a(t!("cmd.previous_page"), PreviousPage),
+                    a(t!("cmd.next_page"), NextPage),
                     Sep,
-                    a(label::ADD_PAGES, AddPages),
-                    a("Déplacer la page vers la gauche", MovePageLeft),
-                    a("Déplacer la page vers la droite", MovePageRight),
+                    a(label::add_pages(), AddPages),
+                    a(t!("cmd.move_page_left"), MovePageLeft),
+                    a(t!("cmd.move_page_right"), MovePageRight),
                     Sep,
-                    a("Séparer cette page en un nouveau média", SplitPage),
-                    a("Retirer cette page du média", RemovePage),
+                    a(t!("cmd.split_page"), SplitPage),
+                    a(t!("cmd.remove_page"), RemovePage),
                 ],
             ),
-            a(label::MERGE_WITH_MEDIA, MergeWithMedia),
-            a(label::MERGE_SELECTED_MEDIA, MergeSelectedMedia),
-            a("Renommer selon le modèle…", RenameMediaFiles),
+            a(label::merge_with_media(), MergeWithMedia),
+            a(label::merge_selected_media(), MergeSelectedMedia),
+            a(t!("cmd.rename_media_files"), RenameMediaFiles),
             Sep,
-            a(label::TAG_PERSON, TagPerson),
+            a(label::tag_person(), TagPerson),
             Sep,
-            a("Fichiers à rattacher", ShowUnreferencedFiles),
+            a(t!("cmd.unreferenced_files"), ShowUnreferencedFiles),
         ],
     ));
     menus.push((
-        "Affichage",
+        t!("menu.view").into(),
         vec![
-            a("Précédent", GoBack),
-            a("Suivant", GoForward),
+            a(t!("cmd.back"), GoBack),
+            a(t!("cmd.forward"), GoForward),
             Sep,
-            a("Individus", ShowIndividuals),
-            a("Sources", ShowSources),
-            a("Lieux", ShowPlaces),
-            a("Médias", ShowMedia),
-            a("Dépôts", ShowRepositories),
-            a("Notes", ShowNotes),
+            a(t!("cmd.individuals"), ShowIndividuals),
+            a(t!("cmd.sources"), ShowSources),
+            a(t!("cmd.places"), ShowPlaces),
+            a(t!("cmd.media_list"), ShowMedia),
+            a(t!("cmd.repositories"), ShowRepositories),
+            a(t!("cmd.notes"), ShowNotes),
             Sep,
-            a("Qualité des données", ShowQuality),
-            a("Statistiques", ShowStats),
+            a(t!("cmd.quality"), ShowQuality),
+            a(t!("cmd.stats"), ShowStats),
             Sep,
-            a("Arbre", ShowTree),
-            a("Fiche", ShowForm),
-            a("GEDCOM brut", ShowRaw),
+            a(t!("cmd.show_tree"), ShowTree),
+            a(t!("cmd.show_form"), ShowForm),
+            a(t!("cmd.show_raw"), ShowRaw),
             Sep,
-            a("Masquer ou afficher la barre latérale", ToggleSidebar),
-            a("Événements des proches", ToggleRelativeEvents),
+            a(t!("cmd.toggle_sidebar"), ToggleSidebar),
+            a(t!("cmd.relative_events"), ToggleRelativeEvents),
             Sep,
             Sub(
-                "Arbre",
+                t!("menu.tree").into(),
                 vec![
-                    a("Arbre libre", TreeChart),
-                    a("Éventail", TreeFan),
+                    a(t!("cmd.tree_chart"), TreeChart),
+                    a(t!("cmd.tree_fan"), TreeFan),
                     Sep,
-                    a(label::CENTER_TREE, CenterTree),
+                    a(label::center_tree(), CenterTree),
                     Sep,
-                    a("Plus de générations", MoreGenerations),
-                    a("Moins de générations", FewerGenerations),
+                    a(t!("cmd.more_generations"), MoreGenerations),
+                    a(t!("cmd.fewer_generations"), FewerGenerations),
                 ],
             ),
             Sub(
-                "Filtrer la liste",
+                t!("menu.filter_list").into(),
                 vec![
-                    a("Hommes", FilterMen),
-                    a("Femmes", FilterWomen),
-                    a("Ascendants de la racine", FilterAncestors),
-                    a("Sans source", FilterUnsourced),
-                    a("Sans parents", FilterNoParents),
-                    a("Sans date", FilterNoDate),
-                    a("Unions sans mariage", FilterNoMarriage),
-                    a("Avec média", FilterWithMedia),
+                    a(t!("cmd.filter_men"), FilterMen),
+                    a(t!("cmd.filter_women"), FilterWomen),
+                    a(t!("cmd.filter_ancestors"), FilterAncestors),
+                    a(t!("cmd.filter_unsourced"), FilterUnsourced),
+                    a(t!("cmd.filter_no_parents"), FilterNoParents),
+                    a(t!("cmd.filter_no_date"), FilterNoDate),
+                    a(t!("cmd.filter_no_marriage"), FilterNoMarriage),
+                    a(t!("cmd.filter_with_media"), FilterWithMedia),
                     Sep,
-                    a("Éléments signalés seulement", ToggleFlagged),
-                    a("Anomalies masquées", ToggleIgnoredIssues),
-                    a(label::CLEAR_SEARCH, ClearSearch),
+                    a(t!("cmd.flagged_only"), ToggleFlagged),
+                    a(t!("cmd.ignored_issues"), ToggleIgnoredIssues),
+                    a(label::clear_search(), ClearSearch),
                 ],
             ),
             Sep,
-            a(label::SAVE_SEARCH, SaveSearch),
-            a(label::RENAME_SEARCH, RenameSearch),
-            a(label::DELETE_SEARCH, DeleteSearch),
+            a(label::save_search(), SaveSearch),
+            a(label::rename_search(), RenameSearch),
+            a(label::delete_search(), DeleteSearch),
         ],
     ));
-    menus.push(("Aide", vec![a("Toutes les commandes…", CommandPalette)]));
+    menus.push((t!("menu.help").into(), vec![a(t!("cmd.all_commands"), CommandPalette)]));
     menus
 }
 
@@ -441,13 +515,13 @@ fn to_menu_items(items: Vec<Item>) -> Vec<MenuItem> {
         .into_iter()
         .map(|i| match i {
             Item::Action(name, action) => {
-                MenuItem::Action { name: name.into(), action, os_action: None, checked: false, disabled: false }
+                MenuItem::Action { name, action, os_action: None, checked: false, disabled: false }
             }
             Item::Recent(name, action) => {
                 MenuItem::Action { name: name.into(), action, os_action: None, checked: false, disabled: false }
             }
             Item::Os(name, action, os) => {
-                MenuItem::Action { name: name.into(), action, os_action: Some(os), checked: false, disabled: false }
+                MenuItem::Action { name, action, os_action: Some(os), checked: false, disabled: false }
             }
             Item::Sub(name, items) => MenuItem::submenu(Menu::new(name).items(to_menu_items(items))),
             Item::Separator => MenuItem::separator(),
@@ -459,22 +533,22 @@ pub fn menus() -> Vec<Menu> {
     model().into_iter().map(|(name, items)| Menu::new(name).items(to_menu_items(items))).collect()
 }
 
-/// Installe les menus : natifs sous macOS, et pour la barre dessinée dans la
-/// fenêtre ailleurs (voir `AppMenuBar`).
+/// Installs the menus: native on macOS, and for the bar drawn inside the window elsewhere
+/// (see `AppMenuBar`).
 pub fn install_menus(cx: &mut App) {
     cx.set_menus(menus());
     let owned = menus().into_iter().map(Menu::owned).collect();
     gpui_kit::base::GlobalState::global_mut(cx).set_app_menus(owned);
 }
 
-/// Une commande pour la palette : chemin dans les menus (« Individu › Ajouter un proche › Père ») et action.
+/// A command for the palette: its path in the menus (“Person › Add Relative › Father”) and action.
 pub struct PaletteEntry {
     pub path: String,
     pub action: Box<dyn Action>,
 }
 
-/// Toutes les commandes des menus, à plat, pour la palette.
-/// Les actions d'édition de texte (couper, coller…) n'y figurent pas.
+/// Every menu command, flattened, for the palette.
+/// Text editing actions (cut, paste…) are left out.
 pub fn palette_entries() -> Vec<PaletteEntry> {
     fn walk(prefix: &str, items: Vec<Item>, out: &mut Vec<PaletteEntry>) {
         for i in items {
@@ -493,7 +567,7 @@ pub fn palette_entries() -> Vec<PaletteEntry> {
     }
     let mut out = Vec::new();
     for (menu, items) in model() {
-        walk(menu, items, &mut out);
+        walk(&menu, items, &mut out);
     }
     out
 }
@@ -504,7 +578,7 @@ mod tests {
     use gpui_kit::Action;
     use std::path::PathBuf;
 
-    /// Une commande n'a qu'une place dans la barre de menus.
+    /// A command has only one place in the menu bar.
     #[test]
     fn menus_have_every_command_once() {
         fn walk(path: &str, items: Vec<Item>, seen: &mut Vec<(String, Box<dyn Action>)>) {
@@ -514,7 +588,7 @@ mod tests {
                         let Some((name, action)) = i.into_command() else { continue };
                         let here = format!("{path} › {name}");
                         if let Some((other, _)) = seen.iter().find(|(_, a)| a.partial_eq(action.as_ref())) {
-                            panic!("« {here} » double « {other} »");
+                            panic!("“{here}” duplicates “{other}”");
                         }
                         seen.push((here, action));
                     }
@@ -526,18 +600,22 @@ mod tests {
         let mut seen = Vec::new();
         let recents = [PathBuf::from("/a/Guyot.ged"), PathBuf::from("/b/Guyot.ged")];
         for (menu, items) in model_with(&recents) {
-            walk(menu, items, &mut seen);
+            walk(&menu, items, &mut seen);
         }
     }
 
     #[test]
     fn palette_has_every_command_once() {
         let entries = palette_entries();
-        assert!(entries.iter().any(|e| e.path == "Individu › Ajouter un proche › Père"));
-        assert!(entries.iter().any(|e| e.path == "Source › Saisir un acte"));
-        assert!(entries.iter().any(|e| e.path == "Fichier › Exporter › GEDCOM pour Geneanet"));
+        assert!(entries.iter().any(|e| e.path == "Person › Add Relative › Father"));
+        assert!(entries.iter().any(|e| e.path == "Source › Enter Record"));
+        assert!(entries.iter().any(|e| e.path == "File › Export › GEDCOM for Geneanet"));
         for (i, e) in entries.iter().enumerate() {
-            assert!(!entries[i + 1..].iter().any(|o| o.action.partial_eq(e.action.as_ref())), "{} en double", e.path);
+            assert!(
+                !entries[i + 1..].iter().any(|o| o.action.partial_eq(e.action.as_ref())),
+                "{} appears twice",
+                e.path
+            );
         }
     }
 }

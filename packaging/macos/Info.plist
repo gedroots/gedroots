@@ -21,7 +21,14 @@
 	<key>CFBundleVersion</key>
 	<string>@VERSION@</string>
 	<key>CFBundleDevelopmentRegion</key>
-	<string>fr</string>
+	<string>en</string>
+	<!-- Interface languages (crates/gedroots/locales): macOS then offers them in System
+	     Settings › General › Language & Region › Applications. -->
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>fr</string>
+	</array>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.reference</string>
 	<key>LSMinimumSystemVersion</key>
@@ -31,13 +38,13 @@
 	<key>NSSupportsAutomaticGraphicsSwitching</key>
 	<true/>
 	<key>NSHumanReadableCopyright</key>
-	<string>GEDRoots — logiciel de généalogie libre et local</string>
-	<!-- Fichiers GEDCOM : double-clic dans le Finder, « Ouvrir avec », glisser sur l'icône. -->
+	<string>GEDRoots — free and local genealogy software</string>
+	<!-- GEDCOM files: double click in Finder, “Open With”, drop on the icon. -->
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>
 			<key>CFBundleTypeName</key>
-			<string>Fichier GEDCOM</string>
+			<string>GEDCOM File</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -54,7 +61,7 @@
 			<key>UTTypeIdentifier</key>
 			<string>org.gedcom.ged</string>
 			<key>UTTypeDescription</key>
-			<string>Fichier GEDCOM</string>
+			<string>GEDCOM File</string>
 			<key>UTTypeConformsTo</key>
 			<array>
 				<string>public.plain-text</string>

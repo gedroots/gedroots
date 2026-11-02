@@ -12,6 +12,7 @@
 
 use super::add::AddDialog;
 use super::*;
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 pub(super) struct RenameDialog {
@@ -33,6 +34,22 @@ fn free_path(p: PathBuf, current: &Path) -> PathBuf {
     (2..).map(|n| p.with_file_name(format!("{stem} ({n}){ext}"))).find(|c| !c.exists()).unwrap()
 }
 
+/// Aperçu de [`free_path`] : nom relatif que prendra `new` dans `base`, sans
+/// écraser un fichier existant ni un nom déjà prévu (`taken`).
+pub(super) fn free_name(base: &Path, new: &str, taken: &mut HashSet<PathBuf>) -> String {
+    let p = base.join(new);
+    let free = |c: &PathBuf| !c.exists() && !taken.contains(c);
+    let to = if free(&p) {
+        p
+    } else {
+        let stem = p.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+        let ext = p.extension().map(|e| format!(".{}", e.to_string_lossy())).unwrap_or_default();
+        (2..).map(|n| p.with_file_name(format!("{stem} ({n}){ext}"))).find(free).unwrap()
+    };
+    taken.insert(to.clone());
+    relative(base, &to)
+}
+
 fn relative(base: &Path, p: &Path) -> String {
     match p.strip_prefix(base) {
         Ok(rel) => rel.components().map(|c| c.as_os_str().to_string_lossy()).collect::<Vec<_>>().join("/"),
@@ -41,13 +58,14 @@ fn relative(base: &Path, p: &Path) -> String {
 }
 
 /// Range les fichiers des médias selon le réglage. Les fichiers hors du dossier
-/// du .ged sont copiés ; ceux du dossier ne sont déplacés que si `move_inside`
-/// l'accepte (média, chemin actuel).
+/// du .ged sont copiés (déplacés si `move_outside`) ; ceux du dossier ne sont
+/// déplacés que si `move_inside` l'accepte (média, chemin actuel).
 fn place_files(
     g: &mut Gedcom,
     base: &Path,
     media: &[String],
     move_inside: &dyn Fn(&Gedcom, &str, &str) -> bool,
+    move_outside: bool,
 ) -> Result<Vec<Moved>, String> {
     let mut moved = Vec::new();
     for m in media {
@@ -67,7 +85,13 @@ fn place_files(
             if let Some(dir) = to.parent() {
                 std::fs::create_dir_all(dir).map_err(|e| format!("dossier {} : {e}", dir.display()))?;
             }
-            let done = if inside { std::fs::rename(&from, &to) } else { std::fs::copy(&from, &to).map(|_| ()) };
+            let done = if inside || move_outside {
+                // Autre disque : copie puis suppression de l'original.
+                std::fs::rename(&from, &to)
+                    .or_else(|_| std::fs::copy(&from, &to).and_then(|_| std::fs::remove_file(&from)))
+            } else {
+                std::fs::copy(&from, &to).map(|_| ())
+            };
             done.map_err(|e| format!("{} : {e}", from.display()))?;
             let rel = relative(base, &to);
             g.replace_media_file(m, i, &old, &rel);
@@ -94,7 +118,7 @@ pub(super) fn store_new_media(g: &mut Gedcom, base: Option<&Path>, media: &[Stri
     let Some(base) = base.filter(|_| !g.media_naming().is_empty()) else {
         return " — attention : fichier hors du dossier du .ged, chemin absolu enregistré".into();
     };
-    match place_files(g, base, media, &|_, _, _| false) {
+    match place_files(g, base, media, &|_, _, _| false, false) {
         Ok(m) if !m.is_empty() => {
             let n = m.len();
             format!(" · {n} copié{} dans le dossier du fichier", if n > 1 { "s" } else { "" })
@@ -115,7 +139,7 @@ pub(super) fn store_act_media(g: &mut Gedcom, base: Option<&Path>, media: &str) 
         !g.records_of(RecordKind::Media)
             .any(|o| o.xref.as_deref() != Some(m) && o.children_with("FILE").any(|f| f.val() == file))
     };
-    match place_files(g, base, &[media.to_string()], &alone) {
+    match place_files(g, base, &[media.to_string()], &alone, false) {
         Ok(m) if !m.is_empty() => {
             let n = m.len();
             format!(
@@ -127,6 +151,38 @@ pub(super) fn store_act_media(g: &mut Gedcom, base: Option<&Path>, media: &str) 
         Ok(_) => String::new(),
         Err(e) => format!(" — rangement impossible : {e}"),
     }
+}
+
+/// Fichiers importés depuis la fenêtre Médias : nommés selon le modèle, déplacés
+/// (`move_files`) ou copiés s'ils viennent d'ailleurs, déplacés s'ils sont déjà
+/// dans le dossier et qu'aucun autre média ne les utilise. Renvoie le complément
+/// du message d'état.
+pub(super) fn store_imported(g: &mut Gedcom, base: Option<&Path>, media: &[String], move_files: bool) -> String {
+    let Some(base) = base.filter(|_| !g.media_naming().is_empty()) else {
+        return store_new_media(g, base, media);
+    };
+    let alone = |g: &Gedcom, m: &str, file: &str| {
+        !g.records_of(RecordKind::Media)
+            .any(|o| o.xref.as_deref() != Some(m) && o.children_with("FILE").any(|f| f.val() == file))
+    };
+    match place_files(g, base, media, &alone, move_files) {
+        Ok(m) if !m.is_empty() => {
+            let n = m.len();
+            let s = if n > 1 { "s" } else { "" };
+            format!(" · {n} fichier{s} {} selon le modèle", if move_files { "rangé" } else { "copié" }.to_string() + s)
+        }
+        Ok(_) => String::new(),
+        Err(e) => format!(" — rangement impossible : {e}"),
+    }
+}
+
+/// Chemins que prendraient les fichiers d'un média selon le modèle (aperçu,
+/// avant tout déplacement) : `(chemin actuel, nouveau chemin)`.
+pub(super) fn planned_paths(g: &Gedcom, media: &str) -> Vec<(String, String)> {
+    if g.media_naming().is_empty() {
+        return Vec::new();
+    }
+    g.media_renames(media).into_iter().map(|(_, a, b)| (a, b)).collect()
 }
 
 impl Workspace {
@@ -155,7 +211,7 @@ impl Workspace {
             return;
         };
         let Some(doc) = &mut self.doc else { return };
-        match place_files(&mut doc.ged, &base, std::slice::from_ref(&d.media), &|_, _, _| true) {
+        match place_files(&mut doc.ged, &base, std::slice::from_ref(&d.media), &|_, _, _| true, false) {
             Ok(moved) => {
                 // Les états précédents pointent aussi vers le nouveau nom : annuler une
                 // modification antérieure ne doit pas casser le lien vers le fichier déplacé.

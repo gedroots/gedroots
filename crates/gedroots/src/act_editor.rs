@@ -469,7 +469,7 @@ impl ActEditor {
     /// Fichiers choisis ou déposés pour l'acte (images et PDF, une page chacun).
     /// `append` : s'ajoutent aux nouveaux fichiers déjà choisis au lieu de les remplacer.
     /// Ils seront copiés et nommés selon Réglages du fichier › Médias à l'enregistrement.
-    fn add_files(&mut self, paths: &[PathBuf], append: bool, cx: &mut Context<Self>) {
+    pub(crate) fn add_files(&mut self, paths: &[PathBuf], append: bool, cx: &mut Context<Self>) {
         let (ok, rejected): (Vec<&PathBuf>, Vec<&PathBuf>) = paths.iter().filter(|p| p.is_file()).partition(|p| {
             let mime = mime_for(&p.to_string_lossy());
             mime.starts_with("image/") || mime == "application/pdf"
