@@ -94,11 +94,15 @@ fn place_row(id: SharedString, ic: IconName, name: SharedString, context: Option
 impl Workspace {
     /// Saisie dans un champ de lieu : affiche le menu, et cherche les lieux réels après une pause.
     pub(super) fn on_place_input(&mut self, input: &Entity<InputState>, ev: &InputEvent, cx: &mut Context<Self>) {
-        if !matches!(ev, InputEvent::Focus | InputEvent::Change) {
-            return;
+        if matches!(ev, InputEvent::Focus | InputEvent::Change) {
+            self.place_input(input, matches!(ev, InputEvent::Change), cx);
         }
+    }
+
+    /// Champ de lieu actif ; `changed` : relancer la recherche des lieux réels.
+    pub(super) fn place_input(&mut self, input: &Entity<InputState>, changed: bool, cx: &mut Context<Self>) {
         self.place_focus = Some(input.entity_id());
-        if matches!(ev, InputEvent::Change) {
+        if changed {
             let value = input.read(cx).value().to_string();
             self.search_places(value, cx);
         }

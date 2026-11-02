@@ -22,6 +22,7 @@ use gpui_kit::component::{Disableable, Sizable, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 
 pub enum ActEditorEvent {
     /// Écrire l'acte ; `next` : enchaîner sur l'acte suivant du même registre.
@@ -30,7 +31,16 @@ pub enum ActEditorEvent {
         next: bool,
     },
     Close,
+    /// Saisie dans un champ de lieu (`changed` : le texte a changé) : l'espace de travail
+    /// tient le menu des lieux, commun à tous les champs Lieu.
+    PlaceInput {
+        input: Entity<InputState>,
+        changed: bool,
+    },
 }
+
+/// Menu des lieux sous un champ Lieu, fourni par l'espace de travail.
+pub type PlaceMenu = Rc<dyn Fn(&Entity<InputState>, &mut App) -> Option<AnyElement>>;
 
 /// Rôle d'un champ de saisie, pour savoir quoi recalculer quand il change.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -75,7 +85,7 @@ pub struct ActEditor {
     rows: Vec<PersonRow>,
     /// Champ de lieu actif (pour afficher les lieux proposés sous ce champ).
     place_focus: Option<EntityId>,
-    places: Vec<(String, String)>,
+    place_menu: Option<PlaceMenu>,
     preview: Option<Result<String, String>>,
     error: Option<SharedString>,
     zoom: f32,
@@ -118,7 +128,6 @@ fn event_value(act: &Act, custom: &[EventType]) -> String {
 
 impl ActEditor {
     pub fn new(ged: Gedcom, ged_path: Option<PathBuf>, act: Act, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let places = ged.places().into_iter().map(|p| (p.short(), p.name)).collect();
         // Événements : individuels, familiaux, types personnalisés du fichier, puis « Autre… ».
         let custom = ged.event_types();
         let mut options: Vec<(String, String)> = INDIVIDUAL_ACT_EVENTS
@@ -176,7 +185,7 @@ impl ActEditor {
             transcription,
             rows: Vec::new(),
             place_focus: None,
-            places,
+            place_menu: None,
             preview: None,
             error: None,
             zoom: 1.0,
@@ -229,12 +238,18 @@ impl ActEditor {
             match ev {
                 InputEvent::Focus => {
                     this.place_focus = (kind == Kind::Place).then(|| input.entity_id());
+                    if kind == Kind::Place {
+                        cx.emit(ActEditorEvent::PlaceInput { input: input.clone(), changed: false });
+                    }
                 }
                 InputEvent::Change => {
                     this.preview = None;
                     this.error = None;
                     match kind {
-                        Kind::Place => this.place_focus = Some(input.entity_id()),
+                        Kind::Place => {
+                            this.place_focus = Some(input.entity_id());
+                            cx.emit(ActEditorEvent::PlaceInput { input: input.clone(), changed: true });
+                        }
                         Kind::Name => this.refresh_suggestions(cx),
                         Kind::Plain => {}
                     }
@@ -540,7 +555,6 @@ impl ActEditor {
         let sub = self.watch_media_picker(window, cx);
         self._subs.push(sub);
         self.saved_count += 1;
-        self.places = self.ged.places().into_iter().map(|p| (p.short(), p.name)).collect();
         self.base = n.clone();
         self.media = n.media.clone();
         self.media_page = 0;
@@ -665,36 +679,18 @@ fn section(title: impl Into<SharedString>) -> Div {
 }
 
 impl ActEditor {
-    /// Lieux du fichier qui correspondent au champ de lieu actif.
-    fn place_suggestions(&self, input: &Entity<InputState>, cx: &mut Context<Self>) -> Option<Div> {
+    /// Branche le menu des lieux de l'espace de travail.
+    pub fn set_place_menu(&mut self, menu: PlaceMenu) {
+        self.place_menu = Some(menu);
+    }
+
+    /// Menu des lieux sous le champ de lieu actif.
+    fn place_suggestions(&self, input: &Entity<InputState>, cx: &mut Context<Self>) -> Option<AnyElement> {
         if self.place_focus != Some(input.entity_id()) {
             return None;
         }
-        let q = sort_key(input.read(cx).value().trim());
-        if q.len() < 2 {
-            return None;
-        }
-        let hits: Vec<(String, String)> = self
-            .places
-            .iter()
-            .filter(|(short, full)| sort_key(short).contains(&q) && *full != input.read(cx).value().as_ref())
-            .take(6)
-            .cloned()
-            .collect();
-        if hits.is_empty() {
-            return None;
-        }
-        let entity = input.clone();
-        Some(h_flex().flex_wrap().gap_1().children(hits.into_iter().enumerate().map(|(n, (short, full))| {
-            let entity = entity.clone();
-            chip(format!("pl-{}-{n}", input.entity_id()), short, false).on_click(cx.listener(
-                move |this, _, window, cx| {
-                    entity.update(cx, |s, cx| s.set_value(full.clone(), window, cx));
-                    this.place_focus = None;
-                    cx.notify();
-                },
-            ))
-        })))
+        let menu = self.place_menu.clone()?;
+        menu(input, cx)
     }
 
     fn render_image(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -999,7 +995,8 @@ impl ActEditor {
         } else {
             Vec::new()
         };
-        let place_hints: Vec<Div> = row.inputs.iter().filter_map(|(_, e)| self.place_suggestions(e, cx)).collect();
+        let place_hints: Vec<AnyElement> =
+            row.inputs.iter().filter_map(|(_, e)| self.place_suggestions(e, cx)).collect();
         v_flex()
             .gap_2()
             .p_3()

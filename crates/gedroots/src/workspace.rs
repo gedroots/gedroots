@@ -858,6 +858,14 @@ impl Workspace {
                 cx.notify();
             }
             ActEditorEvent::Save { act, next } => this.save_act(editor.clone(), act, *next, window, cx),
+            ActEditorEvent::PlaceInput { input, changed } => this.place_input(input, *changed, cx),
+        });
+        // Champs Lieu de l'acte : même menu que partout ailleurs.
+        let ws = cx.entity().downgrade();
+        editor.update(cx, |e, _| {
+            e.set_place_menu(Rc::new(move |input, cx| {
+                ws.update(cx, |ws, cx| ws.place_suggestions(input, cx)).ok().flatten()
+            }))
         });
         self.act_editor = Some((editor, sub));
         cx.notify();
@@ -883,7 +891,9 @@ impl Workspace {
                     }
                     _ => String::new(),
                 };
-                let ged = doc.ged.clone();
+                // Lieux créés dans l'acte : leurs coordonnées.
+                self.apply_pending_places();
+                let ged = self.doc.as_ref().map(|d| d.ged.clone()).unwrap_or_default();
                 self.set_status(res.summary() + &note, false);
                 self.rebuild_rows(cx);
                 self.refresh_editor(window, cx);
