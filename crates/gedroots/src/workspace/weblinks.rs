@@ -112,7 +112,7 @@ impl Workspace {
     }
 
     /// “Web Links” section of the detail panel (hidden if there are none).
-    pub(super) fn render_web_links(&self, record: &str, cx: &mut Context<Self>) -> Option<AnyElement> {
+    pub(super) fn render_web_links(&self, record: &str, cx: &mut Context<Self>) -> Option<Div> {
         let g = &self.doc.as_ref()?.ged;
         let links = g.web_links(record);
         if links.is_empty() {
@@ -204,16 +204,7 @@ impl Workspace {
                 )
                 .on_click(move |_, _, cx| cx.open_url(&href))
         });
-        Some(
-            v_flex()
-                .p_4()
-                .gap_1()
-                .border_b_1()
-                .border_color(theme::border())
-                .child(header)
-                .children(rows)
-                .into_any_element(),
-        )
+        Some(v_flex().p_4().gap_1().border_b_1().border_color(theme::border()).child(header).children(rows))
     }
 }
 

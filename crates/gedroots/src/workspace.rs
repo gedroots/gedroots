@@ -3,7 +3,7 @@
 
 use crate::act_editor::{ActEditor, ActEditorEvent};
 use crate::commands::*;
-use crate::editor::{FieldState, RecordEditor, Target};
+use crate::editor::{FieldState, RecordEditor, Slot, Target};
 use crate::images::picture;
 use crate::map::{MapEvent, MapView};
 use crate::theme;
@@ -1002,6 +1002,7 @@ impl Workspace {
                     } else {
                         t!("ws.acts_count", n = self.source_acts.len()).into_owned()
                     }))
+                    .child(div().flex_1())
                     .child(
                         Button::new("add-act")
                             .ghost()
@@ -1856,48 +1857,119 @@ impl Workspace {
                         .on_click(cx.listener(|this, _, w, cx| this.delete_selected(w, cx))),
                 )
         });
-        div().id("form-scroll").flex_1().overflow_y_scroll().child(
-            v_flex()
-                .p_4()
-                .gap_3()
-                .when(editing, |d| d.child(self.render_form_fields(ed, cx)))
-                .when(!editing && editable, |d| d.child(self.render_form_read(ed, cx)))
-                .when(editing || confirm, |d| {
-                    d.child(
-                        h_flex()
-                            .gap_2()
-                            .when(editing, |d| {
-                                d.child(
-                                    Button::new("cancel-form")
-                                        .ghost()
-                                        .small()
-                                        .label(t!("ws.cancel_edit"))
-                                        .tooltip(t!("ws.cancel_edit_tip"))
-                                        .on_click(cx.listener(|this, _, w, cx| this.cancel_edit(w, cx))),
-                                )
-                                .child(
-                                    Button::new("apply-form")
-                                        .primary()
-                                        .small()
-                                        .icon(IconName::Check)
-                                        .label(t!("ws.done"))
-                                        .on_click(cx.listener(|this, _, w, cx| this.apply_form(w, cx))),
-                                )
-                            })
-                            .child(div().flex_1())
-                            .children(confirm_buttons),
-                    )
-                })
-                .when_some(
-                    match &ed.target {
-                        Target::Record { xref, kind: RecordKind::Source } => Some(xref.clone()),
-                        _ => None,
-                    },
-                    |d, s| d.child(self.render_acts(&s, cx)),
+        // Sources, media, repositories and notes are read whole in the centre, with no side panel:
+        // their images, web links and links follow the record.
+        let record = match &ed.target {
+            Target::Record { xref, kind } if self.view != View::Individuals => Some((xref.clone(), *kind)),
+            _ => None,
+        };
+        let sections = record.as_ref().map(|(x, k)| self.record_sections(x, *k, cx)).unwrap_or_default();
+        // A photo is worth the room; text reads best on a narrower column.
+        let max_w = if preview.is_some() { 960. } else { 720. };
+        let column = v_flex()
+            .w_full()
+            .max_w(px(max_w))
+            .px_10()
+            .py_8()
+            .gap_6()
+            .when(editing, |d| d.child(self.render_form_fields(ed, cx)))
+            .when(!editing && editable, |d| d.child(self.render_form_read(ed, cx)))
+            .when(editing || confirm, |d| {
+                d.child(
+                    h_flex()
+                        .gap_2()
+                        .when(editing, |d| {
+                            d.child(
+                                Button::new("cancel-form")
+                                    .ghost()
+                                    .small()
+                                    .label(t!("ws.cancel_edit"))
+                                    .tooltip(t!("ws.cancel_edit_tip"))
+                                    .on_click(cx.listener(|this, _, w, cx| this.cancel_edit(w, cx))),
+                            )
+                            .child(
+                                Button::new("apply-form")
+                                    .primary()
+                                    .small()
+                                    .icon(IconName::Check)
+                                    .label(t!("ws.done"))
+                                    .on_click(cx.listener(|this, _, w, cx| this.apply_form(w, cx))),
+                            )
+                        })
+                        .child(div().flex_1())
+                        .children(confirm_buttons),
                 )
-                .when_some(preview, |d, p| d.child(p))
-                .when_some(self.record_images(ed, cx), |d, p| d.child(p)),
-        )
+            })
+            .when_some(
+                match &ed.target {
+                    Target::Record { xref, kind: RecordKind::Source } => Some(xref.clone()),
+                    _ => None,
+                },
+                |d, s| d.child(self.render_acts(&s, cx)),
+            )
+            .when_some(preview, |d, p| d.child(p))
+            .children(sections);
+        // Dropping photos or documents on a source opens the import preview of the Media window
+        // (on a media, the preview takes them as pages).
+        let column = match &record {
+            Some((x, RecordKind::Source)) => {
+                let (record, entity) = (x.clone(), cx.entity().downgrade());
+                column.drag_over::<ExternalPaths>(|d, _, _, _| d.bg(theme::accent_soft())).on_drop(
+                    move |paths: &ExternalPaths, window, cx| {
+                        let record = record.clone();
+                        let _ = entity.update(cx, |this, cx| {
+                            let files = paths.paths().to_vec();
+                            this.open_gallery_with_files(GalleryTarget::Record(record), files, window, cx);
+                        });
+                    },
+                )
+            }
+            _ => column,
+        };
+        div().id("form-scroll").flex_1().overflow_y_scroll().child(h_flex().w_full().justify_center().child(column))
+    }
+
+    /// What follows a record read in the centre: images, web links, the records it links to and
+    /// those that use it.
+    fn record_sections(&self, key: &str, kind: RecordKind, cx: &mut Context<Self>) -> Vec<AnyElement> {
+        let Some(doc) = self.doc.as_ref() else { return Vec::new() };
+        let g = &doc.ged;
+        let mut out = Vec::new();
+        // The repository is already under a source's title.
+        let repository = (kind == RecordKind::Source)
+            .then(|| g.get(key).and_then(|n| n.child("REPO")).and_then(|r| r.pointer()).map(str::to_string))
+            .flatten();
+        if kind == RecordKind::Source {
+            out.extend(self.render_gallery(key, true, true, cx).map(|d| d.into_any_element()));
+        }
+        out.extend(self.render_web_links(key, cx).map(|d| d.p_0().border_b_0().into_any_element()));
+        let outgoing: Vec<String> = g
+            .get(key)
+            .map(|n| {
+                let mut v: Vec<String> = Vec::new();
+                for p in n.pointers() {
+                    // Web pages are in “Web Links”, images above.
+                    let skip = p == key
+                        || repository.as_deref() == Some(p.as_str())
+                        || weblinks::is_web_media(g, &p)
+                        || (kind == RecordKind::Source && g.images_of(key).iter().any(|m| m.xref() == p));
+                    if !skip && !v.contains(&p) {
+                        v.push(p);
+                    }
+                }
+                v
+            })
+            .unwrap_or_default();
+        if !outgoing.is_empty() {
+            out.push(self.render_links(t!("ws.links").into(), outgoing, cx).p_0().into_any_element());
+        }
+        let refs: Vec<String> = g.referrers(key).iter().filter_map(|r| r.xref.clone()).collect();
+        // Photo: the “Used By” list is under the image, with the frames.
+        let under_photo = kind == RecordKind::Media && self.photo_file(key).is_some();
+        if !refs.is_empty() && !under_photo {
+            out.push(self.render_links(t!("ws.used_by").into(), refs, cx).p_0().into_any_element());
+        }
+        out
     }
 
     /// Fields of the record being edited (Edit › Edit Record).
@@ -1939,50 +2011,77 @@ impl Workspace {
             })
     }
 
-    /// The record as it is saved, in text: empty values hidden, linked records clickable. The
-    /// pencil (and Edit › Edit Record) switches to the fields, in place.
+    /// The record as it is saved, in text: its title (with a source's repository and call number
+    /// under it), then its facts, empty values hidden, linked records clickable. The pencil (and
+    /// Edit › Edit Record) switches to the fields, in place.
     fn render_form_read(&self, ed: &RecordEditor, cx: &mut Context<Self>) -> impl IntoElement {
         let g = self.doc.as_ref().map(|d| &d.ged);
         let row = |label: SharedString, value: AnyElement| {
             h_flex()
-                .gap_3()
+                .gap_4()
                 .items_start()
-                .child(div().w(px(140.)).flex_none().text_xs().pt_0p5().text_color(theme::muted()).child(label))
+                .child(div().w(px(120.)).flex_none().text_xs().pt_0p5().text_color(theme::muted()).child(label))
                 .child(div().flex_1().min_w_0().child(value))
         };
-        let pickers = ed.pickers.iter().enumerate().filter_map(|(n, p)| {
+        let title = match &ed.target {
+            Target::Place(name) => Some(short_place(name)),
+            // A note's title is its first words: the text is enough.
+            Target::Record { kind: RecordKind::SharedNote, .. } => None,
+            Target::Record { xref, .. } => g.map(|g| g.record_label(xref)),
+        };
+        let links = ed.pickers.iter().enumerate().filter_map(|(n, p)| {
             let x = p.shown.clone()?;
             let name = g?.record_label(&x);
-            let link = div()
-                .id(("form-link", n))
-                .cursor_pointer()
-                .text_color(theme::accent())
-                .hover(|d| d.underline())
-                .child(name)
-                .on_click(cx.listener(move |this, _, w, cx| this.goto(x.clone(), w, cx)));
-            Some(row(p.label.clone(), link.into_any_element()))
+            Some(
+                div()
+                    .id(("form-link", n))
+                    .cursor_pointer()
+                    .text_color(theme::accent())
+                    .hover(|d| d.underline())
+                    .child(name)
+                    .on_click(cx.listener(move |this, _, w, cx| this.goto(x.clone(), w, cx)))
+                    .into_any_element(),
+            )
         });
-        let fields = ed
-            .fields
-            .iter()
-            .filter(|f| !f.shown.trim().is_empty())
-            .map(|f| row(f.label.clone(), div().child(f.shown.clone()).into_any_element()));
+        let filled = |slot: Slot| ed.fields.iter().filter(move |f| f.slot == slot && !f.shown.trim().is_empty());
+        let subtitle: Vec<AnyElement> =
+            links.chain(filled(Slot::Subtitle).map(|f| div().child(f.shown.clone()).into_any_element())).collect();
+        let n = subtitle.len();
+        let subtitle = (n > 0).then(|| {
+            h_flex().flex_wrap().gap_1().text_color(theme::muted()).children(subtitle.into_iter().enumerate().flat_map(
+                |(i, el)| [(i > 0).then(|| div().child("·").into_any_element()), Some(el)].into_iter().flatten(),
+            ))
+        });
+        let facts = filled(Slot::Fact).map(|f| row(f.label.clone(), div().child(f.shown.clone()).into_any_element()));
         let long = ed.long_text.as_ref().and_then(|(label, state)| {
             let text = state.read(cx).value().to_string();
-            (!text.trim().is_empty())
-                .then(|| row(label.clone(), div().whitespace_normal().child(text).into_any_element()))
+            (!text.trim().is_empty()).then(|| (label.clone(), div().whitespace_normal().child(text)))
         });
+        // Without a title (a note), the text takes its place, next to the pencil.
+        let (text, long) = match (&title, long) {
+            (None, Some((_, text))) => (Some(text), None),
+            (_, long) => (None, long.map(|(label, text)| row(label, text.into_any_element()))),
+        };
         let edit = Button::new("edit-record")
             .ghost()
-            .xsmall()
+            .small()
             .icon(IconName::Pencil)
             .tooltip_with_action(t!("cmd.edit_record"), &EditRecord, Some("Workspace"))
             .on_click(cx.listener(|this, _, w, cx| this.start_edit(w, cx)));
-        h_flex()
-            .gap_2()
-            .items_start()
-            .child(v_flex().flex_1().min_w_0().gap_2().children(pickers).children(fields).children(long))
-            .child(edit)
+        let head = v_flex()
+            .flex_1()
+            .min_w_0()
+            .gap_1()
+            .when_some(title.clone(), |d, t| {
+                d.child(div().text_2xl().font_weight(FontWeight::SEMIBOLD).line_height(rems(1.9)).child(t))
+            })
+            .children(subtitle)
+            .children(text);
+        let facts: Vec<_> = facts.chain(long).collect();
+        v_flex()
+            .gap_6()
+            .child(h_flex().gap_3().items_start().child(head).child(edit))
+            .when(!facts.is_empty(), |d| d.child(v_flex().gap_2().children(facts)))
     }
 
     /// Edit › Edit Record: the record's fields, in place; a second time, saves (like Done).
@@ -2012,66 +2111,11 @@ impl Workspace {
         cx.notify();
     }
 
-    /// Images linked to a source, shown large under the record.
-    fn record_images(&self, ed: &RecordEditor, cx: &mut Context<Self>) -> Option<AnyElement> {
-        let Target::Record { xref, kind } = &ed.target else { return None };
-        if *kind != RecordKind::Source {
-            return None;
-        }
-        let doc = self.doc.as_ref()?;
-        let images = doc.ged.images_of(xref);
-        if images.is_empty() {
-            return None;
-        }
-        Some(
-            v_flex()
-                .gap_2()
-                .child(label_caps(t!("ws.images_count", n = images.len())))
-                .children(images.into_iter().map(|m| {
-                    let target = m.xref().to_string();
-                    let title = m.title();
-                    let crop = doc.ged.link_crop(xref, m.xref());
-                    // Cropped area: only its page; otherwise every page, one below the other.
-                    let shown: Vec<usize> = match crop {
-                        Some(_) => vec![doc.ged.link_page(xref, m.xref())],
-                        None => (1..=m.page_count().max(1)).collect(),
-                    };
-                    let body = v_flex().gap_2().children(shown.into_iter().map(|page| {
-                        match pages::page_path(doc, &m, page).filter(|p| p.exists()) {
-                            Some(p) if crop.is_some() => photo::fitted_crop(p, crop, 700., 640.),
-                            Some(p) => picture(p, 700., 640., ObjectFit::Contain)
-                                .max_w_full()
-                                .max_h(px(640.))
-                                .into_any_element(),
-                            None => div()
-                                .text_color(theme::warn())
-                                .child(t!("act.file_missing", path = m.page_file(page).unwrap_or("")))
-                                .into_any_element(),
-                        }
-                    }));
-                    v_flex()
-                        .id(SharedString::from(format!("img-{target}")))
-                        .gap_1()
-                        .p_2()
-                        .rounded(theme::RADIUS_SM)
-                        .border_1()
-                        .border_color(theme::border())
-                        .bg(theme::surface())
-                        .cursor_pointer()
-                        .hover(|d| d.border_color(theme::border_strong()))
-                        .child(body)
-                        .child(div().text_xs().text_color(theme::muted()).child(title))
-                        .on_click(cx.listener(move |this, _, w, cx| this.goto(target.clone(), w, cx)))
-                        .with_menu(self.record_menu(m.xref(), MenuFrom::Attached(xref.clone()), cx))
-                }))
-                .into_any_element(),
-        )
-    }
-
-    /// Thumbnails of the linked images, in the detail panel. `add`: “+” next to the title (add
-    /// photos, link or crop a media), and the title stays visible even without an image. For an
-    /// individual, the images of their unions (wedding photo…) follow their own.
-    fn render_gallery(&self, xref: &str, large: bool, add: bool, cx: &mut Context<Self>) -> Option<AnyElement> {
+    /// Thumbnails of the linked images: in the detail panel, or under a record read in the centre
+    /// (`inline`, larger tiles in a row). `add`: “+” next to the title (add photos, link or crop a
+    /// media), and the title stays visible even without an image. For an individual, the images
+    /// of their unions (wedding photo…) follow their own.
+    fn render_gallery(&self, xref: &str, inline: bool, add: bool, cx: &mut Context<Self>) -> Option<Div> {
         let doc = self.doc.as_ref()?;
         // (record holding the link, image)
         let mut images: Vec<(String, Media)> =
@@ -2105,7 +2149,7 @@ impl Workspace {
                 .cursor_pointer()
                 .hover(|d| d.border_color(theme::accent()))
                 .on_click(cx.listener(move |this, _, w, cx| this.goto(target.clone(), w, cx)));
-            let tile = if large { tile.w_full().h(px(220.)) } else { tile.h(px(96.)) };
+            let tile = if inline { tile.w(px(120.)).h(px(150.)) } else { tile.h(px(96.)) };
             let crop = doc.ged.link_crop(owner, m.xref());
             // Number of pages of a multi-page media, in the corner.
             let badge = (page_count > 1).then(|| {
@@ -2123,13 +2167,12 @@ impl Workspace {
             let tile = match path {
                 Some(p) if crop.is_some() => {
                     // Cropped area of the link: face on a group photo, excerpt of a record…
-                    let (w, h) = if large { (326., 218.) } else { (104., 94.) };
-                    tile.flex().justify_center().child(photo::linked_img(p, crop, w, h, !large))
+                    let (w, h) = if inline { (118., 148.) } else { (104., 94.) };
+                    tile.flex().justify_center().child(photo::linked_img(p, crop, w, h, true))
                 }
                 Some(p) => {
-                    let (w, h, fit) =
-                        if large { (326., 220., ObjectFit::Contain) } else { (104., 96., ObjectFit::Cover) };
-                    tile.child(picture(p, w, h, fit).size_full())
+                    let (w, h) = if inline { (120., 150.) } else { (104., 96.) };
+                    tile.child(picture(p, w, h, ObjectFit::Cover).size_full())
                 }
                 None => tile.flex().items_center().justify_center().child(
                     v_flex()
@@ -2153,7 +2196,7 @@ impl Workspace {
                     h_flex()
                         .gap_2()
                         .items_center()
-                        .child(icon(IconName::Images))
+                        .when(!inline, |d| d.child(icon(IconName::Images)))
                         .child(label_caps(if n > 0 {
                             t!("ws.images_count", n = n).into_owned()
                         } else {
@@ -2163,13 +2206,13 @@ impl Workspace {
                         .children(add_button),
                 )
                 .when(n > 0, |d| {
-                    d.child(if large {
-                        v_flex().gap_2().children(tiles).into_any_element()
+                    d.child(if inline {
+                        h_flex().flex_wrap().gap_2().children(tiles).into_any_element()
                     } else {
                         div().grid().grid_cols(3).gap_2().children(tiles).into_any_element()
                     })
                 })
-                .into_any_element(),
+                .when(inline, |d| d.p_0().border_b_0()),
         )
     }
 
@@ -2284,25 +2327,16 @@ impl Workspace {
             .border_l_1()
             .border_color(theme::border())
             .text_sm();
-        // Dropping photos or documents anywhere on the panel opens the import preview of the Media
-        // window. On a media, they become new pages.
-        let kind = g.get(key).and_then(|n| RecordKind::from_tag(&n.tag));
-        let attachable =
-            kind.is_some_and(|k| matches!(k, RecordKind::Individual | RecordKind::Source | RecordKind::Media));
-        let panel = if attachable {
+        // Dropping photos or documents anywhere on a person's panel opens the import preview of the
+        // Media window.
+        let panel = if g.individual(key).is_some() {
             let (record, entity) = (key.clone(), cx.entity().downgrade());
-            let as_pages = kind == Some(RecordKind::Media);
             panel.drag_over::<ExternalPaths>(|d, _, _, _| d.bg(theme::accent_soft())).on_drop(
                 move |paths: &ExternalPaths, window, cx| {
                     let record = record.clone();
                     let _ = entity.update(cx, |this, cx| {
-                        if as_pages {
-                            let files = paths.paths().iter().map(|p| this.file_value(p)).collect();
-                            this.add_pages(record, files, window, cx);
-                        } else {
-                            let files = paths.paths().to_vec();
-                            this.open_gallery_with_files(GalleryTarget::Record(record), files, window, cx);
-                        }
+                        let files = paths.paths().to_vec();
+                        this.open_gallery_with_files(GalleryTarget::Record(record), files, window, cx);
                     });
                 },
             )
@@ -2342,63 +2376,12 @@ impl Workspace {
                     .child(self.render_links(t!("ws.cited_by").into(), refs, cx))
                     .into_any_element()
             }
-            _ => {
-                let refs: Vec<String> = g.referrers(key).iter().filter_map(|r| r.xref.clone()).collect();
-                let node = g.get(key);
-                let outgoing: Vec<String> = node
-                    .map(|n| {
-                        let mut v: Vec<String> = Vec::new();
-                        for p in n.pointers() {
-                            // Web pages are in “Web Links”.
-                            if !v.contains(&p) && p != *key && !weblinks::is_web_media(g, &p) {
-                                v.push(p);
-                            }
-                        }
-                        v
-                    })
-                    .unwrap_or_default();
-                let kind = node.and_then(|n| RecordKind::from_tag(&n.tag));
-                let is_source = kind == Some(RecordKind::Source);
-                let gallery = self.render_gallery(key, is_source, is_source, cx);
-                let shown_under_photo = kind == Some(RecordKind::Media)
-                    && self.tab == CenterTab::Form
-                    && self.photo_file(key).is_some()
-                    && !refs.is_empty();
-                let show_refs = !shown_under_photo && !refs.is_empty();
-                let web = self.render_web_links(key, cx);
-                // Nothing but the title (already in the record): no panel, the central area takes
-                // the room.
-                if gallery.is_none() && outgoing.is_empty() && !show_refs && web.is_none() {
-                    return div().into_any_element();
-                }
-                panel
-                    .child(
-                        h_flex()
-                            .p_4()
-                            .gap_2()
-                            .items_start()
-                            .border_b_1()
-                            .border_color(theme::border())
-                            .when_some(kind, |d, k| {
-                                d.child(icon(View::for_kind(k).icon()).text_color(theme::accent()).mt_1())
-                            })
-                            .child(
-                                v_flex().flex_1().min_w_0().gap_1().child(
-                                    div().text_xl().font_weight(FontWeight::SEMIBOLD).child(g.record_label(key)),
-                                ),
-                            ),
-                    )
-                    .when_some(gallery, |d, el| d.child(el))
-                    .when_some(web, |d, el| d.child(el))
-                    .when(!outgoing.is_empty(), |d| d.child(self.render_links(t!("ws.links").into(), outgoing, cx)))
-                    // Photo: the “Used By” list is under the image, with the frames.
-                    .when(show_refs, |d| d.child(self.render_links(t!("ws.used_by").into(), refs, cx)))
-                    .into_any_element()
-            }
+            // Sources, media, repositories and notes are read whole in the centre: no panel.
+            _ => div().into_any_element(),
         }
     }
 
-    fn render_links(&self, title: SharedString, xrefs: Vec<String>, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render_links(&self, title: SharedString, xrefs: Vec<String>, cx: &mut Context<Self>) -> Div {
         let g = &self.doc.as_ref().unwrap().ged;
         v_flex().p_4().gap_1().child(label_caps(format!("{title} · {}", xrefs.len()))).children(
             xrefs.into_iter().take(300).map(|x| {

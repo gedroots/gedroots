@@ -174,8 +174,12 @@ Rules shared by the three guidelines, to apply everywhere.
 
 ### Navigation
 
-- Fixed structure: sidebar (areas) → list → record → detail panel. The sidebar is on the left
-  on all three platforms and can be hidden.
+- Fixed structure: sidebar (areas) → list → record. The sidebar is on the left on all three
+  platforms and can be hidden. Individuals and places add a detail panel on the right, because
+  the centre shows the tree or the map. Sources, media, repositories and notes have none (like
+  Contacts or Mail): the record is read whole in the centre, in one readable column (720 px at
+  most): title with the repository and call number under it, facts, records, images, web
+  links, links, then "Used by".
 - **Back/forward history** across all navigation (`workspace/history.rs`): keyboard, side
   mouse buttons and, on a trackpad, swipe. Each list reopens the last item viewed; Individuals
   falls back to the root individual.
