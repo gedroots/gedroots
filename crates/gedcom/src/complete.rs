@@ -363,7 +363,8 @@ const MEDIA_TYPES: &[(&str, &str)] = &[
     ("video/mp4", "MP4"),
 ];
 
-const LANGUAGES: &[(&str, &str)] = &[
+/// Langues proposées pour `LANG` (code BCP 47, libellé).
+pub const LANGUAGES: &[(&str, &str)] = &[
     ("fr", "français"),
     ("en", "anglais"),
     ("de", "allemand"),

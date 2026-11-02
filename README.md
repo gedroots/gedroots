@@ -75,6 +75,10 @@ et suit la maquette « Lignée » (thème sombre, barre d'activité, liste, arbr
   logiciel, liste ce qu'il contient de non standard et propose de le convertir en GEDCOM 7
   (annulable). Premier contrôle : les balises `_URL` deviennent des liens multimédia (`WWW`
   pour les dépôts). Les contrôles sont dans `crates/gedcom/src/import.rs`.
+- **Réglages du fichier** (Fichier › « Réglages du fichier… ») : auteur, e-mail, droits,
+  description, langue et individu racine, plus la liste des anomalies masquées (« Réafficher »).
+  Tout est rangé dans l'en-tête du .ged en GEDCOM 7 standard (`HEAD.SUBM`, `COPR`, `NOTE`,
+  `LANG`). À chaque enregistrement, `HEAD.SOUR` et `HEAD.DATE` indiquent GedRoots et la date.
 - **Médias à plusieurs pages** : un acte sur deux feuillets est un seul média (`OBJE` avec un
   `FILE` par page, standard GEDCOM 7). Visionneuse page par page (miniatures, ⇞ / ⇟), pages
   ajoutées par glisser-déposer ou Média › Pages, réordonnées en glissant les miniatures, retirées
