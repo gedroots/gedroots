@@ -111,7 +111,7 @@ impl Gedcom {
         if e.children.len() == before {
             return Ok(());
         }
-        if !is_attribute(&e.tag) && e.value.is_none() && e.children.is_empty() {
+        if !is_attribute(&e.tag) && !e.tag.starts_with('_') && e.value.is_none() && e.children.is_empty() {
             e.value = Some("Y".into());
         }
         if let Some(r) = self.get_mut(owner) {
@@ -242,7 +242,7 @@ impl Gedcom {
         }
 
         // Événement sans aucun détail : « 1 DEAT Y » (il a eu lieu).
-        if !is_attribute(&ev.tag) && node.value.is_none() && node.children.is_empty() {
+        if !is_attribute(&ev.tag) && !ev.tag.starts_with('_') && node.value.is_none() && node.children.is_empty() {
             node.value = Some("Y".into());
         }
         if let Some(r) = self.get_mut(owner) {

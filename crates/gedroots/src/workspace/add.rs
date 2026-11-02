@@ -70,7 +70,11 @@ impl Workspace {
             types
                 .iter()
                 .filter(|t| t.family == fam)
-                .map(|t| (format!("{prefix}EVEN:{}", t.label), t.label.clone()))
+                .map(|t| {
+                    // `EVEN` + `TYPE` : le libellé ; balise d'extension : la balise.
+                    let v = if t.tag == "EVEN" { format!("EVEN:{}", t.label) } else { t.tag.clone() };
+                    (format!("{prefix}{v}"), t.label.clone())
+                })
                 .collect()
         };
         let at = options.iter().position(|(t, _)| t == "EVEN").unwrap_or(options.len());
@@ -109,7 +113,8 @@ impl Workspace {
         let mut options: Vec<(&str, &str)> = options.iter().map(|(v, l)| (v.as_str(), l.as_str())).collect();
         // Type absent de la liste proposée à l'ajout (CHR, ADOP…) : on le garde.
         let cur_tag = current.as_ref().map(|e| e.tag.clone()).unwrap_or_default();
-        if !cur_tag.is_empty() && !tags.contains(&cur_tag.as_str()) {
+        let custom_tag = types.iter().any(|t| t.family == family && t.tag == cur_tag);
+        if !cur_tag.is_empty() && !tags.contains(&cur_tag.as_str()) && !custom_tag {
             options.insert(0, (cur_tag.as_str(), event_label(&cur_tag).unwrap_or(cur_tag.as_str())));
         }
         let custom_kind = current

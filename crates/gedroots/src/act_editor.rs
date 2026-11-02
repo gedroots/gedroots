@@ -109,6 +109,10 @@ fn event_value(act: &Act, custom: &[EventType]) -> String {
         let known = custom.iter().any(|t| t.family == act.family_even && t.label == act.event_type.trim());
         return if known { format!("{fam}EVEN:{}", act.event_type.trim()) } else { format!("{fam}EVEN") };
     }
+    // Type personnalisé à balise d'extension (`_MILT`).
+    if act.event.starts_with('_') && act.family_even {
+        return format!("FAM:{}", act.event);
+    }
     act.event.clone()
 }
 
@@ -124,7 +128,8 @@ impl ActEditor {
             .collect();
         for t in &custom {
             let fam = if t.family { "FAM:" } else { "" };
-            options.push((format!("{fam}EVEN:{}", t.label), t.label.clone()));
+            let v = if t.tag == "EVEN" { format!("EVEN:{}", t.label) } else { t.tag.clone() };
+            options.push((format!("{fam}{v}"), t.label.clone()));
         }
         options.push(("EVEN".into(), "Autre événement…".into()));
         options.push(("FAM:EVEN".into(), "Autre événement familial…".into()));

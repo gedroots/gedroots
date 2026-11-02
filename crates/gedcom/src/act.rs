@@ -437,7 +437,8 @@ impl Act {
 
     /// L'événement est-il familial (porté par l'enregistrement `FAM` des époux) ?
     pub fn is_family(&self) -> bool {
-        FAMILY_ACT_EVENTS.contains(&self.event.as_str()) || (self.event == "EVEN" && self.family_even)
+        FAMILY_ACT_EVENTS.contains(&self.event.as_str())
+            || ((self.event == "EVEN" || self.event.starts_with('_')) && self.family_even)
     }
 
     /// Libellé de l'événement.

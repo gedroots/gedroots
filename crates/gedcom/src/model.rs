@@ -45,8 +45,40 @@ pub const EVENT_TAGS: &[(&str, &str)] = &[
     ("ANUL", "Annulation"),
 ];
 
+/// Libellé d'une balise d'événement : standard, ou balise d'extension déclarée comme
+/// type d'événement personnalisé dans le fichier ouvert (voir [`set_custom_events`]).
 pub fn event_label(tag: &str) -> Option<&'static str> {
-    EVENT_TAGS.iter().find(|(t, _)| *t == tag).map(|(_, l)| *l)
+    if let Some((_, l)) = EVENT_TAGS.iter().find(|(t, _)| *t == tag) {
+        return Some(l);
+    }
+    if !tag.starts_with('_') {
+        return None;
+    }
+    CUSTOM_EVENTS.read().ok()?.iter().find(|(t, _)| t == tag).map(|(_, l)| *l)
+}
+
+/// Balises d'extension du fichier ouvert qui sont des événements (`_MILT`…), avec leur libellé.
+static CUSTOM_EVENTS: std::sync::RwLock<Vec<(String, &'static str)>> = std::sync::RwLock::new(Vec::new());
+/// Libellés déjà alloués : un même libellé n'est gardé qu'une fois pour toute la session.
+static CUSTOM_LABELS: std::sync::Mutex<Vec<&'static str>> = std::sync::Mutex::new(Vec::new());
+
+/// Indique les types d'événements personnalisés à balise propre du fichier ouvert
+/// (`(balise, libellé)`, voir [`crate::Gedcom::custom_event_tags`]) : ces balises deviennent
+/// des événements pour [`event_label`] et toute la bibliothèque.
+pub fn set_custom_events(list: &[(String, String)]) {
+    let Ok(mut labels) = CUSTOM_LABELS.lock() else { return };
+    let mut intern = |l: &str| -> &'static str {
+        if let Some(s) = labels.iter().find(|s| **s == l) {
+            return s;
+        }
+        let s: &'static str = Box::leak(l.to_string().into_boxed_str());
+        labels.push(s);
+        s
+    };
+    let v: Vec<(String, &'static str)> = list.iter().map(|(t, l)| (t.clone(), intern(l))).collect();
+    if let Ok(mut c) = CUSTOM_EVENTS.write() {
+        *c = v;
+    }
 }
 
 /// Un événement ou attribut (BIRT, DEAT, OCCU, RESI, MARR…).

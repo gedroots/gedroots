@@ -49,7 +49,7 @@ pub mod weblink;
 
 pub use act::{Act, ActKey, ActResult, ActRole, MediaChoice, Participant, PersonChoice, PersonField, Suggestion};
 pub use crop::{Crop, MediaLink, Rect};
-pub use custom::{EventType, Jurisdiction, PlaceRewrite};
+pub use custom::{EventType, Jurisdiction, PlaceRewrite, normalize_event_tag};
 pub use date::{Calendar, Date, DateKind, Parsed as DateInput, SimpleDate, parse_input as parse_date_input};
 pub use document::{Gedcom, RecordKind};
 pub use events::PersonEvent;

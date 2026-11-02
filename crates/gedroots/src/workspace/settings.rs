@@ -2,7 +2,8 @@
 //! - Général : auteur, droits, description, langue, individu racine et
 //!   anomalies masquées (voir `gedcom::settings`) ;
 //! - Lieux : format des lieux (`HEAD.PLAC.FORM`), avec réécriture des lieux ;
-//! - Événements : types d'événements personnalisés (`EVEN` + `TYPE`) ;
+//! - Événements : types d'événements personnalisés et leur balise GEDCOM
+//!   (`EVEN` + `TYPE`, balise d'extension `_XXX` ou événement standard) ;
 //! - Médias : dossier des médias, sous-dossiers par type et modèles de nom
 //!   (`gedcom::media_naming`).
 //!
@@ -32,6 +33,8 @@ struct PlaceRow {
 /// Un type d'événement personnalisé en cours de modification.
 struct EventRow {
     label: Entity<InputState>,
+    /// Balise GEDCOM (`EVEN`, `_MILT`…).
+    tag: Entity<InputState>,
     /// Libellé actuel (`None` : type ajouté).
     original: Option<String>,
     family: bool,
@@ -56,6 +59,7 @@ pub(super) struct SettingsDialog {
     media_active: usize,
     /// Contexte de chaque média du fichier (calculé à l'ouverture), pour les exemples.
     media_samples: Vec<(MediaContext, String)>,
+    error: Option<SharedString>,
     _subs: Vec<Subscription>,
 }
 
@@ -131,6 +135,7 @@ impl Workspace {
             .into_iter()
             .map(|t| EventRow {
                 label: text_input("Libellé", &t.label, window, cx),
+                tag: text_input("EVEN", if t.tag == "EVEN" { "" } else { &t.tag }, window, cx),
                 original: Some(t.label),
                 family: t.family,
                 uses: t.uses,
@@ -172,6 +177,7 @@ impl Workspace {
             media,
             media_active: 0,
             media_samples,
+            error: None,
             _subs: subs,
         })));
         cx.notify();
@@ -200,17 +206,40 @@ impl Workspace {
             .map(|r| Jurisdiction { name: r.name.read(cx).value().trim().to_string(), from: r.from })
             .filter(|j| !j.name.is_empty() || j.from.is_some())
             .collect();
-        // (famille, ancien libellé, nouveau libellé)
-        let events: Vec<(bool, Option<String>, String)> = d
+        let g = &self.doc.as_ref().unwrap().ged;
+        let types = g.event_types();
+        // (famille, ancien libellé, nouveau libellé, balise si elle change)
+        let events: Vec<EventEdit> = d
             .events
             .iter()
-            .map(|r| (r.family, r.original.clone(), r.label.read(cx).value().trim().to_string()))
+            .map(|r| {
+                let label = r.label.read(cx).value().trim().to_string();
+                let tag = r.tag.read(cx).value().trim().to_string();
+                let cur =
+                    r.original.as_ref().and_then(|o| types.iter().find(|t| t.family == r.family && t.label == *o));
+                let same = match (cur, gedcom::normalize_event_tag(r.family, &tag)) {
+                    (Some(t), Ok(n)) => t.tag == n,
+                    _ => false,
+                };
+                (r.family, r.original.clone(), label, (!same).then_some(tag))
+            })
             .collect();
         let removed = d.removed_events.clone();
         let naming = media_naming(d, cx);
+        let events_changed = !removed.is_empty()
+            || events
+                .iter()
+                .any(|(_, old, new, tag)| !new.is_empty() && (old.as_deref() != Some(new.as_str()) || tag.is_some()));
+        let mut probe = g.clone();
+        if events_changed && let Err(e) = apply_event_types(&mut probe, &removed, &events) {
+            if let Some(d) = self.settings_dialog() {
+                d.page = SettingsPage::Events;
+                d.error = Some(e.into());
+            }
+            cx.notify();
+            return;
+        }
         self.add_dialog = None;
-
-        let g = &self.doc.as_ref().unwrap().ged;
         let mut probe = g.clone();
         let mut changed = probe.set_file_settings(&s);
         changed |= probe.set_media_naming(&naming);
@@ -218,8 +247,7 @@ impl Workspace {
         let current = g.place_form();
         let format_changed = format.len() != current.len()
             || format.iter().enumerate().any(|(i, j)| j.from != Some(i) || j.name != current[i]);
-        changed |= root_changed || format_changed || !removed.is_empty();
-        changed |= events.iter().any(|(_, old, new)| old.as_deref() != Some(new.as_str()) && !new.is_empty());
+        changed |= root_changed || format_changed || events_changed;
         if changed {
             self.mutate(window, cx, move |g| {
                 g.set_file_settings(&s);
@@ -237,18 +265,8 @@ impl Workspace {
                         msg.push_str(&format!(" · {} d'un autre format inchangé(s)", places(r.skipped)));
                     }
                 }
-                for (family, label) in &removed {
-                    g.undeclare_event_type(*family, label);
-                }
-                for (family, old, new) in &events {
-                    match old {
-                        Some(old) => {
-                            g.rename_event_type(*family, old, new);
-                        }
-                        None => {
-                            g.declare_event_type(*family, new);
-                        }
-                    }
+                if events_changed {
+                    apply_event_types(g, &removed, &events)?;
                 }
                 Ok((msg, None))
             });
@@ -294,6 +312,7 @@ impl Workspace {
                     .child(tab("settings-media", "Médias", SettingsPage::Media)),
             )
             .child(div().id("settings-body").max_h(px(460.)).overflow_y_scroll().child(body))
+            .when_some(d.error.clone(), |v, e| v.child(div().text_sm().text_color(theme::danger()).child(e)))
             .child(
                 h_flex().gap_2().justify_end().child(
                     Button::new("settings-save")
@@ -464,6 +483,7 @@ impl Workspace {
                     .gap_2()
                     .items_center()
                     .child(div().flex_1().child(Input::new(&r.label).small()))
+                    .child(div().w(px(88.)).font_family("monospace").child(Input::new(&r.tag).small()))
                     .when(r.uses > 0, |h| {
                         h.child(
                             div()
@@ -501,9 +521,10 @@ impl Workspace {
                         .tooltip("Ajouter un type")
                         .on_click(cx.listener(move |this, _, w, cx| {
                             let label = text_input("Libellé", "", w, cx);
+                            let tag = text_input("EVEN", "", w, cx);
                             label.update(cx, |s, cx| s.focus(w, cx));
                             if let Some(d) = this.settings_dialog() {
-                                d.events.push(EventRow { label, original: None, family, uses: 0 });
+                                d.events.push(EventRow { label, tag, original: None, family, uses: 0 });
                             }
                             cx.notify();
                         })),
@@ -677,6 +698,34 @@ impl Workspace {
     }
 }
 
+/// Un type de la page Événements : famille, libellé actuel (`None` : ajouté),
+/// nouveau libellé, nouvelle balise (`None` : inchangée).
+type EventEdit = (bool, Option<String>, String, Option<String>);
+
+/// Applique la page Événements : types retirés, renommés, ajoutés, changés de balise.
+fn apply_event_types(g: &mut Gedcom, removed: &[(bool, String)], events: &[EventEdit]) -> Result<(), String> {
+    for (family, label) in removed {
+        g.undeclare_event_type(*family, label);
+    }
+    for (family, old, new, tag) in events {
+        if new.is_empty() {
+            continue;
+        }
+        let res = match old {
+            Some(old) => {
+                g.rename_event_type(*family, old, new);
+                match tag {
+                    Some(tag) => g.set_event_type_tag(*family, new, tag).map(|_| ()),
+                    None => Ok(()),
+                }
+            }
+            None => g.declare_event_type(*family, new, tag.as_deref().unwrap_or("")).map(|_| ()),
+        };
+        res.map_err(|e| format!("{new} : {e}"))?;
+    }
+    Ok(())
+}
+
 /// Choix du menu des types : libellé, balises. Les événements courants, les
 /// types personnalisés du fichier, puis « Portrait » (média rattaché à une personne).
 fn type_options(g: &Gedcom) -> Vec<(String, Vec<String>)> {
@@ -694,7 +743,8 @@ fn type_options(g: &Gedcom) -> Vec<(String, Vec<String>)> {
     out.sort_by_key(|(_, tags)| FIRST.iter().position(|t| *t == tags[0]).unwrap_or(FIRST.len()));
     for t in g.event_types() {
         if !out.iter().any(|(l, _)| *l == t.label) {
-            out.push((t.label.clone(), vec![t.label]));
+            let key = if t.tag == "EVEN" { t.label.clone() } else { t.tag };
+            out.push((t.label, vec![key]));
         }
     }
     out.push(("Portrait".into(), vec!["INDI".into()]));

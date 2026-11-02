@@ -917,6 +917,8 @@ impl Workspace {
         };
         // Libellés courts des lieux selon le format du fichier (Réglages du fichier › Lieux).
         gedcom::set_place_layout(&doc.ged.place_form());
+        // Types d'événements à balise d'extension (Réglages du fichier › Événements).
+        gedcom::set_custom_events(&doc.ged.custom_event_tags());
         let g = &doc.ged;
         let mut rows: Vec<Row> = match self.view {
             View::Individuals => {

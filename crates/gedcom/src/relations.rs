@@ -204,7 +204,7 @@ impl Gedcom {
             e.children.push(Node::with_value("SOUR", format!("@{}@", s.trim_matches('@'))));
         }
         // Événement sans aucun détail : « 1 DEAT Y » (il a eu lieu).
-        if !attribute && e.children.is_empty() {
+        if !attribute && !ev.tag.starts_with('_') && e.children.is_empty() {
             e.value = Some("Y".into());
         }
         node.insert_child(e);

@@ -100,7 +100,9 @@ et suit le [design system GEDRoots](design.md) (fonds neutres et touches de viol
     (Aube) ») suivent ce format.
   - **Événements** : types d'événements personnalisés (`EVEN` + `TYPE`), déduits du fichier,
     à renommer ou fusionner ; un nouveau type est déclaré par l'extension
-    [`_GR_EVEN`](docs/extensions.md#_gr_even). Ils sont proposés dans « Ajouter un événement… ».
+    [`_GR_EVEN`](docs/extensions.md#_gr_even). Chaque type a sa balise GEDCOM : `EVEN` + `TYPE`
+    par défaut, une balise d'extension (`_MILT`…) ou une balise standard (`MARC`…) ; la changer
+    réécrit tous ses événements. Ils sont proposés dans « Ajouter un événement… ».
   - **Médias** : dossier des médias et sous-dossiers (Actes, Portraits…), chacun avec les
     événements qu'il reçoit (menu à cocher) et son modèle de nom (`{sosa:6}_{fratrie}_{type:1}_{nom}_{prenom}`…,
     numéros Sosa-d'Aboville calculés depuis la racine), extension

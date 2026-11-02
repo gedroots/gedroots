@@ -375,6 +375,29 @@ impl Gedcom {
         }
     }
 
+    /// Remplace un type reçu par les sous-dossiers (type d'événement renommé ou
+    /// changé de balise).
+    pub(crate) fn rename_media_type(&mut self, old: &str, new: &str) {
+        let mut m = self.media_naming();
+        let mut changed = false;
+        for f in &mut m.folders {
+            if f.types.iter().any(|t| t.eq_ignore_ascii_case(old)) {
+                let mut types: Vec<String> = Vec::new();
+                for t in &f.types {
+                    let t = if t.eq_ignore_ascii_case(old) { new.to_string() } else { t.clone() };
+                    if !types.contains(&t) {
+                        types.push(t);
+                    }
+                }
+                f.types = types;
+                changed = true;
+            }
+        }
+        if changed {
+            self.set_media_naming(&m);
+        }
+    }
+
     /// Enregistre le réglage. Renvoie `false` si rien n'a changé.
     pub fn set_media_naming(&mut self, m: &MediaNaming) -> bool {
         let m = MediaNaming {

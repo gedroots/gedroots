@@ -39,29 +39,41 @@ Supprimer l'individu racine retire aussi la balise.
 
 ## `_GR_EVEN`
 
-Type d'événement personnalisé déclaré avant d'être utilisé (**Fichier › Réglages du
-fichier… › Événements**). Un type personnalisé est un `EVEN` standard avec un `TYPE` :
-ceux qui figurent déjà dans le fichier sont déduits de leurs `TYPE` et n'ont pas besoin de
-cette balise. Elle ne sert qu'à proposer un type pas encore utilisé dans **Ajouter un
-événement…**.
+Type d'événement personnalisé (**Fichier › Réglages du fichier… › Événements**). Par
+défaut, un type personnalisé est un `EVEN` standard avec un `TYPE` : ceux qui figurent déjà
+dans le fichier sont déduits de leurs `TYPE` et n'ont pas besoin de cette balise. Elle sert à
+proposer un type pas encore utilisé dans **Ajouter un événement…**, et à donner un libellé
+aux types qui ont leur propre balise d'extension (`_MILT`…).
 
 - **Sous** : `HEAD`, au niveau 1. Une occurrence par type déclaré.
-- **Valeur** : le libellé du type, tel qu'il sera écrit dans `TYPE`.
-- **Sous-structures** : `_GR_REC FAM` pour un événement familial (sous `FAM`) ; absent,
-  le type concerne les individus.
+- **Valeur** : le libellé du type, tel qu'il sera écrit dans `TYPE` (ou affiché pour une
+  balise d'extension).
+- **Sous-structures** :
+  - `_GR_REC FAM` pour un événement familial (sous `FAM`) ; absent, le type concerne
+    les individus.
+  - `_GR_TAG <balise>` : balise d'extension des événements de ce type (`1 _MILT` sous
+    l'individu, sans `TYPE`). Absent : `EVEN` + `TYPE`. Une balise ne sert qu'à un type.
 
 ```
 0 HEAD
 1 SCHMA
 2 TAG _GR_EVEN https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_even
 2 TAG _GR_REC https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_even
+2 TAG _GR_TAG https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_even
 1 _GR_EVEN Baptême protestant
 1 _GR_EVEN Publication des bans
 2 _GR_REC FAM
+1 _GR_EVEN Service militaire
+2 _GR_TAG _MILT
+0 @I1@ INDI
+1 _MILT
+2 DATE FROM 1914 TO 1918
 ```
 
 Renommer un type dans les réglages réécrit tous les `TYPE` correspondants (renommer vers un
-type existant les fusionne) ; un type déclaré et inutilisé peut être retiré.
+type existant les fusionne) ; un type déclaré et inutilisé peut être retiré. Changer la
+balise d'un type réécrit tous ses événements : `EVEN` + `TYPE` ↔ balise d'extension, ou
+balise standard (`MARC`, `GRAD`…), le type devenant alors cet événement standard.
 
 ## `_GR_MEDIA`
 
