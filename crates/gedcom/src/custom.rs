@@ -85,7 +85,7 @@ pub fn normalize_event_tag(family: bool, raw: &str) -> Result<String, String> {
     if extension || is_standard_event(family, &t) {
         return Ok(t);
     }
-    Err(format!("« {} » n'est pas une balise d'événement (EVEN, _XXX ou une balise standard)", raw.trim()))
+    Err(format!("{} n'est pas une balise d'événement", raw.trim()))
 }
 
 fn split_place(v: &str) -> Vec<&str> {

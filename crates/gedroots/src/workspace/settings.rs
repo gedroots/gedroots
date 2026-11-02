@@ -483,7 +483,7 @@ impl Workspace {
                     .gap_2()
                     .items_center()
                     .child(div().flex_1().child(Input::new(&r.label).small()))
-                    .child(div().w(px(88.)).font_family("monospace").child(Input::new(&r.tag).small()))
+                    .child(div().w(px(88.)).child(Input::new(&r.tag).small()))
                     .when(r.uses > 0, |h| {
                         h.child(
                             div()
