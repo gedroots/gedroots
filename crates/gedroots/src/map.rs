@@ -5,6 +5,7 @@
 //! Hors ligne, la carte utilise les tuiles déjà en cache et affiche les repères sur
 //! un quadrillage : les coordonnées viennent du fichier GEDCOM, pas d'Internet.
 
+use crate::images::picture;
 use crate::theme;
 use gedcom::Place;
 use gedcom::geo::{TILE_SIZE, project, unproject};
@@ -367,7 +368,10 @@ impl MapView {
             let y = (ty as f64 * TILE_SIZE - top).round() as f32;
             let cell = div().absolute().left(px(x)).top(px(y)).size(px(TILE_SIZE as f32));
             match self.tile_path(key).filter(|p| p.exists()) {
-                Some(p) => out.push(cell.child(img(p).size_full()).into_any_element()),
+                Some(p) => out.push(
+                    cell.child(picture(p, TILE_SIZE as f32, TILE_SIZE as f32, ObjectFit::Fill).size_full())
+                        .into_any_element(),
+                ),
                 None => {
                     self.request_tile(key, cx);
                     out.push(cell.border_r_1().border_b_1().border_color(theme::border()).into_any_element());
