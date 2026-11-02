@@ -49,7 +49,8 @@ et suit la maquette « Lignée » (thème sombre, barre d'activité, liste, arbr
   restent cohérents, et une famille vidée est supprimée.
 - **Photos et actes** : glisser-déposer ou choisir des fichiers sur une personne, une famille ou
   une source ; suggestions des fichiers du dossier (`Actes/`, `Portraits/`…) dont le nom contient
-  celui de la personne ; liste des fichiers du dossier sans média, importables en un clic.
+  celui de la personne ; les fichiers du dossier sans média sont dans Qualité › Fichiers à
+  rattacher (menu Média › Fichiers à rattacher).
 - **Familles, sources, dépôts, médias, notes partagées** : liste, éditeur visuel,
   et panneau « Utilisé par / Liens » pour naviguer entre les enregistrements.
 - **Lieux** : index de tous les `PLAC` du fichier, renommage global et coordonnées (`MAP`).
@@ -135,10 +136,13 @@ et suit la maquette « Lignée » (thème sombre, barre d'activité, liste, arbr
   impossibles, liens familiaux incohérents, structure GEDCOM 7 (balise non permise,
   information obligatoire absente ou en double, date illisible, valeur inconnue, lien
   cassé), éléments vides ou isolés (événements et notes vides, familles sans membre,
-  enregistrements cités nulle part, arbres séparés de la racine) et événements sans
-  source. Un clic ouvre l'élément (`⌘[` revient), le bouton de la ligne corrige quand
-  c'est sûr (supprimer, rétablir un lien à sens unique, retirer un lien cassé), et en lot
-  avec confirmation. Clic droit › « Masquer » écrit [`_GR_IGNORE`](docs/extensions.md).
+  enregistrements cités nulle part, arbres séparés de la racine), médias (fichier
+  introuvable, déplacé dans le dossier, médias en double, format absent), événements sans
+  source et fichiers du dossier à rattacher. Un clic ouvre l'élément (`⌘[` revient), le
+  bouton de la ligne corrige quand c'est sûr (supprimer, rétablir un lien à sens unique,
+  retirer un lien cassé, corriger le chemin, fusionner, créer le média), et en lot, avec
+  confirmation pour les suppressions et fusions. « Localiser… » choisit à la main le
+  fichier d'un média introuvable. Clic droit › « Masquer » écrit [`_GR_IGNORE`](docs/extensions.md).
 - **Lien de parenté** (menu Individu › Lien de parenté avec…) : « cousine issue de germain »,
   « oncle à la mode de Bretagne », demi-frère, beau-père… avec le chemin par l'ancêtre commun
   et le degré civil, affiché dans le panneau de l'individu.

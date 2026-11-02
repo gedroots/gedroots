@@ -276,7 +276,7 @@ fn model() -> Vec<(&'static str, Vec<Item>)> {
             Sep,
             a("Identifier une personne sur la photo", TagPerson),
             Sep,
-            a("Fichiers du dossier sans média…", ShowUnreferencedFiles),
+            a("Fichiers à rattacher", ShowUnreferencedFiles),
         ],
     ));
     menus.push((

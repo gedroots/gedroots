@@ -159,7 +159,7 @@ impl Gedcom {
     }
 
     /// Réécrit les liens vers `media` dans tout le fichier ; touche les enregistrements modifiés.
-    fn rewrite_links(&mut self, media: &str, mut f: impl FnMut(&mut Node) -> Vec<Node>, dedupe: &[&str]) {
+    pub(crate) fn rewrite_links(&mut self, media: &str, mut f: impl FnMut(&mut Node) -> Vec<Node>, dedupe: &[&str]) {
         let p = ptr(media);
         let mut uses_pages = false;
         let mut wrap = |l: &mut Node| {

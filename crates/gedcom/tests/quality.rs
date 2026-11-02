@@ -134,3 +134,81 @@ fn citation_checks_have_categories() {
     assert_eq!(quality::category("role_sex_mismatch"), Category::Family);
     assert_eq!(quality::category("outside_source_period"), Category::Dates);
 }
+
+const MEDIA: &str = "0 HEAD
+1 GEDC
+2 VERS 7.0
+0 @I1@ INDI
+1 NAME Jean /MARTIN/
+1 OBJE @M1@
+1 OBJE @M2@
+1 OBJE @M3@
+0 @M1@ OBJE
+1 FILE Actes/naissance.jpg
+2 FORM image/jpeg
+0 @M2@ OBJE
+1 FILE Actes/naissance.jpg
+2 FORM image/jpeg
+1 NOTE Copie
+0 @M3@ OBJE
+1 FILE Vieux/deces.jpg
+0 @M4@ OBJE
+1 FILE Perdu.pdf
+2 FORM application/pdf
+0 @M5@ OBJE
+1 FILE https://example.org/acte
+2 FORM text/html
+0 TRLR
+";
+
+fn media_issues(g: &Gedcom) -> Vec<gedcom::analysis::check::Issue> {
+    let folder =
+        vec!["Actes/naissance.jpg".to_string(), "Actes/deces.jpg".to_string(), "Portraits/jean.png".to_string()];
+    let exists = |f: &str| folder.iter().any(|x| x == f);
+    quality::run_with(g, Some(&quality::Files { exists: &exists, folder: &folder }))
+}
+
+#[test]
+fn media_checks() {
+    let g = Gedcom::parse(MEDIA).unwrap();
+    let issues = media_issues(&g);
+    let codes = |code: &str| issues.iter().filter(|i| i.code == code).map(|i| i.xref.as_str()).collect::<Vec<_>>();
+    assert_eq!(codes("duplicate_media"), ["M2"]);
+    assert_eq!(codes("moved_file"), ["M3"]);
+    assert_eq!(codes("missing_file"), ["M4"]);
+    assert_eq!(codes("missing_form"), ["M3"]);
+    assert!(issues.iter().all(|i| i.code != "missing_required"));
+    let files: Vec<&str> =
+        issues.iter().filter(|i| i.code == "unattached_file").map(|i| i.related[0].as_str()).collect();
+    assert_eq!(files, ["Portraits/jean.png"]);
+    assert!(
+        issues.iter().filter(|i| i.code == "unattached_file").all(|i| quality::category(i.code) == Category::Files)
+    );
+    // Sans accès aux fichiers : seulement ce qui se voit dans le .ged.
+    let plain = quality::run(&g);
+    assert!(plain.iter().all(|i| !matches!(i.code, "moved_file" | "missing_file" | "unattached_file")));
+}
+
+#[test]
+fn media_fixes() {
+    let mut g = Gedcom::parse(MEDIA).unwrap();
+    let issues = media_issues(&g);
+    let fixable: Vec<_> = issues
+        .iter()
+        .filter(|i| quality::category(i.code) == Category::Media || i.code == "unattached_file")
+        .cloned()
+        .collect();
+    assert_eq!(g.fix_issues(&fixable), 4);
+    // Doublon fusionné : un seul lien, la note conservée.
+    assert!(g.get("M2").is_none());
+    let indi = g.get("I1").unwrap();
+    assert_eq!(indi.children_with("OBJE").filter(|o| o.val() == "@M1@").count(), 1);
+    assert!(g.get("M1").unwrap().child("NOTE").is_some());
+    // Chemin corrigé, format déduit.
+    let f = g.get("M3").unwrap().child("FILE").unwrap();
+    assert_eq!(f.val(), "Actes/deces.jpg");
+    assert_eq!(f.child_val("FORM"), Some("image/jpeg"));
+    // Médias créés pour les fichiers du dossier.
+    assert!(g.media_by_file("Portraits/jean.png").is_some());
+    assert!(media_issues(&g).iter().all(|i| i.code == "missing_file" || quality::category(i.code) != Category::Media));
+}
