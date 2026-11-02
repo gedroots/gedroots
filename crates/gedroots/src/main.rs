@@ -1,6 +1,5 @@
 //! GedRoots — logiciel de généalogie libre et local, avec GEDCOM 7 comme format de données.
 
-mod analyses;
 mod commands;
 mod completion;
 mod date_field;

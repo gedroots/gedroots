@@ -77,6 +77,8 @@ actions!(
         ShowRepositories,
         ShowNotes,
         ShowQuality,
+        ShowStats,
+        KinshipWith,
         ToggleIgnoredIssues,
         ShowTree,
         ShowForm,
@@ -95,8 +97,6 @@ actions!(
         FilterWithMedia,
         ClearSearch,
         ToggleSearchHelp,
-        // Analyses
-        OpenAnalyses,
         // Aide
         CommandPalette,
     ]
@@ -124,7 +124,6 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new(shortcut!("f"), FocusSearch, WS),
         KeyBinding::new(shortcut!("e"), EnterRecord, WS),
         KeyBinding::new(shortcut!("shift-h"), GoToRoot, WS),
-        KeyBinding::new(shortcut!("shift-a"), OpenAnalyses, WS),
         KeyBinding::new(shortcut!("shift-p"), CommandPalette, WS),
         KeyBinding::new(shortcut!("["), GoBack, WS),
         KeyBinding::new(shortcut!("]"), GoForward, WS),
@@ -136,6 +135,7 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new(shortcut!("6"), ShowRepositories, WS),
         KeyBinding::new(shortcut!("7"), ShowNotes, WS),
         KeyBinding::new(shortcut!("8"), ShowQuality, WS),
+        KeyBinding::new(shortcut!("9"), ShowStats, WS),
         KeyBinding::new(shortcut!("alt-1"), ShowTree, WS),
         KeyBinding::new(shortcut!("alt-2"), ShowForm, WS),
         KeyBinding::new(shortcut!("alt-3"), ShowRaw, WS),
@@ -232,6 +232,7 @@ fn model() -> Vec<(&'static str, Vec<Item>)> {
             Sep,
             a("Définir comme individu racine", SetRoot),
             a("Aller à l'individu racine", GoToRoot),
+            a("Lien de parenté avec…", KinshipWith),
         ],
     ));
     menus.push((
@@ -289,6 +290,7 @@ fn model() -> Vec<(&'static str, Vec<Item>)> {
             a("Dépôts", ShowRepositories),
             a("Notes", ShowNotes),
             a("Qualité des données", ShowQuality),
+            a("Statistiques", ShowStats),
             Sep,
             a("Arbre", ShowTree),
             a("Fiche", ShowForm),
@@ -326,7 +328,6 @@ fn model() -> Vec<(&'static str, Vec<Item>)> {
             a("Toutes les commandes…", CommandPalette),
         ],
     ));
-    menus.push(("Analyses", vec![a("Qualité des données", ShowQuality), a("Ouvrir les analyses", OpenAnalyses)]));
     menus.push((
         "Aide",
         vec![a("Toutes les commandes…", CommandPalette), a("Aide de la recherche avancée", ToggleSearchHelp)],
