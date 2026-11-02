@@ -4,7 +4,7 @@
 use super::relatives::PickPurpose;
 use super::*;
 use crate::date_field::{DateField, date_field};
-use crate::editor::{PickerState, choice, picker};
+use crate::editor::{PickerState, choice, choice_with_search, picker};
 use gpui_kit::component::input::TextareaState;
 use rust_i18n::t;
 
@@ -134,7 +134,7 @@ impl Workspace {
             None if family => "MARR",
             None => "",
         };
-        let kind = choice(&options, default_kind, window, cx);
+        let kind = choice_with_search(&options, default_kind, true, window, cx);
         let cur = current.clone().unwrap_or_default();
         let text = |ph: SharedString, value: String, window: &mut Window, cx: &mut Context<Self>| {
             cx.new(|cx| InputState::new(window, cx).placeholder(ph).default_value(value))
@@ -319,6 +319,7 @@ impl Workspace {
                         .shadow_lg()
                         .on_key_down(cx.listener(|this, ev: &KeyDownEvent, w, cx| {
                             if ev.keystroke.key == "escape" {
+                                cx.stop_propagation();
                                 this.close_add_dialog(w, cx);
                             }
                         }))
@@ -376,7 +377,11 @@ impl Workspace {
                     .child(
                         field(
                             t!("event_dialog.type"),
-                            Select::new(&d.kind).small().placeholder(t!("event_dialog.choose")).into_any_element(),
+                            Select::new(&d.kind)
+                                .small()
+                                .placeholder(t!("event_dialog.choose"))
+                                .search_placeholder(t!("event_dialog.search"))
+                                .into_any_element(),
                         )
                         .flex_1(),
                     )

@@ -3102,6 +3102,10 @@ impl Render for Workspace {
                     if this.tour.is_some() {
                         return this.end_tour(cx);
                     }
+                    // The focus may still be outside the window (e.g. right after it opened).
+                    if this.add_dialog.is_some() {
+                        return this.close_add_dialog(w, cx);
+                    }
                     if this.gallery_escape(w, cx) {
                         return;
                     }
