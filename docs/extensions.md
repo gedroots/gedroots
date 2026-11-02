@@ -159,9 +159,13 @@ la liste) porte la balise avec le bon code.
 | `empty_family` | Famille sans aucun membre |
 | `unused_record` | Média, source, dépôt ou note partagée cité nulle part |
 | `disconnected` | Individu (ou groupe d'individus) sans aucun lien familial ni `ASSO` avec l'individu racine |
-
 | `role_sex_mismatch` | Rôle `FATH`/`HUSB` d'une femme ou `MOTH`/`WIFE` d'un homme dans une citation |
 | `outside_source_period` | Acte daté hors de la période que sa source déclare pour ce type d'acte |
+| `missing_file` | Fichier d'un média introuvable sur le disque |
+| `moved_file` | Fichier introuvable à son chemin, mais un seul fichier du même nom existe dans le dossier du `.ged` |
+| `duplicate_media` | Deux médias désignent exactement les mêmes fichiers |
+| `missing_form` | `FILE` sans `FORM` (remplace `missing_required` pour ce cas) |
+| `unattached_file` | Fichier du dossier du `.ged` qu'aucun média ne désigne (ne peut pas être masqué : il n'a pas d'enregistrement) |
 
 Le contrôle du schéma GEDCOM 7 ne s'applique qu'aux fichiers en version 7 ; les balises
 d'extension (`_XXX`) ne sont jamais signalées.

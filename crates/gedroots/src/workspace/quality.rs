@@ -9,6 +9,7 @@
 use super::*;
 use gedcom::analysis::check::{self, Issue, Severity};
 use gedcom::quality::{self, Category, Group};
+use gpui::PathPromptOptions;
 use gpui_kit::component::menu::PopupMenu;
 use std::cell::RefCell;
 
@@ -35,7 +36,13 @@ impl Workspace {
             return;
         };
         if self.quality.stale {
-            self.quality.issues = Rc::new(quality::run(&doc.ged));
+            // Le dossier a pu changer depuis l'ouverture (fichiers ajoutés, déplacés).
+            let path = doc.path.clone();
+            self.media_files = Rc::new(relatives::scan_media_files(path.as_deref()));
+            let doc = self.doc.as_ref().unwrap();
+            let exists = |f: &str| pages::file_path(doc, f).is_some_and(|p| p.exists());
+            let files = quality::Files { exists: &exists, folder: &self.media_files };
+            self.quality.issues = Rc::new(quality::run_with(&doc.ged, Some(&files)));
             self.quality.stale = false;
             self.quality.confirm = None;
         }
@@ -93,10 +100,11 @@ impl Workspace {
         self.quality_edit(|g| g.fix_issue(&issue), msg, window, cx);
     }
 
-    /// Corrige toutes les anomalies visibles d'un code. Les suppressions demandent
-    /// un second clic.
+    /// Corrige toutes les anomalies visibles d'un code. Les suppressions et
+    /// fusions demandent un second clic.
     fn fix_all(&mut self, code: &'static str, window: &mut Window, cx: &mut Context<Self>) {
-        if code != "missing_backlink" && self.quality.confirm != Some(code) {
+        let harmless = matches!(code, "missing_backlink" | "moved_file" | "missing_form" | "unattached_file");
+        if !harmless && self.quality.confirm != Some(code) {
             self.quality.confirm = Some(code);
             cx.notify();
             return;
@@ -106,6 +114,28 @@ impl Workspace {
         let n = issues.len();
         let msg = format!("{} : {n} élément{} corrigé{}", check::code_label(code), plural(n), plural(n));
         self.quality_edit(|g| g.fix_issues(&issues) > 0, msg, window, cx);
+    }
+
+    /// « Localiser… » : choisir le fichier d'un média introuvable.
+    fn locate_file(&mut self, issue: Issue, window: &mut Window, cx: &mut Context<Self>) {
+        let rx = cx.prompt_for_paths(PathPromptOptions {
+            files: true,
+            directories: false,
+            multiple: false,
+            prompt: Some("Localiser le fichier".into()),
+        });
+        cx.spawn_in(window, async move |this, cx| {
+            if let Ok(Ok(Some(paths))) = rx.await
+                && let Some(p) = paths.first()
+            {
+                let _ = this.update_in(cx, |this, window, cx| {
+                    let value = this.file_value(p);
+                    let msg = format!("Fichier localisé : {value}");
+                    this.quality_edit(|g| g.set_media_file(&issue.xref, &issue.path, &value), msg, window, cx);
+                });
+            }
+        })
+        .detach();
     }
 
     pub(super) fn set_issue_ignored(
@@ -124,6 +154,12 @@ impl Workspace {
             window,
             cx,
         );
+    }
+
+    /// Ouvre la page Qualité sur une catégorie (Média › Fichiers à rattacher).
+    pub(super) fn open_quality(&mut self, cat: Category, window: &mut Window, cx: &mut Context<Self>) {
+        self.open_location(View::Quality, Some(cat.id().to_string()), window, cx);
+        cx.notify();
     }
 
     pub(super) fn toggle_ignored_issues(&mut self, cx: &mut Context<Self>) {
@@ -239,6 +275,21 @@ impl Workspace {
                                                         .child(check::code_label(i.code)),
                                                 ),
                                         )
+                                        .when(i.code == "missing_file" && !i.ignored, |d| {
+                                            let (locate, issue) = (entity.clone(), i.clone());
+                                            d.child(
+                                                Button::new(("locate", n))
+                                                    .ghost()
+                                                    .xsmall()
+                                                    .label("Localiser…")
+                                                    .on_click(move |_, w, cx| {
+                                                        cx.stop_propagation();
+                                                        let issue = issue.clone();
+                                                        let _ = locate
+                                                            .update(cx, |this, cx| this.locate_file(issue, w, cx));
+                                                    }),
+                                            )
+                                        })
                                         .when_some(quality::fix_of(i.code).filter(|_| !i.ignored), |d, f| {
                                             d.child(Button::new(("fix", n)).ghost().xsmall().label(f.label).on_click(
                                                 move |_, w, cx| {
@@ -272,13 +323,27 @@ impl Workspace {
         let target = self.quality.menu_issue.clone();
         Rc::new(move |menu: PopupMenu, _, _| {
             let Some(issue) = target.borrow_mut().take() else { return menu };
-            let (a, b, c) = (issue.clone(), issue.clone(), issue.clone());
-            let menu = menu.item(menus::act(&ws, "Ouvrir", move |this, w, cx| this.goto(a.xref.clone(), w, cx)));
+            let (a, b, c, d) = (issue.clone(), issue.clone(), issue.clone(), issue.clone());
+            // Fichier sans média : rien à ouvrir ni où écrire `_GR_IGNORE`.
+            let record = !issue.xref.is_empty();
+            let menu = if record {
+                menu.item(menus::act(&ws, "Ouvrir", move |this, w, cx| this.goto(a.xref.clone(), w, cx)))
+            } else {
+                menu
+            };
+            let menu = if issue.code == "missing_file" && !issue.ignored {
+                menu.item(menus::act(&ws, "Localiser…", move |this, w, cx| this.locate_file(d.clone(), w, cx)))
+            } else {
+                menu
+            };
             let menu = match quality::fix_of(issue.code).filter(|_| !issue.ignored) {
                 Some(f) => menu.item(menus::act(&ws, f.label, move |this, w, cx| this.fix_issue(b.clone(), w, cx))),
                 None => menu,
             };
             let ignored = issue.ignored;
+            if !record {
+                return menu;
+            }
             menu.separator().item(menus::act(
                 &ws,
                 if ignored { "Ne plus masquer" } else { "Masquer" },
