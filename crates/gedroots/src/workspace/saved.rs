@@ -143,11 +143,11 @@ impl Workspace {
     fn saved_menu(&self, i: usize, cx: &Context<Self>) -> menus::MenuBuilder {
         let ws = cx.entity().downgrade();
         Rc::new(move |menu, _, _| {
-            menu.item(menus::act(&ws, format!("{}…", label::RENAME_SEARCH), move |this, w, cx| {
+            menu.item(menus::act(&ws, format!("{}…", label::rename_search()), move |this, w, cx| {
                 this.start_rename_search(i, w, cx)
             }))
             .separator()
-            .item(menus::act(&ws, label::DELETE_SEARCH, move |this, w, cx| this.delete_saved(i, w, cx)))
+            .item(menus::act(&ws, label::delete_search(), move |this, w, cx| this.delete_saved(i, w, cx)))
         })
     }
 
@@ -164,7 +164,7 @@ impl Workspace {
                 |d| {
                     d.child(
                         add::plus_button("save-search")
-                            .tooltip(label::SAVE_SEARCH)
+                            .tooltip(label::save_search())
                             .on_click(cx.listener(|this, _, w, cx| this.save_search(w, cx))),
                     )
                 },

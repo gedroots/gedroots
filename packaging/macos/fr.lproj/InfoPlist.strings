@@ -1,0 +1,3 @@
+/* French names for the Info.plist strings shown by the Finder. */
+NSHumanReadableCopyright = "GEDRoots — logiciel de généalogie libre et local";
+"GEDCOM File" = "Fichier GEDCOM";

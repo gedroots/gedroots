@@ -1,0 +1,332 @@
+_version: 2
+# Menu bar, context menus and command palette (crates/gedroots/src/commands.rs).
+# Menus and commands use title case in English, like macOS and GNOME.
+
+menu:
+  file:
+    en: File
+    fr: Fichier
+  edit:
+    en: Edit
+    fr: Édition
+  person:
+    en: Person
+    fr: Individu
+  source:
+    en: Source
+    fr: Source
+  media:
+    en: Media
+    fr: Média
+  view:
+    en: View
+    fr: Affichage
+  help:
+    en: Help
+    fr: Aide
+  open_recent:
+    en: Open Recent
+    fr: Ouvrir récent
+  pages:
+    en: Pages
+    fr: Pages
+  tree:
+    en: Tree
+    fr: Arbre
+  filter_list:
+    en: Filter List
+    fr: Filtrer la liste
+
+cmd:
+  # File
+  file_settings:
+    en: File Settings…
+    fr: Réglages du fichier…
+  quit_app:
+    en: Quit GEDRoots
+    fr: Quitter GEDRoots
+  quit:
+    en: Quit
+    fr: Quitter
+  new_file:
+    en: New File
+    fr: Nouveau fichier
+  open:
+    en: Open…
+    fr: Ouvrir…
+  clear_recent:
+    en: Clear Menu
+    fr: Effacer le menu
+  import_gedcom:
+    en: Import GEDCOM…
+    fr: Importer un GEDCOM…
+  save:
+    en: Save
+    fr: Enregistrer
+  save_as:
+    en: Save As…
+    fr: Enregistrer sous…
+  export_gedzip:
+    en: Export as GEDZIP…
+    fr: Exporter en GEDZIP…
+  # Edit
+  undo:
+    en: Undo
+    fr: Annuler la modification
+  redo:
+    en: Redo
+    fr: Rétablir la modification
+  cut:
+    en: Cut
+    fr: Couper
+  copy:
+    en: Copy
+    fr: Copier
+  paste:
+    en: Paste
+    fr: Coller
+  select_all:
+    en: Select All
+    fr: Tout sélectionner
+  attach_files:
+    en: Attach Files…
+    fr: Rattacher des fichiers…
+  add_web_link:
+    en: Add Web Link…
+    fr: Ajouter un lien web…
+  copy_name:
+    en: Copy Name
+    fr: Copier le nom
+  copy_id:
+    en: Copy ID
+    fr: Copier l'ID
+  delete:
+    en: Delete…
+    fr: Supprimer l'élément…
+  find:
+    en: Find
+    fr: Rechercher
+  # Person
+  new_individual:
+    en: New Person
+    fr: Nouvel individu
+  add_relative:
+    en: Add Relative
+    fr: Ajouter un proche
+  link_person:
+    en: Link Existing Person
+    fr: Lier une personne existante
+  father:
+    en: Father
+    fr: Père
+  mother:
+    en: Mother
+    fr: Mère
+  spouse:
+    en: Spouse
+    fr: Conjoint
+  child:
+    en: Child
+    fr: Enfant
+  sibling:
+    en: Sibling
+    fr: Frère ou sœur
+  father_link:
+    en: Father…
+    fr: Père…
+  mother_link:
+    en: Mother…
+    fr: Mère…
+  spouse_link:
+    en: Spouse…
+    fr: Conjoint…
+  child_link:
+    en: Child…
+    fr: Enfant…
+  sibling_link:
+    en: Sibling…
+    fr: Frère ou sœur…
+  add_event:
+    en: Add Event…
+    fr: Ajouter un événement…
+  link_media:
+    en: Link Existing Media…
+    fr: Lier un média existant…
+  crop_media:
+    en: Crop Existing Media…
+    fr: Recadrer un média existant…
+  go_to_root:
+    en: Go to Root Person
+    fr: Aller à l'individu racine
+  kinship_with:
+    en: Relationship With…
+    fr: Lien de parenté avec…
+  search_ancestors:
+    en: Find Ancestors
+    fr: Rechercher ses ascendants
+  search_descendants:
+    en: Find Descendants
+    fr: Rechercher ses descendants
+  # Source
+  enter_act:
+    en: Enter Record…
+    fr: Saisir un acte…
+  new_source:
+    en: New Source
+    fr: Nouvelle source
+  new_repository:
+    en: New Repository
+    fr: Nouveau dépôt
+  new_note:
+    en: New Note
+    fr: Nouvelle note
+  # Media
+  new_media:
+    en: New Media
+    fr: Nouveau média
+  attach_media_to:
+    en: Attach This Media To…
+    fr: Rattacher ce média à…
+  previous_page:
+    en: Previous Page
+    fr: Page précédente
+  next_page:
+    en: Next Page
+    fr: Page suivante
+  add_pages:
+    en: Add Pages…
+    fr: Ajouter des pages…
+  move_page_left:
+    en: Move Page Left
+    fr: Déplacer la page vers la gauche
+  move_page_right:
+    en: Move Page Right
+    fr: Déplacer la page vers la droite
+  split_page:
+    en: Split Page into New Media
+    fr: Séparer cette page en un nouveau média
+  remove_page:
+    en: Remove Page from Media
+    fr: Retirer cette page du média
+  merge_with_media:
+    en: Merge with Another Media…
+    fr: Fusionner avec un autre média…
+  merge_selected_media:
+    en: Merge Selected Media
+    fr: Fusionner les médias sélectionnés
+  rename_media_files:
+    en: Rename Using Template…
+    fr: Renommer selon le modèle…
+  tag_person:
+    en: Tag a Person in the Photo
+    fr: Identifier une personne sur la photo
+  unreferenced_files:
+    en: Files to Attach
+    fr: Fichiers à rattacher
+  # View
+  back:
+    en: Back
+    fr: Précédent
+  forward:
+    en: Forward
+    fr: Suivant
+  individuals:
+    en: People
+    fr: Individus
+  sources:
+    en: Sources
+    fr: Sources
+  places:
+    en: Places
+    fr: Lieux
+  media_list:
+    en: Media
+    fr: Médias
+  repositories:
+    en: Repositories
+    fr: Dépôts
+  notes:
+    en: Notes
+    fr: Notes
+  quality:
+    en: Data Quality
+    fr: Qualité des données
+  stats:
+    en: Statistics
+    fr: Statistiques
+  show_tree:
+    en: Tree
+    fr: Arbre
+  show_form:
+    en: Details
+    fr: Fiche
+  show_raw:
+    en: Raw GEDCOM
+    fr: GEDCOM brut
+  toggle_sidebar:
+    en: Show or Hide Sidebar
+    fr: Masquer ou afficher la barre latérale
+  relative_events:
+    en: Relatives' Events
+    fr: Événements des proches
+  tree_chart:
+    en: Free Tree
+    fr: Arbre libre
+  tree_fan:
+    en: Fan Chart
+    fr: Éventail
+  center_tree:
+    en: Center Tree on Person
+    fr: Centrer l'arbre sur la personne
+  more_generations:
+    en: More Generations
+    fr: Plus de générations
+  fewer_generations:
+    en: Fewer Generations
+    fr: Moins de générations
+  filter_men:
+    en: Men
+    fr: Hommes
+  filter_women:
+    en: Women
+    fr: Femmes
+  filter_ancestors:
+    en: Ancestors of the Root Person
+    fr: Ascendants de la racine
+  filter_unsourced:
+    en: Without Sources
+    fr: Sans source
+  filter_no_parents:
+    en: Without Parents
+    fr: Sans parents
+  filter_no_date:
+    en: Without Dates
+    fr: Sans date
+  filter_no_marriage:
+    en: Unions Without Marriage
+    fr: Unions sans mariage
+  filter_with_media:
+    en: With Media
+    fr: Avec média
+  flagged_only:
+    en: Flagged Items Only
+    fr: Éléments signalés seulement
+  ignored_issues:
+    en: Ignored Issues
+    fr: Anomalies masquées
+  clear_search:
+    en: Clear Search
+    fr: Effacer la recherche
+  save_search:
+    en: Save Search
+    fr: Enregistrer la recherche
+  rename_search:
+    en: Rename Search
+    fr: Renommer la recherche
+  delete_search:
+    en: Delete Search
+    fr: Supprimer la recherche
+  # Help
+  all_commands:
+    en: All Commands…
+    fr: Toutes les commandes…
