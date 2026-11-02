@@ -80,6 +80,7 @@ actions!(
         ShowStats,
         KinshipWith,
         ToggleIgnoredIssues,
+        ToggleRelativeEvents,
         ShowTree,
         ShowForm,
         ShowRaw,
@@ -295,6 +296,8 @@ fn model() -> Vec<(&'static str, Vec<Item>)> {
             a("Arbre", ShowTree),
             a("Fiche", ShowForm),
             a("GEDCOM brut", ShowRaw),
+            Sep,
+            a("Événements des proches", ToggleRelativeEvents),
             Sep,
             Sub(
                 "Arbre",
