@@ -1,0 +1,301 @@
+//! Page « Qualité » : les anomalies du fichier par catégorie, avec leur
+//! correction sur place (voir `gedcom::quality`).
+//!
+//! La liste de gauche donne les catégories, la zone centrale les anomalies de
+//! la catégorie choisie. Un clic ouvre l'élément concerné (⌘[ ramène ici),
+//! le bouton de la ligne applique la correction quand elle est sûre, le clic
+//! droit permet de masquer l'anomalie (`_GR_IGNORE`).
+
+use super::*;
+use gedcom::analysis::check::{self, Issue, Severity};
+use gedcom::quality::{self, Category, Group};
+use gpui_kit::component::menu::PopupMenu;
+use std::cell::RefCell;
+
+/// État de la page.
+#[derive(Default)]
+pub(super) struct QualityState {
+    /// Toutes les anomalies (masquées comprises).
+    pub issues: Rc<Vec<Issue>>,
+    /// Le fichier a changé depuis le dernier contrôle.
+    pub stale: bool,
+    /// Afficher aussi les anomalies masquées (Affichage › Anomalies masquées).
+    pub show_ignored: bool,
+    /// Correction en lot en attente de confirmation (code d'anomalie).
+    pub confirm: Option<&'static str>,
+    /// Ligne visée par le dernier clic droit.
+    pub menu_issue: Rc<RefCell<Option<Issue>>>,
+}
+
+impl Workspace {
+    /// Relance les contrôles si le fichier a changé.
+    pub(super) fn refresh_quality(&mut self) {
+        let Some(doc) = &self.doc else {
+            self.quality.issues = Rc::default();
+            return;
+        };
+        if self.quality.stale {
+            self.quality.issues = Rc::new(quality::run(&doc.ged));
+            self.quality.stale = false;
+            self.quality.confirm = None;
+        }
+    }
+
+    fn visible_issue(&self, i: &Issue) -> bool {
+        self.quality.show_ignored || !i.ignored
+    }
+
+    /// Nombre d'anomalies à corriger (badge de la barre de gauche).
+    pub(super) fn quality_count(&self) -> usize {
+        self.quality.issues.iter().filter(|i| !i.ignored && quality::category(i.code).group() == Group::Fix).count()
+    }
+
+    /// Lignes de la liste : une par catégorie non vide.
+    pub(super) fn quality_rows(&self, q: &str) -> Vec<Row> {
+        Category::ALL
+            .into_iter()
+            .filter_map(|c| {
+                let n = self
+                    .quality
+                    .issues
+                    .iter()
+                    .filter(|i| quality::category(i.code) == c && self.visible_issue(i))
+                    .filter(|i| q.is_empty() || i.message.to_lowercase().contains(q))
+                    .count();
+                (n > 0).then(|| Row {
+                    key: c.id().to_string(),
+                    title: c.label().to_string(),
+                    strong: String::new(),
+                    meta: n.to_string(),
+                    dot: Some(match c.group() {
+                        Group::Fix => theme::warn(),
+                        Group::Complete => theme::accent(),
+                    }),
+                    flagged: false,
+                })
+            })
+            .collect()
+    }
+
+    fn quality_edit(
+        &mut self,
+        f: impl FnOnce(&mut Gedcom) -> bool,
+        msg: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.edit_ged(f, msg, window, cx);
+    }
+
+    pub(super) fn fix_issue(&mut self, issue: Issue, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(fix) = quality::fix_of(issue.code) else { return };
+        let msg = format!("{} : {}", fix.label, issue.message);
+        self.quality_edit(|g| g.fix_issue(&issue), msg, window, cx);
+    }
+
+    /// Corrige toutes les anomalies visibles d'un code. Les suppressions demandent
+    /// un second clic.
+    fn fix_all(&mut self, code: &'static str, window: &mut Window, cx: &mut Context<Self>) {
+        if code != "missing_backlink" && self.quality.confirm != Some(code) {
+            self.quality.confirm = Some(code);
+            cx.notify();
+            return;
+        }
+        self.quality.confirm = None;
+        let issues: Vec<Issue> = self.quality.issues.iter().filter(|i| i.code == code && !i.ignored).cloned().collect();
+        let n = issues.len();
+        let msg = format!("{} : {n} élément{} corrigé{}", check::code_label(code), plural(n), plural(n));
+        self.quality_edit(|g| g.fix_issues(&issues) > 0, msg, window, cx);
+    }
+
+    pub(super) fn set_issue_ignored(
+        &mut self,
+        issue: Issue,
+        ignore: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let label = check::code_label(issue.code);
+        let msg = if ignore { format!("« {label} » masqué") } else { format!("« {label} » de nouveau affiché") };
+        let (x, code) = (issue.xref.clone(), issue.code);
+        self.quality_edit(
+            move |g| if ignore { g.ignore_issue(&x, code) } else { g.unignore_issue(&x, code) },
+            msg,
+            window,
+            cx,
+        );
+    }
+
+    pub(super) fn toggle_ignored_issues(&mut self, cx: &mut Context<Self>) {
+        self.quality.show_ignored = !self.quality.show_ignored;
+        self.build_rows(cx);
+        cx.notify();
+    }
+
+    /// Zone centrale : les anomalies de la catégorie choisie.
+    pub(super) fn render_quality(&self, cx: &mut Context<Self>) -> AnyElement {
+        let Some(cat) = self.selected.as_deref().and_then(Category::from_id) else {
+            let empty = self.quality.issues.iter().all(|i| !self.visible_issue(i));
+            return v_flex()
+                .flex_1()
+                .items_center()
+                .justify_center()
+                .text_color(if empty { theme::ok() } else { theme::muted() })
+                .child(if empty { "Aucune anomalie" } else { "Choisissez une catégorie" })
+                .into_any_element();
+        };
+        let q = self.filter.read(cx).value().trim().to_lowercase();
+        let shown: Rc<Vec<Issue>> = Rc::new(
+            self.quality
+                .issues
+                .iter()
+                .filter(|i| quality::category(i.code) == cat && self.visible_issue(i))
+                .filter(|i| q.is_empty() || i.message.to_lowercase().contains(&q))
+                .cloned()
+                .collect(),
+        );
+        // Corrections en lot : une par code qui en a une, avec le nombre concerné.
+        let mut batches: Vec<(&'static str, &'static str, usize)> = Vec::new();
+        for i in shown.iter().filter(|i| !i.ignored) {
+            if let Some(label) = quality::fix_of(i.code).and_then(|f| f.batch) {
+                match batches.iter_mut().find(|b| b.0 == i.code) {
+                    Some(b) => b.2 += 1,
+                    None => batches.push((i.code, label, 1)),
+                }
+            }
+        }
+        batches.retain(|b| b.2 > 1);
+        let entity = cx.entity().downgrade();
+        let menu_issue = self.quality.menu_issue.clone();
+        v_flex()
+            .flex_1()
+            .min_h_0()
+            .child(
+                h_flex()
+                    .px_4()
+                    .py_3()
+                    .gap_2()
+                    .items_center()
+                    .border_b_1()
+                    .border_color(theme::border())
+                    .child(div().text_lg().font_weight(FontWeight::SEMIBOLD).child(cat.label()))
+                    .child(mono(shown.len().to_string()))
+                    .child(div().flex_1())
+                    .children(batches.into_iter().map(|(code, label, n)| {
+                        let confirming = self.quality.confirm == Some(code);
+                        Button::new(SharedString::from(format!("batch-{code}")))
+                            .xsmall()
+                            .when(confirming, |b| b.danger())
+                            .when(!confirming, |b| b.ghost())
+                            .label(if confirming {
+                                format!("Confirmer : {label} ({n})")
+                            } else {
+                                format!("{label} ({n})")
+                            })
+                            .on_click(cx.listener(move |this, _, w, cx| this.fix_all(code, w, cx)))
+                    })),
+            )
+            .child(
+                div()
+                    .id("quality-issues")
+                    .flex_1()
+                    .min_h_0()
+                    .child(
+                        uniform_list("issues", shown.len(), move |range, _, _| {
+                            range
+                                .map(|n| {
+                                    let i = &shown[n];
+                                    let (open, fix) = (entity.clone(), entity.clone());
+                                    let (x, issue, for_menu) = (i.xref.clone(), i.clone(), i.clone());
+                                    let menu_issue = menu_issue.clone();
+                                    h_flex()
+                                        .id(n)
+                                        .w_full()
+                                        .h(px(46.))
+                                        .px_4()
+                                        .gap_3()
+                                        .items_center()
+                                        .border_b_1()
+                                        .border_color(theme::border())
+                                        .cursor_pointer()
+                                        .when(i.ignored, |d| d.opacity(0.5))
+                                        .hover(|d| d.bg(theme::surface()))
+                                        .child(dot(severity_color(i.severity)))
+                                        .child(
+                                            v_flex()
+                                                .flex_1()
+                                                .min_w_0()
+                                                .child(
+                                                    div()
+                                                        .overflow_hidden()
+                                                        .whitespace_nowrap()
+                                                        .text_ellipsis()
+                                                        .child(i.message.clone()),
+                                                )
+                                                .child(
+                                                    div()
+                                                        .text_xs()
+                                                        .text_color(theme::muted())
+                                                        .child(check::code_label(i.code)),
+                                                ),
+                                        )
+                                        .when_some(quality::fix_of(i.code).filter(|_| !i.ignored), |d, f| {
+                                            d.child(Button::new(("fix", n)).ghost().xsmall().label(f.label).on_click(
+                                                move |_, w, cx| {
+                                                    cx.stop_propagation();
+                                                    let issue = issue.clone();
+                                                    let _ = fix.update(cx, |this, cx| this.fix_issue(issue, w, cx));
+                                                },
+                                            ))
+                                        })
+                                        .on_click(move |_, w, cx| {
+                                            let x = x.clone();
+                                            let _ = open.update(cx, |this, cx| this.goto(x, w, cx));
+                                        })
+                                        .on_mouse_down(MouseButton::Right, move |_, _, _| {
+                                            *menu_issue.borrow_mut() = Some(for_menu.clone());
+                                        })
+                                })
+                                .collect()
+                        })
+                        .size_full()
+                        .text_sm(),
+                    )
+                    .with_menu(self.issue_menu(cx)),
+            )
+            .into_any_element()
+    }
+
+    /// Menu du clic droit sur une anomalie.
+    fn issue_menu(&self, cx: &mut Context<Self>) -> menus::MenuBuilder {
+        let ws = cx.entity().downgrade();
+        let target = self.quality.menu_issue.clone();
+        Rc::new(move |menu: PopupMenu, _, _| {
+            let Some(issue) = target.borrow_mut().take() else { return menu };
+            let (a, b, c) = (issue.clone(), issue.clone(), issue.clone());
+            let menu = menu.item(menus::act(&ws, "Ouvrir", move |this, w, cx| this.goto(a.xref.clone(), w, cx)));
+            let menu = match quality::fix_of(issue.code).filter(|_| !issue.ignored) {
+                Some(f) => menu.item(menus::act(&ws, f.label, move |this, w, cx| this.fix_issue(b.clone(), w, cx))),
+                None => menu,
+            };
+            let ignored = issue.ignored;
+            menu.separator().item(menus::act(
+                &ws,
+                if ignored { "Ne plus masquer" } else { "Masquer" },
+                move |this, w, cx| this.set_issue_ignored(c.clone(), !ignored, w, cx),
+            ))
+        })
+    }
+}
+
+fn plural(n: usize) -> &'static str {
+    if n > 1 { "s" } else { "" }
+}
+
+fn severity_color(s: Severity) -> Hsla {
+    match s {
+        Severity::Error => theme::danger(),
+        Severity::Warning => theme::warn(),
+        Severity::Info => theme::accent(),
+    }
+}

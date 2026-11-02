@@ -83,6 +83,8 @@ impl Workspace {
         let d = on!(d, cx, ShowMedia, |this, w, cx| this.show_view(View::Media, w, cx));
         let d = on!(d, cx, ShowRepositories, |this, w, cx| this.show_view(View::Repositories, w, cx));
         let d = on!(d, cx, ShowNotes, |this, w, cx| this.show_view(View::Notes, w, cx));
+        let d = on!(d, cx, ShowQuality, |this, w, cx| this.show_view(View::Quality, w, cx));
+        let d = on!(d, cx, ToggleIgnoredIssues, |this, _w, cx| this.toggle_ignored_issues(cx));
         let d = on!(d, cx, ShowForm, |this, w, cx| this.show_tab(CenterTab::Form, cx));
         let d = on!(d, cx, ShowUnreferencedFiles, |this, w, cx| {
             this.orphans_open = true;

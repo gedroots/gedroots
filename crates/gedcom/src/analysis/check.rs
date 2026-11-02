@@ -44,6 +44,11 @@ pub struct Issue {
     /// Autres enregistrements concernés.
     pub related: Vec<String>,
     pub message: String,
+    /// Position de la structure fautive dans l'enregistrement (indices des
+    /// sous-structures depuis l'enregistrement) ; vide pour l'enregistrement entier.
+    pub path: Vec<usize>,
+    /// Anomalie masquée par `_GR_IGNORE`.
+    pub ignored: bool,
 }
 
 /// Seuils utilisés par le contrôle (valeurs par défaut proches de Gramps).
@@ -97,6 +102,16 @@ pub fn code_label(code: &str) -> &'static str {
         "broken_link" => "Lien vers un enregistrement absent",
         "missing_backlink" => "Lien familial à sens unique",
         "unsourced" => "Événement sans source",
+        "tag_not_allowed" => "Balise non permise à cet endroit",
+        "missing_required" => "Information obligatoire absente",
+        "too_many" => "Information en trop",
+        "wrong_pointer" => "Lien vers le mauvais type d'enregistrement",
+        "invalid_value" => "Valeur invalide",
+        "empty_fact" => "Événement vide",
+        "empty_note" => "Note vide",
+        "empty_family" => "Famille vide",
+        "unused_record" => "Enregistrement utilisé nulle part",
+        "disconnected" => "Sans lien avec l'individu racine",
         _ => "Anomalie",
     }
 }
@@ -136,14 +151,38 @@ fn years(x: f64) -> String {
     if x < 1. { "moins d'un an".into() } else { format!("{} ans", x.floor() as i64) }
 }
 
-/// Lance tous les contrôles sur le fichier.
+/// Lance tous les contrôles de cohérence, sans les anomalies masquées.
 pub fn check(g: &Gedcom, t: &Thresholds) -> Vec<Issue> {
+    let mut issues = check_all(g, t);
+    issues.retain(|i| !i.ignored);
+    issues
+}
+
+/// Marque les anomalies masquées par `_GR_IGNORE` sous leur enregistrement.
+pub(crate) fn mark_ignored(g: &Gedcom, issues: &mut [Issue]) {
+    let mut cache: HashMap<String, HashSet<String>> = HashMap::new();
+    for i in issues {
+        let ign = cache.entry(i.xref.clone()).or_insert_with(|| g.get(&i.xref).map(ignored).unwrap_or_default());
+        i.ignored = ign.contains(i.code);
+    }
+}
+
+/// Contrôles de cohérence, anomalies masquées comprises (marquées `ignored`).
+pub(crate) fn check_all(g: &Gedcom, t: &Thresholds) -> Vec<Issue> {
     let mut issues: Vec<Issue> = Vec::new();
     let name = |x: &str| g.record_label(x);
     let lives: HashMap<&str, Life> =
         g.records_of(RecordKind::Individual).filter_map(|r| Some((r.xref.as_deref()?, life(r)))).collect();
     let mut push = |severity, code, xref: &str, related: Vec<String>, message: String| {
-        issues.push(Issue { severity, code, xref: xref.to_string(), related, message });
+        issues.push(Issue {
+            severity,
+            code,
+            xref: xref.to_string(),
+            related,
+            message,
+            path: Vec::new(),
+            ignored: false,
+        });
     };
 
     // Liens cassés (tous enregistrements).
@@ -160,7 +199,7 @@ pub fn check(g: &Gedcom, t: &Thresholds) -> Vec<Issue> {
                     Severity::Error,
                     "broken_link",
                     x,
-                    vec![],
+                    vec![p.to_string()],
                     format!("{} ({}) pointe vers @{p}@, qui n'existe pas", name(x), n.tag),
                 );
             }
@@ -408,12 +447,7 @@ pub fn check(g: &Gedcom, t: &Thresholds) -> Vec<Issue> {
         }
     }
 
-    // Anomalies masquées par `_GR_IGNORE`.
-    let mut cache: HashMap<String, HashSet<String>> = HashMap::new();
-    issues.retain(|i| {
-        let ign = cache.entry(i.xref.clone()).or_insert_with(|| g.get(&i.xref).map(ignored).unwrap_or_default());
-        !ign.contains(i.code)
-    });
+    mark_ignored(g, &mut issues);
     issues.sort_by(|a, b| (a.severity, a.code, &a.message).cmp(&(b.severity, b.code, &b.message)));
     issues.dedup();
     issues
@@ -454,6 +488,18 @@ impl Gedcom {
         r.insert_child(Node::with_value(IGNORE_TAG, code));
         r.touch();
         self.declare_extension(IGNORE_TAG, IGNORE_URI);
+        true
+    }
+
+    /// Ne plus masquer une anomalie : retire `_GR_IGNORE <code>` de l'enregistrement.
+    pub fn unignore_issue(&mut self, xref: &str, code: &str) -> bool {
+        let Some(r) = self.get_mut(xref) else { return false };
+        let before = r.children.len();
+        r.children.retain(|n| !(n.tag == IGNORE_TAG && n.val().trim() == code));
+        if r.children.len() == before {
+            return false;
+        }
+        r.touch();
         true
     }
 }
