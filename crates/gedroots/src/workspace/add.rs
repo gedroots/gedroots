@@ -63,6 +63,17 @@ impl Workspace {
             .iter()
             .map(|t| (t.to_string(), if *t == "EVEN" { "Autre…" } else { event_label(t).unwrap_or(t) }.to_string()))
             .collect();
+        // Types d'événements personnalisés (Réglages du fichier › Événements), avant « Autre… ».
+        let types = g.event_types();
+        let custom = |fam: bool, prefix: &str| -> Vec<(String, String)> {
+            types
+                .iter()
+                .filter(|t| t.family == fam)
+                .map(|t| (format!("{prefix}EVEN:{}", t.label), t.label.clone()))
+                .collect()
+        };
+        let at = options.iter().position(|(t, _)| t == "EVEN").unwrap_or(options.len());
+        options.splice(at..at, custom(family, ""));
         // Ajout depuis un individu : les événements de ses unions (mariage…) aussi.
         let unions: Vec<(String, String)> = match (editing, g.individual(&owner)) {
             (None, Some(i)) => i
@@ -86,7 +97,8 @@ impl Workspace {
                 FAMILY_EVENTS
                     .iter()
                     .filter(|t| **t != "EVEN")
-                    .map(|t| (format!("FAM:{t}"), event_label(t).unwrap_or(t).to_string())),
+                    .map(|t| (format!("FAM:{t}"), event_label(t).unwrap_or(t).to_string()))
+                    .chain(custom(true, "FAM:")),
             );
         }
         let union = (unions.len() > 1).then(|| {
@@ -99,7 +111,12 @@ impl Workspace {
         if !cur_tag.is_empty() && !tags.contains(&cur_tag.as_str()) {
             options.insert(0, (cur_tag.as_str(), event_label(&cur_tag).unwrap_or(cur_tag.as_str())));
         }
+        let custom_kind = current
+            .as_ref()
+            .filter(|e| e.tag == "EVEN" && types.iter().any(|t| t.family == family && t.label == e.detail.trim()))
+            .map(|e| format!("EVEN:{}", e.detail.trim()));
         let default_kind = match &current {
+            _ if custom_kind.is_some() => custom_kind.as_deref().unwrap_or_default(),
             Some(e) => e.tag.as_str(),
             None if family => "MARR",
             None => "",
@@ -186,6 +203,11 @@ impl Workspace {
             };
             ev.tag = t;
             owner = fam;
+        }
+        // Type personnalisé : un `EVEN` dont le `TYPE` est le libellé.
+        if let Some(label) = ev.tag.strip_prefix("EVEN:").map(str::to_string) {
+            ev.tag = "EVEN".into();
+            ev.detail = label;
         }
         // Vérification avant la modification, pour garder la fenêtre ouverte en cas d'erreur.
         let mut probe = self.doc.as_ref().unwrap().ged.clone();
@@ -305,6 +327,7 @@ impl Workspace {
     fn event_body(&self, d: &EventDialog, cx: &mut Context<Self>) -> AnyElement {
         let tag = d.kind.read(cx).selected_value().cloned().unwrap_or_default();
         let detail_label = match tag.trim_start_matches("FAM:") {
+            t if t.starts_with("EVEN:") => None,
             "OCCU" => Some("Profession"),
             "EDUC" => Some("Établissement ou diplôme"),
             "EVEN" => Some("Type d'événement"),
