@@ -1,0 +1,119 @@
+name: Release
+
+# mise's release flow: after each merge into main, the “chore: release X” pull request gets the
+# next version (calendar versioning) and its CHANGELOG.md entry (git-cliff). Merging it tags the
+# version, builds the installers and update packages on macOS, Windows and Linux (Velopack), and
+# publishes the GitHub release with notes written by communique.
+# Tools come from mise.release.toml (MISE_ENV=release), commands from mise-tasks/.
+
+on:
+  push:
+    branches: [main]
+  # A pull request that touches packaging builds the packages without publishing them (artifacts).
+  pull_request:
+    paths:
+      - .github/workflows/release.yml
+      - mise-tasks/package
+      - mise-tasks/bundle
+      - mise.release.toml
+      - packaging/**
+      - crates/gedroots/build.rs
+      - crates/gedroots/src/updates.rs
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.event_name == 'pull_request' && github.ref || 'main' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  MISE_ENV: release
+  GH_TOKEN: ${{ github.token }}
+  GITHUB_TOKEN: ${{ github.token }}
+
+jobs:
+  prepare:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      version: ${{ steps.tag.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: jdx/mise-action@v5
+        with:
+          version: 2026.10.25
+          install_args: git-cliff rust
+      - name: Release pull request
+        if: "!startsWith(github.event.head_commit.message, 'chore: release')"
+        run: mise run release:pr
+      - name: Tag and draft release
+        id: tag
+        if: "startsWith(github.event.head_commit.message, 'chore: release')"
+        run: mise run release:tag
+
+  package:
+    needs: prepare
+    # After a release is tagged; on a pull request, without publishing.
+    if: ${{ always() && (needs.prepare.outputs.version || github.event_name == 'pull_request') }}
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        # Linux: the oldest supported runner, so that the AppImage runs on older glibc.
+        os: [macos-latest, windows-latest, ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.version && format('v{0}', needs.prepare.outputs.version) || '' }}
+      - name: GPUI's system libraries, and mksquashfs for the AppImage
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-dev libfontconfig-dev libwayland-dev libxcb1-dev libvulkan-dev squashfs-tools
+      - name: Rust toolchain in mise's folder
+        shell: bash
+        run: echo "MISE_RUSTUP_HOME=$HOME/.local/share/mise/rustup" >> "$GITHUB_ENV"
+      - uses: jdx/mise-action@v5
+        with:
+          version: 2026.10.25
+          install_args: rust dotnet dotnet:vpk
+      - name: Installers and update packages
+        shell: bash
+        run: mise run package ${{ github.event_name != 'pull_request' && '--upload' || '' }}
+      - if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v7
+        with:
+          name: GEDRoots-${{ runner.os }}-${{ github.run_number }}
+          path: |
+            target/dist/*.dmg
+            target/dist/*-Setup.*
+            target/dist/*.AppImage
+          retention-days: 14
+
+  publish:
+    needs: [prepare, package]
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: v${{ needs.prepare.outputs.version }}
+          fetch-depth: 0
+      - uses: jdx/mise-action@v5
+        with:
+          version: 2026.10.25
+          install_args: github:jdx/communique
+      - name: Release notes and publication
+        run: mise run release:publish
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
