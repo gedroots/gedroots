@@ -120,6 +120,36 @@ pub struct OpenRecent {
     pub path: std::path::PathBuf,
 }
 
+/// Ouvre la recherche de la personne sélectionnée sur un site d'Individu › Rechercher sur.
+#[derive(Clone, PartialEq, Action)]
+#[action(namespace = gedroots, no_json)]
+pub struct SearchWeb {
+    /// Position du site dans les réglages du fichier.
+    pub index: usize,
+}
+
+/// Noms des sites de recherche du fichier affiché (Réglages du fichier › Recherche).
+static SEARCH_SITES: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
+/// Note les sites de recherche du fichier affiché. Renvoie `true` s'ils ont
+/// changé : les menus sont alors à réinstaller.
+pub fn set_search_sites(names: Vec<String>) -> bool {
+    let mut sites = SEARCH_SITES.lock().unwrap_or_else(|e| e.into_inner());
+    if *sites == names {
+        return false;
+    }
+    *sites = names;
+    SEARCH_SITES_GEN.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    true
+}
+
+static SEARCH_SITES_GEN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Numéro de version des sites de recherche, pour que chaque fenêtre recharge sa barre de menus.
+pub fn search_sites_generation() -> u64 {
+    SEARCH_SITES_GEN.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// Shortcut with ⌘ on macOS, Ctrl elsewhere.
 macro_rules! shortcut {
     ($k:literal) => {
@@ -272,6 +302,9 @@ pub mod label {
     pub fn clear_search() -> SharedString {
         t!("cmd.clear_search").into()
     }
+    pub fn search_web() -> SharedString {
+        t!("cmd.search_web").into()
+    }
     pub fn save_search() -> SharedString {
         t!("cmd.save_search").into()
     }
@@ -286,7 +319,7 @@ pub mod label {
 /// A menu entry.
 enum Item {
     Action(SharedString, Box<dyn Action>),
-    /// Recent file: computed label.
+    /// Computed label: recent file, search site.
     Recent(String, Box<dyn Action>),
     /// Standard system action (copy, paste…): macOS wires it to text fields.
     Os(SharedString, Box<dyn Action>, OsAction),
@@ -311,11 +344,12 @@ fn a(label: impl Into<SharedString>, action: impl Action) -> Item {
 
 /// The menu model, shared by every platform.
 fn model() -> Vec<(SharedString, Vec<Item>)> {
-    model_with(&crate::recent::list())
+    let sites = SEARCH_SITES.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    model_with(&crate::recent::list(), &sites)
 }
 
-/// The menu model, with the given recent files.
-fn model_with(recents: &[std::path::PathBuf]) -> Vec<(SharedString, Vec<Item>)> {
+/// The menu model, with the given recent files and search sites.
+fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedString, Vec<Item>)> {
     use Item::{Separator as Sep, Sub};
     let mac = cfg!(target_os = "macos");
     let mut menus = Vec::new();
@@ -408,6 +442,14 @@ fn model_with(recents: &[std::path::PathBuf]) -> Vec<(SharedString, Vec<Item>)> 
             a(t!("cmd.search_descendants"), SearchDescendants),
         ],
     ));
+    // Sites de recherche du fichier ; sous-menu masqué s'il n'y en a aucun.
+    if !sites.is_empty() {
+        let items =
+            sites.iter().enumerate().map(|(index, name)| Item::Recent(name.clone(), Box::new(SearchWeb { index })));
+        if let Some((_, indi)) = menus.last_mut() {
+            indi.push(Sub(label::search_web(), items.collect()));
+        }
+    }
     // Repositories and shared notes are not in the sidebar: they are created from the Source menu.
     menus.push((
         t!("menu.source").into(),
@@ -599,14 +641,17 @@ mod tests {
         }
         let mut seen = Vec::new();
         let recents = [PathBuf::from("/a/Guyot.ged"), PathBuf::from("/b/Guyot.ged")];
-        for (menu, items) in model_with(&recents) {
+        let sites = ["Geneanet".to_string(), "FamilySearch".to_string()];
+        for (menu, items) in model_with(&recents, &sites) {
             walk(&menu, items, &mut seen);
         }
     }
 
     #[test]
     fn palette_has_every_command_once() {
+        super::set_search_sites(vec!["Geneanet".into()]);
         let entries = palette_entries();
+        assert!(entries.iter().any(|e| e.path == "Person › Search On › Geneanet"));
         assert!(entries.iter().any(|e| e.path == "Person › Add Relative › Father"));
         assert!(entries.iter().any(|e| e.path == "Source › Enter Record"));
         assert!(entries.iter().any(|e| e.path == "File › Export › GEDCOM for Geneanet"));

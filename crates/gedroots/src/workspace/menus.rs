@@ -305,32 +305,45 @@ pub(super) fn person_menu(ws: Ws, x: String, from: From) -> MenuBuilder {
         let rels2 = rels.clone();
         let (x1, x2, x3, x4, x5, x6) = (x.clone(), x.clone(), x.clone(), x.clone(), x.clone(), x.clone());
         let (wa, wb) = (ws.clone(), ws.clone());
-        menu.item(act(&ws, label::center_tree(), move |this, w, cx| {
-            this.act_editor = None;
-            this.goto(x1.clone(), w, cx);
-            this.center_chart_on(x1.clone(), w, cx)
-        }))
-        .item(act(&ws, "Ouvrir la fiche", move |this, w, cx| this.open_in(x2.clone(), CenterTab::Form, w, cx)))
-        .separator()
-        .submenu(label::add_relative(), window, cx, move |m, _, _| {
-            rels.iter().fold(m, |m, (rel, label, _)| {
-                let (x, rel) = (x3.clone(), *rel);
-                m.item(act(&wa, label.clone(), move |this, w, cx| this.add_relative(x.clone(), rel, w, cx)))
+        let sites = read(&ws, cx, |_, g| g.search_sites()).unwrap_or_default();
+        let (ws_sites, x_sites) = (ws.clone(), x.clone());
+        let menu = menu
+            .item(act(&ws, label::center_tree(), move |this, w, cx| {
+                this.act_editor = None;
+                this.goto(x1.clone(), w, cx);
+                this.center_chart_on(x1.clone(), w, cx)
+            }))
+            .item(act(&ws, "Ouvrir la fiche", move |this, w, cx| this.open_in(x2.clone(), CenterTab::Form, w, cx)))
+            .separator()
+            .submenu(label::add_relative(), window, cx, move |m, _, _| {
+                rels.iter().fold(m, |m, (rel, label, _)| {
+                    let (x, rel) = (x3.clone(), *rel);
+                    m.item(act(&wa, label.clone(), move |this, w, cx| this.add_relative(x.clone(), rel, w, cx)))
+                })
             })
-        })
-        .submenu(label::link_person(), window, cx, move |m, _, _| {
-            rels2.iter().fold(m, |m, (rel, _, label)| {
-                let (indi, rel) = (x4.clone(), *rel);
-                m.item(act(&wb, label.clone(), move |this, w, cx| {
-                    this.open_picker(PickPurpose::Relative { indi: indi.clone(), rel }, w, cx)
-                }))
+            .submenu(label::link_person(), window, cx, move |m, _, _| {
+                rels2.iter().fold(m, |m, (rel, _, label)| {
+                    let (indi, rel) = (x4.clone(), *rel);
+                    m.item(act(&wb, label.clone(), move |this, w, cx| {
+                        this.open_picker(PickPurpose::Relative { indi: indi.clone(), rel }, w, cx)
+                    }))
+                })
             })
-        })
-        .item(act(&ws, label::add_event(), move |this, w, cx| this.open_event_dialog(x5.clone(), None, w, cx)))
-        .item(act(&ws, label::media_gallery(), move |this, w, cx| {
-            this.open_gallery(GalleryTarget::Record(x6.clone()), w, cx)
-        }))
-        .when_some(
+            .item(act(&ws, label::add_event(), move |this, w, cx| this.open_event_dialog(x5.clone(), None, w, cx)))
+            .item(act(&ws, label::media_gallery(), move |this, w, cx| {
+                this.open_gallery(GalleryTarget::Record(x6.clone()), w, cx)
+            }));
+        let menu = if sites.is_empty() {
+            menu
+        } else {
+            menu.submenu(label::search_web(), window, cx, move |m, _, _| {
+                sites.iter().enumerate().fold(m, |m, (index, site)| {
+                    let x = x_sites.clone();
+                    m.item(act(&ws_sites, site.name.clone(), move |this, _, cx| this.search_web(index, &x, cx)))
+                })
+            })
+        };
+        menu.when_some(
             match &from {
                 From::Relative(indi, fam, label) => Some((indi.clone(), fam.clone(), *label)),
                 _ => None,

@@ -320,6 +320,9 @@ cmd:
   clear_search:
     en: Clear Search
     fr: Effacer la recherche
+  search_web:
+    en: Search On
+    fr: Rechercher sur
   save_search:
     en: Save Search
     fr: Enregistrer la recherche
