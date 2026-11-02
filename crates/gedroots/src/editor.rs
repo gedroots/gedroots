@@ -318,11 +318,13 @@ impl RecordEditor {
                             shown: choice_label(&sexes, &f.sex),
                             slot: Slot::Fact,
                         });
-                        field!(t!("editor.occupation"), "", f.occupation);
-                        date_field!(t!("editor.birth_date"), f.birth);
-                        place_field!(t!("editor.birth_place"), f.birth.place);
-                        date_field!(t!("editor.death_date"), f.death);
-                        place_field!(t!("editor.death_place"), f.death.place);
+                        // The occupation is an event of the timeline (there can be several): not
+                        // in the form. Birth and death are here for quick entry, as in the
+                        // timeline below the fields.
+                        date_field!(t!("editor.date"), f.birth);
+                        place_field!(t!("editor.place"), f.birth.place);
+                        date_field!(t!("editor.date"), f.death);
+                        place_field!(t!("editor.place"), f.death.place);
                         long_text = Some((t!("editor.note").into(), textarea(window, cx, &f.note)));
                     }
                     // Unions are managed from the spouses' pages.
@@ -465,9 +467,9 @@ impl RecordEditor {
                         given: v[0].clone(),
                         surname: v[1].clone(),
                         sex: v[2].clone(),
-                        occupation: v[3].clone(),
-                        birth: self.event(4, &v, cx)?,
-                        death: self.event(6, &v, cx)?,
+                        occupation: IndividualForm::read(node).occupation,
+                        birth: self.event(3, &v, cx)?,
+                        death: self.event(5, &v, cx)?,
                         note,
                     }
                     .apply(node),

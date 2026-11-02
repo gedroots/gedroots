@@ -103,7 +103,9 @@ impl Workspace {
         let d = on!(d, cx, ShowStats, |this, w, cx| this.show_view(View::Stats, w, cx));
         let d = on!(d, cx, ToggleIgnoredIssues, |this, _w, cx| this.toggle_ignored_issues(cx));
         let d = on!(d, cx, ToggleRelativeEvents, |this, _w, cx| this.toggle_relative_events(cx));
-        let d = on!(d, cx, ShowForm, |this, w, cx| this.show_tab(CenterTab::Form, cx));
+        // Individuals and places: the record is the right panel, not a tab.
+        let d =
+            d.when(!self.view.has_panel(), |d| on!(d, cx, ShowForm, |this, w, cx| this.show_tab(CenterTab::Form, cx)));
         let d = on!(d, cx, ShowUnreferencedFiles, |this, w, cx| {
             this.open_quality(gedcom::quality::Category::Files, w, cx)
         });
@@ -120,7 +122,9 @@ impl Workspace {
             )
             .when(sel.is_some(), |d| {
                 on!(d, cx, DeleteRecord, |this, w, cx| {
-                    this.tab = CenterTab::Form;
+                    if !this.view.has_panel() {
+                        this.tab = CenterTab::Form;
+                    }
                     this.delete_selected(w, cx);
                 })
             })

@@ -189,7 +189,8 @@ Rules shared by the three guidelines, to apply everywhere.
 
 - Fixed structure: sidebar (areas) → list → record. The sidebar is on the left on all three
   platforms and can be hidden. Individuals and places add a detail panel on the right, because
-  the centre shows the tree or the map. Sources, media, repositories and notes have none (like
+  the centre shows the tree or the map: that panel is their record, read and edited in place
+  (no "Details" tab repeating it in the centre, like Family Historian's Property Box). Sources, media, repositories and notes have none (like
   Contacts or Mail): the record is read whole in the centre, in one readable column (720 px at
   most): title with the repository and call number under it, facts, records, images, web
   links, links, then "Used by".
