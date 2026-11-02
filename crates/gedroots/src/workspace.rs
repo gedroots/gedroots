@@ -1718,15 +1718,11 @@ impl Workspace {
         }
         // Raw GEDCOM: a tab only when it was asked for. With no other view than the record, no tab
         // bar.
-        // The record is read in the detail panel: its fields only take a tab while it is edited.
         let mut tabs: Vec<CenterTab> = match self.view {
-            View::Individuals => vec![CenterTab::Tree],
-            View::Places => vec![CenterTab::Map],
+            View::Individuals => vec![CenterTab::Tree, CenterTab::Form],
+            View::Places => vec![CenterTab::Map, CenterTab::Form],
             _ => vec![CenterTab::Form],
         };
-        if self.editing && tabs[0] != CenterTab::Form {
-            tabs.push(CenterTab::Form);
-        }
         if self.raw_open && self.view != View::Places {
             tabs.push(CenterTab::Raw);
         }
@@ -1740,8 +1736,7 @@ impl Workspace {
             (CenterTab::Form, Some(ed)) => self.render_form(ed, cx).into_any_element(),
             (CenterTab::Raw, Some(ed)) => self.render_raw(ed, cx).into_any_element(),
         };
-        // The chart keeps its bar (its mode is in the tab).
-        let strip = tabs.len() > 1 || self.view == View::Individuals;
+        let strip = tabs.len() > 1;
         v_flex()
             .flex_1()
             .min_w_0()
@@ -1781,7 +1776,7 @@ impl Workspace {
                                     let tip = Tooltip::new(t.label());
                                     match t {
                                         CenterTab::Tree => tip.action(&ShowTree, Some("Workspace")),
-                                        CenterTab::Form => tip.action(&EditRecord, Some("Workspace")),
+                                        CenterTab::Form => tip.action(&ShowForm, Some("Workspace")),
                                         CenterTab::Raw => tip.action(&ShowRaw, Some("Workspace")),
                                         CenterTab::Map => tip,
                                     }
@@ -1866,6 +1861,7 @@ impl Workspace {
                 .p_4()
                 .gap_3()
                 .when(editing, |d| d.child(self.render_form_fields(ed, cx)))
+                .when(!editing && editable, |d| d.child(self.render_form_read(ed, cx)))
                 .when(editing || confirm, |d| {
                     d.child(
                         h_flex()
@@ -1943,49 +1939,50 @@ impl Workspace {
             })
     }
 
-    /// Pencil of the detail panel: Edit › Edit Record, when the selected item has fields.
-    fn edit_button(&self, cx: &mut Context<Self>) -> Option<Button> {
-        let ed = self.editor.as_ref().filter(|ed| ed.error.is_none())?;
-        if ed.fields.is_empty() && ed.pickers.is_empty() && ed.long_text.is_none() {
-            return None;
-        }
-        Some(
-            Button::new("edit-record")
-                .ghost()
-                .xsmall()
-                .icon(IconName::Pencil)
-                .tooltip_with_action(t!("cmd.edit_record"), &EditRecord, Some("Workspace"))
-                .on_click(cx.listener(|this, _, w, cx| this.start_edit(w, cx))),
-        )
-    }
-
-    /// The record's saved values that the panel does not show elsewhere, in text: empty values
-    /// hidden, dates in words, choices by their label. The title is the panel's heading and the
-    /// linked records are in “Links”.
-    fn render_record_facts(&self, title: &str, cx: &mut Context<Self>) -> Option<AnyElement> {
-        let ed = self.editor.as_ref().filter(|ed| ed.error.is_none())?;
-        let row = |label: SharedString, value: String| {
+    /// The record as it is saved, in text: empty values hidden, linked records clickable. The
+    /// pencil (and Edit › Edit Record) switches to the fields, in place.
+    fn render_form_read(&self, ed: &RecordEditor, cx: &mut Context<Self>) -> impl IntoElement {
+        let g = self.doc.as_ref().map(|d| &d.ged);
+        let row = |label: SharedString, value: AnyElement| {
             h_flex()
                 .gap_3()
                 .items_start()
-                .child(div().w(px(96.)).flex_none().text_xs().pt_0p5().text_color(theme::muted()).child(label))
+                .child(div().w(px(140.)).flex_none().text_xs().pt_0p5().text_color(theme::muted()).child(label))
                 .child(div().flex_1().min_w_0().child(value))
         };
-        let mut rows: Vec<Div> = ed
+        let pickers = ed.pickers.iter().enumerate().filter_map(|(n, p)| {
+            let x = p.shown.clone()?;
+            let name = g?.record_label(&x);
+            let link = div()
+                .id(("form-link", n))
+                .cursor_pointer()
+                .text_color(theme::accent())
+                .hover(|d| d.underline())
+                .child(name)
+                .on_click(cx.listener(move |this, _, w, cx| this.goto(x.clone(), w, cx)));
+            Some(row(p.label.clone(), link.into_any_element()))
+        });
+        let fields = ed
             .fields
             .iter()
-            .filter(|f| !f.shown.trim().is_empty() && f.shown.trim() != title.trim())
-            .map(|f| row(f.label.clone(), f.shown.clone()))
-            .collect();
-        if let Some((label, state)) = &ed.long_text {
+            .filter(|f| !f.shown.trim().is_empty())
+            .map(|f| row(f.label.clone(), div().child(f.shown.clone()).into_any_element()));
+        let long = ed.long_text.as_ref().and_then(|(label, state)| {
             let text = state.read(cx).value().to_string();
-            if !text.trim().is_empty() {
-                rows.push(row(label.clone(), text));
-            }
-        }
-        (!rows.is_empty()).then(|| {
-            v_flex().p_4().gap_2().border_b_1().border_color(theme::border()).children(rows).into_any_element()
-        })
+            (!text.trim().is_empty())
+                .then(|| row(label.clone(), div().whitespace_normal().child(text).into_any_element()))
+        });
+        let edit = Button::new("edit-record")
+            .ghost()
+            .xsmall()
+            .icon(IconName::Pencil)
+            .tooltip_with_action(t!("cmd.edit_record"), &EditRecord, Some("Workspace"))
+            .on_click(cx.listener(|this, _, w, cx| this.start_edit(w, cx)));
+        h_flex()
+            .gap_2()
+            .items_start()
+            .child(v_flex().flex_1().min_w_0().gap_2().children(pickers).children(fields).children(long))
+            .child(edit)
     }
 
     /// Edit › Edit Record: the record's fields, in place; a second time, saves (like Done).
@@ -2327,20 +2324,7 @@ impl Workspace {
                             .gap_1()
                             .border_b_1()
                             .border_color(theme::border())
-                            .child(
-                                h_flex()
-                                    .gap_2()
-                                    .items_start()
-                                    .child(
-                                        div()
-                                            .flex_1()
-                                            .min_w_0()
-                                            .text_xl()
-                                            .font_weight(FontWeight::SEMIBOLD)
-                                            .child(short_place(key)),
-                                    )
-                                    .children(self.edit_button(cx)),
-                            )
+                            .child(div().text_xl().font_weight(FontWeight::SEMIBOLD).child(short_place(key)))
                             .children(place.iter().map(|p| {
                                 mono(match (&p.latitude, &p.longitude) {
                                     (Some(a), Some(b)) => {
@@ -2382,8 +2366,11 @@ impl Workspace {
                     && !refs.is_empty();
                 let show_refs = !shown_under_photo && !refs.is_empty();
                 let web = self.render_web_links(key, cx);
-                let title = g.record_label(key);
-                let facts = self.render_record_facts(&title, cx);
+                // Nothing but the title (already in the record): no panel, the central area takes
+                // the room.
+                if gallery.is_none() && outgoing.is_empty() && !show_refs && web.is_none() {
+                    return div().into_any_element();
+                }
                 panel
                     .child(
                         h_flex()
@@ -2396,15 +2383,11 @@ impl Workspace {
                                 d.child(icon(View::for_kind(k).icon()).text_color(theme::accent()).mt_1())
                             })
                             .child(
-                                v_flex()
-                                    .flex_1()
-                                    .min_w_0()
-                                    .gap_1()
-                                    .child(div().text_xl().font_weight(FontWeight::SEMIBOLD).child(title)),
-                            )
-                            .children(self.edit_button(cx)),
+                                v_flex().flex_1().min_w_0().gap_1().child(
+                                    div().text_xl().font_weight(FontWeight::SEMIBOLD).child(g.record_label(key)),
+                                ),
+                            ),
                     )
-                    .children(facts)
                     .when_some(gallery, |d, el| d.child(el))
                     .when_some(web, |d, el| d.child(el))
                     .when(!outgoing.is_empty(), |d| d.child(self.render_links(t!("ws.links").into(), outgoing, cx)))
@@ -2743,8 +2726,7 @@ impl Workspace {
                             )
                             .child(mono(t!("ws.sourced", sourced = sourced, total = total))),
                     ),
-            )
-            .children(self.edit_button(cx));
+            );
 
         let events_el = self.render_events(&xref, cx);
 
