@@ -10,6 +10,7 @@
 //! - [`search`] : recherche et filtres sur les individus ;
 //! - [`relations`] : ajout/liaison/suppression de proches, lieux et médias ;
 //! - [`events`] : modification et suppression des événements ;
+//! - [`quality`] : page Qualité des données (cohérence, schéma GEDCOM 7, éléments vides ou inutilisés) ;
 //! - [`import`] : contrôles de l'assistant d'import (balises non standard → GEDCOM 7) ;
 //! - [`custom`] : format des lieux (`HEAD.PLAC.FORM`) et types d'événements personnalisés ;
 //! - [`settings`] : réglages du fichier (auteur, droits, langue…) dans l'en-tête ;
@@ -37,6 +38,7 @@ pub mod multipage;
 pub mod node;
 pub mod parse;
 pub mod pedigree;
+pub mod quality;
 pub mod relations;
 pub mod schema;
 pub mod search;

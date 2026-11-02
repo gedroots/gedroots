@@ -76,6 +76,8 @@ actions!(
         ShowMedia,
         ShowRepositories,
         ShowNotes,
+        ShowQuality,
+        ToggleIgnoredIssues,
         ShowTree,
         ShowForm,
         ShowRaw,
@@ -133,6 +135,7 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new(shortcut!("5"), ShowMedia, WS),
         KeyBinding::new(shortcut!("6"), ShowRepositories, WS),
         KeyBinding::new(shortcut!("7"), ShowNotes, WS),
+        KeyBinding::new(shortcut!("8"), ShowQuality, WS),
         KeyBinding::new(shortcut!("alt-1"), ShowTree, WS),
         KeyBinding::new(shortcut!("alt-2"), ShowForm, WS),
         KeyBinding::new(shortcut!("alt-3"), ShowRaw, WS),
@@ -285,6 +288,7 @@ fn model() -> Vec<(&'static str, Vec<Item>)> {
             a("Médias", ShowMedia),
             a("Dépôts", ShowRepositories),
             a("Notes", ShowNotes),
+            a("Qualité des données", ShowQuality),
             Sep,
             a("Arbre", ShowTree),
             a("Fiche", ShowForm),
@@ -314,6 +318,7 @@ fn model() -> Vec<(&'static str, Vec<Item>)> {
                     a("Avec média", FilterWithMedia),
                     Sep,
                     a("Éléments signalés seulement", ToggleFlagged),
+                    a("Anomalies masquées", ToggleIgnoredIssues),
                     a("Effacer la recherche", ClearSearch),
                 ],
             ),
@@ -321,7 +326,7 @@ fn model() -> Vec<(&'static str, Vec<Item>)> {
             a("Toutes les commandes…", CommandPalette),
         ],
     ));
-    menus.push(("Analyses", vec![a("Ouvrir les analyses", OpenAnalyses)]));
+    menus.push(("Analyses", vec![a("Qualité des données", ShowQuality), a("Ouvrir les analyses", OpenAnalyses)]));
     menus.push((
         "Aide",
         vec![a("Toutes les commandes…", CommandPalette), a("Aide de la recherche avancée", ToggleSearchHelp)],

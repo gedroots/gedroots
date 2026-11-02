@@ -29,6 +29,7 @@ mod import;
 mod menus;
 mod pages;
 mod photo;
+mod quality;
 mod relatives;
 mod settings;
 mod tree;
@@ -43,11 +44,20 @@ pub enum View {
     Media,
     Repositories,
     Notes,
+    Quality,
 }
 
 impl View {
-    const ALL: [View; 7] =
-        [View::Individuals, View::Families, View::Sources, View::Places, View::Media, View::Repositories, View::Notes];
+    const ALL: [View; 8] = [
+        View::Individuals,
+        View::Families,
+        View::Sources,
+        View::Places,
+        View::Media,
+        View::Repositories,
+        View::Notes,
+        View::Quality,
+    ];
 
     fn label(self) -> &'static str {
         match self {
@@ -58,6 +68,7 @@ impl View {
             View::Media => "Médias",
             View::Repositories => "Dépôts",
             View::Notes => "Notes",
+            View::Quality => "Qualité",
         }
     }
 
@@ -70,6 +81,7 @@ impl View {
             View::Media => "MÉD",
             View::Repositories => "DÉP",
             View::Notes => "NOTE",
+            View::Quality => "QUAL",
         }
     }
 
@@ -82,6 +94,7 @@ impl View {
             View::Media => IconName::Image,
             View::Repositories => IconName::Landmark,
             View::Notes => IconName::StickyNote,
+            View::Quality => IconName::CircleCheck,
         }
     }
 
@@ -93,7 +106,7 @@ impl View {
             View::Media => RecordKind::Media,
             View::Repositories => RecordKind::Repository,
             View::Notes => RecordKind::SharedNote,
-            View::Places => return None,
+            View::Places | View::Quality => return None,
         })
     }
 
@@ -210,6 +223,8 @@ pub struct Workspace {
     menu_row: Rc<std::cell::RefCell<Option<String>>>,
     /// Défilement de la liste, pour garder l'élément affiché visible.
     list_scroll: UniformListScrollHandle,
+    /// Page Qualité : anomalies du fichier.
+    quality: quality::QualityState,
     _subs: Vec<Subscription>,
 }
 
@@ -218,7 +233,7 @@ impl Workspace {
         let filter = cx.new(|cx| InputState::new(window, cx).placeholder("Rechercher un nom, un lieu…"));
         let sub = cx.subscribe_in(&filter, window, |this, _, ev: &InputEvent, _, cx| {
             if matches!(ev, InputEvent::Change) {
-                this.rebuild_rows(cx);
+                this.build_rows(cx);
                 cx.notify();
             }
         });
@@ -255,6 +270,7 @@ impl Workspace {
             history: Default::default(),
             orphans_open: false,
             list_scroll: UniformListScrollHandle::new(),
+            quality: quality::QualityState { stale: true, ..Default::default() },
             menu_row: Rc::default(),
             place_focus: None,
             editor_subs: Vec::new(),
@@ -520,7 +536,7 @@ impl Workspace {
     }
 
     fn refresh_editor(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let (Some(doc), Some(key)) = (&self.doc, &self.selected) else {
+        let (Some(doc), Some(key), false) = (&self.doc, &self.selected, self.view == View::Quality) else {
             self.editor = None;
             return;
         };
@@ -571,7 +587,7 @@ impl Workspace {
 
     /// Premier clic : demande confirmation ; second clic : supprime.
     fn delete_selected(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(key) = self.selected.clone() else { return };
+        let Some(key) = self.selected.clone().filter(|_| self.view != View::Quality) else { return };
         if self.pending_delete.as_ref() != Some(&key) {
             self.pending_delete = Some(key);
             cx.notify();
@@ -728,8 +744,20 @@ impl Workspace {
     // Liste
     // ------------------------------------------------------------------
 
+    /// Le fichier a peut-être changé : relance les contrôles et reconstruit la liste.
     fn rebuild_rows(&mut self, cx: &mut Context<Self>) {
+        self.quality.stale = true;
+        self.refresh_quality();
+        self.build_rows(cx);
+    }
+
+    /// Reconstruit la liste (recherche, filtre ou fichier modifié).
+    fn build_rows(&mut self, cx: &mut Context<Self>) {
         let q = self.filter.read(cx).value().to_lowercase();
+        if self.view == View::Quality {
+            self.rows = Rc::new(self.quality_rows(q.trim()));
+            return;
+        }
         let Some(doc) = &self.doc else {
             self.rows = Rc::new(Vec::new());
             return;
@@ -848,6 +876,7 @@ impl Workspace {
                     }
                 })
                 .collect(),
+            View::Quality => Vec::new(),
             View::Notes => g
                 .records_of(RecordKind::SharedNote)
                 .map(|r| {
@@ -1038,6 +1067,7 @@ impl Workspace {
         let counts: Vec<usize> = View::ALL
             .iter()
             .map(|v| match (&self.doc, v.kind()) {
+                (Some(_), None) if *v == View::Quality => self.quality_count(),
                 (Some(d), Some(k)) => d.ged.count(k),
                 (Some(d), None) => d.ged.places().len(),
                 _ => 0,
@@ -1205,6 +1235,9 @@ impl Workspace {
     }
 
     fn render_center(&self, cx: &mut Context<Self>) -> AnyElement {
+        if self.view == View::Quality {
+            return v_flex().flex_1().min_w_0().bg(theme::bg()).child(self.render_quality(cx)).into_any_element();
+        }
         let tabs: Vec<CenterTab> = match self.view {
             View::Individuals => vec![CenterTab::Tree, CenterTab::Form, CenterTab::Raw],
             View::Places => vec![CenterTab::Map, CenterTab::Form],
@@ -1635,7 +1668,9 @@ impl Workspace {
     }
 
     fn render_detail(&self, cx: &mut Context<Self>) -> AnyElement {
-        let Some(doc) = &self.doc else { return div().into_any_element() };
+        let Some(doc) = &self.doc.as_ref().filter(|_| self.view != View::Quality) else {
+            return div().into_any_element();
+        };
         let Some(key) = &self.selected else { return div().into_any_element() };
         let g = &doc.ged;
         let panel = v_flex()

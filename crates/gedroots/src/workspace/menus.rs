@@ -46,7 +46,7 @@ impl<E: ContextMenuExt> WithMenu for E {}
 /// Une entrée qui agit sur l'espace de travail. L'action est différée : le
 /// menu se ferme d'abord (et rend le focus), puis la fenêtre ouverte par
 /// l'action (sélecteur, événement…) prend le focus.
-fn act(
+pub(super) fn act(
     ws: &Ws,
     label: impl Into<SharedString>,
     f: impl Fn(&mut Workspace, &mut Window, &mut Context<Workspace>) + 'static,
@@ -167,6 +167,10 @@ impl Workspace {
         Rc::new(move |menu, w, cx| {
             // Clic droit sur une ligne : le menu de cet élément.
             if let Some(key) = read(&ws, cx, |this, _| this.menu_row.take()).flatten() {
+                // Catégories de la page Qualité : pas de menu.
+                if view == View::Quality {
+                    return menu;
+                }
                 let builder = if view == View::Places {
                     place_menu(ws.clone(), key, From::List)
                 } else {

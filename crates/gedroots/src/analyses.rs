@@ -4,7 +4,6 @@
 
 use crate::theme;
 use crate::workspace::Workspace;
-use gedcom::analysis::check::{self, Issue, Severity, Thresholds};
 use gedcom::analysis::kinship::{self, Kinship};
 use gedcom::analysis::stats::{self, Stats};
 use gedcom::analysis::timeline::{self, EntryKind};
@@ -15,7 +14,6 @@ use gpui_kit::component::{Sizable, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 use std::cell::RefCell;
-use std::rc::Rc;
 
 thread_local! {
     /// Fenêtre déjà ouverte (une seule à la fois).
@@ -46,17 +44,15 @@ pub fn open(ws: Entity<Workspace>, main: AnyWindowHandle, ged: Gedcom, person: O
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Tab {
-    Coherence,
     Kinship,
     Timeline,
     Stats,
 }
 
 impl Tab {
-    const ALL: [Tab; 4] = [Tab::Coherence, Tab::Kinship, Tab::Timeline, Tab::Stats];
+    const ALL: [Tab; 3] = [Tab::Kinship, Tab::Timeline, Tab::Stats];
     fn label(self) -> &'static str {
         match self {
-            Tab::Coherence => "Cohérence",
             Tab::Kinship => "Lien de parenté",
             Tab::Timeline => "Chronologie",
             Tab::Stats => "Statistiques",
@@ -69,9 +65,6 @@ pub struct Analyses {
     main: AnyWindowHandle,
     ged: Gedcom,
     tab: Tab,
-    thresholds: Thresholds,
-    issues: Rc<Vec<Issue>>,
-    severity: Option<Severity>,
     stats: Stats,
     /// Personne sélectionnée dans la fenêtre principale.
     person: Option<String>,
@@ -119,10 +112,7 @@ impl Analyses {
             ws: ws.downgrade(),
             main,
             ged,
-            tab: Tab::Coherence,
-            thresholds: Thresholds::default(),
-            issues: Rc::new(Vec::new()),
-            severity: None,
+            tab: Tab::Kinship,
             stats: Stats::default(),
             person,
             other: None,
@@ -130,7 +120,6 @@ impl Analyses {
             matches: Vec::new(),
             _subs: subs,
         };
-        this.recheck();
         this.stats = stats::stats(&this.ged, this.person.as_deref());
         this
     }
@@ -152,14 +141,9 @@ impl Analyses {
         if self.other.as_ref().is_some_and(|p| self.ged.individual(p).is_none()) {
             self.other = None;
         }
-        self.recheck();
         self.stats = stats::stats(&self.ged, self.person.as_deref());
         self.update_matches(cx);
         cx.notify();
-    }
-
-    fn recheck(&mut self) {
-        self.issues = Rc::new(check::check(&self.ged, &self.thresholds));
     }
 
     fn update_matches(&mut self, cx: &mut Context<Self>) {
@@ -197,16 +181,6 @@ fn goto_in(ws: WeakEntity<Workspace>, main: AnyWindowHandle, xref: String, cx: &
 }
 
 impl Analyses {
-    fn ignore(&mut self, issue: &Issue, cx: &mut Context<Self>) {
-        let Some(ws) = self.ws.upgrade() else { return };
-        let (xref, code) = (issue.xref.clone(), issue.code);
-        let msg = format!("Anomalie « {} » masquée pour {}", check::code_label(code), self.ged.record_label(&xref));
-        let _ = self.main.update(cx, |_, window, cx| {
-            ws.update(cx, |ws, cx| ws.edit_ged(|g| g.ignore_issue(&xref, code), msg, window, cx));
-        });
-        self.reload(cx);
-    }
-
     fn name(&self, x: &str) -> String {
         self.ged.record_label(x)
     }
@@ -222,14 +196,6 @@ fn mono(s: impl Into<SharedString>) -> Div {
 
 fn card() -> Div {
     v_flex().p_4().gap_2().rounded_md().border_1().border_color(theme::border()).bg(theme::panel())
-}
-
-fn severity_color(s: Severity) -> Hsla {
-    match s {
-        Severity::Error => theme::danger(),
-        Severity::Warning => theme::warn(),
-        Severity::Info => theme::accent(),
-    }
 }
 
 fn pct(x: f64) -> String {
@@ -249,15 +215,11 @@ impl Analyses {
             .border_color(theme::border())
             .children(Tab::ALL.into_iter().map(|t| {
                 let active = t == self.tab;
-                let count = match t {
-                    Tab::Coherence => format!(" ({})", self.issues.len()),
-                    _ => String::new(),
-                };
                 Button::new(SharedString::from(format!("tab-{}", t.label())))
                     .small()
                     .when(active, |b| b.primary())
                     .when(!active, |b| b.ghost())
-                    .label(format!("{}{count}", t.label()))
+                    .label(t.label())
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.tab = t;
                         cx.notify();
@@ -274,140 +236,6 @@ impl Analyses {
                     .label("Actualiser")
                     .on_click(cx.listener(|this, _, _, cx| this.reload(cx))),
             )
-    }
-
-    fn render_coherence(&self, cx: &mut Context<Self>) -> AnyElement {
-        let count = |s: Severity| self.issues.iter().filter(|i| i.severity == s).count();
-        let shown: Rc<Vec<Issue>> =
-            Rc::new(self.issues.iter().filter(|i| self.severity.is_none_or(|s| s == i.severity)).cloned().collect());
-        let entity = cx.entity().downgrade();
-        let filters = [
-            (None, format!("Tout ({})", self.issues.len())),
-            (Some(Severity::Error), format!("Erreurs ({})", count(Severity::Error))),
-            (Some(Severity::Warning), format!("À vérifier ({})", count(Severity::Warning))),
-            (Some(Severity::Info), format!("Informations ({})", count(Severity::Info))),
-        ];
-        let unsourced = self.thresholds.report_unsourced;
-        v_flex()
-            .flex_1()
-            .min_h_0()
-            .child(
-                h_flex()
-                    .px_4()
-                    .py_2()
-                    .gap_1()
-                    .items_center()
-                    .border_b_1()
-                    .border_color(theme::border())
-                    .children(filters.into_iter().enumerate().map(|(n, (sev, label))| {
-                        let on = self.severity == sev;
-                        Button::new(("sev", n))
-                            .xsmall()
-                            .when(on, |b| b.primary())
-                            .when(!on, |b| b.ghost())
-                            .label(label)
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                this.severity = sev;
-                                cx.notify();
-                            }))
-                    }))
-                    .child(div().flex_1())
-                    .child(
-                        Button::new("unsourced")
-                            .xsmall()
-                            .when(unsourced, |b| b.primary())
-                            .when(!unsourced, |b| b.ghost())
-                            .label("Signaler les événements sans source")
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.thresholds.report_unsourced = !this.thresholds.report_unsourced;
-                                this.recheck();
-                                cx.notify();
-                            })),
-                    ),
-            )
-            .when(shown.is_empty(), |d| {
-                d.child(
-                    v_flex()
-                        .flex_1()
-                        .items_center()
-                        .justify_center()
-                        .gap_1()
-                        .child(div().text_lg().text_color(theme::ok()).child("Aucune anomalie"))
-                        .child(
-                            div()
-                                .text_color(theme::muted())
-                                .child("Dates, âges et liens familiaux sont cohérents pour ce filtre."),
-                        ),
-                )
-            })
-            .when(!shown.is_empty(), |d| {
-                d.child(
-                    uniform_list("issues", shown.len(), move |range, _, _| {
-                        range
-                            .map(|n| {
-                                let i = &shown[n];
-                                let open = entity.clone();
-                                let ign = entity.clone();
-                                let (x, issue) = (i.xref.clone(), i.clone());
-                                h_flex()
-                                    .id(n)
-                                    .w_full()
-                                    .h(px(46.))
-                                    .px_4()
-                                    .gap_3()
-                                    .items_center()
-                                    .border_b_1()
-                                    .border_color(theme::border())
-                                    .cursor_pointer()
-                                    .hover(|d| d.bg(theme::surface()))
-                                    .child(div().size(px(8.)).flex_none().rounded_full().bg(severity_color(i.severity)))
-                                    .child(
-                                        v_flex()
-                                            .flex_1()
-                                            .min_w_0()
-                                            .child(
-                                                div()
-                                                    .overflow_hidden()
-                                                    .whitespace_nowrap()
-                                                    .text_ellipsis()
-                                                    .child(i.message.clone()),
-                                            )
-                                            .child(
-                                                div()
-                                                    .text_xs()
-                                                    .text_color(theme::muted())
-                                                    .child(check::code_label(i.code)),
-                                            ),
-                                    )
-                                    .child(
-                                        Button::new(("ignore", n))
-                                            .ghost()
-                                            .xsmall()
-                                            .label("Ignorer")
-                                            .tooltip("Masquer cette anomalie (ajoute _GR_IGNORE dans le fichier)")
-                                            .on_click(move |_, _, cx| {
-                                                cx.stop_propagation();
-                                                let issue = issue.clone();
-                                                let _ = ign.update(cx, |this, cx| this.ignore(&issue, cx));
-                                            }),
-                                    )
-                                    .on_click(move |_, _, cx| {
-                                        let x = x.clone();
-                                        if let Some(e) = open.upgrade() {
-                                            let (ws, main) = {
-                                                let a = e.read(cx);
-                                                (a.ws.clone(), a.main)
-                                            };
-                                            goto_in(ws, main, x, cx);
-                                        }
-                                    })
-                            })
-                            .collect()
-                    })
-                    .flex_1(),
-                )
-            })
-            .into_any_element()
     }
 
     fn person_link(&self, id: impl Into<ElementId>, x: &str, cx: &mut Context<Self>) -> Stateful<Div> {
@@ -699,7 +527,6 @@ impl Analyses {
 impl Render for Analyses {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let body = match self.tab {
-            Tab::Coherence => self.render_coherence(cx),
             Tab::Kinship => self.render_kinship(cx),
             Tab::Timeline => self.render_timeline(cx),
             Tab::Stats => self.render_stats(),
