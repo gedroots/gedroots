@@ -8,15 +8,64 @@ n'écrivent jamais de couleur, de rayon ni de police en dur, elles passent par s
 |---|---|
 | ![Thème clair](docs/capture-theme-clair.png) | ![Thème sombre](docs/capture-theme-sombre.png) |
 
+Ce document réunit le design system (jetons, typographie, icônes) et les règles d'interface
+tirées des guides [Apple HIG](https://developer.apple.com/design/human-interface-guidelines),
+[GNOME HIG](https://developer.gnome.org/hig/) et [Windows / Fluent](https://learn.microsoft.com/windows/apps/design/),
+adaptées à GEDRoots. En cas de conflit : les règles du projet ci-dessous l'emportent, puis la
+convention de la plateforme où l'app tourne.
+
+## Avant toute maquette
+
+À faire **à chaque fois**, sans attendre qu'on le demande, avant de proposer un écran, une
+fenêtre ou un parcours :
+
+1. **Logiciels de généalogie.** Regarder comment au moins trois d'entre eux traitent le sujet,
+   en commençant par les plus pertinents :
+   - MacFamilyTree : app Mac soignée, arbres et graphes, édition directe dans la fiche ;
+   - Family Historian : sources et citations, témoins (rôles), diagrammes, requêtes ;
+   - Heredis : référence française, saisie d'actes, lieux et cartes ;
+   - RootsMagic : citations, « Problems », gestion des doublons, listes de tâches ;
+   - Gramps : modèle de données (événements partagés, rôles), Linux, greffons ;
+   - Ancestris : GEDCOM natif, vocabulaire français ;
+   - les services web (FamilySearch, Geneanet, Ancestry, Filae) pour la saisie et la
+     présentation des enregistrements.
+2. **Meilleures apps en général.** Chercher le même motif (liste + détail, recherche, import,
+   réglages, édition en place, carte, chronologie…) dans au moins deux apps réputées pour leur
+   design : Finder, Photos, Mail, Notes, Plans, Réglages (macOS) ; Things, Linear, Figma, Zed,
+   Obsidian, Raycast, Arc ; Fichiers, Fragments, Paramètres (GNOME) ; Explorateur, Photos,
+   Paramètres (Windows 11).
+3. **Guides de plateforme.** Vérifier le motif dans les HIG Apple, GNOME et Windows, puis
+   contre ce document (sections Principes, Interaction et Plateformes).
+4. **Rendre la recherche avec la maquette** : un court tableau « app · ce qu'elle fait bien ·
+   ce qu'on reprend · ce qu'on évite », avec liens ou captures. Pas de longue dissertation.
+5. **Maquetter avec les jetons** de ce document, en clair **et** en sombre, avec les vrais
+   libellés français et des données réalistes (dates partielles, noms longs, lieux
+   hiérarchisés, champs vides).
+
+Une proposition sans cette recherche n'est pas prête à montrer.
+
 ## Principes
 
 - **Fonds neutres, une pointe de violet** : les fonds restent blanc et ocre en clair, gris et
   noir en sombre. Le violet primaire n'apparaît que par touches : action principale, lien,
   sélection, symbole de marque. Jamais de fond ni de grand aplat violet, pas de dégradé.
-- **Commandes dans les menus** : pas de barre d'outils. Les seuls boutons visibles sont les
-  petits « + » des en-têtes de section et les emplacements pointillés de l'arbre.
+- **Les données d'abord** : l'écran sert la généalogie, pas l'interface. Pas de chrome
+  décoratif, pas de cartes dans des cartes, pas d'ombre sauf pour ce qui flotte (menus,
+  popovers, modales).
+- **Commandes dans les menus** : pas de barre d'outils. Chaque commande existe une seule fois
+  dans la barre de menus (modèle de `commands.rs`), donc aussi dans la palette `⌘⇧P` et, quand
+  elle porte sur un élément, dans son menu contextuel avec le même libellé. Les seuls boutons
+  visibles sont les petits « + » des en-têtes de section (Événements, Famille, Membres…) et les
+  emplacements pointillés de l'arbre.
 - **Pas de texte explicatif** : un titre par élément ; les exemples de format vont dans le
   placeholder des champs ; les sections vides sont masquées.
+- **Dévoilement progressif** : les champs techniques sont déduits, pas affichés (ex. le `FORM`
+  d'un média) ; les actions rares ou destructrices sont repliées ou dans les menus ; les
+  identifiants GEDCOM n'apparaissent que via Édition › Copier l'ID et la recherche avancée.
+- **Édition en place** : on modifie là où on lit (fiche, événement, case de l'arbre), dans la
+  même fenêtre pour créer et modifier. Pas de mode « édition » séparé.
+- **Annuler plutôt que confirmer** : toute modification passe par un point d'annulation ; une
+  confirmation n'est demandée que pour ce qui ne s'annule pas (fichier écrasé sur le disque…).
 - **Une seule barre en haut** : sous macOS, la barre de titre est fondue dans celle de l'app
   (feux tricolores à gauche, déplacement de la fenêtre). Le nom du fichier n'y figure qu'une
   fois, centré, suivi de « • » tant qu'il n'est pas enregistré. Pas de barre d'état : les
@@ -117,6 +166,121 @@ autour d'un champ.
   collatéraux neutres (`border_strong()`).
 - Sélection : contour `accent()` + fond `accent_soft()`, jamais une simple teinte.
 - Liens : courbes ou coudes discrets, épaisseur homogène.
+
+## Interaction
+
+Règles communes aux trois guides, à appliquer partout.
+
+### Navigation
+
+- Structure fixe : barre latérale (zones) → liste → fiche → panneau de détail. La barre
+  latérale est à gauche sur les trois plateformes et se masque.
+- **Historique** précédent/suivant sur toute la navigation (`workspace/history.rs`) : clavier,
+  boutons latéraux de la souris et, sur trackpad, balayage. Chaque liste rouvre le dernier
+  élément consulté ; Individus retombe sur l'individu racine.
+- Tout lien vers un enregistrement (proche, source citée, lieu, média) est cliquable et ouvre
+  sa fiche ; jamais d'impasse.
+
+### Menus et commandes
+
+- Libellés : verbe à l'infinitif pour une commande (« Ajouter un événement »), nom ou adjectif
+  pour un réglage coché (« Événements des proches »). Casse de phrase.
+- **Points de suspension « … »** quand la commande demande encore quelque chose avant d'agir
+  (fenêtre, sélecteur) ; jamais sinon.
+- Une commande inapplicable est grisée, pas masquée (seuls les menus contextuels n'affichent
+  que ce qui s'applique). Un sous-menu vide est masqué (ex. Ouvrir récent).
+- Menus : 3 à 12 entrées, groupées par séparateurs, sous-menus à un seul niveau.
+- Menu contextuel : clic droit (et `⇧F10` / touche Menu hors macOS), mêmes libellés que la barre
+  de menus, il agit sur l'élément cliqué sans changer la sélection.
+- Raccourcis : seulement pour les commandes fréquentes ; reprendre ceux de la plateforme avant
+  d'en inventer (voir Plateformes). Le raccourci apparaît dans le menu, la palette et
+  l'infobulle.
+
+### Fenêtres et dialogues
+
+- Préférer l'édition en place et les popovers aux modales. Une modale n'est justifiée que pour
+  une tâche courte et bloquante (ajouter un proche, choisir un fichier, saisir un acte).
+- Boutons de dialogue libellés par leur **verbe** (« Supprimer », « Fusionner »), jamais « OK »
+  ou « Oui ». `Entrée` valide le bouton par défaut, `Échap` annule. Le bouton destructif prend
+  `danger()` et n'est jamais le bouton par défaut.
+- Ordre des boutons selon la plateforme (voir Plateformes).
+- Réglages : appliqués immédiatement, sans bouton « Appliquer » ni « OK ».
+- Fichiers : dialogues natifs du système (ouvrir, enregistrer, choisir un dossier).
+
+### Retours et états
+
+- Message bref à droite de la barre du haut après une action (« 3 médias rattachés »), en
+  `danger()` pour une erreur. Une erreur dit ce qui s'est passé et quoi faire, sans jargon.
+- Au-delà d'environ une seconde : indicateur de progression ; au-delà de quelques secondes :
+  progression chiffrée et annulable. Ne jamais figer la fenêtre.
+- État vide d'une vue entière : icône, titre court et au plus une action, sans paragraphe.
+  Une section vide dans une fiche est simplement masquée.
+- Glisser-déposer : la cible s'éclaire (`accent_soft()` + contour `accent()`) pendant le survol.
+
+### Clavier et accessibilité
+
+- Tout est faisable au clavier : ordre de tabulation logique, focus toujours visible (anneau
+  `accent()`), `Échap` ferme le popover ou la modale ouverte.
+- Cibles cliquables d'au moins 24 × 24 px (WCAG 2.2), 28 px conseillés pour les icônes seules.
+- Contraste 4,5:1 pour le texte, 3:1 pour les contours de contrôles et les icônes porteuses
+  de sens. Jamais la couleur seule (voir Principes).
+- Animations courtes (≤ 200 ms) et utiles ; respecter « réduire les animations » du système.
+- Tout bouton sans libellé a une infobulle et un nom accessible.
+
+### Textes
+
+- Français soigné : guillemets « », espace insécable avant `: ; ! ?` et dans « », caractère
+  `…` (pas trois points), apostrophe typographique `’` dans les libellés.
+- Vocabulaire du généalogiste, pas de GEDCOM : « Naissance », « Union », « Source citée »,
+  jamais `BIRT`, `FAM`, `SOUR` dans l'interface (sauf vue GEDCOM brute).
+- Dates à la française (`12 mars 1854`, `vers 1850`, `entre 1850 et 1855`), calendrier
+  républicain compris.
+- Libellés courts ; pas de « Veuillez », pas de point final dans les libellés et infobulles.
+
+## Plateformes
+
+Le même modèle de commandes et la même mise en page partout ; seules changent les conventions
+ci-dessous. Toute nouvelle fonction se vérifie sur les trois colonnes.
+
+| Sujet | macOS (Apple HIG) | Windows (Fluent) | Linux (GNOME HIG) |
+|---|---|---|---|
+| Barre de menus | Native, en haut de l'écran, menu « GEDRoots » en premier | Dans la fenêtre, barre du haut | Dans la fenêtre, barre du haut (écart assumé : GNOME préfère un menu principal ☰) |
+| Boutons de fenêtre | Feux tricolores à gauche, fondus dans la barre du haut | Réduire / agrandir / fermer à droite | Côté et boutons selon le réglage du système (fermer à droite par défaut) |
+| Retour / suivant | Chevrons ‹ › dans la barre du haut, après le bouton de barre latérale | Flèche retour seule, tout à gauche de la barre de titre | Flèche retour au début de la barre d'en-tête |
+| Raccourcis retour / suivant | `⌘[` / `⌘]` | `Alt+←` / `Alt+→` | `Alt+←` / `Alt+→` |
+| Touche de commande | `⌘` (`⌥` pour les variantes) | `Ctrl` (`Alt` pour les variantes) | `Ctrl` (`Alt` pour les variantes) |
+| Rétablir | `⌘⇧Z` | `Ctrl+Y` | `Ctrl+Maj+Z` |
+| Réglages | GEDRoots › Réglages… `⌘,` | Fichier › Paramètres… / Options… `Ctrl+,` | Fichier › Préférences `Ctrl+,` |
+| À propos, Quitter | Menu GEDRoots ; `⌘Q` | Aide › À propos ; Fichier › Quitter, `Alt+F4` | Aide › À propos ; Fichier › Quitter, `Ctrl+Q` |
+| Aide | Menu Aide avec champ de recherche | `F1` | `F1` |
+| Plein écran | `⌃⌘F` | `F11` | `F11` |
+| Lettres soulignées des menus | Non | Oui (`Alt` + lettre) | Oui (`Alt` + lettre) |
+| Ordre des boutons de dialogue | Annuler à gauche, action à droite | Action à gauche, Annuler à droite | Annuler à gauche, action à droite |
+| Menu contextuel au clavier | — | `Maj+F10`, touche Menu | `Maj+F10`, touche Menu |
+| Barres de défilement | Superposées, selon le réglage système | Fines, s'élargissent au survol | Superposées |
+
+La police (Inter) et les couleurs restent les mêmes partout : l'identité de GEDRoots prime sur
+l'apparence de chaque système, mais le comportement suit la plateforme.
+
+### Écarts connus à corriger
+
+État au 2 novembre 2026, à résorber au fil des PR :
+
+- Annuler est sur `⌘⇧Z` / `Ctrl+Maj+Z` au lieu de `⌘Z` / `Ctrl+Z`, et Rétablir n'existe pas.
+- Pas de boutons précédent / suivant visibles ; hors macOS, retour / suivant sont sur
+  `Ctrl+[` / `Ctrl+]` au lieu de `Alt+←` / `Alt+→`.
+- Hors macOS, les menus n'ont pas de lettres soulignées et Réglages ne porte pas le nom de la
+  plateforme (Paramètres, Préférences).
+
+## Avant de livrer une interface
+
+- [ ] Recherche « Avant toute maquette » faite et résumée dans la PR.
+- [ ] Commandes ajoutées au modèle de menus (donc palette), libellés identiques au clic droit.
+- [ ] Aucune couleur, police ni rayon en dur : jetons de `theme.rs` uniquement.
+- [ ] Captures en clair et en sombre, avec un vrai fichier (copie) et des données longues ou vides.
+- [ ] Parcours au clavier seul ; focus visible ; infobulles sur les icônes.
+- [ ] Comportement vérifié pour macOS, Windows et Linux (tableau Plateformes).
+- [ ] Pas de texte explicatif, sections vides masquées, identifiants GEDCOM invisibles.
 
 ## Ajouter un jeton
 
