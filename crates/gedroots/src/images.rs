@@ -8,6 +8,7 @@
 //!
 //! `GEDROOTS_DEBUG_IMAGES=1` affiche l'état du cache sur la sortie d'erreur.
 
+use gedcom::Rect;
 use gpui_kit::*;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -22,8 +23,19 @@ const MIN_SIDE: f32 = 256.;
 /// L'image `path`, affichée en entier dans une boîte `w × h` (pixels logiques)
 /// selon `fit`. Pour un recadrage, la boîte est la taille de l'image entière à l'écran.
 pub fn picture(path: PathBuf, w: f32, h: f32, fit: ObjectFit) -> Img {
+    region(path, None, w, h, fit)
+}
+
+/// La zone `rect` (pixels de l'image orientée) de l'image `path`, décodée seule :
+/// l'élément n'est que cette zone, il se cadre et s'arrondit comme une image entière
+/// (un portrait recadré reste ainsi un disque).
+pub fn picture_region(path: PathBuf, rect: Rect, w: f32, h: f32, fit: ObjectFit) -> Img {
+    region(path, Some(rect), w, h, fit)
+}
+
+fn region(path: PathBuf, rect: Option<Rect>, w: f32, h: f32, fit: ObjectFit) -> Img {
     let contain = matches!(fit, ObjectFit::Contain | ObjectFit::ScaleDown);
-    img(ImageSource::Custom(Arc::new(move |window, cx| load(&path, (w, h), contain, window, cx)))).object_fit(fit)
+    img(ImageSource::Custom(Arc::new(move |window, cx| load(&path, rect, (w, h), contain, window, cx)))).object_fit(fit)
 }
 
 thread_local! {
@@ -70,17 +82,22 @@ fn side_for(natural: (u32, u32), bx: (f32, f32), contain: bool, scale: f32) -> u
     if side >= natural.0.max(natural.1) { 0 } else { side }
 }
 
-type Key = (PathBuf, u32);
+type Key = (PathBuf, Option<Rect>, u32);
 
 fn load(
     path: &Path,
+    rect: Option<Rect>,
     bx: (f32, f32),
     contain: bool,
     window: &mut Window,
     cx: &mut App,
 ) -> Option<Result<Arc<RenderImage>, ImageCacheError>> {
-    let side = image_size(path).map_or(0, |n| side_for(n, bx, contain, window.scale_factor()));
-    let key = (path.to_path_buf(), side);
+    let natural = match rect {
+        Some((_, _, w, h)) => Some((w, h)),
+        None => image_size(path),
+    };
+    let side = natural.map_or(0, |n| side_for(n, bx, contain, window.scale_factor()));
+    let key = (path.to_path_buf(), rect, side);
     let res = window.use_asset::<Scaled>(&key, cx)?;
     if let Ok(image) = &res {
         let cache = cx.default_global::<Cache>();
@@ -156,7 +173,7 @@ impl Asset for Scaled {
     #[allow(clippy::manual_async_fn)]
     fn load(source: Self::Source, _: &mut App) -> impl Future<Output = Self::Output> + Send + 'static {
         async move {
-            let image = decode(&source.0, source.1)?;
+            let image = decode(&source.0, source.1, source.2)?;
             if std::env::var_os("GEDROOTS_DEBUG_IMAGES").is_some() {
                 let s = image.size(0);
                 eprintln!("images : {} décodée en {}×{}", source.0.display(), s.width.0, s.height.0);
@@ -172,25 +189,35 @@ impl Asset for Scaled {
 const PARALLEL: usize = 1;
 static DECODING: (Mutex<usize>, Condvar) = (Mutex::new(0), Condvar::new());
 
-fn decode(path: &Path, side: u32) -> Result<RenderImage, ImageCacheError> {
+fn decode(path: &Path, rect: Option<Rect>, side: u32) -> Result<RenderImage, ImageCacheError> {
     let (lock, freed) = &DECODING;
     *freed.wait_while(lock.lock().unwrap(), |n| *n >= PARALLEL).unwrap() += 1;
-    let res = decode_now(path, side);
+    let res = decode_now(path, rect, side);
     *lock.lock().unwrap() -= 1;
     freed.notify_one();
     res
 }
 
-/// Décode comme GPUI (orientation EXIF, BGRA), réduit à `side` px sur le grand côté.
-fn decode_now(path: &Path, side: u32) -> Result<RenderImage, ImageCacheError> {
+/// Décode comme GPUI (orientation EXIF, BGRA), ne garde que `rect` s'il est donné,
+/// puis réduit à `side` px sur le grand côté.
+fn decode_now(path: &Path, rect: Option<Rect>, side: u32) -> Result<RenderImage, ImageCacheError> {
     use image::ImageDecoder;
     let mut decoder = image::ImageReader::open(path)?.with_guessed_format()?.into_decoder()?;
     let orientation = decoder.orientation()?;
     let mut image = image::DynamicImage::from_decoder(decoder)?;
-    if side > 0 && image.width().max(image.height()) > side {
-        image = image.thumbnail(side, side);
+    if let Some((x, y, w, h)) = rect {
+        // Le rectangle est donné sur l'image orientée.
+        image.apply_orientation(orientation);
+        image = image.crop_imm(x, y, w.max(1), h.max(1));
+        if side > 0 && image.width().max(image.height()) > side {
+            image = image.thumbnail(side, side);
+        }
+    } else {
+        if side > 0 && image.width().max(image.height()) > side {
+            image = image.thumbnail(side, side);
+        }
+        image.apply_orientation(orientation);
     }
-    image.apply_orientation(orientation);
     let mut data = image.into_rgba8();
     for pixel in data.as_chunks_mut::<4>().0 {
         pixel.swap(0, 2);
@@ -221,12 +248,17 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("large.png");
         image::RgbaImage::from_pixel(1200, 600, image::Rgba([10, 20, 30, 255])).save(&path).unwrap();
-        let small = decode(&path, 300).unwrap();
+        let small = decode(&path, None, 300).unwrap();
         assert_eq!((small.size(0).width.0, small.size(0).height.0), (300, 150));
         // BGRA, comme GPUI.
         assert_eq!(&small.as_bytes(0).unwrap()[..4], &[30, 20, 10, 255]);
-        let full = decode(&path, 0).unwrap();
+        let full = decode(&path, None, 0).unwrap();
         assert_eq!((full.size(0).width.0, full.size(0).height.0), (1200, 600));
+        // Zone seule (visage d'un portrait recadré), puis réduite.
+        let face = decode(&path, Some((100, 50, 400, 200)), 0).unwrap();
+        assert_eq!((face.size(0).width.0, face.size(0).height.0), (400, 200));
+        let face = decode(&path, Some((100, 50, 400, 200)), 256).unwrap();
+        assert_eq!((face.size(0).width.0, face.size(0).height.0), (256, 128));
         std::fs::remove_dir_all(&dir).ok();
     }
 }

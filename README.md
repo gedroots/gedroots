@@ -39,9 +39,27 @@ et suit le [design system GEDRoots](design.md) (fonds neutres et touches de viol
   sœurs, conjoints, enfants et petits-enfants survenus de son vivant. Chaque événement affiche ses médias (`2 OBJE`, GEDCOM 7 standard) :
   déposer des fichiers sur l'événement les y rattache, le clic droit permet d'en rattacher,
   de lier un média existant ou d'en détacher.
-- **Individus** : liste avec recherche sans accents ni casse et critères
-  (`né:1800-1850`, `mort:<1900`, `vécu:1870`, `lieu:troyes`, `prof:meunier`, `sexe:f`,
-  `sans:source`, `sans:parents`, `sans:mariage`, `avec:média`, `sosa:1-63`…), filtres rapides (Affichage › Filtrer la liste) ;
+- **Recherche** : un champ par liste, sans accents ni casse. Chaque critère complet devient
+  un jeton (« Né 1800–1850 », « Sans source ») et, pendant la frappe, des propositions tirées
+  du fichier (lieux, noms, professions, types d'actes, dépôts…) affichent leur nombre de
+  résultats (↑ ↓ ↵, Échap). Le compteur de la zone dans la barre latérale donne le nombre de
+  résultats. On tape des mots ordinaires : « 1850 » propose « Né en 1850 », « Né vers 1850 »
+  (± 5 ans), « Mort vers 1850 », « Vivant en 1850 » ; un prénom et un nom (« lucien guyot »)
+  proposent ses ascendants, descendants, conjoints, enfants, parents, frères et sœurs (aussi
+  dans Individu › Rechercher ses ascendants / descendants). Un clic sur un jeton règle la marge
+  des années (exactement, ± 2, ± 5, ± 10 ans) ou les variantes d'orthographe d'un nom (Guyot,
+  Guyau, Guillot ; clé phonétique française, `phonetic.rs`), et permet de le retirer.
+  Critères des individus : `né:1800-1850`, `né:1850±5`, `mort:<1900`, `vécu:1870`,
+  `lieu:troyes`, `nom:guyot` (variantes comprises ; `nom:=guyot` : exact), `prof:meunier`,
+  `sexe:f`, `ascendants:@I1@`, `descendants:@I1@`, `conjoints:@I1@`, `enfants:@I1@`,
+  `parents:@I1@`, `fratrie:@I1@`, `sans:source`, `sans:parents`, `sans:mariage`,
+  `avec:média`, `sosa:1-63`… ; des sources : `type:naissance`, `dépôt:…`, `sans:média`,
+  `sans:citation` ; des lieux : `dans:aube`, `sans:coordonnées` ; des médias :
+  `événement:naissance`, `pour:guyot`, `format:pdf`, `support:photo` (`MEDI`), `sans:lien`. Une valeur avec des espaces
+  s'écrit entre guillemets. Dans la zone Médias, une ligne de types (Tous · Actes ·
+  Portraits…) reprend les sous-dossiers des réglages, sinon les dossiers des fichiers, sinon
+  le support GEDCOM (`MEDI`) ; les liens web ont leur type.
+- **Individus** : filtres rapides (Affichage › Filtrer la liste) ;
   fiche avec portrait, galerie d'images, événements (dates en français, calendrier républicain compris), sources citées,
   famille (parents, conjoints, enfants) cliquable.
 - **Pas d'onglet Familles** : une union (`FAM`) se gère depuis la fiche de chacun des conjoints
@@ -156,6 +174,12 @@ et suit le [design system GEDRoots](design.md) (fonds neutres et touches de viol
   d'après l'âge, et toutes les citations avec leur rôle (`EVEN`/`ROLE`), sans aucune
   extension. Aperçu du GEDCOM avant d'écrire, et « Enregistrer et acte suivant » pour
   dépouiller un registre (le numéro de la référence avance tout seul).
+  Images ou PDF de l'acte : un média du fichier (« Média existant… », recherche par titre),
+  ou des fichiers déposés n'importe où sur l'éditeur (ou « Autre fichier… ») ; un fichier déjà
+  importé reprend son média, sans doublon ;
+  plusieurs fichiers font un seul média à plusieurs pages. À l'enregistrement, ils sont
+  nommés et rangés selon Réglages du fichier › Médias : copiés s'ils viennent d'ailleurs,
+  déplacés s'ils sont déjà dans le dossier et qu'aucun autre média ne les utilise.
 - Créer / supprimer un enregistrement (avec confirmation ; un lieu peut être retiré de tous
   les événements), annuler (50 niveaux), date de modification `CHAN`
   mise à jour comme dans Ancestris.
@@ -267,7 +291,8 @@ mise run app chemin/vers/arbre.ged
 
 Sans argument, l'app propose d'ouvrir un fichier ou d'en créer un nouveau.
 Raccourcis : `⌘O` / `Ctrl+O` ouvrir, `⌘S` / `Ctrl+S` enregistrer, `⌘N` nouveau,
-`⌘E` saisir un acte, `⌘⇧Z` annuler la dernière modification du document.
+`⌘E` saisir un acte, `⌘Z` / `Ctrl+Z` annuler la dernière modification du document, `⌘⇧Z` /
+`Ctrl+Y` (Windows) / `Ctrl+Maj+Z` (Linux) la rétablir, `⌘[` / `Alt+←` revenir à la fiche précédente.
 
 Variables d'environnement facultatives pour la carte : `GEDROOTS_OFFLINE=1` (démarrer hors ligne),
 `GEDROOTS_TILE_URL` (autre serveur de tuiles, `{z}/{x}/{y}`), `GEDROOTS_TILE_CACHE` (dossier du
@@ -278,7 +303,7 @@ cache, par défaut `~/Library/Caches/GEDRoots/tiles` ou `~/.cache/gedroots/tiles
 
 | Crate | Rôle |
 | --- | --- |
-| [`crates/gedcom`](crates/gedcom) | Lecture/écriture GEDCOM 7 sans perte, vues typées (individus, familles, sources, lieux, médias), recadrage `CROP` (`crop.rs`), médias multipages (`multipage.rs`), liens web (`weblink.rs`), assistant d'import (`import.rs`), préparation de l'export GEDZIP (`gedzip.rs`), formulaires d'édition, dates, coordonnées (`geo.rs`), outils d'analyse (`analysis/`), contrôles de la page Qualité (`quality.rs`), recherche (`search.rs`), ajout/liaison de proches et médias (`relations.rs`), descendance (`pedigree.rs`) et actes des sources (`act.rs`). Sans dépendance. |
+| [`crates/gedcom`](crates/gedcom) | Lecture/écriture GEDCOM 7 sans perte, vues typées (individus, familles, sources, lieux, médias), recadrage `CROP` (`crop.rs`), médias multipages (`multipage.rs`), liens web (`weblink.rs`), assistant d'import (`import.rs`), préparation de l'export GEDZIP (`gedzip.rs`), formulaires d'édition, dates, coordonnées (`geo.rs`), outils d'analyse (`analysis/`), contrôles de la page Qualité (`quality.rs`), recherche (`search.rs`, `query.rs`, `phonetic.rs`), ajout/liaison de proches et médias (`relations.rs`), descendance (`pedigree.rs`) et actes des sources (`act.rs`). Sans dépendance. |
 | [`crates/gedroots`](crates/gedroots) | Application GPUI : `commands.rs` (toutes les commandes, raccourcis et menus), `workspace.rs` (fenêtre et vues) et `workspace/` (`commands.rs` commandes et palette, `tree.rs` arbres, `relatives.rs` proches/sélecteur/médias, `add.rs` fenêtres d'ajout et de modification d'événement, `menus.rs` menus du clic droit, `photo.rs` recadrage et personnes sur les photos, `pages.rs` médias multipages et fusion, `weblinks.rs` liens web, `import.rs` assistant d'import, `export.rs` export GEDZIP, `filters.rs` filtres rapides, `quality.rs` page Qualité, `insights.rs` page Statistiques et lien de parenté), `editor.rs` (éditeurs visuel et brut), `act_editor.rs` (éditeur d'acte), `gedzip.rs` (écriture de l'archive `.gdz`), `map.rs` (carte des lieux), `theme.rs` (palette de la maquette). |
 
 ## Tests

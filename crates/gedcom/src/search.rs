@@ -10,19 +10,25 @@
 //! | Critère | Effet |
 //! | --- | --- |
 //! | texte libre | chaque mot doit apparaître dans un nom (prénoms, nom, noms alternatifs), sans tenir compte des accents ni de la casse |
-//! | `né:1850`, `né:1800-1850`, `né:<1800`, `né:>1900` | année de naissance (ou baptême) |
+//! | `né:1850`, `né:1800-1850`, `né:<1800`, `né:>1900`, `né:1850±5` | année de naissance (ou baptême) ; `±` : à quelques années près |
 //! | `mort:…` / `décès:…` | année de décès (ou inhumation) |
 //! | `vécu:1870` | en vie cette année-là (d'après naissance/décès connus) |
 //! | `lieu:troyes` | un événement de la personne a eu lieu à cet endroit |
 //! | `prof:meunier` | profession (`OCCU`) |
+//! | `nom:guyot` | nom de famille, variantes d'orthographe comprises (Guyau, Guillot) ; `nom:=guyot` : orthographe exacte |
+//! | `conjoints:@I1@`, `enfants:@I1@`, `parents:@I1@`, `fratrie:@I1@` | proches d'une personne |
+//! | `ascendants:@I1@`, `descendants:@I1@` | ascendance ou descendance complète d'une personne |
 //! | `sexe:h` / `sexe:f` / `sexe:?` | sexe (h/m = homme, f = femme, ? = inconnu) |
 //! | `sans:source`, `sans:parents`, `sans:date`, `sans:famille`, `sans:média` | ce qui manque |
 //! | `sans:mariage` | a une union sans mariage (`MARR`) |
 //! | `avec:média`, `avec:note`, `avec:source`, `avec:mariage` | ce qui est présent |
-//! | `sosa`, `sosa:1-63` | porte un numéro Sosa (ascendant du de cujus) |
+//! | `sosa`, `sosa:1-63` | porte un numéro Sosa (ascendant de la personne racine) |
 //! | `id:I00012` ou `@I00012@` | identifiant GEDCOM (recherche avancée) |
 //!
 //! Les clés acceptent aussi leur forme sans accent (`ne:`, `deces:`, `media`).
+
+use std::cell::OnceCell;
+use std::collections::HashSet;
 
 use crate::document::Gedcom;
 use crate::model::{Individual, sort_key};
@@ -35,8 +41,13 @@ pub struct YearRange {
 }
 
 impl YearRange {
-    fn parse(s: &str) -> Option<Self> {
+    pub(crate) fn parse(s: &str) -> Option<Self> {
         let s = s.trim();
+        // « 1850±5 » (ou « 1850~5 ») : de 1845 à 1855.
+        if let Some((y, m)) = s.split_once(['±', '~']) {
+            let (y, m) = (y.trim().parse::<i32>().ok()?, m.trim().parse::<i32>().ok()?.abs());
+            return Some(Self { from: Some(y - m), to: Some(y + m) });
+        }
         if let Some(r) = s.strip_prefix('<') {
             return Some(Self { from: None, to: Some(r.trim().parse::<i32>().ok()? - 1) });
         }
@@ -112,6 +123,118 @@ impl Feature {
     }
 }
 
+/// Proches d'une personne (`ascendants:@I1@`…).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Kin {
+    Spouses,
+    Children,
+    Parents,
+    Siblings,
+    Ancestors,
+    Descendants,
+}
+
+impl Kin {
+    pub const ALL: [Kin; 6] =
+        [Kin::Ancestors, Kin::Descendants, Kin::Spouses, Kin::Children, Kin::Parents, Kin::Siblings];
+
+    pub(crate) fn parse(key: &str) -> Option<Self> {
+        Some(match key {
+            "conjoint" | "conjoints" | "epoux" => Kin::Spouses,
+            "enfant" | "enfants" => Kin::Children,
+            "parent" | "parents" => Kin::Parents,
+            "fratrie" | "frere" | "freres" | "soeur" | "soeurs" => Kin::Siblings,
+            "ascendant" | "ascendants" | "ancetres" => Kin::Ancestors,
+            "descendant" | "descendants" => Kin::Descendants,
+            _ => return None,
+        })
+    }
+
+    /// Clé du critère.
+    pub fn key(self) -> &'static str {
+        match self {
+            Kin::Spouses => "conjoints",
+            Kin::Children => "enfants",
+            Kin::Parents => "parents",
+            Kin::Siblings => "fratrie",
+            Kin::Ancestors => "ascendants",
+            Kin::Descendants => "descendants",
+        }
+    }
+
+    /// « Ascendants de » : suivi du nom de la personne.
+    pub fn label(self) -> &'static str {
+        match self {
+            Kin::Spouses => "Conjoints de",
+            Kin::Children => "Enfants de",
+            Kin::Parents => "Parents de",
+            Kin::Siblings => "Frères et sœurs de",
+            Kin::Ancestors => "Ascendants de",
+            Kin::Descendants => "Descendants de",
+        }
+    }
+}
+
+impl Gedcom {
+    /// Proches d'une personne (sans elle-même).
+    pub fn kin(&self, kin: Kin, xref: &str) -> HashSet<String> {
+        let parents_of = |x: &str| -> Vec<String> {
+            let Some(i) = self.individual(x) else { return vec![] };
+            i.famc()
+                .into_iter()
+                .filter_map(|f| self.family(f))
+                .flat_map(|f| [f.husband(), f.wife()])
+                .flatten()
+                .map(str::to_string)
+                .collect()
+        };
+        let children_of = |x: &str| -> Vec<String> {
+            let Some(i) = self.individual(x) else { return vec![] };
+            i.fams().into_iter().filter_map(|f| self.family(f)).flat_map(|f| f.children()).map(str::to_string).collect()
+        };
+        let mut out: HashSet<String> = HashSet::new();
+        match kin {
+            Kin::Spouses => {
+                if let Some(i) = self.individual(xref) {
+                    for f in i.fams().into_iter().filter_map(|f| self.family(f)) {
+                        out.extend([f.husband(), f.wife()].into_iter().flatten().map(str::to_string));
+                    }
+                }
+            }
+            Kin::Children => out.extend(children_of(xref)),
+            Kin::Parents => out.extend(parents_of(xref)),
+            Kin::Siblings => {
+                if let Some(i) = self.individual(xref) {
+                    for f in i.famc().into_iter().filter_map(|f| self.family(f)) {
+                        out.extend(f.children().into_iter().map(str::to_string));
+                    }
+                }
+            }
+            Kin::Ancestors | Kin::Descendants => {
+                let next = |x: &str| if kin == Kin::Ancestors { parents_of(x) } else { children_of(x) };
+                let mut todo = next(xref);
+                while let Some(x) = todo.pop() {
+                    if out.insert(x.clone()) {
+                        todo.extend(next(&x));
+                    }
+                }
+            }
+        }
+        out.remove(xref);
+        out
+    }
+}
+
+/// Proches déjà calculés pour une requête (ignoré dans les comparaisons).
+#[derive(Debug, Clone, Default)]
+pub struct KinCache(OnceCell<Vec<HashSet<String>>>);
+
+impl PartialEq for KinCache {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
+
 /// Requête analysée.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct IndividualQuery {
@@ -122,6 +245,13 @@ pub struct IndividualQuery {
     pub alive_in: Option<i32>,
     pub place: Option<String>,
     pub occupation: Option<String>,
+    /// Nom de famille (`nom:`), normalisé.
+    pub surname: Option<String>,
+    /// `nom:=…` : sans les variantes d'orthographe.
+    pub surname_exact: bool,
+    /// Proches d'une personne (`ascendants:@I1@`).
+    pub kin: Vec<(Kin, String)>,
+    kin_sets: KinCache,
     /// `M`, `F` ou `U`.
     pub sex: Option<char>,
     pub without: Vec<Feature>,
@@ -135,7 +265,7 @@ pub struct IndividualQuery {
 impl IndividualQuery {
     pub fn parse(q: &str) -> Self {
         let mut out = Self::default();
-        for tok in q.split_whitespace() {
+        for (_, tok) in crate::query::words(q) {
             if tok.len() > 2 && tok.starts_with('@') && tok.ends_with('@') {
                 out.xref = Some(tok.trim_matches('@').to_string());
                 continue;
@@ -146,9 +276,10 @@ impl IndividualQuery {
                 continue;
             }
             let Some((key, val)) = tok.split_once(':') else {
-                out.words.push(sort_key(tok));
+                out.words.push(sort_key(crate::query::unquote(tok)));
                 continue;
             };
+            let val = crate::query::unquote(val);
             let ok = match sort_key(key).as_str() {
                 "ne" | "nee" | "naissance" | "n" => YearRange::parse(val).map(|r| out.born = Some(r)).is_some(),
                 "mort" | "morte" | "deces" | "d" => YearRange::parse(val).map(|r| out.died = Some(r)).is_some(),
@@ -156,6 +287,13 @@ impl IndividualQuery {
                 "lieu" | "a" => {
                     out.place = Some(sort_key(val));
                     !val.is_empty()
+                }
+                "nom" => {
+                    let exact = val.strip_prefix('=');
+                    out.surname_exact = exact.is_some();
+                    let v = exact.unwrap_or(val).trim();
+                    out.surname = Some(sort_key(v));
+                    !v.is_empty()
                 }
                 "prof" | "profession" | "metier" => {
                     out.occupation = Some(sort_key(val));
@@ -183,11 +321,18 @@ impl IndividualQuery {
                     out.xref = Some(val.trim_matches('@').to_string());
                     !val.is_empty()
                 }
-                // « 1 rue de la Paix » n'est pas un critère : on garde le mot tel quel.
-                _ => {
-                    out.words.push(sort_key(tok));
-                    true
-                }
+                k => match Kin::parse(k) {
+                    Some(kin) => {
+                        let x = val.trim_matches('@');
+                        out.kin.push((kin, x.to_string()));
+                        !x.is_empty()
+                    }
+                    // « 1 rue de la Paix » n'est pas un critère : on garde le mot tel quel.
+                    None => {
+                        out.words.push(sort_key(crate::query::unquote(tok)));
+                        true
+                    }
+                },
             };
             if !ok {
                 out.unknown.push(tok.to_string());
@@ -220,6 +365,18 @@ impl IndividualQuery {
                 }
             }
             if !self.words.iter().all(|w| names.contains(w.as_str())) {
+                return false;
+            }
+        }
+        if let Some(n) = &self.surname {
+            let s = sort_key(&i.surname());
+            if !s.contains(n.as_str()) && (self.surname_exact || !crate::phonetic::similar(&s, n)) {
+                return false;
+            }
+        }
+        if !self.kin.is_empty() {
+            let sets = self.kin_sets.0.get_or_init(|| self.kin.iter().map(|(k, x)| g.kin(*k, x)).collect());
+            if !sets.iter().all(|s| s.contains(i.xref())) {
                 return false;
             }
         }

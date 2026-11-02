@@ -24,6 +24,7 @@ actions!(
         Quit,
         // Édition
         Undo,
+        Redo,
         DeleteRecord,
         CopyId,
         CopyName,
@@ -43,6 +44,8 @@ actions!(
         LinkChild,
         LinkSibling,
         GoToRoot,
+        SearchAncestors,
+        SearchDescendants,
         AttachFiles,
         LinkMedia,
         CropMedia,
@@ -99,7 +102,6 @@ actions!(
         FilterNoMarriage,
         FilterWithMedia,
         ClearSearch,
-        ToggleSearchHelp,
         // Aide
         CommandPalette,
     ]
@@ -129,15 +131,18 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new(shortcut!("s"), SaveFile, None),
         KeyBinding::new(shortcut!("shift-s"), SaveFileAs, WS),
         KeyBinding::new(shortcut!("q"), Quit, None),
-        KeyBinding::new(shortcut!("shift-z"), Undo, WS),
+        KeyBinding::new(shortcut!("z"), Undo, WS),
+        // Rétablir : ⌘⇧Z (macOS), Ctrl+Y (Windows), Ctrl+Maj+Z (Linux).
+        KeyBinding::new(if cfg!(target_os = "windows") { "ctrl-y" } else { shortcut!("shift-z") }, Redo, WS),
         KeyBinding::new(shortcut!("shift-n"), NewIndividual, WS),
         KeyBinding::new(shortcut!("f"), FocusSearch, WS),
         KeyBinding::new(shortcut!("e"), EnterRecord, WS),
         KeyBinding::new(shortcut!("shift-h"), GoToRoot, WS),
         KeyBinding::new(shortcut!("shift-p"), CommandPalette, WS),
         KeyBinding::new(shortcut!(","), OpenFileSettings, WS),
-        KeyBinding::new(shortcut!("["), GoBack, WS),
-        KeyBinding::new(shortcut!("]"), GoForward, WS),
+        // Précédent / suivant : ⌘[ ⌘] (macOS), Alt+← Alt+→ (Windows, Linux).
+        KeyBinding::new(if cfg!(target_os = "macos") { "cmd-[" } else { "alt-left" }, GoBack, WS),
+        KeyBinding::new(if cfg!(target_os = "macos") { "cmd-]" } else { "alt-right" }, GoForward, WS),
         // Les quatre zones de la barre latérale, puis les listes et pages du menu Affichage.
         KeyBinding::new(shortcut!("1"), ShowIndividuals, WS),
         KeyBinding::new(shortcut!("2"), ShowSources, WS),
@@ -262,6 +267,7 @@ fn model_with(recents: &[std::path::PathBuf]) -> Vec<(&'static str, Vec<Item>)> 
         "Édition",
         vec![
             a("Annuler la modification", Undo),
+            a("Rétablir la modification", Redo),
             Sep,
             Item::Os("Couper", Box::new(input::Cut), OsAction::Cut),
             Item::Os("Copier", Box::new(input::Copy), OsAction::Copy),
@@ -309,6 +315,8 @@ fn model_with(recents: &[std::path::PathBuf]) -> Vec<(&'static str, Vec<Item>)> 
             Sep,
             a(label::GO_TO_ROOT, GoToRoot),
             a("Lien de parenté avec…", KinshipWith),
+            a("Rechercher ses ascendants", SearchAncestors),
+            a("Rechercher ses descendants", SearchDescendants),
         ],
     ));
     // Dépôts et notes partagées hors de la barre latérale : on les crée depuis le menu Source.
@@ -405,10 +413,7 @@ fn model_with(recents: &[std::path::PathBuf]) -> Vec<(&'static str, Vec<Item>)> 
             ),
         ],
     ));
-    menus.push((
-        "Aide",
-        vec![a("Toutes les commandes…", CommandPalette), a("Aide de la recherche avancée", ToggleSearchHelp)],
-    ));
+    menus.push(("Aide", vec![a("Toutes les commandes…", CommandPalette)]));
     menus
 }
 

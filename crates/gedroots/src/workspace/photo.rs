@@ -8,7 +8,7 @@
 use super::relatives::PickPurpose;
 use super::*;
 pub(super) use crate::images::image_size;
-use crate::images::picture;
+use crate::images::{picture, picture_region};
 use std::cell::Cell;
 use std::path::Path;
 
@@ -16,34 +16,18 @@ use std::path::Path;
 const MAX_W: f32 = 1600.;
 const MAX_H: f32 = 900.;
 
-/// La zone `rect` de l'image, mise à l'échelle dans une boîte `w × h`.
-/// `cover` : remplit la boîte (en rognant), sinon la zone y tient entière.
-pub(super) fn cropped_img(path: PathBuf, size: (u32, u32), rect: Rect, w: f32, h: f32, cover: bool) -> Div {
-    let (x, y, rw, rh) = (rect.0 as f32, rect.1 as f32, rect.2 as f32, rect.3 as f32);
-    let s = if cover { (w / rw).max(h / rh) } else { (w / rw).min(h / rh) };
-    // Centre la zone dans la boîte.
-    let (ox, oy) = ((w - rw * s) / 2., (h - rh * s) / 2.);
-    div().relative().overflow_hidden().w(px(w)).h(px(h)).flex_none().child(
-        picture(path, size.0 as f32 * s, size.1 as f32 * s, ObjectFit::Fill)
-            .absolute()
-            .left(px(ox - x * s))
-            .top(px(oy - y * s))
-            .w(px(size.0 as f32 * s))
-            .h(px(size.1 as f32 * s)),
-    )
-}
-
-/// Image d'un lien, recadrée si le lien porte un `CROP` (boîte `w × h`, en remplissage).
-pub(super) fn linked_img(path: PathBuf, crop: Option<Crop>, w: f32, h: f32, cover: bool) -> AnyElement {
-    match crop.zip(image_size(&path)).and_then(|(c, size)| c.rect(size.0, size.1).map(|r| (r, size))) {
-        Some((r, size)) if !Crop::from_rect(r).is_full(size.0, size.1) => {
-            cropped_img(path, size, r, w, h, cover).into_any_element()
-        }
-        _ => picture(path, w, h, if cover { ObjectFit::Cover } else { ObjectFit::Contain })
-            .w(px(w))
-            .h(px(h))
-            .into_any_element(),
+/// Image d'un lien, recadrée si le lien porte un `CROP` (boîte `w × h`).
+/// `cover` : remplit la boîte (en rognant), sinon l'image ou la zone y tient entière.
+/// Seule la zone est décodée : l'élément se cadre et s'arrondit comme une image entière.
+pub(super) fn linked_img(path: PathBuf, crop: Option<Crop>, w: f32, h: f32, cover: bool) -> Img {
+    let fit = if cover { ObjectFit::Cover } else { ObjectFit::Contain };
+    let region = crop.zip(image_size(&path)).and_then(|(c, size)| c.rect(size.0, size.1).map(|r| (r, size)));
+    match region {
+        Some((r, size)) if !Crop::from_rect(r).is_full(size.0, size.1) => picture_region(path, r, w, h, fit),
+        _ => picture(path, w, h, fit),
     }
+    .w(px(w))
+    .h(px(h))
 }
 
 /// Zone recadrée seule, à sa propre proportion, dans au plus `max_w × max_h`.
