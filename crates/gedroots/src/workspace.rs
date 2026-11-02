@@ -175,7 +175,11 @@ struct Row {
 
 struct Document {
     ged: Gedcom,
+    /// File of the tree; media paths are relative to its folder.
     path: Option<PathBuf>,
+    /// Opened by File › Import: `path` is the imported file (or, for a GEDZIP, where the unzipped
+    /// tree would be saved), which Save never overwrites without asking where.
+    imported: bool,
     dirty: bool,
     dirty_before_checkpoint: bool,
     /// Previous states, for Undo (the last one is the most recent).
@@ -184,6 +188,31 @@ struct Document {
     future: Vec<Gedcom>,
     /// `future` as it was before the last restore point, given back if it is abandoned.
     future_before_checkpoint: Vec<Gedcom>,
+}
+
+impl Document {
+    /// Name shown in the title bar: the file name, without its extension for an imported tree
+    /// (not saved yet, like an untitled one).
+    fn title(&self) -> String {
+        let name = match self.imported {
+            true => self.path.as_ref().and_then(|p| p.file_stem()),
+            false => self.path.as_ref().and_then(|p| p.file_name()),
+        };
+        name.map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| t!("ws.untitled").into())
+    }
+}
+
+/// Folder and name proposed by Save for a tree not saved yet: next to the imported file, under a
+/// name that does not replace it (`export copy.ged`); otherwise in the home folder.
+fn save_as_default(imported: Option<&std::path::Path>) -> (PathBuf, String) {
+    let Some(p) = imported else { return (dirs_home(), format!("{}.ged", t!("file.default_name"))) };
+    let dir = p.parent().map(std::path::Path::to_path_buf).unwrap_or_else(dirs_home);
+    let stem = p.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| t!("file.default_name").into());
+    let name = match p.exists() {
+        true => t!("file.copy_name", name = stem).into_owned(),
+        false => stem,
+    };
+    (dir, format!("{name}.ged"))
 }
 
 pub struct Workspace {
@@ -401,32 +430,50 @@ impl Workspace {
     }
 
     fn load(&mut self, path: PathBuf, window: &mut Window, cx: &mut Context<Self>) {
+        if import::is_gedzip(&path) {
+            return self.import_path(path, window, cx);
+        }
         match gedcom::load(&path) {
             Ok(ged) => {
                 crate::recent::add(&path, cx);
-                let first = ged.root();
-                self.doc = Some(Document {
-                    ged,
-                    path: Some(path),
-                    dirty: false,
-                    dirty_before_checkpoint: false,
-                    history: Vec::new(),
-                    future: Vec::new(),
-                    future_before_checkpoint: Vec::new(),
-                });
-                self.view = View::Individuals;
-                self.selected = None;
-                self.reset_history();
-                self.rescan_media();
-                self.rebuild_rows(cx);
-                if let Some(x) = first {
-                    self.select(x, window, cx);
-                }
+                self.set_document(ged, Some(path), false, window, cx);
                 self.status = None;
             }
             Err(e) => self.set_error("ws.open_failed", t!("ws.open_failed", path = path.display(), error = e)),
         }
         cx.notify();
+    }
+
+    /// Shows `ged` in place of the open document. An imported or new tree (`path` none) starts with
+    /// changes to save.
+    fn set_document(
+        &mut self,
+        ged: Gedcom,
+        path: Option<PathBuf>,
+        imported: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let first = ged.root();
+        let dirty = imported || path.is_none();
+        self.doc = Some(Document {
+            ged,
+            path,
+            imported,
+            dirty,
+            dirty_before_checkpoint: dirty,
+            history: Vec::new(),
+            future: Vec::new(),
+            future_before_checkpoint: Vec::new(),
+        });
+        self.view = View::Individuals;
+        self.selected = None;
+        self.reset_history();
+        self.rescan_media();
+        self.rebuild_rows(cx);
+        if let Some(x) = first {
+            self.select(x, window, cx);
+        }
     }
 
     fn new_file(&mut self, _: &NewFile, window: &mut Window, cx: &mut Context<Self>) {
@@ -452,11 +499,10 @@ impl Workspace {
 
     fn save_file(&mut self, _: &SaveFile, window: &mut Window, cx: &mut Context<Self>) {
         let Some(doc) = &self.doc else { return };
-        match doc.path.clone() {
+        match doc.path.clone().filter(|_| !doc.imported) {
             Some(p) => self.write_to(p, cx),
             None => {
-                let dir = dirs_home();
-                let name = format!("{}.ged", t!("file.default_name"));
+                let (dir, name) = save_as_default(doc.path.as_deref());
                 let rx = cx.prompt_for_new_path(&dir, Some(&name));
                 cx.spawn_in(window, async move |this, cx| {
                     if let Ok(Ok(Some(p))) = rx.await {
@@ -473,10 +519,11 @@ impl Workspace {
         doc.ged.stamp_header();
         match gedcom::save(&doc.ged, &path) {
             Ok(()) => {
-                if doc.path.as_ref() != Some(&path) {
+                if doc.imported || doc.path.as_ref() != Some(&path) {
                     crate::recent::add(&path, cx);
                 }
                 doc.path = Some(path.clone());
+                doc.imported = false;
                 doc.dirty = false;
                 self.rescan_media();
                 self.set_status(t!("ws.saved", path = path.display()), false);
@@ -1395,12 +1442,7 @@ impl Workspace {
     fn render_header(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let mac = cfg!(target_os = "macos");
         let title = self.doc.as_ref().map(|d| {
-            let name = d
-                .path
-                .as_ref()
-                .and_then(|p| p.file_name())
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_else(|| t!("ws.untitled").into());
+            let name = d.title();
             if d.dirty { format!("{name} •") } else { name }
         });
         h_flex()
@@ -2924,15 +2966,7 @@ impl Render for Workspace {
         }
         self.search_focused = focused;
         let title = match &self.doc {
-            Some(d) => format!(
-                "{}{} — GEDRoots",
-                d.path
-                    .as_ref()
-                    .and_then(|p| p.file_name())
-                    .map(|n| n.to_string_lossy().to_string())
-                    .unwrap_or_else(|| t!("ws.untitled").into()),
-                if d.dirty { " •" } else { "" }
-            ),
+            Some(d) => format!("{}{} — GEDRoots", d.title(), if d.dirty { " •" } else { "" }),
             None => "GEDRoots".into(),
         };
         if title != self.window_title {

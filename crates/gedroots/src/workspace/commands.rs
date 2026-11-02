@@ -293,15 +293,14 @@ impl Workspace {
 
     fn save_file_as(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(doc) = &self.doc else { return };
-        let (dir, name) = match &doc.path {
+        let (dir, name) = match doc.path.as_deref().filter(|_| !doc.imported) {
             Some(p) => (
                 p.parent().map(|p| p.to_path_buf()).unwrap_or_else(dirs_home),
-                p.file_name().map(|n| n.to_string_lossy().to_string()),
+                p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default(),
             ),
-            None => (dirs_home(), None),
+            None => save_as_default(doc.path.as_deref()),
         };
-        let rx =
-            cx.prompt_for_new_path(&dir, Some(name.as_deref().unwrap_or(&format!("{}.ged", t!("file.default_name")))));
+        let rx = cx.prompt_for_new_path(&dir, Some(&name));
         cx.spawn_in(window, async move |this, cx| {
             if let Ok(Ok(Some(p))) = rx.await {
                 let _ = this.update_in(cx, |this, _, cx| this.write_to(p, cx));

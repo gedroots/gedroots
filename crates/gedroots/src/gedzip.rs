@@ -1,4 +1,5 @@
-//! Writing a GEDZIP archive (`.gdz`) prepared by `gedcom::gedzip::pack`.
+//! Writing a GEDZIP archive (`.gdz`) prepared by `gedcom::gedzip::pack`, and unzipping one for
+//! File › Import ([`extract`]).
 //!
 //! The archive is first written next to the destination (`.part`), then renamed: an interrupted
 //! export never leaves an incomplete archive in place of a good one. The dataset and text files are
@@ -78,6 +79,51 @@ fn date_time(t: SystemTime) -> DateTime {
     DateTime::from_date_and_time(year, month, day, h, m, s).unwrap_or_default()
 }
 
+/// Folder next to `archive` to unzip it into: its name without the extension, numbered if a
+/// folder of that name already holds something (`tree 2`).
+pub fn extraction_folder(archive: &Path) -> PathBuf {
+    let dir = archive.parent().map(Path::to_path_buf).unwrap_or_default();
+    let stem = archive.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "gedzip".into());
+    let free = |p: &Path| std::fs::read_dir(p).map(|mut d| d.next().is_none()).unwrap_or(!p.exists());
+    (1..).map(|n| dir.join(if n == 1 { stem.clone() } else { format!("{stem} {n}") })).find(|p| free(p)).unwrap()
+}
+
+/// Unzips the GEDZIP `archive` into `dest`: returns the text of its `gedcom.ged`, which is not
+/// written to the disk, and the number of files unzipped. Entries whose name would leave `dest`
+/// (`../`, absolute) and `META-INF/` are skipped.
+pub fn extract(archive: &Path, dest: &Path) -> Result<(String, usize), String> {
+    let at = |p: &Path, e: &dyn std::fmt::Display| format!("{} : {e}", p.display());
+    let file = File::open(archive).map_err(|e| at(archive, &e))?;
+    let mut zip = zip::ZipArchive::new(io::BufReader::new(file)).map_err(|e| at(archive, &e))?;
+    let mut dataset = None;
+    let mut count = 0;
+    for i in 0..zip.len() {
+        let mut entry = zip.by_index(i).map_err(|e| at(archive, &e))?;
+        if entry.is_dir() {
+            continue;
+        }
+        let Some(name) = entry.enclosed_name() else { continue };
+        if name == Path::new(gedcom::gedzip::DATASET) {
+            let mut text = String::new();
+            io::Read::read_to_string(&mut entry, &mut text).map_err(|e| at(archive, &e))?;
+            dataset = Some(text);
+            continue;
+        }
+        if name.starts_with("META-INF") {
+            continue;
+        }
+        let path = dest.join(name);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| at(parent, &e))?;
+        }
+        let mut out = File::create(&path).map_err(|e| at(&path, &e))?;
+        io::copy(&mut entry, &mut out).map_err(|e| at(&path, &e))?;
+        count += 1;
+    }
+    let dataset = dataset.ok_or_else(|| rust_i18n::t!("import.no_dataset").into_owned())?;
+    Ok((dataset, count))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -120,5 +166,25 @@ mod tests {
         let d = date_time(t);
         assert_eq!((d.year(), d.month(), d.day(), d.hour(), d.minute()), (2026, 11, 2, 9, 39));
         assert_eq!(date_time(UNIX_EPOCH).year(), 1980);
+    }
+
+    #[test]
+    fn extracts_files_but_not_the_dataset() {
+        let dir = std::env::temp_dir().join(format!("gedroots-unzip-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let photo = dir.join("p.jpg");
+        std::fs::write(&photo, [1, 2, 3]).unwrap();
+        let archive = dir.join("Family tree.gdz");
+        let entries = [Entry { name: "Actes/naissance Jean.jpg".into(), source: photo }];
+        write(&archive, "0 HEAD\n0 TRLR\n", &entries).unwrap();
+        std::fs::create_dir_all(dir.join("Family tree")).unwrap();
+        std::fs::write(dir.join("Family tree").join("x"), "").unwrap();
+        let dest = extraction_folder(&archive);
+        assert_eq!(dest, dir.join("Family tree 2"), "a folder that holds something is not reused");
+        let (text, n) = extract(&archive, &dest).unwrap();
+        assert_eq!((text.as_str(), n), ("0 HEAD\n0 TRLR\n", 1));
+        assert_eq!(std::fs::read(dest.join("Actes").join("naissance Jean.jpg")).unwrap(), [1, 2, 3]);
+        assert!(!dest.join("gedcom.ged").exists());
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

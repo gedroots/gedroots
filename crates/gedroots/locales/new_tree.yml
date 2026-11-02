@@ -11,8 +11,8 @@ welcome:
     en: Import From Another App…
     fr: Importer depuis un autre logiciel…
   import_formats:
-    en: GEDCOM 5.5.1
-    fr: GEDCOM 5.5.1
+    en: GEDCOM 5.5.1 · GEDZIP
+    fr: GEDCOM 5.5.1 · GEDZIP
 new_tree:
   title:
     en: New Tree

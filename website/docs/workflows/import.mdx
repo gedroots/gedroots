@@ -3,25 +3,25 @@ title: Bring in a tree from other software
 description: Move your research from Ancestris, Heredis, RootsMagic, Gramps or any program that exports GEDCOM, without losing data.
 ---
 
-GEDRoots works directly on GEDCOM files, so there is nothing to convert into a private format. You export your tree from your current software, then open the file in GEDRoots.
-
-:::tip
-Work on a copy of your file the first time. Keep the original export untouched until you're happy with the result.
-:::
+GEDRoots works directly on GEDCOM files, so there is nothing to convert into a private format. You export your tree from your current software, then import the file in GEDRoots.
 
 ## Export from your current software
 
-In your current program, look for an **Export GEDCOM** command. If it offers several versions, choose **GEDCOM 7**. GEDRoots is built on GEDCOM 7: its checks and editors follow the version 7 rules.
+In your current program, look for an **Export GEDCOM** command. If it offers several versions, choose **GEDCOM 7**. GEDRoots is built on GEDCOM 7: its checks and editors follow the version 7 rules. If it offers **GEDZIP**, choose it: the archive holds the tree and its media files together.
 
-Put the `.ged` file in the folder that holds your scans and photos. Media paths in a GEDCOM file are usually relative to the file, so GEDRoots finds the images when they keep the same place relative to it.
+For a `.ged` file, put it in the folder that holds your scans and photos. Media paths in a GEDCOM file are usually relative to the file, so GEDRoots finds the images when they keep the same place relative to it.
 
 ## Import the file
 
-1. Select **File › Import GEDCOM…**, or click **Import From Another App…** on the welcome screen, and choose the file.
-2. GEDRoots lists what the file contains that isn't standard GEDCOM 7, with the number of items and what each will become.
-3. Click **Normalize** to convert them, or **Keep As Is** to open the file unchanged.
+1. Select **File › Import GEDCOM…**, or click **Import From Another App…** on the welcome screen, and choose the `.ged` or `.gdz` file.
+2. If the file doesn't say who the **root person** is, choose them: usually yourself, or the person the research starts from. GEDRoots suggests the Sosa 1 that Ancestris declares, or else the first person in the file.
+3. GEDRoots lists what the file contains that isn't standard GEDCOM 7, with the number of items and what each will become. Click **Normalize** to convert them, or **Keep As Is** to leave them unchanged.
 
 The conversion is a single change: **Edit › Undo** reverts all of it.
+
+The imported tree isn't saved yet: its name in the title bar has no extension. The first **File › Save** (<kbd>⌘S</kbd> / <kbd>Ctrl+S</kbd>) asks where to save it, next to the imported file and under another name, so the export from your other software is never overwritten.
+
+A GEDZIP archive is unzipped into a folder next to it, named after the archive (`Family tree.gdz` gives `Family tree/`). Its media files go there, and Save suggests that folder for the tree.
 
 ### What the import assistant converts
 
@@ -41,7 +41,7 @@ Everything else is kept exactly as it was, including tags that GEDRoots doesn't 
 
 After a first import, open **View › Data Quality** (<kbd>⌘7</kbd> / <kbd>Ctrl+7</kbd>). It lists what other software may have left behind: broken links between families, media files that moved, the same town written three different ways. See [Check and clean your data](/workflows/quality).
 
-Then set the **root person** in **File › File Settings… › General**, if it isn't the one GEDRoots picked. Without a root person declared in the file, GEDRoots uses the Sosa 1 that Ancestris declares, or else the first person in the file.
+You can change the root person later in **File › File Settings… › General**.
 
 ## Related pages
 

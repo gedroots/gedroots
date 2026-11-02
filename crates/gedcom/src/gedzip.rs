@@ -15,6 +15,9 @@
 //!   `META-INF/…`) are avoided.
 //!
 //! Web links (`FILE https://…`) stay as they are.
+//!
+//! [`unpack`] does the reverse on an imported archive, once its files are unzipped next to the
+//! dataset: `FILE` values become plain relative paths again.
 
 use crate::Gedcom;
 use std::collections::{HashMap, HashSet};
@@ -183,4 +186,46 @@ pub fn escape(name: &str) -> String {
         }
     }
     out
+}
+
+/// Reverse of [`escape`]: decodes `%XX` sequences. An invalid sequence is kept as is.
+pub fn unescape(value: &str) -> String {
+    let bytes = value.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        let hex = bytes.get(i + 1..i + 3).and_then(|h| std::str::from_utf8(h).ok());
+        match hex.filter(|_| bytes[i] == b'%').and_then(|h| u8::from_str_radix(h, 16).ok()) {
+            Some(b) => {
+                out.push(b);
+                i += 3;
+            }
+            None => {
+                out.push(bytes[i]);
+                i += 1;
+            }
+        }
+    }
+    String::from_utf8(out).unwrap_or_else(|_| value.to_string())
+}
+
+/// Dataset of an imported archive whose files were unzipped next to it: local `FILE` values,
+/// escaped in the archive, become the plain relative paths that the files have on the disk.
+/// Returns the number of values changed.
+pub fn unpack(g: &mut Gedcom) -> usize {
+    let mut changed = 0;
+    for r in g.records.iter_mut().filter(|r| r.tag == "OBJE") {
+        if !r.children.iter().any(|c| c.tag == "FILE" && is_local(c.val()) && c.val().contains('%')) {
+            continue;
+        }
+        let r = std::sync::Arc::make_mut(r);
+        for f in r.children.iter_mut().filter(|c| c.tag == "FILE" && is_local(c.val())) {
+            let plain = unescape(f.val().trim());
+            if plain != f.val() {
+                f.value = Some(plain);
+                changed += 1;
+            }
+        }
+    }
+    changed
 }
