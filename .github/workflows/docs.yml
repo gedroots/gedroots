@@ -14,16 +14,18 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      # Only Bun (website/mise.toml) is needed, not the Rust toolchain.
+      MISE_DISABLE_TOOLS: rust
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: jdx/mise-action@v5
         with:
           version: 2026.10.25
           working_directory: website
-          install_args: bun
       - run: bun install --frozen-lockfile && bun run build
         working-directory: website
         env:
