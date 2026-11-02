@@ -18,6 +18,8 @@ pub enum PickPurpose {
     TagPerson { media: String, page: usize, crop: Crop },
     /// Le média choisi est ajouté à la fin de `media`, comme nouvelles pages.
     MergeInto { media: String },
+    /// Le média choisi est lié à l'événement `ix` de `owner`.
+    MediaToEvent { owner: String, ix: usize },
 }
 
 impl PickPurpose {
@@ -31,6 +33,11 @@ impl PickPurpose {
             PickPurpose::MediaTo { media } => format!("Rattacher « {} » à…", g.record_label(media)),
             PickPurpose::TagPerson { .. } => "Qui est sur cette zone de la photo ?".into(),
             PickPurpose::MergeInto { media } => format!("Ajouter à « {} » les pages du média…", g.record_label(media)),
+            PickPurpose::MediaToEvent { owner, ix } => format!(
+                "Lier un média à « {} » · {}",
+                g.event_title(owner, *ix).unwrap_or_default(),
+                g.record_label(owner)
+            ),
         }
     }
 }
@@ -168,7 +175,7 @@ impl Workspace {
 
     pub(super) fn open_picker(&mut self, purpose: PickPurpose, window: &mut Window, cx: &mut Context<Self>) {
         let hint = match purpose {
-            PickPurpose::MergeInto { .. } => "Titre ou fichier du média…",
+            PickPurpose::MergeInto { .. } | PickPurpose::MediaToEvent { .. } => "Titre ou fichier du média…",
             _ => "Nom, prénom… (critères : né:1850 lieu:troyes)",
         };
         let input = cx.new(|cx| InputState::new(window, cx).placeholder(hint));
@@ -244,11 +251,16 @@ impl Workspace {
             (distance, sort_key(&i.surname()), sort_key(&i.given()))
         });
         let mut out: Vec<String> = Vec::new();
-        if let PickPurpose::MergeInto { media } = &p.purpose {
-            // Autres médias, d'après leur titre ou leurs fichiers.
+        let media_search = match &p.purpose {
+            PickPurpose::MergeInto { media } => Some(Some(media.as_str())),
+            PickPurpose::MediaToEvent { .. } => Some(None),
+            _ => None,
+        };
+        if let Some(skip) = media_search {
+            // Médias, d'après leur titre ou leurs fichiers.
             let words: Vec<String> = text.split_whitespace().map(sort_key).collect();
             for r in g.records_of(RecordKind::Media) {
-                let Some(x) = r.xref.as_deref().filter(|x| x != media) else { continue };
+                let Some(x) = r.xref.as_deref().filter(|x| Some(*x) != skip) else { continue };
                 let m = Media::new(r);
                 let k = sort_key(&format!(
                     "{} {}",
@@ -324,6 +336,11 @@ impl Workspace {
                     g.merge_media(&[media.clone(), chosen])?;
                     Ok((format!("« {who} » ajouté au média ({n} page{})", plural(n)), Some(media)))
                 }
+                PickPurpose::MediaToEvent { owner, ix } => {
+                    g.attach_media_to_event(&owner, ix, &chosen)?;
+                    let what = g.event_title(&owner, ix).unwrap_or_default().to_lowercase();
+                    Ok((format!("« {who} » lié à l'événement {what} de {}", g.record_label(&owner)), None))
+                }
                 PickPurpose::TagPerson { media, page, crop } => {
                     g.tag_person_on(&chosen, &media, page, crop)?;
                     Ok((format!("{who} identifié(e) sur la photo"), None))
@@ -374,6 +391,63 @@ impl Workspace {
             }
             Ok((msg, None))
         });
+    }
+
+    /// Crée (ou réutilise) les médias des fichiers et les lie à l'événement `ix` de `owner`.
+    pub(super) fn attach_files_to_event(
+        &mut self,
+        owner: String,
+        ix: usize,
+        files: Vec<String>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if files.is_empty() {
+            return;
+        }
+        let outside = files.iter().filter(|f| std::path::Path::new(f).is_absolute()).count();
+        self.mutate(window, cx, |g| {
+            for f in &files {
+                let m = g.media_for_file(f);
+                g.attach_media_to_event(&owner, ix, &m)?;
+            }
+            let n = files.len();
+            let what = g.event_title(&owner, ix).unwrap_or_default().to_lowercase();
+            let mut msg = format!(
+                "{n} fichier{} rattaché{} à l'événement {what} de {}",
+                plural(n),
+                plural(n),
+                g.record_label(&owner)
+            );
+            if outside > 0 {
+                msg.push_str(" — attention : fichier hors du dossier du .ged, chemin absolu enregistré");
+            }
+            Ok((msg, None))
+        });
+    }
+
+    pub(super) fn choose_files_for_event(
+        &mut self,
+        owner: String,
+        ix: usize,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let rx = cx.prompt_for_paths(PathPromptOptions {
+            files: true,
+            directories: false,
+            multiple: true,
+            prompt: Some("Rattacher".into()),
+        });
+        cx.spawn_in(window, async move |this, cx| {
+            if let Ok(Ok(Some(paths))) = rx.await {
+                let _ = this.update_in(cx, |this, window, cx| {
+                    let files = paths.iter().map(|p| this.file_value(p)).collect();
+                    this.attach_files_to_event(owner, ix, files, window, cx);
+                });
+            }
+        })
+        .detach();
     }
 
     pub(super) fn choose_files(&mut self, record: String, window: &mut Window, cx: &mut Context<Self>) {

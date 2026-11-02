@@ -1893,12 +1893,30 @@ impl Workspace {
         )
     }
 
-    /// Section « Événements » d'un individu ou d'une famille : un clic ouvre
-    /// l'événement en modification, clic droit pour les autres actions.
+    /// Section « Événements » d'un individu ou d'une famille. Pour un individu,
+    /// les événements de ses unions (mariage, divorce…) sont dans la même
+    /// chronologie. Un clic ouvre l'événement en modification, clic droit pour
+    /// les autres actions ; déposer des fichiers sur un événement les y rattache.
     fn render_events(&self, owner: &str, cx: &mut Context<Self>) -> AnyElement {
-        let g = &self.doc.as_ref().unwrap().ged;
-        let mut events = g.events_of(owner);
-        events.sort_by_key(|(_, e)| e.date().map(|d| d.sort_key()).unwrap_or((i32::MAX, 0, 0)));
+        let doc = self.doc.as_ref().unwrap();
+        let g = &doc.ged;
+        let events: Vec<PersonEvent> = if g.individual(owner).is_some() {
+            g.person_events(owner)
+        } else {
+            let mut v: Vec<PersonEvent> = g
+                .events_of(owner)
+                .into_iter()
+                .map(|(index, event)| PersonEvent {
+                    owner: owner.to_string(),
+                    index,
+                    event,
+                    family: false,
+                    spouse: None,
+                })
+                .collect();
+            v.sort_by_key(|e| e.event.date().map(|d| d.sort_key()).unwrap_or((i32::MAX, 0, 0)));
+            v
+        };
         let x = owner.to_string();
         v_flex()
             .p_4()
@@ -1911,22 +1929,35 @@ impl Workspace {
                     .tooltip("Ajouter un événement")
                     .on_click(cx.listener(move |this, _, w, cx| this.open_event_dialog(x.clone(), None, w, cx)))
             }))
-            .children(events.into_iter().map(|(ix, e)| {
+            .children(events.into_iter().map(|pe| {
+                let PersonEvent { owner: ev_owner, index: ix, event: e, family, spouse } = pe;
                 let place = e.place().map(|p| p.to_string());
                 let sources: Vec<String> = e.source_xrefs().iter().map(|s| s.to_string()).collect();
                 let label = match e.value() {
                     Some(v) => format!("{} : {v}", e.label()),
                     None => e.label(),
                 };
-                let (o1, o2) = (x.clone(), x.clone());
+                let key = format!("{ev_owner}-{ix}");
+                let (o1, o2) = (ev_owner.clone(), ev_owner.clone());
+                // Déposer des fichiers sur l'événement : médias de l'événement.
+                let (drop_owner, entity) = (ev_owner.clone(), cx.entity().downgrade());
                 v_flex()
-                    .id(SharedString::from(format!("ev-{ix}")))
+                    .id(SharedString::from(format!("ev-{key}")))
                     .gap_0p5()
                     .px_2()
                     .py_1()
                     .rounded_sm()
                     .cursor_pointer()
                     .hover(|d| d.bg(theme::hover()))
+                    .drag_over::<ExternalPaths>(|d, _, _, _| d.bg(theme::accent_soft()))
+                    .on_drop(move |paths: &ExternalPaths, window, cx| {
+                        cx.stop_propagation();
+                        let owner = drop_owner.clone();
+                        let _ = entity.update(cx, |this, cx| {
+                            let files = paths.paths().iter().map(|p| this.file_value(p)).collect();
+                            this.attach_files_to_event(owner, ix, files, window, cx);
+                        });
+                    })
                     .child(
                         h_flex()
                             .justify_between()
@@ -1941,11 +1972,26 @@ impl Workspace {
                             )
                             .child(mono(e.date().map(|d| d.to_french()).unwrap_or_default())),
                     )
+                    // Événement d'une union : avec qui.
+                    .when_some(spouse.filter(|_| family), |d, s| {
+                        let target = s.clone();
+                        d.child(
+                            div()
+                                .id(SharedString::from(format!("ev-spouse-{key}")))
+                                .text_color(theme::muted())
+                                .hover(|d| d.text_color(theme::accent()))
+                                .child(format!("avec {}", g.record_label(&s)))
+                                .on_click(cx.listener(move |this, _, w, cx| {
+                                    cx.stop_propagation();
+                                    this.goto(target.clone(), w, cx)
+                                })),
+                        )
+                    })
                     .when_some(place, |d, p| {
                         let target = p.clone();
                         d.child(
                             div()
-                                .id(SharedString::from(format!("ev-place-{ix}")))
+                                .id(SharedString::from(format!("ev-place-{key}")))
                                 .text_color(theme::muted())
                                 .hover(|d| d.text_color(theme::accent()))
                                 .child(short_place(&p))
@@ -1959,7 +2005,7 @@ impl Workspace {
                         let title = g.record_label(&s);
                         let target = s.clone();
                         div()
-                            .id(SharedString::from(format!("ev-src-{ix}-{s}")))
+                            .id(SharedString::from(format!("ev-src-{key}-{s}")))
                             .text_xs()
                             .text_color(theme::ok())
                             .hover(|d| d.text_color(theme::accent()))
@@ -1969,14 +2015,84 @@ impl Workspace {
                                 this.goto(target.clone(), w, cx)
                             }))
                     }))
+                    .children(self.render_event_media(&ev_owner, ix, &e, cx))
                     .on_click(cx.listener(move |this, _, w, cx| this.open_event_dialog(o1.clone(), Some(ix), w, cx)))
                     .with_menu(self.event_menu(o2, ix, cx))
             }))
             .into_any_element()
     }
 
+    /// Médias d'un événement : vignettes des images, titre des autres documents.
+    fn render_event_media(
+        &self,
+        owner: &str,
+        ix: usize,
+        e: &gedcom::Event<'_>,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        let doc = self.doc.as_ref()?;
+        let g = &doc.ged;
+        let media: Vec<Media> =
+            e.media_xrefs().into_iter().filter_map(|m| g.get(m).filter(|n| n.tag == "OBJE").map(Media::new)).collect();
+        if media.is_empty() {
+            return None;
+        }
+        let from = || MenuFrom::OnEvent(owner.to_string(), ix);
+        Some(
+            h_flex()
+                .flex_wrap()
+                .gap_1()
+                .pt_1()
+                .children(media.into_iter().map(|m| {
+                    let target = m.xref().to_string();
+                    let id = SharedString::from(format!("ev-media-{owner}-{ix}-{target}"));
+                    let menu = self.record_menu(m.xref(), from(), cx);
+                    let open = cx.listener(move |this, _, w, cx| {
+                        cx.stop_propagation();
+                        this.goto(target.clone(), w, cx)
+                    });
+                    let path = m.is_image().then(|| pages::page_path(doc, &m, 1)).flatten().filter(|p| p.exists());
+                    match path {
+                        Some(p) => div()
+                            .id(id)
+                            .size(px(56.))
+                            .rounded_sm()
+                            .overflow_hidden()
+                            .border_1()
+                            .border_color(theme::border())
+                            .hover(|d| d.border_color(theme::accent()))
+                            .child(img(p).size_full().object_fit(ObjectFit::Cover))
+                            .on_click(open)
+                            .with_menu(menu)
+                            .into_any_element(),
+                        None => h_flex()
+                            .id(id)
+                            .gap_1()
+                            .items_center()
+                            .max_w(px(220.))
+                            .px_1p5()
+                            .py_0p5()
+                            .rounded_sm()
+                            .border_1()
+                            .border_color(theme::border())
+                            .text_xs()
+                            .text_color(if m.is_image() { theme::warn() } else { theme::muted() })
+                            .hover(|d| d.border_color(theme::accent()))
+                            .child(icon(if m.is_image() { IconName::Image } else { IconName::FileText }))
+                            .child(div().overflow_hidden().whitespace_nowrap().text_ellipsis().child(m.title()))
+                            .on_click(open)
+                            .with_menu(menu)
+                            .into_any_element(),
+                    }
+                }))
+                .into_any_element(),
+        )
+    }
+
     fn render_individual_card(&self, g: &Gedcom, i: Individual<'_>, cx: &mut Context<Self>) -> impl IntoElement {
-        let (sourced, total) = i.sourced_ratio();
+        // Comme la liste « Événements » : ceux des unions comptent aussi.
+        let timeline = g.person_events(i.xref());
+        let (sourced, total) = (timeline.iter().filter(|e| e.event.is_sourced()).count(), timeline.len());
         let pct = if total == 0 { 0. } else { sourced as f32 / total as f32 };
         let sosa = i.sosa();
         let doc = self.doc.as_ref().unwrap();

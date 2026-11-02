@@ -42,6 +42,7 @@ pub use crop::{Crop, MediaLink, Rect};
 pub use date::{Calendar, Date, DateKind, Parsed as DateInput, SimpleDate, parse_input as parse_date_input};
 pub use document::{Gedcom, RecordKind};
 pub use entry::{Entry, EntryResult, MediaChoice, Participant, PersonChoice, SourceChoice, Suggestion};
+pub use events::PersonEvent;
 pub use model::*;
 pub use multipage::{MediaFile, PAGE_TAG, page_of_link, strip_page_suffix};
 pub use node::Node;
