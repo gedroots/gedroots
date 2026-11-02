@@ -147,6 +147,7 @@ impl Gedcom {
             date_phrase: e.child("DATE").and_then(|d| d.child_val("PHRASE")).unwrap_or("").to_string(),
             place: e.child_val("PLAC").unwrap_or("").to_string(),
             source: e.children_with("SOUR").find_map(|s| s.pointer()).map(str::to_string),
+            note: e.child("NOTE").map(|n| n.text()).unwrap_or_default(),
         })
     }
 
@@ -236,6 +237,23 @@ impl Gedcom {
             }
             (None, Some(s)) => node.insert_child(Node::with_value("SOUR", format!("@{s}@"))),
             (None, None) => {}
+        }
+
+        // First note (the others are not touched); rewritten only if its text changed.
+        let note = ev.note.trim_end();
+        let first = node.children.iter().position(|c| c.tag == "NOTE");
+        match first {
+            Some(i) if note.trim().is_empty() => {
+                node.children.remove(i);
+            }
+            Some(i) if node.children[i].text() != note => node.children[i].set_text(note),
+            Some(_) => {}
+            None if !note.trim().is_empty() => {
+                let mut n = Node::new("NOTE");
+                n.set_text(note);
+                node.insert_child(n);
+            }
+            None => {}
         }
 
         // Event without any detail: “1 DEAT Y” (it happened).

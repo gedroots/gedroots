@@ -4,7 +4,8 @@
 use super::relatives::PickPurpose;
 use super::*;
 use crate::date_field::{DateField, date_field};
-use crate::editor::{PickerState, choice, picker};
+use crate::editor::{PickerState, choice, choice_with_search, picker};
+use gpui_kit::component::input::TextareaState;
 use rust_i18n::t;
 
 pub(super) enum AddDialog {
@@ -33,6 +34,8 @@ pub(super) struct EventDialog {
     date: Entity<DateField>,
     place: Entity<InputState>,
     source: Entity<PickerState>,
+    /// First note of the event.
+    note: Entity<TextareaState>,
     /// Adding from a married individual: union that will hold a family event (types prefixed with
     /// `FAM:`). `None` if the individual has only one union, or none.
     union: Option<Entity<PickerState>>,
@@ -131,7 +134,7 @@ impl Workspace {
             None if family => "MARR",
             None => "",
         };
-        let kind = choice(&options, default_kind, window, cx);
+        let kind = choice_with_search(&options, default_kind, true, window, cx);
         let cur = current.clone().unwrap_or_default();
         let text = |ph: SharedString, value: String, window: &mut Window, cx: &mut Context<Self>| {
             cx.new(|cx| InputState::new(window, cx).placeholder(ph).default_value(value))
@@ -140,6 +143,7 @@ impl Workspace {
         let date = date_field(&cur.date, &cur.date_phrase, window, cx);
         let place = text(t!("event_dialog.town").into(), place_label(&cur.place), window, cx);
         let source = picker(g, RecordKind::Source, cur.source.as_deref().unwrap_or(""), window, cx);
+        let note = cx.new(|cx| TextareaState::new(window, cx).auto_grow(2, 8).default_value(cur.note));
         let sub =
             cx.subscribe_in(&place, window, |this, input, ev: &InputEvent, _, cx| this.on_place_input(input, ev, cx));
         let sub_kind = cx.observe(&kind, |_, _, cx| cx.notify());
@@ -151,6 +155,7 @@ impl Workspace {
             date,
             place,
             source,
+            note,
             union,
             unions,
             error: None,
@@ -198,6 +203,7 @@ impl Workspace {
                 &d.place.read(cx).value(),
             ),
             source: d.source.read(cx).selected_value().cloned(),
+            note: d.note.read(cx).value().to_string(),
         };
         let (mut owner, editing) = (d.owner.clone(), d.editing);
         // Event of a union: held by the chosen family.
@@ -313,6 +319,7 @@ impl Workspace {
                         .shadow_lg()
                         .on_key_down(cx.listener(|this, ev: &KeyDownEvent, w, cx| {
                             if ev.keystroke.key == "escape" {
+                                cx.stop_propagation();
                                 this.close_add_dialog(w, cx);
                             }
                         }))
@@ -370,7 +377,11 @@ impl Workspace {
                     .child(
                         field(
                             t!("event_dialog.type"),
-                            Select::new(&d.kind).small().placeholder(t!("event_dialog.choose")).into_any_element(),
+                            Select::new(&d.kind)
+                                .small()
+                                .placeholder(t!("event_dialog.choose"))
+                                .search_placeholder(t!("event_dialog.search"))
+                                .into_any_element(),
                         )
                         .flex_1(),
                     )
@@ -401,6 +412,7 @@ impl Workspace {
                     .search_placeholder(t!("event_dialog.search"))
                     .into_any_element(),
             ))
+            .child(field(t!("editor.note"), Textarea::new(&d.note).small().into_any_element()))
             .when_some(d.error.clone(), |v, e| v.child(div().text_sm().text_color(theme::danger()).child(e)))
             .child(
                 h_flex()
