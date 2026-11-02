@@ -1276,6 +1276,10 @@ fn avatar(doc: &Document, i: &Individual<'_>, size: f32, ring: Hsla) -> Div {
     let portrait = doc.ged.portrait(i.xref());
     // Personne située sur une autre page d'un média multipage : cette page-là.
     let page = |m: &Media| pages::page_path(doc, m, doc.ged.link_page(i.xref(), m.xref()));
+    // Les initiales restent dessous tant que le portrait se charge : la case
+    // n'apparaît jamais vide.
+    let initials: String = [i.given().chars().next(), i.surname().chars().next()].into_iter().flatten().collect();
+    let base = base.font_weight(FontWeight::SEMIBOLD).when(size < 32., |d| d.text_xs()).child(initials);
     match portrait.and_then(|m| page(&m)).filter(|p| p.exists()) {
         Some(p) => {
             // Le recadrage du lien (CROP) cadre le visage sur une photo de groupe.
@@ -1283,13 +1287,10 @@ fn avatar(doc: &Document, i: &Individual<'_>, size: f32, ring: Hsla) -> Div {
             // Le masque de GPUI est rectangulaire : c'est l'image elle-même qui
             // s'arrondit, dans l'anneau.
             let inner = size - 4.;
-            base.child(photo::linked_img(p, crop, inner, inner, true).rounded_full())
+            base.relative()
+                .child(photo::linked_img(p, crop, inner, inner, true).rounded_full().absolute().top_0().left_0())
         }
-        None => {
-            let initials: String =
-                [i.given().chars().next(), i.surname().chars().next()].into_iter().flatten().collect();
-            base.font_weight(FontWeight::SEMIBOLD).when(size < 32., |d| d.text_xs()).child(initials)
-        }
+        None => base,
     }
 }
 
