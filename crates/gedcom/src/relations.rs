@@ -7,7 +7,7 @@ use crate::model::{Family, Individual};
 use crate::node::Node;
 
 /// Lien de parenté à créer depuis une personne.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Relation {
     Father,
     Mother,

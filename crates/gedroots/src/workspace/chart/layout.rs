@@ -22,7 +22,7 @@ pub const COL: f32 = CARD_W + 56.;
 const SLOT_DEPTH: u32 = 3;
 
 /// Ce qu'affiche une case.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Slot {
     /// Une personne. `side` : 1 pour la personne centrale, 2 côté paternel,
     /// 3 côté maternel, 0 hors ascendance (descendants, conjoints, fratrie).
@@ -60,11 +60,23 @@ impl Card {
     }
 }
 
+/// Extrémité d'une liaison. Les colonnes ne bougent pas quand une génération
+/// s'ajoute, seules les ordonnées : l'abscisse est fixe et l'ordonnée suit une
+/// case, pour que les liaisons accompagnent les cases quand elles glissent.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct End {
+    pub x: f32,
+    /// Indice de la case dans [`Layout::cards`].
+    pub card: usize,
+    /// Écart vertical depuis le haut de cette case.
+    pub dy: f32,
+}
+
 #[derive(Debug, Default)]
 pub struct Layout {
     pub cards: Vec<Card>,
-    /// Segments de liaison (x0, y0, x1, y1).
-    pub lines: Vec<[f32; 4]>,
+    /// Segments de liaison, d'une extrémité à l'autre.
+    pub lines: Vec<[End; 2]>,
     /// Des ascendants existent au-delà de la dernière génération chargée.
     pub more_up: bool,
     /// Des descendants existent au-delà de la dernière génération chargée.
@@ -77,6 +89,12 @@ impl Layout {
     /// Première case de la personne (la personne centrale avant tout).
     pub fn find(&self, xref: &str) -> Option<&Card> {
         self.cards.iter().find(|c| c.xref() == Some(xref))
+    }
+
+    /// Segments de liaison (x0, y0, x1, y1), les cases étant aux ordonnées `ys`
+    /// (une par case, dans l'ordre de [`Layout::cards`]).
+    pub fn segments<'a>(&'a self, ys: &'a [f32]) -> impl Iterator<Item = [f32; 4]> + 'a {
+        self.lines.iter().map(move |[a, b]| [a.x, ys[a.card] + a.dy, b.x, ys[b.card] + b.dy])
     }
 
     /// Case de personne la plus proche du point donné.
@@ -284,6 +302,19 @@ impl DescBuilder<'_> {
 // Assemblage
 // ----------------------------------------------------------------------
 
+/// Extrémité en `(x, y)`, rattachée à la case `card`.
+fn end(cards: &[Card], card: usize, x: f32, y: f32) -> End {
+    End { x, card, dy: y - cards[card].y }
+}
+
+/// Barre verticale couvrant toutes les ordonnées données, chacune rattachée à sa case.
+fn bar(cards: &[Card], x: f32, ys: impl IntoIterator<Item = (usize, f32)>) -> [End; 2] {
+    let mut ys = ys.into_iter();
+    let first = ys.next().expect("au moins une extrémité");
+    let (t, b) = ys.fold((first, first), |(t, b), p| (if p.1 < t.1 { p } else { t }, if p.1 > b.1 { p } else { b }));
+    [end(cards, t.0, x, t.1), end(cards, b.0, x, b.1)]
+}
+
 /// Arbre autour de `anchor` : `up` générations d'ascendants, `down` de descendants.
 pub fn build(g: &Gedcom, anchor: &str, up: u32, down: u32) -> Layout {
     let mut out = Layout::default();
@@ -298,19 +329,21 @@ pub fn build(g: &Gedcom, anchor: &str, up: u32, down: u32) -> Layout {
     ab.person(anchor, 0, 1);
     let tn: Vec<TNode> = ab.nodes.iter().map(|n| TNode { w: CARD_H, kids: n.kids.clone() }).collect();
     let ay = tidy(&tn, 0);
+    // Les cases d'abord (le nœud `i` est la case `i`), puis leurs liaisons.
     for (n, a) in ab.nodes.iter().zip(&ay) {
-        let x = n.depth as f32 * COL;
-        let cy = CARD_H / 2. + a;
-        out.cards.push(Card { slot: n.slot.clone(), x, y: cy - CARD_H / 2. });
+        out.cards.push(Card { slot: n.slot.clone(), x: n.depth as f32 * COL, y: *a });
+    }
+    for (i, n) in ab.nodes.iter().enumerate() {
         if !n.kids.is_empty() {
             // De la case vers la droite, puis une barre jusqu'en face des parents.
-            let bar = x + CARD_W + mid_gap;
-            out.lines.push([x + CARD_W, cy, bar, cy]);
-            let pcs: Vec<f32> = n.kids.iter().map(|k| CARD_H / 2. + ay[*k]).collect();
-            let (t, b) = pcs.iter().fold((cy, cy), |(t, b), p| (t.min(*p), b.max(*p)));
-            out.lines.push([bar, t, bar, b]);
-            for p in pcs {
-                out.lines.push([bar, p, x + COL, p]);
+            let x = out.cards[i].x;
+            let cy = |k: usize| out.cards[k].y + CARD_H / 2.;
+            let bx = x + CARD_W + mid_gap;
+            out.lines.push([end(&out.cards, i, x + CARD_W, cy(i)), end(&out.cards, i, bx, cy(i))]);
+            let b = bar(&out.cards, bx, std::iter::once(i).chain(n.kids.iter().copied()).map(|k| (k, cy(k))));
+            out.lines.push(b);
+            for &k in &n.kids {
+                out.lines.push([end(&out.cards, k, bx, cy(k)), end(&out.cards, k, x + COL, cy(k))]);
             }
         }
     }
@@ -335,20 +368,29 @@ pub fn build(g: &Gedcom, anchor: &str, up: u32, down: u32) -> Layout {
     // La case de la personne centrale (en haut de son bloc) doit être en y = 0.
     let shift = db.nodes[0].height() / 2.;
     let top = |n: usize| dy[n] + shift - db.nodes[n].height() / 2.;
+    // Les cases d'abord : `card[ix]` est la case du nœud `ix` (la personne
+    // centrale est la case 0, déjà posée), ses conjoints suivent.
+    let mut card = vec![0; db.nodes.len()];
     for (ix, n) in db.nodes.iter().enumerate() {
         let x = -(n.depth as f32) * COL;
         let y = top(ix);
         if ix != 0 {
+            card[ix] = out.cards.len();
             out.cards.push(Card { slot: n.slot.clone(), x, y });
         }
         for (j, s) in n.spouses.iter().enumerate() {
             out.cards.push(Card { slot: Slot::Person { xref: s.clone(), side: 0 }, x, y: y + (j as f32 + 1.) * step });
         }
+    }
+    for (ix, n) in db.nodes.iter().enumerate() {
+        let (x, y, me) = (-(n.depth as f32) * COL, top(ix), card[ix]);
         if !n.spouses.is_empty() {
             // Trait d'union, visible entre les cases.
-            out.lines.push([x + CARD_W / 2., y + CARD_H, x + CARD_W / 2., y + n.spouses.len() as f32 * step]);
+            let ux = x + CARD_W / 2.;
+            let last = y + n.spouses.len() as f32 * step;
+            out.lines.push([end(&out.cards, me, ux, y + CARD_H), end(&out.cards, me, ux, last)]);
         }
-        let bar = x - mid_gap;
+        let bx = x - mid_gap;
         // Les enfants d'une union partent d'entre la personne et le conjoint.
         let from = |sp: Option<usize>| match sp {
             Some(j) => y + (j as f32 + 1.) * step - GAP / 2.,
@@ -360,12 +402,11 @@ pub fn build(g: &Gedcom, anchor: &str, up: u32, down: u32) -> Layout {
             .map(|(sp, kids)| (from(*sp), kids.clone()))
             .chain(n.slot_kid.map(|k| (y + CARD_H / 2., vec![k])));
         for (fy, kids) in groups.filter(|(_, k)| !k.is_empty()) {
-            out.lines.push([x, fy, bar, fy]);
-            let kcs: Vec<f32> = kids.iter().map(|k| top(*k) + CARD_H / 2.).collect();
-            let (t, b) = kcs.iter().fold((fy, fy), |(t, b), c| (t.min(*c), b.max(*c)));
-            out.lines.push([bar, t, bar, b]);
-            for c in kcs {
-                out.lines.push([bar, c, x - COL + CARD_W, c]);
+            out.lines.push([end(&out.cards, me, x, fy), end(&out.cards, me, bx, fy)]);
+            let kcs: Vec<(usize, f32)> = kids.iter().map(|k| (card[*k], top(*k) + CARD_H / 2.)).collect();
+            out.lines.push(bar(&out.cards, bx, std::iter::once((me, fy)).chain(kcs.iter().copied())));
+            for (k, c) in kcs {
+                out.lines.push([end(&out.cards, k, bx, c), end(&out.cards, k, x - COL + CARD_W, c)]);
             }
         }
     }
@@ -380,16 +421,19 @@ pub fn build(g: &Gedcom, anchor: &str, up: u32, down: u32) -> Layout {
         })
         .unwrap_or_default();
     let n = siblings.len() as f32;
-    let bar = CARD_W + mid_gap;
+    let bx = CARD_W + mid_gap;
+    let first = out.cards.len();
     for (j, s) in siblings.iter().enumerate() {
         let y = -(n - j as f32) * step;
+        let c = out.cards.len();
         out.cards.push(Card { slot: Slot::Person { xref: s.clone(), side: 0 }, x: 0., y });
-        out.lines.push([CARD_W, y + CARD_H / 2., bar, y + CARD_H / 2.]);
+        let cy = y + CARD_H / 2.;
+        out.lines.push([end(&out.cards, c, CARD_W, cy), end(&out.cards, c, bx, cy)]);
     }
     if !siblings.is_empty() {
-        out.lines.push([bar, -n * step + CARD_H / 2., bar, CARD_H / 2.]);
+        out.lines.push([end(&out.cards, first, bx, -n * step + CARD_H / 2.), end(&out.cards, 0, bx, CARD_H / 2.)]);
         // Sans parents connus, la barre de la fratrie part quand même de la personne centrale.
-        out.lines.push([CARD_W, CARD_H / 2., bar, CARD_H / 2.]);
+        out.lines.push([end(&out.cards, 0, CARD_W, CARD_H / 2.), end(&out.cards, 0, bx, CARD_H / 2.)]);
     }
     out.cards.push(Card { slot: Slot::AddSibling(anchor.to_string()), x: 0., y: -(n + 1.) * step });
 
@@ -450,6 +494,33 @@ mod tests {
         let l = build(&g, "GF", 1, 1);
         assert!(l.find("P").is_some() && l.find("I1").is_none());
         assert!(l.more_down);
+    }
+
+    #[test]
+    fn links_follow_cards() {
+        let g = ged();
+        let l = build(&g, "I1", 3, 2);
+        let mut ys: Vec<f32> = l.cards.iter().map(|c| c.y).collect();
+        let ip = l.cards.iter().position(|c| c.xref() == Some("P")).unwrap();
+        let (px, py) = (l.cards[ip].x, l.cards[ip].y + CARD_H / 2.);
+        // Le père est relié à son fils par un trait qui arrive en son milieu…
+        assert!(l.segments(&ys).any(|s| s[2] == px && s[3] == py));
+        // … et ce trait le suit quand il glisse.
+        ys[ip] += 100.;
+        assert!(l.segments(&ys).any(|s| s[2] == px && s[3] == py + 100.));
+        assert!(!l.segments(&ys).any(|s| s[2] == px && s[3] == py));
+    }
+
+    #[test]
+    fn columns_stay_put() {
+        // Charger une génération ne déplace les cases que verticalement.
+        let g = ged();
+        let small = build(&g, "I1", 1, 0);
+        let big = build(&g, "I1", 3, 2);
+        for c in small.cards.iter().filter(|c| c.xref().is_some()) {
+            let x = c.xref().unwrap();
+            assert_eq!(big.find(x).map(|b| b.x), Some(c.x), "{x}");
+        }
     }
 
     #[test]

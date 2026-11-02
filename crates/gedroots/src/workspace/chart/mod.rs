@@ -1,12 +1,18 @@
 //! Arbre libre : on s'y déplace en glissant ou à la molette, dans toutes les
 //! directions. Les générations d'ascendants et de descendants se chargent au
 //! fur et à mesure qu'on s'en approche ; une mini-carte montre où l'on est.
+//!
+//! Quand une génération s'ajoute, la disposition compacte resserre ou écarte
+//! les cases déjà affichées : elles glissent alors vers leur nouvelle place au
+//! lieu d'y sauter, et la personne au centre de la vue ne bouge pas.
 
 pub(super) mod layout;
 
 use super::*;
 use layout::{CARD_H, CARD_W, COL, Card, Layout, Slot};
 use std::cell::Cell;
+use std::collections::HashMap;
+use std::time::{Duration, Instant};
 
 /// Générations chargées en arrivant sur une personne.
 const START_UP: u32 = 2;
@@ -19,6 +25,33 @@ const MINI_W: f32 = 200.;
 const MINI_H: f32 = 130.;
 /// Déplacement au-delà duquel un appui devient un glissement (et non un clic).
 const DRAG_SLOP: f32 = 4.;
+/// Durée du glissement des cases quand une génération s'ajoute.
+const GLIDE: Duration = Duration::from_millis(180);
+/// Marge autour de la vue où les cases sont déjà construites : leurs portraits
+/// se chargent avant d'entrer dans la vue.
+const PRELOAD: f32 = COL;
+
+/// Identité d'une case d'une disposition à l'autre : ce qu'elle montre, sa
+/// colonne, et son rang parmi les cases identiques de la colonne (implexe).
+type CardKey = (Slot, i32, usize);
+
+fn card_keys(l: &Layout) -> Vec<CardKey> {
+    let mut seen: HashMap<(&Slot, i32), usize> = HashMap::new();
+    l.cards
+        .iter()
+        .map(|c| {
+            let col = (c.x / COL).round() as i32;
+            let n = seen.entry((&c.slot, col)).or_default();
+            *n += 1;
+            (c.slot.clone(), col, *n - 1)
+        })
+        .collect()
+}
+
+/// Décélération du glissement (`t` de 0 à 1).
+fn ease_out(t: f32) -> f32 {
+    1. - (1. - t).powi(3)
+}
 
 /// État de l'arbre libre.
 pub(super) struct Chart {
@@ -31,8 +64,10 @@ pub(super) struct Chart {
     /// Point de l'arbre affiché au centre de la vue, au signe près :
     /// position à l'écran = position dans l'arbre + `pan` + demi-vue.
     pan: (f32, f32),
-    /// Glissement en cours : position de départ du pointeur et `pan` d'alors.
-    drag: Option<(Point<Pixels>, (f32, f32))>,
+    /// Glissement en cours : position de départ du pointeur et dernière position
+    /// prise en compte. Le déplacement s'ajoute à `pan` pas à pas, pour garder les
+    /// corrections faites entre-temps (génération chargée, bord de l'arbre).
+    drag: Option<(Point<Pixels>, Point<Pixels>)>,
     /// Le dernier appui a déplacé l'arbre : le clic qui suit est ignoré.
     dragged: bool,
     /// La mini-carte est en cours de manipulation.
@@ -41,6 +76,11 @@ pub(super) struct Chart {
     mini: Rc<Cell<Option<Bounds<Pixels>>>>,
     /// Passage de la mini-carte à l'arbre : origine de l'arbre, échelle, marges.
     mini_map: Cell<[f32; 4]>,
+    /// Ordonnée de chaque case dans la dernière disposition, et son ancre.
+    shown: HashMap<CardKey, f32>,
+    shown_anchor: Option<String>,
+    /// Glissement des cases en cours : début et ordonnées de départ.
+    glide: Option<(Instant, HashMap<CardKey, f32>)>,
 }
 
 impl Default for Chart {
@@ -57,6 +97,9 @@ impl Default for Chart {
             view: Rc::default(),
             mini: Rc::default(),
             mini_map: Cell::new([0., 0., 1., 0.]),
+            shown: HashMap::new(),
+            shown_anchor: None,
+            glide: None,
         }
     }
 }
@@ -90,7 +133,9 @@ impl Chart {
     /// Construit l'arbre, en chargeant les générations dont la vue s'approche.
     /// Quand une génération s'ajoute, les cases peuvent se décaler : la
     /// personne la plus proche du centre de la vue reste à sa place à l'écran.
-    fn layout(&mut self, g: &Gedcom, anchor: &str) -> Layout {
+    /// Renvoie aussi le décalage vertical de la vue que cela a demandé.
+    fn layout(&mut self, g: &Gedcom, anchor: &str) -> (Layout, f32) {
+        let before = self.pan.1;
         let mut l = layout::build(g, anchor, self.up, self.down);
         let (w, _) = self.view_size();
         for _ in 0..MAX_GENS {
@@ -117,7 +162,44 @@ impl Chart {
         if x0 <= x1 && y0 <= y1 {
             self.pan = (self.pan.0.clamp(-x1, -x0), self.pan.1.clamp(-y1, -y0));
         }
-        l
+        (l, self.pan.1 - before)
+    }
+
+    /// Ordonnée affichée d'une case dont la place visée est `y`.
+    fn glide_y(&self, key: &CardKey, y: f32, now: Instant) -> f32 {
+        let Some((start, from)) = &self.glide else { return y };
+        let t = now.duration_since(*start).as_secs_f32() / GLIDE.as_secs_f32();
+        match from.get(key) {
+            Some(f) if t < 1. => f + (y - f) * ease_out(t),
+            _ => y,
+        }
+    }
+
+    /// Ordonnées où afficher les cases de `l`. Si elles ont changé de place
+    /// depuis l'image précédente (génération chargée, personne ajoutée), elles y
+    /// glissent depuis leur place d'avant ; `shift` est le décalage de la vue
+    /// fait entre-temps pour garder la personne du centre immobile. Renvoie aussi
+    /// si le glissement continue.
+    fn glide(&mut self, l: &Layout, shift: f32, animate: bool) -> (Vec<f32>, bool) {
+        let now = Instant::now();
+        let keys = card_keys(l);
+        let same_tree = animate && self.shown_anchor == self.anchor;
+        let moved = keys.iter().zip(&l.cards).any(|(k, c)| self.shown.get(k).is_some_and(|y| (y - c.y).abs() > 0.5));
+        if !same_tree {
+            self.glide = None;
+        } else if moved {
+            // Départ : là où chaque case est affichée maintenant, vue décalée comprise.
+            let from = self.shown.iter().map(|(k, y)| (k.clone(), self.glide_y(k, *y, now) - shift)).collect();
+            self.glide = Some((now, from));
+        }
+        let ys = keys.iter().zip(&l.cards).map(|(k, c)| self.glide_y(k, c.y, now)).collect();
+        let running = self.glide.as_ref().is_some_and(|(start, _)| now.duration_since(*start) < GLIDE);
+        if !running {
+            self.glide = None;
+        }
+        self.shown = keys.into_iter().zip(&l.cards).map(|(k, c)| (k, c.y)).collect();
+        self.shown_anchor = self.anchor.clone();
+        (ys, running)
     }
 
     fn pan_by(&mut self, dx: f32, dy: f32) {
@@ -163,55 +245,73 @@ impl Workspace {
             st.reanchor(sel);
         }
         let anchor = st.anchor.clone().unwrap_or_default();
-        let mut l = st.layout(g, &anchor);
+        let (mut l, mut shift) = st.layout(g, &anchor);
+        let mut animate = !cx.reduce_motion();
         // Nouvelle sélection (liste, Précédent…) : si la personne est déjà dans
         // l'arbre, on l'amène dans la vue ; sinon l'arbre se recentre sur elle.
         if st.seen.as_ref() != Some(sel) {
             st.seen = Some(sel.clone());
             match l.find(sel).cloned() {
                 Some(c) if st.visible(&c) => {}
-                Some(c) => st.center_on(&c),
+                Some(c) => {
+                    st.center_on(&c);
+                    animate = false;
+                }
                 None => st.reanchor(sel),
             }
             let anchor = st.anchor.clone().unwrap_or_default();
-            l = st.layout(g, &anchor);
+            let (l2, s2) = st.layout(g, &anchor);
+            (l, shift) = (l2, shift + s2);
         }
+
+        let view_cell = st.view.clone();
+        let measure = move |bounds: Bounds<Pixels>, window: &mut Window, running: bool| {
+            if view_cell.get().map(|b| b.size) != Some(bounds.size) {
+                // Première mesure, ou fenêtre redimensionnée : on recompose.
+                window.refresh();
+            } else if running {
+                window.request_animation_frame();
+            }
+            view_cell.set(Some(bounds));
+        };
+        if st.view.get().is_none() {
+            // Taille de la vue encore inconnue : rien n'est placé avant de la
+            // connaître, pour ne pas montrer l'arbre décalé le temps d'une image.
+            return div()
+                .flex_1()
+                .size_full()
+                .child(canvas(move |b, w, _| measure(b, w, false), |_, _, _, _| {}).size_full())
+                .into_any_element();
+        }
+        let (ys, running) = st.glide(&l, shift, animate);
 
         let (vw, vh) = st.view_size();
         let pan = st.pan;
         let to_screen = move |x: f32, y: f32| (x + pan.0 + vw / 2., y + pan.1 + vh / 2.);
-        let in_view = |c: &Card| {
-            let (sx, sy) = to_screen(c.x, c.y);
-            sx + CARD_W > -40. && sy + CARD_H > -40. && sx < vw + 40. && sy < vh + 40.
+        let near_view = |x: f32, y: f32| {
+            let (sx, sy) = to_screen(x, y);
+            sx + CARD_W > -PRELOAD && sy + CARD_H > -PRELOAD && sx < vw + PRELOAD && sy < vh + PRELOAD
         };
         let root = g.root();
         let cards: Vec<AnyElement> = l
             .cards
             .iter()
-            .filter(|c| in_view(c))
-            .filter_map(|c| self.chart_card(doc, c, to_screen(c.x, c.y), sel, root.as_deref(), cx))
+            .zip(&ys)
+            .filter(|(c, y)| near_view(c.x, **y))
+            .filter_map(|(c, y)| self.chart_card(doc, c, to_screen(c.x, *y), sel, root.as_deref(), cx))
             .collect();
 
         // Liaisons, dessinées sous les cases.
         let lines: Vec<[f32; 4]> = l
-            .lines
-            .iter()
+            .segments(&ys)
             .filter(|s| {
                 let (x0, y0) = to_screen(s[0].min(s[2]), s[1].min(s[3]));
                 let (x1, y1) = to_screen(s[0].max(s[2]), s[1].max(s[3]));
                 x1 >= 0. && y1 >= 0. && x0 <= vw && y0 <= vh
             })
-            .copied()
             .collect();
-        let view_cell = st.view.clone();
         let lines_el = canvas(
-            move |bounds, window, _| {
-                if view_cell.get().map(|b| b.size) != Some(bounds.size) {
-                    // Première mesure, ou fenêtre redimensionnée : on recompose.
-                    window.refresh();
-                }
-                view_cell.set(Some(bounds));
-            },
+            move |bounds, window, _| measure(bounds, window, running),
             move |bounds, _, window, _| {
                 let mut b = PathBuilder::stroke(px(1.));
                 for s in &lines {
@@ -245,7 +345,7 @@ impl Workspace {
                 MouseButton::Left,
                 cx.listener(|this, ev: &MouseDownEvent, _, _| {
                     let st = this.chart.get_mut();
-                    st.drag = Some((ev.position, st.pan));
+                    st.drag = Some((ev.position, ev.position));
                     st.dragged = false;
                 }),
             )
@@ -259,13 +359,15 @@ impl Workspace {
                 if st.mini_drag {
                     st.mini_jump(ev.position);
                     cx.notify();
-                } else if let Some((start, from)) = st.drag {
-                    let (dx, dy) = (f32::from(ev.position.x - start.x), f32::from(ev.position.y - start.y));
-                    if dx.abs() + dy.abs() > DRAG_SLOP {
+                } else if let Some((start, last)) = st.drag {
+                    let moved = ev.position - start;
+                    if f32::from(moved.x).abs() + f32::from(moved.y).abs() > DRAG_SLOP {
                         st.dragged = true;
                     }
                     if st.dragged {
-                        st.pan = (from.0 + dx, from.1 + dy);
+                        let d = ev.position - last;
+                        st.pan_by(f32::from(d.x), f32::from(d.y));
+                        st.drag = Some((start, ev.position));
                         cx.notify();
                     }
                 }
