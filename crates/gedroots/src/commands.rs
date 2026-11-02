@@ -117,6 +117,8 @@ actions!(
         ClearSearch,
         // Help
         CommandPalette,
+        TakeTour,
+        OpenSampleTree,
         CheckForUpdates,
         ToggleAutomaticUpdates,
         ReleaseNotes,
@@ -600,6 +602,8 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
     ));
     let mut help = vec![
         a(t!("cmd.all_commands"), CommandPalette),
+        a(t!("cmd.take_tour"), TakeTour),
+        a(t!("cmd.open_sample"), OpenSampleTree),
         Sep,
         a(t!("cmd.release_notes"), ReleaseNotes),
         a(t!("cmd.report_issue"), ReportIssue),

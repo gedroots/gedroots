@@ -56,16 +56,19 @@ impl Workspace {
         let d = on!(d, cx, NewFile, |this, w, cx| this.new_file(&NewFile, w, cx));
         let d = on!(d, cx, CommandPalette, |this, w, cx| this.toggle_palette(w, cx));
         let d = on!(d, cx, ReportIssue, |this, w, cx| this.open_report(w, cx));
+        let d = on!(d, cx, OpenSampleTree, |_this, w, cx| cx.defer(crate::open_sample));
         if !has_doc {
             return d;
         }
-        let d = on!(d, cx, SaveFile, |this, w, cx| this.save_file(&SaveFile, w, cx));
+        let sample = doc.is_some_and(|d| d.sample);
+        let d = if sample { d } else { on!(d, cx, SaveFile, |this, w, cx| this.save_file(&SaveFile, w, cx)) };
+        let d = on!(d, cx, TakeTour, |this, w, cx| this.open_tour_chooser(cx));
         let d = on!(d, cx, OpenFileSettings, |this, w, cx| this.open_settings(w, cx));
         let d = on!(d, cx, ReviewProposals, |this, w, cx| this.open_review(cx));
         let d = on!(d, cx, AcceptProposal, |this, w, cx| this.accept_proposal(w, cx));
         let d = on!(d, cx, RejectProposal, |this, w, cx| this.reject_proposal(cx));
         let d = on!(d, cx, ConnectAgent, |this, w, cx| this.open_agent_dialog(cx));
-        let d = on!(d, cx, SaveFileAs, |this, w, cx| this.save_file_as(w, cx));
+        let d = if sample { d } else { on!(d, cx, SaveFileAs, |this, w, cx| this.save_file_as(w, cx)) };
         let d = on!(d, cx, ExportFile, |this, w, cx| this.export(w, cx));
         let d = on!(d, cx, EnterRecord, |this, w, cx| this.enter_act(w, cx));
         let d = on!(d, cx, FocusSearch, |this, w, cx| this.filter.update(cx, |f, cx| f.focus(w, cx)));
@@ -290,15 +293,14 @@ impl Workspace {
 
     fn save_file_as(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(doc) = &self.doc else { return };
-        let (dir, name) = match &doc.path {
+        let (dir, name) = match doc.path.as_deref().filter(|_| !doc.imported) {
             Some(p) => (
                 p.parent().map(|p| p.to_path_buf()).unwrap_or_else(dirs_home),
-                p.file_name().map(|n| n.to_string_lossy().to_string()),
+                p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default(),
             ),
-            None => (dirs_home(), None),
+            None => save_as_default(doc.path.as_deref()),
         };
-        let rx =
-            cx.prompt_for_new_path(&dir, Some(name.as_deref().unwrap_or(&format!("{}.ged", t!("file.default_name")))));
+        let rx = cx.prompt_for_new_path(&dir, Some(&name));
         cx.spawn_in(window, async move |this, cx| {
             if let Ok(Ok(Some(p))) = rx.await {
                 let _ = this.update_in(cx, |this, _, cx| this.write_to(p, cx));
@@ -421,6 +423,7 @@ impl Workspace {
             .collect();
         let state = cx.new(|cx| CommandState::new(window, cx));
         state.update(cx, |s, cx| s.focus(window, cx));
+        self.tour_did(super::tour::Advance::Palette, cx);
         self.palette = Some(Palette { state, items });
         cx.notify();
     }

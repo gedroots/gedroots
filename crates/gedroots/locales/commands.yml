@@ -357,6 +357,12 @@ cmd:
   all_commands:
     en: All Commands…
     fr: Toutes les commandes…
+  take_tour:
+    en: Take the Tour
+    fr: Visite guidée
+  open_sample:
+    en: Open Sample Tree
+    fr: Ouvrir l’arbre d’exemple
   release_notes:
     en: Release Notes
     fr: Notes de version

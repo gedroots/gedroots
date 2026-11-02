@@ -194,22 +194,11 @@ impl Workspace {
             }
         };
         self.new_tree = None;
-        self.doc = Some(Document {
-            ged,
-            path: None,
-            dirty: true,
-            dirty_before_checkpoint: true,
-            history: Vec::new(),
-            future: Vec::new(),
-            future_before_checkpoint: Vec::new(),
-        });
-        self.view = View::Individuals;
-        self.selected = None;
-        self.reset_history();
-        self.rebuild_rows(cx);
+        self.set_document(ged, None, false, window, cx);
         self.select(root, window, cx);
         self.tab = CenterTab::Tree;
         window.focus(&self.focus, cx);
+        self.offer_tour(window, cx);
         cx.notify();
     }
 

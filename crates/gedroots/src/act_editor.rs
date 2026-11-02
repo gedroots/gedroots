@@ -86,6 +86,8 @@ pub struct ActEditor {
     place_focus: Option<EntityId>,
     place_menu: Option<PlaceMenu>,
     preview: Option<Result<String, String>>,
+    /// Guided tour: the “Link to …” suggestion of this individual is highlighted.
+    tour_link: Option<String>,
     error: Option<SharedString>,
     zoom: crate::viewer::Zoom,
     saved_count: usize,
@@ -190,6 +192,7 @@ impl ActEditor {
             place_focus: None,
             place_menu: None,
             preview: None,
+            tour_link: None,
             error: None,
             zoom: Default::default(),
             saved_count: 0,
@@ -579,6 +582,17 @@ impl ActEditor {
     }
 
     /// Zoom of the act's image, for the View menu.
+    /// Guided tour: highlights the suggestion to link `xref`.
+    pub fn set_tour_link(&mut self, xref: Option<String>, cx: &mut Context<Self>) {
+        self.tour_link = xref;
+        cx.notify();
+    }
+
+    /// Is a person of the record linked to `xref`?
+    pub fn links(&self, xref: &str) -> bool {
+        self.rows.iter().any(|r| matches!(&r.choice, PersonChoice::Link(x) if x == xref))
+    }
+
     pub fn zoom(&self) -> &crate::viewer::Zoom {
         &self.zoom
     }
@@ -1062,6 +1076,7 @@ impl ActEditor {
                         .gap_1()
                         .children(row.suggestions.iter().map(|s| {
                             let x = s.xref.clone();
+                            let ringed = self.tour_link.as_deref() == Some(s.xref.as_str());
                             chip(
                                 format!("sug-{idx}-{}", s.xref),
                                 if s.reason.is_empty() {
@@ -1071,6 +1086,7 @@ impl ActEditor {
                                 },
                                 false,
                             )
+                            .when(ringed, |d| d.border_2().border_color(theme::accent()))
                             .on_click(cx.listener(move |this, _, w, cx| {
                                 this.set_choice(idx, PersonChoice::Link(x.clone()), w, cx)
                             }))

@@ -161,7 +161,7 @@ impl Workspace {
             "bom": g.format.bom,
             "crlf": g.format.crlf,
             "size_kb": doc.path.as_ref().and_then(|p| std::fs::metadata(p).ok()).map(|m| m.len() / 1024),
-            "saved": doc.path.is_some(),
+            "saved": doc.path.is_some() && !doc.imported,
             "unsaved_changes": doc.dirty,
             "undo_steps": doc.history.len(),
             "extension_tags": tags.into_iter().map(|(t, n)| json!([t, n])).collect::<Vec<_>>(),

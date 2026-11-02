@@ -1,0 +1,200 @@
+0 HEAD
+1 GEDC
+2 VERS 7.0
+1 NOTE A fictional family, bundled with GEDRoots to try things out (Help › Open Sample Tree). Every person in it is invented.
+0 @I1@ INDI
+1 NAME Jacques /MARCHAND/
+2 GIVN Jacques
+2 SURN MARCHAND
+1 SEX M
+1 BIRT
+2 DATE ABT 1764
+2 PLAC Agneaux, Manche, Normandie, France
+3 MAP
+4 LATI N49.1187
+4 LONG W1.1086
+1 OCCU Ploughman
+1 DEAT
+2 DATE 12 MAR 1831
+2 PLAC Agneaux, Manche, Normandie, France
+1 FAMS @F1@
+0 @I2@ INDI
+1 NAME Marie /HÉBERT/
+2 GIVN Marie
+2 SURN HÉBERT
+1 SEX F
+1 BIRT
+2 DATE 1768
+2 PLAC Saint-Gilles, Manche, Normandie, France
+3 MAP
+4 LATI N49.1053
+4 LONG W1.1736
+1 DEAT
+2 DATE 2 NOV 1840
+2 PLAC Agneaux, Manche, Normandie, France
+1 FAMS @F1@
+0 @I3@ INDI
+1 NAME Émile /MARCHAND/
+2 GIVN Émile
+2 SURN MARCHAND
+1 SEX M
+1 OCCU Weaver
+1 DEAT
+2 DATE 7 JAN 1862
+2 PLAC Saint-Lô, Manche, Normandie, France
+3 MAP
+4 LATI N49.1157
+4 LONG W1.0906
+1 FAMC @F1@
+1 FAMS @F2@
+0 @I4@ INDI
+1 NAME Jeanne /MARCHAND/
+2 GIVN Jeanne
+2 SURN MARCHAND
+1 SEX F
+1 BIRT
+2 DATE FRENCH_R 4 PLUV 7
+2 PLAC Agneaux, Manche, Normandie, France
+1 DEAT
+2 DATE 1857
+1 FAMC @F1@
+0 @I5@ INDI
+1 NAME Rose /LEFÈVRE/
+2 GIVN Rose
+2 SURN LEFÈVRE
+1 SEX F
+1 BIRT
+2 DATE 11 MAY 1801
+2 PLAC Saint-Lô, Manche, Normandie, France
+1 DEAT
+2 DATE 1870
+2 PLAC Saint-Lô, Manche, Normandie, France
+1 FAMS @F2@
+0 @I6@ INDI
+1 NAME Louis /MARCHAND/
+2 GIVN Louis
+2 SURN MARCHAND
+1 SEX M
+1 BIRT
+2 DATE 3 FEB 1825
+2 PLAC Saint-Lô, Manche, Normandie, France
+1 OCCU Carpenter
+1 DEAT
+2 DATE 28 SEP 1889
+2 PLAC Saint-Lô, Manche, Normandie, France
+1 FAMC @F2@
+1 FAMS @F3@
+0 @I7@ INDI
+1 NAME Augustine /MARCHAND/
+2 GIVN Augustine
+2 SURN MARCHAND
+1 SEX F
+1 BIRT
+2 DATE 1828
+2 PLAC Saint-Lô, Manche, Normandie, France
+1 DEAT
+2 DATE 1901
+2 PLAC Coutances, Manche, Normandie, France
+3 MAP
+4 LATI N49.0478
+4 LONG W1.4452
+1 FAMC @F2@
+0 @I8@ INDI
+1 NAME Victorine /DUVAL/
+2 GIVN Victorine
+2 SURN DUVAL
+1 SEX F
+1 BIRT
+2 DATE ABT 1830
+2 PLAC Coutances, Manche, Normandie, France
+1 DEAT
+2 DATE 1894
+2 PLAC Saint-Lô, Manche, Normandie, France
+1 FAMS @F3@
+0 @I9@ INDI
+1 NAME Paul /MARCHAND/
+2 GIVN Paul
+2 SURN MARCHAND
+1 SEX M
+1 BIRT
+2 DATE 16 AUG 1856
+2 PLAC Saint-Lô, Manche, Normandie, France
+1 OCCU Schoolteacher
+1 DEAT
+2 DATE 4 DEC 1921
+2 PLAC Caen, Calvados, Normandie, France
+3 MAP
+4 LATI N49.1829
+4 LONG W0.3707
+1 FAMC @F3@
+1 FAMS @F4@
+0 @I10@ INDI
+1 NAME Léonie /GUÉRIN/
+2 GIVN Léonie
+2 SURN GUÉRIN
+1 SEX F
+1 BIRT
+2 DATE 1860
+2 PLAC Caen, Calvados, Normandie, France
+1 DEAT
+2 DATE 1932
+2 PLAC Caen, Calvados, Normandie, France
+1 FAMS @F4@
+0 @I11@ INDI
+1 NAME Henri /MARCHAND/
+2 GIVN Henri
+2 SURN MARCHAND
+1 SEX M
+1 BIRT
+2 DATE 21 JUN 1884
+2 PLAC Caen, Calvados, Normandie, France
+1 DEAT
+2 DATE 1950
+2 PLAC Caen, Calvados, Normandie, France
+1 FAMC @F4@
+0 @F1@ FAM
+1 HUSB @I1@
+1 WIFE @I2@
+1 CHIL @I3@
+1 CHIL @I4@
+1 MARR
+2 DATE ABT 1792
+2 PLAC Agneaux, Manche, Normandie, France
+0 @F2@ FAM
+1 HUSB @I3@
+1 WIFE @I5@
+1 CHIL @I6@
+1 CHIL @I7@
+1 MARR
+2 DATE 14 OCT 1823
+2 PLAC Saint-Lô, Manche, Normandie, France
+0 @F3@ FAM
+1 HUSB @I6@
+1 WIFE @I8@
+1 CHIL @I9@
+1 MARR
+2 DATE 1851
+2 PLAC Saint-Lô, Manche, Normandie, France
+0 @F4@ FAM
+1 HUSB @I9@
+1 WIFE @I10@
+1 CHIL @I11@
+1 MARR
+2 DATE 30 APR 1882
+2 PLAC Caen, Calvados, Normandie, France
+0 @R1@ REPO
+1 NAME Archives départementales de la Manche
+0 @S1@ SOUR
+1 TITL Births register, Agneaux, year IV
+1 DATA
+2 EVEN BIRT
+3 DATE FROM FRENCH_R 1 VEND 4 TO FRENCH_R 5 COMP 4
+3 PLAC Agneaux, Manche, Normandie, France
+1 REPO @R1@
+2 CALN 5 MI 1 R 12
+1 OBJE @O1@
+0 @O1@ OBJE
+1 FILE Records/birth-emile-marchand.jpg
+2 FORM image/jpeg
+1 TITL Births register, Agneaux, year IV, view 2
+0 TRLR
