@@ -185,7 +185,7 @@ Installe `~/.local/bin/gedroots`, l'icône et l'entrée du menu des applications
 `cargo build --release -p gedroots` produit `target\release\gedroots.exe`, qui s'ouvre sans
 fenêtre de console.
 
-L'icône est générée par `packaging/icon.py` (Pillow) dans `packaging/icon.png`.
+L'icône (`packaging/icon.png`) vient du kit de marque GEDRoots (app icon sombre, posée sur la grille macOS).
 
 ## Lancer depuis les sources
 
