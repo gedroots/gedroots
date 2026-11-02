@@ -1,13 +1,13 @@
 //! Champ de recherche des listes : critères en jetons, propositions, types de médias.
 //!
-//! La requête reste du texte (`né:1850 lieu:troyes guyot`, voir `gedcom::query`) ;
+//! La requête reste du texte (`born:1850 place:troyes guyot`, voir `gedcom::query`) ;
 //! chaque critère complet s'affiche en jeton atomique dans le champ. Sous le
 //! champ, des propositions tirées du fichier, avec le nombre de résultats que
 //! donnerait chacune. Dans la zone Médias, une ligne de types (sous-dossiers des
 //! réglages, sinon support GEDCOM) restreint la liste.
 
 use super::*;
-use gedcom::query::{Suggestion, words};
+use gedcom::query::{Group, Suggestion, words};
 use gpui_kit::component::input::{InlineToken, InputContent};
 use rust_i18n::t;
 
@@ -24,9 +24,9 @@ pub(super) struct ChipMenu {
 
 /// Réglages proposés dans le menu d'un jeton.
 enum ChipOption {
-    /// Marge d'une année (`né:1850±5`) : 0 = exactement.
+    /// Marge d'une année (`born:1850±5`) : 0 = exactement.
     Margin { key: String, year: String, margin: u32, on: bool },
-    /// Variantes d'orthographe d'un nom (`nom:guyot` / `nom:=guyot`).
+    /// Variantes d'orthographe d'un nom (`name:guyot` / `name:=guyot`).
     Variants { name: String, on: bool },
 }
 
@@ -36,7 +36,7 @@ fn chip_options(word: &str) -> Vec<ChipOption> {
     let Some((key, val)) = word.split_once(':') else { return vec![] };
     let val = gedcom::query::unquote(val);
     match gedcom::model::sort_key(key).as_str() {
-        k @ ("ne" | "nee" | "naissance" | "mort" | "morte" | "deces") => {
+        k @ ("born" | "b" | "died" | "d") => {
             let (year, margin) = match val.split_once(['±', '~']) {
                 Some((y, m)) => (y.trim(), m.trim().parse::<u32>().ok()),
                 None => (val, Some(0)),
@@ -44,13 +44,13 @@ fn chip_options(word: &str) -> Vec<ChipOption> {
             if year.is_empty() || !year.chars().all(|c| c.is_ascii_digit()) {
                 return vec![];
             }
-            let key = if k.starts_with('n') { "né" } else { "mort" };
+            let key = if k.starts_with('b') { "born" } else { "died" };
             MARGINS
                 .iter()
                 .map(|&m| ChipOption::Margin { key: key.into(), year: year.into(), margin: m, on: margin == Some(m) })
                 .collect()
         }
-        "nom" => {
+        "name" => {
             let exact = val.starts_with('=');
             vec![ChipOption::Variants { name: val.trim_start_matches('=').trim().to_string(), on: !exact }]
         }
@@ -78,8 +78,8 @@ impl ChipOption {
         match self {
             ChipOption::Margin { key, year, margin: 0, .. } => format!("{key}:{year}"),
             ChipOption::Margin { key, year, margin, .. } => format!("{key}:{year}±{margin}"),
-            ChipOption::Variants { name, on: true } => gedcom::criterion("nom", &format!("={name}")),
-            ChipOption::Variants { name, on: false } => gedcom::criterion("nom", name),
+            ChipOption::Variants { name, on: true } => gedcom::criterion("name", &format!("={name}")),
+            ChipOption::Variants { name, on: false } => gedcom::criterion("name", name),
         }
     }
 }
@@ -120,7 +120,7 @@ impl Workspace {
     }
 
     /// Requête appliquée à la liste : sans le critère en cours de frappe
-    /// (`né:18…`), qui ne compte qu'une fois suivi d'une espace ou de ↵.
+    /// (`born:18…`), qui ne compte qu'une fois suivi d'une espace ou de ↵.
     pub(super) fn committed_query(text: &str) -> String {
         let (range, partial) = Self::partial_word(text);
         if partial.contains(':') { text[..range.start].to_string() } else { text.to_string() }
@@ -398,7 +398,7 @@ impl Workspace {
             }))
     }
 
-    /// Critères mal écrits (`sans:truc`), seulement quand il y en a.
+    /// Critères mal écrits (`without:foo`), seulement quand il y en a.
     pub(super) fn render_search_notes(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let query = Self::committed_query(&self.filter.read(cx).value());
         let unknown = match self.view.scope() {
@@ -477,11 +477,11 @@ impl Workspace {
             .shadow_lg()
             .occlude()
             .text_sm();
-        let mut group = "";
+        let mut group = None;
         for (i, (s, n)) in self.suggestions.iter().enumerate() {
-            if s.group != group {
-                group = s.group;
-                list = list.child(div().px_2().pt_1().child(label_caps(group)));
+            if group != Some(s.group) {
+                group = Some(s.group);
+                list = list.child(div().px_2().pt_1().child(label_caps(s.group.label())));
             }
             let on = i == self.suggest_sel;
             list = list.child(
@@ -519,14 +519,14 @@ impl Workspace {
 
 fn group_icon(s: &Suggestion) -> IconName {
     match s.group {
-        "Lieu" => IconName::MapPin,
-        "Nom" | "Personne" | "Famille" => IconName::Users,
-        "Profession" => IconName::FileText,
-        "Type d'acte" => IconName::BookOpen,
-        "Dépôt" => IconName::Landmark,
-        "Juridiction" => IconName::Map,
-        "Dates" | "Événement" => IconName::Calendar,
-        "Support" => IconName::Image,
-        _ => IconName::Search,
+        Group::Place => IconName::MapPin,
+        Group::Name | Group::Person | Group::Family => IconName::Users,
+        Group::Occupation => IconName::FileText,
+        Group::ActType => IconName::BookOpen,
+        Group::Repository => IconName::Landmark,
+        Group::Jurisdiction => IconName::Map,
+        Group::Dates | Group::Event => IconName::Calendar,
+        Group::Medium => IconName::Image,
+        Group::Criteria => IconName::Search,
     }
 }

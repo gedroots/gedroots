@@ -97,7 +97,7 @@ fn real_file_roundtrip() {
     let g = Gedcom::parse(&text).unwrap();
     assert_eq!(g.to_gedcom_string(), text, "relecture/réécriture à l'identique");
     for k in RecordKind::ALL {
-        eprintln!("{:>14} : {}", k.label_fr(), g.count(k));
+        eprintln!("{:>14} : {}", k.label(), g.count(k));
     }
     eprintln!("{:>14} : {}", "Lieux", g.places().len());
 }

@@ -315,7 +315,10 @@ mod tests {
         assert_eq!(g.place_value("Troyes, 10000, Aube, Grand Est, France ", &[]), full);
         assert_eq!(g.place_value(full, &[]), full);
         let created = ", Bayeux, 14400, Calvados, Normandie, France".to_string();
-        assert_eq!(g.place_value("Bayeux, 14400, Calvados, Normandie, France", &[created.clone()]), created);
+        assert_eq!(
+            g.place_value("Bayeux, 14400, Calvados, Normandie, France", std::slice::from_ref(&created)),
+            created
+        );
         assert_eq!(g.place_value("Lyon, France", &[]), "Lyon, France");
     }
 }

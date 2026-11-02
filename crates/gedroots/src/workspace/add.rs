@@ -67,11 +67,7 @@ impl Workspace {
             .map(|t| {
                 (
                     t.to_string(),
-                    if *t == "EVEN" {
-                        t!("event_dialog.other").into_owned()
-                    } else {
-                        event_label(t).unwrap_or(t).to_string()
-                    },
+                    if *t == "EVEN" { t!("event_dialog.other").into_owned() } else { gedcom::event_name(t) },
                 )
             })
             .collect();
@@ -109,7 +105,7 @@ impl Workspace {
                 FAMILY_EVENTS
                     .iter()
                     .filter(|t| **t != "EVEN")
-                    .map(|t| (format!("FAM:{t}"), event_label(t).unwrap_or(t).to_string()))
+                    .map(|t| (format!("FAM:{t}"), gedcom::event_name(t)))
                     .chain(custom(true, "FAM:")),
             );
         }
@@ -120,8 +116,9 @@ impl Workspace {
         let mut options: Vec<(&str, &str)> = options.iter().map(|(v, l)| (v.as_str(), l.as_str())).collect();
         // Type absent de la liste proposée à l'ajout (CHR, ADOP…) : on le garde.
         let cur_tag = current.as_ref().map(|e| e.tag.clone()).unwrap_or_default();
+        let cur_label = gedcom::event_name(&cur_tag);
         if !cur_tag.is_empty() && !tags.contains(&cur_tag.as_str()) {
-            options.insert(0, (cur_tag.as_str(), event_label(&cur_tag).unwrap_or(cur_tag.as_str())));
+            options.insert(0, (cur_tag.as_str(), cur_label.as_str()));
         }
         let custom_kind = current
             .as_ref()
@@ -237,7 +234,7 @@ impl Workspace {
         let label = if ev.tag == "EVEN" {
             gedcom::event_type_label(&ev.detail)
         } else {
-            event_label(&ev.tag).unwrap_or("").to_string()
+            event_label(&ev.tag).unwrap_or_default().into_owned()
         };
         self.mutate(window, cx, move |g| {
             let who = g.record_label(&owner);
@@ -393,7 +390,7 @@ impl Workspace {
                     ),
             )
             .child(field(
-                t!("kind.source"),
+                gedcom::RecordKind::Source.label(),
                 Select::new(&d.source)
                     .small()
                     .cleanable(true)

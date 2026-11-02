@@ -198,7 +198,7 @@ impl Gedcom {
         let Some(e) = self.get(owner).and_then(|n| n.children.get(ix)) else { return String::new() };
         let title = self.event_title(owner, ix).unwrap_or_default();
         match (Event { node: e }).date() {
-            Some(d) => format!("{title} · {}", d.to_french()),
+            Some(d) => format!("{title} · {}", d.display()),
             None => title,
         }
     }

@@ -157,14 +157,14 @@ impl Workspace {
                     let d = on!(d, cx, MoreGenerations, |this, w, cx| this.step_generations(1, cx));
                     on!(d, cx, FewerGenerations, |this, w, cx| this.step_generations(-1, cx))
                 });
-                let d = on!(d, cx, FilterMen, |this, w, cx| this.toggle_filter("sexe:h", w, cx));
-                let d = on!(d, cx, FilterWomen, |this, w, cx| this.toggle_filter("sexe:f", w, cx));
+                let d = on!(d, cx, FilterMen, |this, w, cx| this.toggle_filter("sex:m", w, cx));
+                let d = on!(d, cx, FilterWomen, |this, w, cx| this.toggle_filter("sex:f", w, cx));
                 let d = on!(d, cx, FilterAncestors, |this, w, cx| this.toggle_filter("sosa", w, cx));
-                let d = on!(d, cx, FilterUnsourced, |this, w, cx| this.toggle_filter("sans:source", w, cx));
-                let d = on!(d, cx, FilterNoParents, |this, w, cx| this.toggle_filter("sans:parents", w, cx));
-                let d = on!(d, cx, FilterNoDate, |this, w, cx| this.toggle_filter("sans:date", w, cx));
-                let d = on!(d, cx, FilterNoMarriage, |this, w, cx| this.toggle_filter("sans:mariage", w, cx));
-                on!(d, cx, FilterWithMedia, |this, w, cx| this.toggle_filter("avec:média", w, cx))
+                let d = on!(d, cx, FilterUnsourced, |this, w, cx| this.toggle_filter("without:source", w, cx));
+                let d = on!(d, cx, FilterNoParents, |this, w, cx| this.toggle_filter("without:parents", w, cx));
+                let d = on!(d, cx, FilterNoDate, |this, w, cx| this.toggle_filter("without:date", w, cx));
+                let d = on!(d, cx, FilterNoMarriage, |this, w, cx| this.toggle_filter("without:marriage", w, cx));
+                on!(d, cx, FilterWithMedia, |this, w, cx| this.toggle_filter("with:media", w, cx))
             })
             // Individu sélectionné.
             .when(indi.is_some(), |d| {

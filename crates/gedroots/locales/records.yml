@@ -165,27 +165,6 @@ sex.other:
 sex.unknown:
   en: Unknown
   fr: Inconnu
-kind.individual:
-  en: Person
-  fr: Individu
-kind.family:
-  en: Family
-  fr: Famille
-kind.source:
-  en: Source
-  fr: Source
-kind.repository:
-  en: Repository
-  fr: Dépôt
-kind.media:
-  en: Media
-  fr: Média
-kind.shared_note:
-  en: Shared Note
-  fr: Note partagée
-kind.submitter:
-  en: Submitter
-  fr: Auteur
 picker.choose_father:
   en: "Choose the Father of %{name}"
   fr: "Choisir le père de %{name}"
@@ -235,8 +214,8 @@ picker.source_hint:
   en: Title of the source, or of a new source…
   fr: "Titre de la source, ou d'une nouvelle source…"
 picker.person_hint:
-  en: "Name, given name… (criteria: né:1850 lieu:troyes)"
-  fr: "Nom, prénom… (critères : né:1850 lieu:troyes)"
+  en: "Name, given name… (criteria: born:1850 place:troyes)"
+  fr: "Nom, prénom… (critères : born:1850 place:troyes)"
 picker.linked_as:
   en: "%{who} linked as %{rel} of %{name}"
   fr: "%{who} lié(e) comme %{rel} de %{name}"

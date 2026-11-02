@@ -1,0 +1,645 @@
+_version: 2
+# GEDCOM 7 structures and enumerated values (crates/gedcom/src/schema/mod.rs).
+# struct.<id>: label by registry id; tag.<TAG>: label by tag; enum.<VALUE>: enumerated value.
+struct.record-INDI:
+  en: Person
+  fr: Individu
+struct.record-FAM:
+  en: Family
+  fr: Famille
+struct.record-SOUR:
+  en: Source
+  fr: Source
+struct.HEAD-SOUR:
+  en: Source
+  fr: Source
+struct.record-REPO:
+  en: Repository
+  fr: "Dépôt d'archives"
+struct.record-OBJE:
+  en: Media
+  fr: Média
+struct.record-SNOTE:
+  en: Shared Note
+  fr: Note partagée
+struct.record-SUBM:
+  en: Submitter
+  fr: Auteur du fichier
+struct.FAM-HUSB:
+  en: Husband
+  fr: Époux
+struct.HUSB:
+  en: Husband
+  fr: Époux
+struct.FAM-WIFE:
+  en: Wife
+  fr: Épouse
+struct.WIFE:
+  en: Wife
+  fr: Épouse
+struct.INDI-TITL:
+  en: Nobility or Honorific Title
+  fr: Titre de noblesse ou honorifique
+struct.TITL:
+  en: Title
+  fr: Titre
+struct.NAME-TYPE:
+  en: Type
+  fr: Type
+struct.EXID-TYPE:
+  en: Type
+  fr: Type
+struct.TYPE:
+  en: Type
+  fr: Type
+struct.FAMC-STAT:
+  en: Status
+  fr: Statut
+struct.ord-STAT:
+  en: Status
+  fr: Statut
+struct.FAMC-ADOP:
+  en: Adopted By
+  fr: Adopté par
+struct.SOUR-EVEN:
+  en: Events Recorded
+  fr: Événements enregistrés
+struct.DATA-EVEN:
+  en: Events Recorded
+  fr: Événements enregistrés
+struct.SOUR-DATA:
+  en: Data
+  fr: Données
+struct.HEAD-SOUR-DATA:
+  en: Data
+  fr: Données
+struct.DATA:
+  en: Data
+  fr: Données
+struct.PLAC-FORM:
+  en: Place Format
+  fr: Format des lieux
+struct.HEAD-PLAC-FORM:
+  en: Place Format
+  fr: Format des lieux
+tag.ABBR:
+  en: Abbreviation
+  fr: Abréviation
+tag.ADDR:
+  en: Address
+  fr: Adresse
+tag.ADOP:
+  en: Adoption
+  fr: Adoption
+tag.ADR1:
+  en: Address Line (deprecated)
+  fr: "Ligne d'adresse (obsolète)"
+tag.ADR2:
+  en: Address Line (deprecated)
+  fr: "Ligne d'adresse (obsolète)"
+tag.ADR3:
+  en: Address Line (deprecated)
+  fr: "Ligne d'adresse (obsolète)"
+tag.AGE:
+  en: Age at Event
+  fr: "Âge à l'événement"
+tag.AGNC:
+  en: Responsible Agency
+  fr: Organisme responsable
+tag.ALIA:
+  en: Alias (same person)
+  fr: Alias (même personne)
+tag.ANCI:
+  en: Ancestor Interest
+  fr: Intérêt pour les ascendants
+tag.ANUL:
+  en: Annulment
+  fr: Annulation du mariage
+tag.ASSO:
+  en: Associated Person (witness, godparent…)
+  fr: Personne associée (témoin, parrain…)
+tag.AUTH:
+  en: Author
+  fr: Auteur
+tag.BAPL:
+  en: Baptism (LDS)
+  fr: Baptême (SDJ)
+tag.BAPM:
+  en: Baptism
+  fr: Baptême
+tag.BARM:
+  en: Bar Mitzvah
+  fr: Bar-mitsva
+tag.BASM:
+  en: Bat Mitzvah
+  fr: Bat-mitsva
+tag.BIRT:
+  en: Birth
+  fr: Naissance
+tag.BLES:
+  en: Blessing
+  fr: Bénédiction
+tag.BURI:
+  en: Burial
+  fr: Inhumation
+tag.CALN:
+  en: Call Number
+  fr: Cote
+tag.CAST:
+  en: Caste
+  fr: Caste
+tag.CAUS:
+  en: Cause
+  fr: Cause
+tag.CENS:
+  en: Census
+  fr: Recensement
+tag.CHAN:
+  en: Last Change
+  fr: Dernière modification
+tag.CHIL:
+  en: Child
+  fr: Enfant
+tag.CHR:
+  en: Christening
+  fr: Baptême (enfant)
+tag.CHRA:
+  en: Adult Christening
+  fr: Baptême (adulte)
+tag.CITY:
+  en: City
+  fr: Ville
+tag.CONF:
+  en: Confirmation
+  fr: Confirmation
+tag.CONL:
+  en: Confirmation (LDS)
+  fr: Confirmation (SDJ)
+tag.CONT:
+  en: Continued Text
+  fr: Suite du texte
+tag.COPR:
+  en: Copyright
+  fr: "Droits d'auteur"
+tag.CORP:
+  en: Corporate Name
+  fr: Société
+tag.CREA:
+  en: Creation
+  fr: Création
+tag.CREM:
+  en: Cremation
+  fr: Crémation
+tag.CROP:
+  en: Crop
+  fr: Recadrage
+tag.CTRY:
+  en: Country
+  fr: Pays
+tag.DATE:
+  en: Date
+  fr: Date
+tag.DEAT:
+  en: Death
+  fr: Décès
+tag.DESI:
+  en: Descendant Interest
+  fr: Intérêt pour les descendants
+tag.DEST:
+  en: Destination
+  fr: Destinataire
+tag.DIV:
+  en: Divorce
+  fr: Divorce
+tag.DIVF:
+  en: Divorce Filing
+  fr: Demande de divorce
+tag.DSCR:
+  en: Physical Description
+  fr: Description physique
+tag.EDUC:
+  en: Education
+  fr: Études
+tag.EMAIL:
+  en: Email
+  fr: Courriel
+tag.EMIG:
+  en: Emigration
+  fr: Émigration
+tag.ENDL:
+  en: Endowment (LDS)
+  fr: Dotation (SDJ)
+tag.ENGA:
+  en: Engagement
+  fr: Fiançailles
+tag.EVEN:
+  en: Event
+  fr: Événement
+tag.EXID:
+  en: External Identifier
+  fr: Identifiant externe
+tag.FACT:
+  en: Fact
+  fr: Fait
+tag.FAM:
+  en: Family
+  fr: Famille
+tag.FAMC:
+  en: Family (as child)
+  fr: "Famille (en tant qu'enfant)"
+tag.FAMS:
+  en: Family (as spouse)
+  fr: Famille (en tant que conjoint)
+tag.FAX:
+  en: Fax
+  fr: Fax
+tag.FCOM:
+  en: First Communion
+  fr: Première communion
+tag.FILE:
+  en: File
+  fr: Fichier
+tag.FORM:
+  en: Format
+  fr: Format
+tag.GEDC:
+  en: GEDCOM Version
+  fr: Version GEDCOM
+tag.GIVN:
+  en: Given Names
+  fr: Prénoms
+tag.GRAD:
+  en: Graduation
+  fr: Diplôme
+tag.HEAD:
+  en: Header
+  fr: En-tête
+tag.HEIGHT:
+  en: Height (pixels)
+  fr: Hauteur (pixels)
+tag.IDNO:
+  en: Identification Number
+  fr: "Numéro d'identification"
+tag.IMMI:
+  en: Immigration
+  fr: Immigration
+tag.INDI:
+  en: Person
+  fr: Individu
+tag.INIL:
+  en: Initiatory (LDS)
+  fr: Initiation (SDJ)
+tag.LANG:
+  en: Language
+  fr: Langue
+tag.LATI:
+  en: Latitude
+  fr: Latitude
+tag.LEFT:
+  en: Left Crop
+  fr: Rognage à gauche
+tag.LONG:
+  en: Longitude
+  fr: Longitude
+tag.MAP:
+  en: Coordinates
+  fr: Coordonnées
+tag.MARB:
+  en: Marriage Banns
+  fr: Publication des bans
+tag.MARC:
+  en: Marriage Contract
+  fr: Contrat de mariage
+tag.MARL:
+  en: Marriage License
+  fr: Licence de mariage
+tag.MARR:
+  en: Marriage
+  fr: Mariage
+tag.MARS:
+  en: Marriage Settlement
+  fr: Convention matrimoniale
+tag.MEDI:
+  en: Medium
+  fr: Support
+tag.MIME:
+  en: Media Type
+  fr: Type de média
+tag.NAME:
+  en: Name
+  fr: Nom
+tag.NATI:
+  en: Nationality
+  fr: Nationalité
+tag.NATU:
+  en: Naturalization
+  fr: Naturalisation
+tag.NCHI:
+  en: Number of Children
+  fr: "Nombre d'enfants"
+tag.NICK:
+  en: Nickname
+  fr: Surnom
+tag.NMR:
+  en: Number of Marriages
+  fr: Nombre de mariages
+tag.NO:
+  en: Did Not Happen
+  fr: "N'a pas eu lieu"
+tag.NOTE:
+  en: Note
+  fr: Note
+tag.NPFX:
+  en: Name Prefix (title)
+  fr: Préfixe du nom (titre)
+tag.NSFX:
+  en: Name Suffix
+  fr: Suffixe du nom
+tag.OBJE:
+  en: Media
+  fr: Média
+tag.OCCU:
+  en: Occupation
+  fr: Profession
+tag.ORDN:
+  en: Ordination
+  fr: Ordination
+tag.PAGE:
+  en: Page / Location in Source
+  fr: Page / emplacement dans la source
+tag.PEDI:
+  en: Pedigree
+  fr: Lien de filiation
+tag.PHON:
+  en: Phone
+  fr: Téléphone
+tag.PHRASE:
+  en: Free-Form Phrase
+  fr: Formulation libre
+tag.PLAC:
+  en: Place
+  fr: Lieu
+tag.POST:
+  en: Postal Code
+  fr: Code postal
+tag.PROB:
+  en: Probate
+  fr: Succession
+tag.PROP:
+  en: Property
+  fr: Propriété
+tag.PUBL:
+  en: Publication
+  fr: Publication
+tag.QUAY:
+  en: Certainty
+  fr: Fiabilité
+tag.REFN:
+  en: Reference
+  fr: Référence
+tag.RELI:
+  en: Religion
+  fr: Religion
+tag.REPO:
+  en: Repository
+  fr: "Dépôt d'archives"
+tag.RESI:
+  en: Residence
+  fr: Résidence
+tag.RESN:
+  en: Restriction
+  fr: Restriction
+tag.RETI:
+  en: Retirement
+  fr: Retraite
+tag.ROLE:
+  en: Role
+  fr: Rôle
+tag.SCHMA:
+  en: Extension Schema
+  fr: Schéma des extensions
+tag.SDATE:
+  en: Sort Date
+  fr: Date de tri
+tag.SEX:
+  en: Sex
+  fr: Sexe
+tag.SLGC:
+  en: Child Sealing (LDS)
+  fr: Scellement enfant (SDJ)
+tag.SLGS:
+  en: Spouse Sealing (LDS)
+  fr: Scellement conjoints (SDJ)
+tag.SNOTE:
+  en: Shared Note
+  fr: Note partagée
+tag.SOUR:
+  en: Source
+  fr: Source
+tag.SPFX:
+  en: Surname Prefix
+  fr: Particule
+tag.SSN:
+  en: Social Security Number
+  fr: Numéro de sécurité sociale
+tag.STAE:
+  en: State / Region
+  fr: Département / région
+tag.SUBM:
+  en: Submitter
+  fr: Auteur du fichier
+tag.SURN:
+  en: Surname
+  fr: Nom de famille
+tag.TAG:
+  en: Extension Tag
+  fr: "Balise d'extension"
+tag.TEMP:
+  en: Temple
+  fr: Temple
+tag.TEXT:
+  en: Transcription
+  fr: Transcription
+tag.TIME:
+  en: Time
+  fr: Heure
+tag.TOP:
+  en: Top Crop
+  fr: Rognage en haut
+tag.TRAN:
+  en: Translation
+  fr: Traduction
+tag.TRLR:
+  en: End of File
+  fr: Fin de fichier
+tag.UID:
+  en: Unique Identifier
+  fr: Identifiant unique
+tag.VERS:
+  en: Version
+  fr: Version
+tag.WIDTH:
+  en: Width (pixels)
+  fr: Largeur (pixels)
+tag.WILL:
+  en: Will
+  fr: Testament
+tag.WWW:
+  en: Website
+  fr: Site web
+enum.M:
+  en: Male
+  fr: Masculin
+enum.F:
+  en: Female
+  fr: Féminin
+enum.X:
+  en: Other
+  fr: Autre
+enum.U:
+  en: Unknown
+  fr: Inconnu
+enum.BIRTH:
+  en: Birth / Biological
+  fr: Naissance / biologique
+enum.ADOPTED:
+  en: Adopted
+  fr: Adopté
+enum.FOSTER:
+  en: Foster
+  fr: "Placé (famille d'accueil)"
+enum.SEALING:
+  en: Sealing (LDS)
+  fr: Scellement (SDJ)
+enum.OTHER:
+  en: Other
+  fr: Autre
+enum.AKA:
+  en: Also Known As
+  fr: Aussi connu sous
+enum.IMMIGRANT:
+  en: Immigrant Name
+  fr: "Nom d'immigrant"
+enum.MAIDEN:
+  en: Maiden Name
+  fr: Nom de jeune fille
+enum.MARRIED:
+  en: Married Name
+  fr: "Nom d'épouse"
+enum.PROFESSIONAL:
+  en: Professional Name
+  fr: "Nom d'usage professionnel"
+enum.PROVEN:
+  en: Proven
+  fr: Prouvé
+enum.CHALLENGED:
+  en: Challenged
+  fr: Contesté
+enum.DISPROVEN:
+  en: Disproven
+  fr: Réfuté
+enum.HUSB:
+  en: Husband
+  fr: Époux
+enum.WIFE:
+  en: Wife
+  fr: Épouse
+enum.BOTH:
+  en: Both
+  fr: Les deux
+enum.CHIL:
+  en: Child
+  fr: Enfant
+enum.CLERGY:
+  en: Clergy
+  fr: Clergé
+enum.FATH:
+  en: Father
+  fr: Père
+enum.MOTH:
+  en: Mother
+  fr: Mère
+enum.FRIEND:
+  en: Friend
+  fr: Ami
+enum.GODP:
+  en: Godparent
+  fr: Parrain / marraine
+enum.MULTIPLE:
+  en: Multiple Birth
+  fr: Naissance multiple
+enum.NGHBR:
+  en: Neighbor
+  fr: Voisin
+enum.OFFICIATOR:
+  en: Officiator
+  fr: Officiant
+enum.PARENT:
+  en: Parent
+  fr: Parent
+enum.SPOU:
+  en: Spouse
+  fr: Conjoint
+enum.WITN:
+  en: Witness
+  fr: Témoin
+enum.CONFIDENTIAL:
+  en: Confidential
+  fr: Confidentiel
+enum.LOCKED:
+  en: Locked
+  fr: Verrouillé
+enum.PRIVACY:
+  en: Private
+  fr: Privé
+enum.0:
+  en: Unreliable / Estimated
+  fr: Non fiable / estimé
+enum.1:
+  en: Questionable
+  fr: Fiabilité douteuse
+enum.2:
+  en: Secondary Evidence
+  fr: Source secondaire
+enum.3:
+  en: Direct and Primary Evidence
+  fr: Source directe et primaire
+enum.AUDIO:
+  en: Audio
+  fr: Audio
+enum.BOOK:
+  en: Book
+  fr: Livre
+enum.CARD:
+  en: Card
+  fr: Fiche
+enum.ELECTRONIC:
+  en: Electronic
+  fr: Électronique
+enum.FICHE:
+  en: Microfiche
+  fr: Microfiche
+enum.FILM:
+  en: Microfilm
+  fr: Microfilm
+enum.MAGAZINE:
+  en: Magazine
+  fr: Revue
+enum.MANUSCRIPT:
+  en: Manuscript
+  fr: Manuscrit
+enum.MAP:
+  en: Map
+  fr: Carte
+enum.NEWSPAPER:
+  en: Newspaper
+  fr: Journal
+enum.PHOTO:
+  en: Photo
+  fr: Photo
+enum.TOMBSTONE:
+  en: Tombstone
+  fr: Pierre tombale
+enum.VIDEO:
+  en: Video
+  fr: Vidéo

@@ -57,15 +57,16 @@ impl RecordKind {
         }
     }
 
-    pub fn label_fr(self) -> &'static str {
+    /// Name of the kind, e.g. “Source”.
+    pub fn label(self) -> std::borrow::Cow<'static, str> {
         match self {
-            RecordKind::Individual => "Individu",
-            RecordKind::Family => "Famille",
-            RecordKind::Source => "Source",
-            RecordKind::Repository => "Dépôt",
-            RecordKind::Media => "Média",
-            RecordKind::SharedNote => "Note partagée",
-            RecordKind::Submitter => "Auteur",
+            RecordKind::Individual => rust_i18n::t!("kind.individual"),
+            RecordKind::Family => rust_i18n::t!("kind.family"),
+            RecordKind::Source => rust_i18n::t!("kind.source"),
+            RecordKind::Repository => rust_i18n::t!("kind.repository"),
+            RecordKind::Media => rust_i18n::t!("kind.media"),
+            RecordKind::SharedNote => rust_i18n::t!("kind.shared_note"),
+            RecordKind::Submitter => rust_i18n::t!("kind.submitter"),
         }
     }
 }
@@ -201,12 +202,14 @@ impl Gedcom {
                 node.children.push(Node::with_value("NAME", "//"));
                 node.children.push(Node::with_value("SEX", "U"));
             }
-            RecordKind::Source => node.children.push(Node::with_value("TITL", "Nouvelle source")),
-            RecordKind::Repository => node.children.push(Node::with_value("NAME", "Nouveau dépôt")),
+            RecordKind::Source => node.children.push(Node::with_value("TITL", rust_i18n::t!("record.new_source"))),
+            RecordKind::Repository => {
+                node.children.push(Node::with_value("NAME", rust_i18n::t!("record.new_repository")))
+            }
             RecordKind::Media => {
                 node.children.push(Node::with_value("FILE", "").push(Node::with_value("FORM", "image/jpeg")))
             }
-            RecordKind::SharedNote => node.value = Some("Nouvelle note".into()),
+            RecordKind::SharedNote => node.value = Some(rust_i18n::t!("record.new_note").into()),
             RecordKind::Submitter => node.children.push(Node::with_value("NAME", "")),
             RecordKind::Family => {}
         }

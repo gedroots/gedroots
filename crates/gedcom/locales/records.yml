@@ -1,0 +1,32 @@
+_version: 2
+# Kinds of records (crates/gedcom/src/document.rs).
+kind.individual:
+  en: Person
+  fr: Individu
+kind.family:
+  en: Family
+  fr: Famille
+kind.source:
+  en: Source
+  fr: Source
+kind.repository:
+  en: Repository
+  fr: Dépôt
+kind.media:
+  en: Media
+  fr: Média
+kind.shared_note:
+  en: Shared Note
+  fr: Note partagée
+kind.submitter:
+  en: Submitter
+  fr: Auteur
+record.new_source:
+  en: New Source
+  fr: Nouvelle source
+record.new_repository:
+  en: New Repository
+  fr: Nouveau dépôt
+record.new_note:
+  en: New Note
+  fr: Nouvelle note

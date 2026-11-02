@@ -15,6 +15,8 @@ pub use input::{Parsed, parse_input};
 
 use crate::node::Node;
 use calendar as cal;
+use rust_i18n::t;
+use std::borrow::Cow;
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Hash)]
 pub enum Calendar {
@@ -53,13 +55,13 @@ impl Calendar {
         })
     }
 
-    pub fn label(&self) -> &str {
+    pub fn label(&self) -> Cow<'_, str> {
         match self {
-            Calendar::Gregorian => "Grégorien",
-            Calendar::Julian => "Julien",
-            Calendar::FrenchRepublican => "Républicain",
-            Calendar::Hebrew => "Hébraïque",
-            Calendar::Extension(t) => t,
+            Calendar::Gregorian => t!("calendar.gregorian"),
+            Calendar::Julian => t!("calendar.julian"),
+            Calendar::FrenchRepublican => t!("calendar.republican"),
+            Calendar::Hebrew => t!("calendar.hebrew"),
+            Calendar::Extension(t) => Cow::Borrowed(t),
         }
     }
 
@@ -130,18 +132,18 @@ impl DateKind {
         DateKind::To,
     ];
 
-    pub fn label(self) -> &'static str {
+    pub fn label(self) -> Cow<'static, str> {
         match self {
-            DateKind::Exact => "Exacte",
-            DateKind::About => "Vers",
-            DateKind::Calculated => "Calculée",
-            DateKind::Estimated => "Estimée",
-            DateKind::Before => "Avant",
-            DateKind::After => "Après",
-            DateKind::Between => "Entre",
-            DateKind::FromTo => "Période",
-            DateKind::From => "Depuis",
-            DateKind::To => "Jusqu'à",
+            DateKind::Exact => t!("date_kind.exact"),
+            DateKind::About => t!("date_kind.about"),
+            DateKind::Calculated => t!("date_kind.calculated"),
+            DateKind::Estimated => t!("date_kind.estimated"),
+            DateKind::Before => t!("date_kind.before"),
+            DateKind::After => t!("date_kind.after"),
+            DateKind::Between => t!("date_kind.between"),
+            DateKind::FromTo => t!("date_kind.from_to"),
+            DateKind::From => t!("date_kind.from"),
+            DateKind::To => t!("date_kind.to"),
         }
     }
 
@@ -151,43 +153,34 @@ impl DateKind {
 }
 
 const GREG_MONTHS: [&str; 12] = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
-const FR_MONTHS: [&str; 12] =
-    ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."];
 const REP_MONTHS: [&str; 13] =
     ["VEND", "BRUM", "FRIM", "NIVO", "PLUV", "VENT", "GERM", "FLOR", "PRAI", "MESS", "THER", "FRUC", "COMP"];
-const REP_NAMES: [&str; 13] = [
-    "vendémiaire",
-    "brumaire",
-    "frimaire",
-    "nivôse",
-    "pluviôse",
-    "ventôse",
-    "germinal",
-    "floréal",
-    "prairial",
-    "messidor",
-    "thermidor",
-    "fructidor",
-    "jours complémentaires",
-];
 const HEB_MONTHS: [&str; 13] =
     ["TSH", "CSH", "KSL", "TVT", "SHV", "ADR", "ADS", "NSN", "IYR", "SVN", "TMZ", "AAV", "ELL"];
-const HEB_NAMES: [&str; 13] = [
-    "tichri", "hechvan", "kislev", "tevet", "chevat", "adar I", "adar II", "nissan", "iyar", "sivan", "tammouz", "av",
-    "eloul",
-];
 
-fn fr_month(m: u32) -> &'static str {
-    FR_MONTHS.get(m as usize - 1).copied().unwrap_or("?")
+/// Short name of a Gregorian or Julian month (1..=12): “Mar”, « mars ».
+fn month_name(m: u32, lang: &str) -> Cow<'static, str> {
+    match GREG_MONTHS.get((m as usize).wrapping_sub(1)) {
+        Some(tag) => crate::i18n::lookup_in(&format!("month.{tag}"), lang).unwrap_or(Cow::Borrowed("?")),
+        None => Cow::Borrowed("?"),
+    }
 }
 
-/// Année grégorienne lisible (`1803`, `44 av. J.-C.`) à partir d'une année astronomique.
-fn fr_year(y: i64) -> String {
-    if y <= 0 { format!("{} av. J.-C.", 1 - y) } else { y.to_string() }
+/// Name of a month of the French Republican or Hebrew calendar (1..=13).
+fn calendar_month_name(tags: &[&str], m: u8, lang: &str) -> Cow<'static, str> {
+    match tags.get((m as usize).wrapping_sub(1)) {
+        Some(tag) => crate::i18n::lookup_in(&format!("month.{tag}"), lang).unwrap_or(Cow::Borrowed("?")),
+        None => Cow::Borrowed("?"),
+    }
 }
 
-fn fr_day(d: u32) -> String {
-    if d == 1 { "1er".into() } else { d.to_string() }
+/// Readable Gregorian year (`1803`, `44 BC`) from an astronomical year.
+fn year_text(y: i64, lang: &str) -> String {
+    if y <= 0 { t!("date.bce_year", year = 1 - y, locale = lang).into_owned() } else { y.to_string() }
+}
+
+fn day_text(d: u32, lang: &str) -> String {
+    if d == 1 { t!("date.first_day", locale = lang).into_owned() } else { d.to_string() }
 }
 
 pub(crate) fn roman(mut n: i32) -> String {
@@ -318,27 +311,27 @@ impl SimpleDate {
         if matches!(self.calendar, Calendar::Extension(_)) || self.month_tag.is_some() {
             return Ok(());
         }
-        let y = self.year.ok_or("année manquante")?;
+        let y = self.year.ok_or_else(|| t!("date.error.no_year").into_owned())?;
         if y <= 0 {
-            return Err("l'année 0 n'existe pas".into());
+            return Err(t!("date.error.year_zero").into());
         }
         if self.bce && !matches!(self.calendar, Calendar::Gregorian | Calendar::Julian) {
-            return Err("« av. J.-C. » n'existe qu'en calendrier grégorien ou julien".into());
+            return Err(t!("date.error.bce_calendar").into());
         }
         if let Some(m) = self.month
             && (m == 0 || m as usize > self.calendar.months().len())
         {
-            return Err("mois invalide".into());
+            return Err(t!("date.error.month").into());
         }
         if let Some(d) = self.day {
             if self.month.is_none() {
-                return Err("jour sans mois".into());
+                return Err(t!("date.error.day_without_month").into());
             }
             let max = self.month_days().unwrap_or(31);
             if d == 0 || d as u32 > max {
                 let mut m = self.clone();
                 m.day = None;
-                return Err(format!("{} n'a que {max} jours", m.core_text()));
+                return Err(t!("date.error.too_many_days", month = m.core_text(), max = max).into());
             }
         }
         Ok(())
@@ -446,8 +439,12 @@ impl SimpleDate {
         (y, self.month.unwrap_or(0), self.day.unwrap_or(0))
     }
 
-    /// Texte de la date seule, dans son calendrier (`15 brumaire an XII`, `3 mars 1700 julien`).
+    /// The date alone, in its calendar (`15 Brumaire year XII`, `3 Mar 1700 Julian`).
     pub fn core_text(&self) -> String {
+        self.core_text_in(&crate::i18n::language())
+    }
+
+    fn core_text_in(&self, lang: &str) -> String {
         if let Calendar::Extension(_) = self.calendar {
             return self.to_gedcom(false);
         }
@@ -456,42 +453,47 @@ impl SimpleDate {
         }
         let mut s = Vec::new();
         if let Some(day) = self.day {
-            s.push(fr_day(day as u32));
+            s.push(day_text(day as u32, lang));
         }
         if let Some(m) = self.month {
-            let i = m as usize - 1;
             s.push(match self.calendar {
-                Calendar::FrenchRepublican => REP_NAMES.get(i).copied().unwrap_or("?").to_string(),
+                Calendar::FrenchRepublican => calendar_month_name(&REP_MONTHS, m, lang).into_owned(),
                 Calendar::Hebrew => {
                     let leap = self.year.is_some_and(|y| cal::hebrew_leap(y as i64));
                     match m {
-                        6 if !leap => "adar".into(),
-                        7 if !leap => "adar".into(),
-                        _ => HEB_NAMES.get(i).copied().unwrap_or("?").to_string(),
+                        6 | 7 if !leap => t!("month.adar", locale = lang).into_owned(),
+                        _ => calendar_month_name(&HEB_MONTHS, m, lang).into_owned(),
                     }
                 }
-                _ => fr_month(m as u32).to_string(),
+                _ => month_name(m as u32, lang).into_owned(),
             });
         }
         if let Some(y) = self.year {
             s.push(match self.calendar {
-                Calendar::FrenchRepublican => format!("an {}", roman(y)),
+                Calendar::FrenchRepublican => t!("date.republican_year", year = roman(y), locale = lang).into_owned(),
                 _ => y.to_string(),
             });
         }
         if self.bce {
-            s.push("av. J.-C.".into());
+            s.push(t!("date.bce", locale = lang).into_owned());
         }
         match self.calendar {
-            Calendar::Julian => s.push("julien".into()),
-            Calendar::Hebrew => s.push("hébraïque".into()),
+            Calendar::Julian => s.push(t!("date.julian", locale = lang).into_owned()),
+            Calendar::Hebrew => s.push(t!("date.hebrew", locale = lang).into_owned()),
             _ => {}
         }
         s.join(" ")
     }
 
-    /// Équivalent grégorien (`7 nov. 1803`, `sept.–oct. 1803`, `1803–1804`).
+    /// Gregorian equivalent (`7 Nov 1803`, `Sep–Oct 1803`, `1803–1804`).
     pub fn gregorian_equivalent(&self) -> Option<String> {
+        self.gregorian_equivalent_in(&crate::i18n::language())
+    }
+
+    fn gregorian_equivalent_in(&self, lang: &str) -> Option<String> {
+        let fr_day = |d| day_text(d, lang);
+        let fr_month = |m| month_name(m, lang);
+        let fr_year = |y| year_text(y, lang);
         if matches!(self.calendar, Calendar::Gregorian | Calendar::Extension(_)) {
             return None;
         }
@@ -516,9 +518,14 @@ impl SimpleDate {
         })
     }
 
-    pub fn to_french(&self) -> String {
-        let core = self.core_text();
-        match self.gregorian_equivalent() {
+    /// The date in the interface language, with its Gregorian equivalent for other calendars.
+    pub fn display(&self) -> String {
+        self.display_in(&crate::i18n::language())
+    }
+
+    fn display_in(&self, lang: &str) -> String {
+        let core = self.core_text_in(lang);
+        match self.gregorian_equivalent_in(lang) {
             Some(g) => format!("{core} ({g})"),
             None => core,
         }
@@ -658,7 +665,7 @@ impl Date {
             && let (Some((lo, _)), Some((_, hi))) = (a.rd_range(), b.rd_range())
             && lo > hi
         {
-            return Err("la première date doit précéder la seconde".into());
+            return Err(t!("date.error.order").into());
         }
         Ok(())
     }
@@ -702,41 +709,62 @@ impl Date {
         }
     }
 
-    fn render(&self, f: impl Fn(&SimpleDate) -> String) -> String {
-        // « le » n'est pas répété : « du 10 mai au 12 juin », « de 1850 à 1860 ».
-        let du = |d: &SimpleDate| if d.day.is_some() { "du" } else { "de" };
-        let au = |d: &SimpleDate| if d.day.is_some() { "au" } else { "à" };
-        let jusque = |d: &SimpleDate| if d.day.is_some() { "jusqu'au" } else { "jusqu'en" };
+    fn render(&self, lang: &str, f: impl Fn(&SimpleDate) -> String) -> String {
+        // French changes the preposition with a day: « du 10 mai au 12 juin », « de 1850 à 1860 ».
+        let until = |d: &SimpleDate| match d.day {
+            Some(_) => t!("date.until_day", d = f(d), locale = lang),
+            None => t!("date.until_year", d = f(d), locale = lang),
+        };
+        let from = |d: &SimpleDate| match d.day {
+            Some(_) => t!("date.from_day", d = f(d), locale = lang),
+            None => t!("date.from_year", d = f(d), locale = lang),
+        };
+        let to = |d: &SimpleDate| match d.day {
+            Some(_) => t!("date.to_day", d = f(d), locale = lang),
+            None => t!("date.to_year", d = f(d), locale = lang),
+        };
         match self {
             Date::Exact(d) => f(d),
-            Date::About(d) => format!("vers {}", f(d)),
-            Date::Calculated(d) => format!("calculée {}", f(d)),
-            Date::Estimated(d) => format!("estimée {}", f(d)),
-            Date::Before(d) => format!("avant {}", f(d)),
-            Date::After(d) => format!("après {}", f(d)),
-            Date::Between(a, b) => format!("entre {} et {}", f(a), f(b)),
-            Date::From(d) => format!("depuis {}", f(d)),
-            Date::To(d) => format!("{} {}", jusque(d), f(d)),
-            Date::FromTo(a, b) => format!("{} {} {} {}", du(a), f(a), au(b), f(b)),
+            Date::About(d) => t!("date.about", d = f(d), locale = lang).into_owned(),
+            Date::Calculated(d) => t!("date.calculated", d = f(d), locale = lang).into_owned(),
+            Date::Estimated(d) => t!("date.estimated", d = f(d), locale = lang).into_owned(),
+            Date::Before(d) => t!("date.before", d = f(d), locale = lang).into_owned(),
+            Date::After(d) => t!("date.after", d = f(d), locale = lang).into_owned(),
+            Date::Between(a, b) => t!("date.between", a = f(a), b = f(b), locale = lang).into_owned(),
+            Date::From(d) => t!("date.since", d = f(d), locale = lang).into_owned(),
+            Date::To(d) => until(d).into_owned(),
+            Date::FromTo(a, b) => t!("date.from_to", from = from(a), to = to(b), locale = lang).into_owned(),
             Date::Other(s) => s.clone(),
         }
     }
 
-    /// Affichage en français, avec l'équivalent grégorien des autres calendriers.
-    pub fn to_french(&self) -> String {
-        self.render(SimpleDate::to_french)
+    /// The date in the interface language, with the Gregorian equivalent of other calendars.
+    pub fn display(&self) -> String {
+        self.display_in(&crate::i18n::language())
     }
 
-    /// Texte de saisie, relu à l'identique par [`parse_input`].
+    fn display_in(&self, lang: &str) -> String {
+        self.render(lang, |d| d.display_in(lang))
+    }
+
+    /// Text for the date field, read back as is by [`parse_input`].
     pub fn to_input_text(&self) -> String {
+        self.to_input_text_in(&crate::i18n::language())
+    }
+
+    fn to_input_text_in(&self, lang: &str) -> String {
         if self.dates().iter().any(|d| matches!(d.calendar, Calendar::Extension(_)) || d.month_tag.is_some()) {
             return self.to_gedcom();
         }
         let ds = self.dates();
         let mixed = ds.iter().any(|d| d.calendar != ds[0].calendar);
-        self.render(|d| {
-            let t = d.core_text();
-            if mixed && d.calendar == Calendar::Gregorian { format!("{t} grégorien") } else { t }
+        self.render(lang, |d| {
+            let text = d.core_text_in(lang);
+            if mixed && d.calendar == Calendar::Gregorian {
+                format!("{text} {}", t!("date.gregorian", locale = lang))
+            } else {
+                text
+            }
         })
     }
 }
@@ -783,35 +811,50 @@ mod tests {
     use super::*;
 
     #[test]
+    fn english() {
+        let en = |raw: &str| Date::parse(raw).display_in("en");
+        assert_eq!(en("19 SEP 2000"), "19 Sep 2000");
+        assert_eq!(en("1 JAN 1900"), "1 Jan 1900");
+        assert_eq!(en("ABT 1850"), "about 1850");
+        assert_eq!(en("FROM 10 MAY 1926 TO 10 NOV 1926"), "from 10 May 1926 to 10 Nov 1926");
+        assert_eq!(en("TO 1860"), "until 1860");
+        assert_eq!(en("BET 1850 AND 1860"), "between 1850 and 1860");
+        assert_eq!(en("FRENCH_R 30 GERM 4"), "30 Germinal year IV (19 Apr 1796)");
+        assert_eq!(en("JULIAN 3 MAR 1700"), "3 Mar 1700 Julian (14 Mar 1700)");
+        assert_eq!(en("HEBREW 14 ADS 5785"), "14 Adar 5785 Hebrew (14 Mar 2025)");
+        assert_eq!(en("44 BCE"), "44 BC");
+    }
+
+    #[test]
     fn exact_and_qualified() {
-        assert_eq!(Date::parse("19 SEP 2000").to_french(), "19 sept. 2000");
-        assert_eq!(Date::parse("1 JAN 1900").to_french(), "1er janv. 1900");
+        assert_eq!(Date::parse("19 SEP 2000").display_in("fr"), "19 sept. 2000");
+        assert_eq!(Date::parse("1 JAN 1900").display_in("fr"), "1er janv. 1900");
         assert_eq!(Date::parse("ABT 1850").short_year(), "~1850");
-        assert_eq!(Date::parse("BEF 23 MAY 1809").to_french(), "avant 23 mai 1809");
+        assert_eq!(Date::parse("BEF 23 MAY 1809").display_in("fr"), "avant 23 mai 1809");
         assert_eq!(Date::parse("FROM 10 MAY 1926 TO 10 NOV 1926").year(), Some(1926));
-        assert_eq!(Date::parse("FROM 10 MAY 1926 TO 10 NOV 1926").to_french(), "du 10 mai 1926 au 10 nov. 1926");
-        assert_eq!(Date::parse("FROM 1850 TO 1860").to_french(), "de 1850 à 1860");
-        assert_eq!(Date::parse("TO 1860").to_french(), "jusqu'en 1860");
-        assert_eq!(Date::parse("BET 1850 AND 1860").to_french(), "entre 1850 et 1860");
+        assert_eq!(Date::parse("FROM 10 MAY 1926 TO 10 NOV 1926").display_in("fr"), "du 10 mai 1926 au 10 nov. 1926");
+        assert_eq!(Date::parse("FROM 1850 TO 1860").display_in("fr"), "de 1850 à 1860");
+        assert_eq!(Date::parse("TO 1860").display_in("fr"), "jusqu'en 1860");
+        assert_eq!(Date::parse("BET 1850 AND 1860").display_in("fr"), "entre 1850 et 1860");
     }
 
     #[test]
     fn french_republican() {
         let d = Date::parse("FRENCH_R 30 GERM 4");
         assert_eq!(d.year(), Some(1796));
-        assert_eq!(d.to_french(), "30 germinal an IV (19 avr. 1796)");
-        assert_eq!(Date::parse("FRENCH_R BRUM 12").to_french(), "brumaire an XII (oct.–nov. 1803)");
-        assert_eq!(Date::parse("FRENCH_R 12").to_french(), "an XII (1803–1804)");
+        assert_eq!(d.display_in("fr"), "30 germinal an IV (19 avr. 1796)");
+        assert_eq!(Date::parse("FRENCH_R BRUM 12").display_in("fr"), "brumaire an XII (oct.–nov. 1803)");
+        assert_eq!(Date::parse("FRENCH_R 12").display_in("fr"), "an XII (1803–1804)");
         let d = Date::parse("BEF FRENCH_R 17 FLOR 13");
         assert_eq!(d.year(), Some(1805));
     }
 
     #[test]
     fn julian_and_hebrew() {
-        assert_eq!(Date::parse("JULIAN 3 MAR 1700").to_french(), "3 mars 1700 julien (14 mars 1700)");
-        assert_eq!(Date::parse("HEBREW 15 NSN 5784").to_french(), "15 nissan 5784 hébraïque (23 avr. 2024)");
-        assert_eq!(Date::parse("HEBREW 14 ADS 5785").to_input_text(), "14 adar 5785 hébraïque");
-        assert_eq!(Date::parse("44 BCE").to_french(), "44 av. J.-C.");
+        assert_eq!(Date::parse("JULIAN 3 MAR 1700").display_in("fr"), "3 mars 1700 julien (14 mars 1700)");
+        assert_eq!(Date::parse("HEBREW 15 NSN 5784").display_in("fr"), "15 nissan 5784 hébraïque (23 avr. 2024)");
+        assert_eq!(Date::parse("HEBREW 14 ADS 5785").to_input_text_in("fr"), "14 adar 5785 hébraïque");
+        assert_eq!(Date::parse("44 BCE").display_in("fr"), "44 av. J.-C.");
         assert_eq!(Date::parse("@#DJULIAN@ 1650").to_gedcom(), "JULIAN 1650");
     }
 

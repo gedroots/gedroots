@@ -1112,8 +1112,8 @@ impl Workspace {
                     .with_search(
                         files
                             .iter()
-                            .map(|f| f.path)
-                            .chain(medium(r).and_then(medium_label))
+                            .map(|f| f.path.to_string())
+                            .chain(medium(r).and_then(medium_label).map(|l| l.into_owned()))
                             .collect::<Vec<_>>()
                             .join(" "),
                     )
@@ -1157,7 +1157,7 @@ impl Workspace {
             rows.retain(|r| r.flagged);
         }
         if let Some(scope) = self.view.scope() {
-            // Recherche avec critères (né:, lieu:, type:, dans:…), voir gedcom::query.
+            // Recherche avec critères (born:, place:, type:, in:…), voir gedcom::query.
             let query = Self::committed_query(&self.filter.read(cx).value());
             let media_type = self.active_media_type();
             if !query.trim().is_empty() || media_type.is_some() {
@@ -2255,7 +2255,7 @@ impl Workspace {
                                     .gap_2()
                                     .flex_none()
                                     .when_some(age, |d, a| d.child(div().text_xs().text_color(theme::muted()).child(a)))
-                                    .child(mono(e.date().map(|d| d.to_french()).unwrap_or_default())),
+                                    .child(mono(e.date().map(|d| d.display()).unwrap_or_default())),
                             ),
                     )
                     // Événement d'une union : avec qui.
@@ -2367,7 +2367,7 @@ impl Workspace {
                     .gap_2()
                     .flex_none()
                     .when_some(r.age.clone(), |d, a| d.child(div().text_xs().child(a)))
-                    .child(mono(r.date.as_ref().map(|d| d.to_french()).unwrap_or_default())),
+                    .child(mono(r.date.as_ref().map(|d| d.display()).unwrap_or_default())),
             )
             .on_click(cx.listener(move |this, _, w, cx| {
                 if let Some(x) = target.clone() {

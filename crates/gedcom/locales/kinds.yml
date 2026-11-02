@@ -1,0 +1,47 @@
+_version: 2
+# Sources and media kinds (crates/gedcom/src/kinds.rs).
+medium.PHOTO:
+  en: "Photo"
+  fr: "Photo"
+medium.MANUSCRIPT:
+  en: "Manuscript, Record"
+  fr: "Manuscrit, acte"
+medium.BOOK:
+  en: "Book"
+  fr: "Livre"
+medium.NEWSPAPER:
+  en: "Newspaper"
+  fr: "Journal"
+medium.MAGAZINE:
+  en: "Magazine"
+  fr: "Revue"
+medium.TOMBSTONE:
+  en: "Tombstone"
+  fr: "Pierre tombale"
+medium.MAP:
+  en: "Map"
+  fr: "Carte géographique"
+medium.CARD:
+  en: "Postcard, Card"
+  fr: "Carte postale, fiche"
+medium.FILM:
+  en: "Microfilm"
+  fr: "Microfilm"
+medium.FICHE:
+  en: "Microfiche"
+  fr: "Microfiche"
+medium.ELECTRONIC:
+  en: "Digital Document"
+  fr: "Document numérique"
+medium.AUDIO:
+  en: "Sound Recording"
+  fr: "Enregistrement sonore"
+medium.VIDEO:
+  en: "Video"
+  fr: "Vidéo"
+medium.OTHER:
+  en: "Other"
+  fr: "Autre"
+kinds.unknown_event:
+  en: "unknown record type: “%{item}”"
+  fr: "type d'acte inconnu : « %{item} »"

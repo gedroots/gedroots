@@ -701,7 +701,7 @@ impl Gedcom {
             let content = crate::kinds::SourceContent::read(s);
             if let [t] = content.events.as_slice() {
                 ctx.event = t.clone();
-                ctx.kind = event_label(t).unwrap_or(t).to_string();
+                ctx.kind = crate::model::event_name(t);
             }
             if !content.period.split_whitespace().any(|w| matches!(w, "FROM" | "TO" | "BET" | "AND")) {
                 ctx.date = content.period;
@@ -814,7 +814,7 @@ mod tests {
     #[test]
     fn labels_types() {
         let types: Vec<String> = ["BIRT", "BAPM", "CHR", "BURI", "INDI", "Service militaire"].map(String::from).into();
-        assert_eq!(media_type_labels(&types), "naissance, baptême, inhumation, portrait, Service militaire");
+        assert_eq!(media_type_labels(&types), "birth, baptism, christening, burial, portrait, Service militaire");
     }
 
     #[test]
@@ -838,7 +838,7 @@ mod tests {
         let c = g.media_context("M1");
         assert_eq!(
             (c.event.as_str(), c.kind.as_str(), c.surname.as_str(), c.source.as_str(), c.page.as_str()),
-            ("BIRT", "Naissance", "GUYOT", "État civil de Troyes", "Acte n° 12")
+            ("BIRT", "Birth", "GUYOT", "État civil de Troyes", "Acte n° 12")
         );
         assert_eq!(g.media_context("M2").event, "INDI");
         // Matricule cité par une profession, un service militaire et le décès : à score égal,
@@ -869,8 +869,8 @@ mod tests {
             ],
         ));
         let r = g.media_renames("M1");
-        assert_eq!(r[0].2, "Médias/Actes/000001_N_GUYOT_Jean_1.jpg");
-        assert_eq!(r[1].2, "Médias/Actes/000001_N_GUYOT_Jean_2.jpg");
+        assert_eq!(r[0].2, "Médias/Actes/000001_B_GUYOT_Jean_1.jpg");
+        assert_eq!(r[1].2, "Médias/Actes/000001_B_GUYOT_Jean_2.jpg");
         assert_eq!(g.media_renames("M2")[0].2, "Médias/Portraits/000001_GUYOT_Jean.png");
         assert_eq!(g.media_renames("M4")[0].2, "Médias/Actes/000002_M_GUYOT_DELARUE.jpg");
         assert_eq!(g.media_renames("M3")[0].2, "Médias/Actes/000002_1_D_GUYOT_Pierre.jpg");

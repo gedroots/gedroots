@@ -21,6 +21,8 @@
 use crate::document::{Gedcom, RecordKind};
 use crate::model::{Individual, sort_key};
 use crate::node::Node;
+use rust_i18n::t;
+use std::borrow::Cow;
 
 // ----------------------------------------------------------------------
 // Événements et rôles
@@ -55,17 +57,17 @@ pub enum PersonField {
 }
 
 impl PersonField {
-    pub fn label(self) -> &'static str {
+    pub fn label(self) -> Cow<'static, str> {
         match self {
-            PersonField::Surname => "Nom",
-            PersonField::Given => "Prénoms",
-            PersonField::Sex => "Sexe",
-            PersonField::Age => "Âge déclaré",
-            PersonField::Occupation => "Profession",
-            PersonField::Residence => "Domicile",
-            PersonField::Birthplace => "Né(e) à",
-            PersonField::Kinship => "Lien déclaré",
-            PersonField::Note => "Précisions",
+            PersonField::Surname => t!("act.field.surname"),
+            PersonField::Given => t!("act.field.given"),
+            PersonField::Sex => t!("act.field.sex"),
+            PersonField::Age => t!("act.field.age"),
+            PersonField::Occupation => t!("act.field.occupation"),
+            PersonField::Residence => t!("act.field.residence"),
+            PersonField::Birthplace => t!("act.field.birthplace"),
+            PersonField::Kinship => t!("act.field.kinship"),
+            PersonField::Note => t!("act.field.note"),
         }
     }
 }
@@ -120,38 +122,48 @@ impl ActRole {
     }
 
     /// Libellé du rôle. `nth` : rang parmi les personnes principales.
-    pub fn label(self, event: &str, family: bool, nth: usize) -> &'static str {
+    pub fn label(self, event: &str, family: bool, nth: usize) -> Cow<'static, str> {
+        self.label_in(&crate::i18n::language(), event, family, nth)
+    }
+
+    /// Libellé du rôle dans la langue `lang`.
+    fn label_in(self, lang: &str, event: &str, family: bool, nth: usize) -> Cow<'static, str> {
         match self {
             ActRole::Principal if family => {
                 if nth == 0 {
-                    "Époux"
+                    t!("act.role.husband", locale = lang)
                 } else {
-                    "Épouse"
+                    t!("act.role.wife", locale = lang)
                 }
             }
-            ActRole::Principal if is_birth_like(event) => "Enfant",
-            ActRole::Principal if is_death_like(event) => "Défunt(e)",
+            ActRole::Principal if is_birth_like(event) => t!("act.role.child", locale = lang),
+            ActRole::Principal if is_death_like(event) => t!("act.role.deceased", locale = lang),
             ActRole::Principal if event == "CENS" => {
                 if nth == 0 {
-                    "Chef de ménage"
+                    t!("act.role.head", locale = lang)
                 } else {
-                    "Membre du ménage"
+                    t!("act.role.household", locale = lang)
                 }
             }
-            ActRole::Principal => "Personne",
-            ActRole::Father => "Père",
-            ActRole::Mother => "Mère",
-            ActRole::Spouse => "Conjoint",
-            ActRole::Witness => "Témoin",
-            ActRole::Godfather => "Parrain",
-            ActRole::Godmother => "Marraine",
-            ActRole::Declarant => "Déclarant",
-            ActRole::Officiator => "Officiant",
-            ActRole::Clergy => "Ecclésiastique",
-            ActRole::Neighbor => "Voisin",
-            ActRole::Friend => "Ami",
-            ActRole::Other => "Autre",
+            ActRole::Principal => t!("act.role.person", locale = lang),
+            ActRole::Father => t!("act.role.father", locale = lang),
+            ActRole::Mother => t!("act.role.mother", locale = lang),
+            ActRole::Spouse => t!("act.role.spouse", locale = lang),
+            ActRole::Witness => t!("act.role.witness", locale = lang),
+            ActRole::Godfather => t!("act.role.godfather", locale = lang),
+            ActRole::Godmother => t!("act.role.godmother", locale = lang),
+            ActRole::Declarant => t!("act.role.declarant", locale = lang),
+            ActRole::Officiator => t!("act.role.officiator", locale = lang),
+            ActRole::Clergy => t!("act.role.clergy", locale = lang),
+            ActRole::Neighbor => t!("act.role.neighbor", locale = lang),
+            ActRole::Friend => t!("act.role.friend", locale = lang),
+            ActRole::Other => t!("act.role.other", locale = lang),
         }
+    }
+
+    /// Le rôle porte-t-il ce libellé, dans l'une des langues de l'app ?
+    fn has_label(self, event: &str, family: bool, label: &str) -> bool {
+        crate::i18n::LANGUAGES.iter().any(|l| self.label_in(l, event, family, 0) == label)
     }
 
     /// Rôle GEDCOM 7 écrit dans les citations (`EVEN` / `ROLE`).
@@ -179,12 +191,10 @@ impl ActRole {
         })
     }
 
-    /// Précision fixe du rôle (`ROLE` / `PHRASE`).
-    fn base_phrase(self) -> Option<&'static str> {
+    /// Précision fixe du rôle (`ROLE` / `PHRASE`), dans la langue `lang`.
+    fn base_phrase(self, lang: &str) -> Option<Cow<'static, str>> {
         match self {
-            ActRole::Godfather => Some("Parrain"),
-            ActRole::Godmother => Some("Marraine"),
-            ActRole::Declarant => Some("Déclarant"),
+            ActRole::Godfather | ActRole::Godmother | ActRole::Declarant => Some(self.label_in(lang, "", false, 0)),
             _ => None,
         }
     }
@@ -221,16 +231,27 @@ impl ActRole {
             "MOTH" => ActRole::Mother,
             "SPOU" => ActRole::Spouse,
             "WITN" => ActRole::Witness,
-            "GODP" if p.starts_with("marraine") || (!p.starts_with("parrain") && sex == "F") => ActRole::Godmother,
+            "GODP"
+                if starts_with_label(&p, ActRole::Godmother)
+                    || (!starts_with_label(&p, ActRole::Godfather) && sex == "F") =>
+            {
+                ActRole::Godmother
+            }
             "GODP" => ActRole::Godfather,
             "OFFICIATOR" => ActRole::Officiator,
             "CLERGY" => ActRole::Clergy,
             "NGHBR" => ActRole::Neighbor,
             "FRIEND" => ActRole::Friend,
-            "OTHER" if p.starts_with("declarant") => ActRole::Declarant,
+            "OTHER" if starts_with_label(&p, ActRole::Declarant) => ActRole::Declarant,
             _ => ActRole::Other,
         }
     }
+}
+
+/// La précision normalisée `p` commence-t-elle par la précision fixe du rôle, dans l'une des
+/// langues de l'app (« marraine », « godmother ») ?
+fn starts_with_label(p: &str, role: ActRole) -> bool {
+    crate::i18n::LANGUAGES.iter().filter_map(|l| role.base_phrase(l)).any(|b| p.starts_with(&sort_key(&b)))
 }
 
 // ----------------------------------------------------------------------
@@ -363,21 +384,17 @@ pub struct ActResult {
 impl ActResult {
     pub fn summary(&self) -> String {
         let linked = self.persons.iter().flatten().count();
-        let mut s = format!("Acte enregistré : {linked} personne{}", plural(linked));
+        let mut s = tn!("act.summary.linked", linked).into_owned();
         let new = self.persons.iter().flatten().filter(|x| self.created.contains(x)).count();
         if new > 0 {
-            s += &format!(" dont {new} créée{}", plural(new));
+            s += &tn!("act.summary.created", new);
         }
         let fams = self.families_created.len();
         if fams > 0 {
-            s += &format!(", {fams} famille{} créée{}", plural(fams), plural(fams));
+            s += &tn!("act.summary.families", fams);
         }
         s
     }
-}
-
-fn plural(n: usize) -> &'static str {
-    if n > 1 { "s" } else { "" }
 }
 
 /// Un individu existant qui pourrait correspondre à une personne citée.
@@ -390,8 +407,10 @@ pub struct Suggestion {
     pub reason: String,
 }
 
-/// Titre d'une source tout juste créée (voir [`Gedcom::create`]).
-const NEW_SOURCE_TITLE: &str = "Nouvelle source";
+/// Titre d'une source tout juste créée (voir [`Gedcom::create`]), dans l'une des langues de l'app.
+fn is_new_source_title(title: &str) -> bool {
+    crate::i18n::LANGUAGES.iter().any(|l| t!("record.new_source", locale = l) == title)
+}
 
 impl Act {
     /// Nouvel acte vide, avec les personnes attendues pour cet événement.
@@ -446,7 +465,7 @@ impl Act {
         if !self.event_type.trim().is_empty() {
             return crate::model::event_type_label(&self.event_type);
         }
-        crate::model::event_label(&self.event).map(str::to_string).unwrap_or_else(|| self.event.clone())
+        crate::model::event_name(&self.event)
     }
 
     /// Rang de la personne `idx` parmi les personnes principales.
@@ -460,7 +479,7 @@ impl Act {
     }
 
     /// Libellé du rôle de la personne `idx`.
-    pub fn role_label(&self, idx: usize) -> &'static str {
+    pub fn role_label(&self, idx: usize) -> Cow<'static, str> {
         let p = &self.participants[idx];
         p.role.label(&self.event, self.is_family(), self.nth_principal(idx))
     }
@@ -483,7 +502,7 @@ impl Act {
     /// Libellé court d'une personne principale (« l'époux », « Paul MARCHAND »).
     pub fn principal_name(&self, nth: usize) -> String {
         if self.is_family() {
-            return if nth == 0 { "l'époux".into() } else { "l'épouse".into() };
+            return if nth == 0 { t!("act.the_husband").into() } else { t!("act.the_wife").into() };
         }
         self.participants
             .iter()
@@ -491,7 +510,7 @@ impl Act {
             .nth(nth)
             .map(|p| p.display_name())
             .filter(|n| !n.is_empty())
-            .unwrap_or_else(|| format!("la personne {}", nth + 1))
+            .unwrap_or_else(|| t!("act.person_n", n = nth + 1).into_owned())
     }
 
     /// Année de l'événement, si la date en contient une.
@@ -523,11 +542,15 @@ impl Act {
             .map(|p| p.display_name())
             .collect();
         let what = self.event_label().to_lowercase();
-        let article = if what.starts_with(|c: char| "aeéèêiouyh".contains(c)) { "d'" } else { "de " };
-        match names.len() {
-            0 => format!("Acte {article}{what}"),
-            _ => format!("Acte {article}{what} de {}", names.join(" et ")),
-        }
+        // « Acte d'inhumation », « Acte de naissance ».
+        let elided = what.starts_with(|c: char| "aeéèêiouyh".contains(c));
+        let title = match (names.is_empty(), elided) {
+            (true, true) => t!("act.auto_title.elided", what = what),
+            (true, false) => t!("act.auto_title.plain", what = what),
+            (false, true) => t!("act.auto_title.elided_of", what = what, names = join_and(&names)),
+            (false, false) => t!("act.auto_title.plain_of", what = what, names = join_and(&names)),
+        };
+        capitalize(&title)
     }
 
     /// Libellé de l'acte dans la liste de sa source : « Naissance · Louise MARCHAND ».
@@ -538,14 +561,14 @@ impl Act {
             .filter(|p| p.role == ActRole::Principal && !p.is_blank())
             .map(|p| p.display_name())
             .collect();
-        let what = if self.event.is_empty() { "Acte".to_string() } else { self.event_label() };
-        if names.is_empty() { what } else { format!("{what} · {}", names.join(" et ")) }
+        let what = if self.event.is_empty() { t!("act.record").into_owned() } else { self.event_label() };
+        if names.is_empty() { what } else { format!("{what} · {}", join_and(&names)) }
     }
 
     /// Référence et date, pour la liste des actes : « Acte n° 27 · 3 février 1914 ».
     pub fn subtitle(&self) -> String {
         let date = if self.date.trim().is_empty() { &self.record_date } else { &self.date };
-        let date = if date.trim().is_empty() { String::new() } else { crate::Date::parse(date).to_french() };
+        let date = if date.trim().is_empty() { String::new() } else { crate::Date::parse(date).display() };
         [self.page.trim().to_string(), date].into_iter().filter(|s| !s.is_empty()).collect::<Vec<_>>().join(" · ")
     }
 
@@ -557,22 +580,26 @@ impl Act {
             if self.date.is_empty() {
                 String::new()
             } else {
-                format!(" le {}", crate::Date::parse(&self.date).to_french())
+                t!("act.text.on_date", date = crate::Date::parse(&self.date).display()).into_owned()
             },
-            if self.place.is_empty() { String::new() } else { format!(" à {}", crate::short_place(&self.place)) }
+            if self.place.is_empty() {
+                String::new()
+            } else {
+                t!("act.text.in_place", place = crate::short_place(&self.place)).into_owned()
+            }
         )];
         for (i, p) in self.participants.iter().enumerate() {
             if p.is_blank() {
                 continue;
             }
-            let mut s = format!("{} : {}", self.role_label(i), p.display_name());
+            let mut s = labelled(&self.role_label(i), &p.display_name());
             for f in [Age, Occupation, Residence, Birthplace, Kinship] {
                 let v = p.get(f);
                 if !v.is_empty() {
                     s += &match f {
                         Age => format!(", {}", age_text(v)),
-                        Residence => format!(", domicilié(e) à {}", crate::short_place(v)),
-                        Birthplace => format!(", né(e) à {}", crate::short_place(v)),
+                        Residence => t!("act.text.residing", place = crate::short_place(v)).into_owned(),
+                        Birthplace => t!("act.text.born_in", place = crate::short_place(v)).into_owned(),
                         _ => format!(", {v}"),
                     };
                 }
@@ -585,26 +612,38 @@ impl Act {
     /// Vérifie l'acte avant écriture.
     pub fn validate(&self, ged: &Gedcom) -> Result<(), String> {
         if ged.get(&self.source).is_none_or(|n| n.tag != "SOUR") {
-            return Err("la source de l'acte n'existe plus".into());
+            return Err(t!("act.error.no_source").into());
         }
         if self.event.trim().is_empty() {
-            return Err("choisissez l'événement de l'acte".into());
+            return Err(t!("act.error.no_event").into());
         }
         if self.event == "EVEN" && self.event_type.trim().is_empty() {
-            return Err("précisez le type d'événement".into());
+            return Err(t!("act.error.no_event_type").into());
         }
         if let MediaChoice::Existing(x) = &self.media
             && ged.get(x).is_none_or(|n| n.tag != "OBJE")
         {
-            return Err("le média choisi n'existe plus".into());
+            return Err(t!("act.error.no_media").into());
         }
-        for (label, d) in [("date", &self.date), ("date de l'acte", &self.record_date)] {
+        for (record, d) in [(false, &self.date), (true, &self.record_date)] {
             if !d.trim().is_empty() {
                 let parsed = crate::Date::parse(d);
                 if parsed.year().is_none() {
-                    return Err(format!("{label} non reconnue : « {} »", d.trim()));
+                    return Err(if record {
+                        t!("act.error.record_date_unknown", text = d.trim())
+                    } else {
+                        t!("act.error.date_unknown", text = d.trim())
+                    }
+                    .into());
                 }
-                parsed.validate().map_err(|e| format!("{label} impossible : {e}"))?;
+                parsed.validate().map_err(|e| {
+                    if record {
+                        t!("act.error.record_date_impossible", error = e)
+                    } else {
+                        t!("act.error.date_impossible", error = e)
+                    }
+                    .into_owned()
+                })?;
             }
         }
         let principals = self.principal_count();
@@ -612,12 +651,12 @@ impl Act {
         for (i, p) in self.participants.iter().enumerate() {
             let label = self.role_label(i);
             if p.role.relative() && p.of >= principals.max(1) {
-                return Err(format!("{label} : personne principale introuvable"));
+                return Err(t!("act.error.principal_missing", role = label).into());
             }
             let counts = match &p.choice {
                 PersonChoice::Link(x) => {
                     if ged.individual(x).is_none() {
-                        return Err(format!("{label} : individu introuvable"));
+                        return Err(t!("act.error.person_missing", role = label).into());
                     }
                     true
                 }
@@ -625,12 +664,12 @@ impl Act {
                 PersonChoice::Create if p.is_blank() => false,
                 PersonChoice::Create => {
                     if p.get(Surname).is_empty() && p.get(Given).is_empty() {
-                        return Err(format!("{label} : indiquez au moins un nom ou un prénom"));
+                        return Err(t!("act.error.no_name", role = label).into());
                     }
                     true
                 }
                 PersonChoice::Mention if p.role == ActRole::Principal => {
-                    return Err(format!("{label} : la personne principale doit être liée ou créée"));
+                    return Err(t!("act.error.principal_mention", role = label).into());
                 }
                 PersonChoice::Mention => false,
             };
@@ -639,10 +678,10 @@ impl Act {
             }
         }
         if kept == 0 {
-            return Err("renseignez au moins la personne principale de l'acte".into());
+            return Err(t!("act.error.no_principal").into());
         }
         if self.is_family() && kept < 2 {
-            return Err("un événement familial demande les deux époux".into());
+            return Err(t!("act.error.both_spouses").into());
         }
         Ok(())
     }
@@ -727,7 +766,7 @@ impl Act {
 
         // 1. Source : titre automatique d'une source toute neuve, contenu (`DATA` / `EVEN` + période).
         let src = w.ged.get_mut(&source).unwrap();
-        if src.child_val("TITL").is_none_or(|t| t.trim().is_empty() || t.trim() == NEW_SOURCE_TITLE) {
+        if src.child_val("TITL").is_none_or(|t| t.trim().is_empty() || is_new_source_title(t.trim())) {
             let title = self.auto_title();
             src.set_child_text("TITL", &title);
             w.touch(&source);
@@ -1008,11 +1047,14 @@ impl Act {
     ) -> Option<(String, Option<String>)> {
         let family = self.is_family();
         let mut phrase: Vec<String> = Vec::new();
-        if let Some(b) = p.role.base_phrase() {
-            phrase.push(b.into());
+        if let Some(b) = p.role.base_phrase(&crate::i18n::language()) {
+            phrase.push(b.into_owned());
         }
         if p.role.relative() && people.iter().zip(nths).filter(|(q, _)| q.role == ActRole::Principal).count() > 1 {
-            phrase.push(format!("{} de {}", p.role.label(&self.event, family, 0), self.principal_name(p.of)));
+            phrase.push(
+                t!("act.role_of", role = p.role.label(&self.event, family, 0), name = self.principal_name(p.of))
+                    .into_owned(),
+            );
         }
         let kin = p.get(Kinship);
         if !kin.is_empty() {
@@ -1035,7 +1077,7 @@ impl Act {
             .enumerate()
             .filter(|(_, p)| p.choice == PersonChoice::Mention && !p.is_blank())
             .map(|(i, p)| {
-                let mut s = format!("{} : {}", p.role.label(&self.event, family, nth[i]), p.display_name());
+                let mut s = labelled(&p.role.label(&self.event, family, nth[i]), &p.display_name());
                 for f in [Age, Occupation, Residence, Kinship, Note] {
                     let v = p.get(f);
                     if !v.is_empty() {
@@ -1134,17 +1176,15 @@ impl Act {
         let kin = |p: &Participant| sort_key(p.get(Kinship));
         let spouse = members.iter().find(|(p, _, _)| {
             let k = kin(p);
-            ["epou", "femme", "mari", "conjoint"].iter().any(|s| k.contains(s))
+            ["epou", "femme", "mari", "conjoint", "wife", "husband", "spouse"].iter().any(|s| k.contains(s))
         });
         if let Some((_, s, _)) = spouse {
             w.ensure_couple(&head, s);
         }
         for (p, x, _) in members {
             let k = kin(p);
-            if !["fils", "fille", "enfant"].iter().any(|s| k.contains(s))
-                || k.contains("petit")
-                || k.contains("beau")
-                || k.contains("belle")
+            if !["fils", "fille", "enfant", "son", "daughter", "child"].iter().any(|s| k.contains(s))
+                || ["petit", "beau", "belle", "grand", "law", "step"].iter().any(|s| k.contains(s))
             {
                 continue;
             }
@@ -1220,11 +1260,12 @@ fn age_from_gedcom(s: &str) -> String {
             out.push(part.to_string());
             continue;
         }
+        let n: usize = digits.parse().unwrap_or(0);
         out.push(match unit {
-            "y" => format!("{digits} ans"),
-            "m" => format!("{digits} mois"),
-            "w" => format!("{digits} semaines"),
-            "d" => format!("{digits} jours"),
+            "y" => tn!("act.age.years", n).into_owned(),
+            "m" => tn!("act.age.months", n).into_owned(),
+            "w" => tn!("act.age.weeks", n).into_owned(),
+            "d" => tn!("act.age.days", n).into_owned(),
             _ => part.to_string(),
         });
     }
@@ -1233,7 +1274,30 @@ fn age_from_gedcom(s: &str) -> String {
 
 fn age_text(s: &str) -> String {
     let s = s.trim();
-    if s.chars().all(|c| c.is_ascii_digit()) { format!("{s} ans") } else { s.to_string() }
+    match s.parse::<usize>() {
+        Ok(n) if s.chars().all(|c| c.is_ascii_digit()) => tn!("act.age.years", n).into_owned(),
+        _ => s.to_string(),
+    }
+}
+
+/// « Témoin : Paul MARCHAND » (« Witness: Paul MARCHAND »).
+fn labelled(label: &str, value: &str) -> String {
+    t!("act.labelled", label = label, value = value).into_owned()
+}
+
+/// Sépare « Témoin : Paul MARCHAND » ou « Witness: Paul MARCHAND ».
+fn split_labelled(s: &str) -> Option<(&str, &str)> {
+    s.split_once(" : ").or_else(|| s.split_once(": "))
+}
+
+/// « Paul et Marie » (« Paul and Marie »).
+fn join_and(names: &[String]) -> String {
+    names.join(&t!("act.and"))
+}
+
+fn capitalize(s: &str) -> String {
+    let mut c = s.chars();
+    c.next().map(|f| f.to_uppercase().chain(c).collect()).unwrap_or_default()
 }
 
 // ----------------------------------------------------------------------
@@ -1584,10 +1648,12 @@ fn kinship_from_phrase(role: ActRole, phrase: &str) -> String {
         .split(", ")
         .filter(|part| {
             let k = sort_key(part);
-            let base = role.base_phrase().map(sort_key);
-            !(base.as_deref() == Some(k.as_str())
-                || (role.relative()
-                    && (k.starts_with("pere de") || k.starts_with("mere de") || k.starts_with("conjoint de"))))
+            let base = crate::i18n::LANGUAGES.iter().filter_map(|l| role.base_phrase(l)).any(|b| sort_key(&b) == k);
+            let of_principal = crate::i18n::LANGUAGES.iter().any(|l| {
+                let of = sort_key(&t!("act.role_of", role = role.label_in(l, "", false, 0), name = "", locale = l));
+                k.starts_with(of.trim_end())
+            });
+            !(base || (role.relative() && of_principal))
         })
         .collect::<Vec<_>>()
         .join(", ")
@@ -1760,7 +1826,7 @@ impl Gedcom {
                         && let Some(est) = e.child_val("DATE").and_then(|d| d.strip_prefix("EST "))
                         && let (Ok(b), Some(y)) = (est.trim().parse::<i32>(), act.year())
                     {
-                        p.set(Age, format!("{} ans", y - b));
+                        p.set(Age, tn!("act.age.years", (y - b).max(0) as usize).into_owned());
                     }
                 }
                 _ => {}
@@ -1777,9 +1843,12 @@ impl Gedcom {
                     .find(|h| h.record.xref.as_deref() == Some(x.as_str()))
                     .map(|h| sort_key(cite_role(h.cite).1))
                     .unwrap_or_default();
-                let by_phrase = if family && phrase.contains("de l'epouse") {
+                let names = |key: fn(&str) -> Cow<'static, str>| {
+                    crate::i18n::LANGUAGES.iter().any(|l| phrase.contains(&sort_key(&key(l))))
+                };
+                let by_phrase = if family && names(|l| t!("act.the_wife", locale = l)) {
                     Some(1)
-                } else if family && phrase.contains("de l'epoux") {
+                } else if family && names(|l| t!("act.the_husband", locale = l)) {
                     Some(0)
                 } else {
                     None
@@ -1802,10 +1871,10 @@ impl Gedcom {
         let family = act.is_family();
         for n in note_cite.into_iter().flat_map(|c| c.children_with("NOTE")) {
             for part in n.text().split("; ") {
-                let parsed = part.split_once(" : ").and_then(|(label, rest)| {
+                let parsed = split_labelled(part).and_then(|(label, rest)| {
                     let role = ActRole::ALL
                         .into_iter()
-                        .find(|r| *r != ActRole::Principal && r.label(&event, family, 0) == label.trim())?;
+                        .find(|r| *r != ActRole::Principal && r.has_label(&event, family, label.trim()))?;
                     let mut fields = rest.split(", ");
                     let (given, surname) = split_name(fields.next().unwrap_or(""));
                     let mut p = Participant::new(role).with(Given, &given).with(Surname, &surname);
@@ -2015,7 +2084,7 @@ impl Act {
                     reasons.push(why.clone());
                 }
                 if let Some(b) = i.birth().and_then(|e| e.date()) {
-                    reasons.push(format!("né(e) {}", b.to_french()));
+                    reasons.push(format!("né(e) {}", b.display()));
                 }
                 (score >= 3.0).then(|| Suggestion {
                     xref: i.xref().to_string(),

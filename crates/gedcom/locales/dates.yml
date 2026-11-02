@@ -1,0 +1,273 @@
+_version: 2
+# Dates (crates/gedcom/src/date/). English writes dates day first, like GEDCOM: “14 Mar 1912”.
+calendar.gregorian:
+  en: Gregorian
+  fr: Grégorien
+calendar.julian:
+  en: Julian
+  fr: Julien
+calendar.republican:
+  en: French Republican
+  fr: Républicain
+calendar.hebrew:
+  en: Hebrew
+  fr: Hébraïque
+date_kind.exact:
+  en: Exact
+  fr: Exacte
+date_kind.about:
+  en: About
+  fr: Vers
+date_kind.calculated:
+  en: Calculated
+  fr: Calculée
+date_kind.estimated:
+  en: Estimated
+  fr: Estimée
+date_kind.before:
+  en: Before
+  fr: Avant
+date_kind.after:
+  en: After
+  fr: Après
+date_kind.between:
+  en: Between
+  fr: Entre
+date_kind.from_to:
+  en: Period
+  fr: Période
+date_kind.from:
+  en: Since
+  fr: Depuis
+date_kind.to:
+  en: Until
+  fr: "Jusqu'à"
+# Short month names used in dates.
+month.JAN:
+  en: Jan
+  fr: janv.
+month.FEB:
+  en: Feb
+  fr: févr.
+month.MAR:
+  en: Mar
+  fr: mars
+month.APR:
+  en: Apr
+  fr: avr.
+month.MAY:
+  en: May
+  fr: mai
+month.JUN:
+  en: Jun
+  fr: juin
+month.JUL:
+  en: Jul
+  fr: juil.
+month.AUG:
+  en: Aug
+  fr: août
+month.SEP:
+  en: Sep
+  fr: sept.
+month.OCT:
+  en: Oct
+  fr: oct.
+month.NOV:
+  en: Nov
+  fr: nov.
+month.DEC:
+  en: Dec
+  fr: déc.
+month.VEND:
+  en: Vendémiaire
+  fr: vendémiaire
+month.BRUM:
+  en: Brumaire
+  fr: brumaire
+month.FRIM:
+  en: Frimaire
+  fr: frimaire
+month.NIVO:
+  en: Nivôse
+  fr: nivôse
+month.PLUV:
+  en: Pluviôse
+  fr: pluviôse
+month.VENT:
+  en: Ventôse
+  fr: ventôse
+month.GERM:
+  en: Germinal
+  fr: germinal
+month.FLOR:
+  en: Floréal
+  fr: floréal
+month.PRAI:
+  en: Prairial
+  fr: prairial
+month.MESS:
+  en: Messidor
+  fr: messidor
+month.THER:
+  en: Thermidor
+  fr: thermidor
+month.FRUC:
+  en: Fructidor
+  fr: fructidor
+month.COMP:
+  en: complementary days
+  fr: jours complémentaires
+month.TSH:
+  en: Tishrei
+  fr: tichri
+month.CSH:
+  en: Cheshvan
+  fr: hechvan
+month.KSL:
+  en: Kislev
+  fr: kislev
+month.TVT:
+  en: Tevet
+  fr: tevet
+month.SHV:
+  en: Shevat
+  fr: chevat
+month.ADR:
+  en: Adar I
+  fr: adar I
+month.ADS:
+  en: Adar II
+  fr: adar II
+month.NSN:
+  en: Nisan
+  fr: nissan
+month.IYR:
+  en: Iyar
+  fr: iyar
+month.SVN:
+  en: Sivan
+  fr: sivan
+month.TMZ:
+  en: Tammuz
+  fr: tammouz
+month.AAV:
+  en: Av
+  fr: av
+month.ELL:
+  en: Elul
+  fr: eloul
+month.adar:
+  en: Adar
+  fr: adar
+date.first_day:
+  en: "1"
+  fr: 1er
+date.bce_year:
+  en: "%{year} BC"
+  fr: "%{year} av. J.-C."
+date.bce:
+  en: BC
+  fr: av. J.-C.
+date.republican_year:
+  en: "year %{year}"
+  fr: "an %{year}"
+date.julian:
+  en: Julian
+  fr: julien
+date.hebrew:
+  en: Hebrew
+  fr: hébraïque
+date.gregorian:
+  en: Gregorian
+  fr: grégorien
+date.about:
+  en: "about %{d}"
+  fr: "vers %{d}"
+date.calculated:
+  en: "calculated %{d}"
+  fr: "calculée %{d}"
+date.estimated:
+  en: "estimated %{d}"
+  fr: "estimée %{d}"
+date.before:
+  en: "before %{d}"
+  fr: "avant %{d}"
+date.after:
+  en: "after %{d}"
+  fr: "après %{d}"
+date.between:
+  en: "between %{a} and %{b}"
+  fr: "entre %{a} et %{b}"
+date.since:
+  en: "since %{d}"
+  fr: "depuis %{d}"
+date.until_day:
+  en: "until %{d}"
+  fr: "jusqu'au %{d}"
+date.until_year:
+  en: "until %{d}"
+  fr: "jusqu'en %{d}"
+date.from_day:
+  en: "from %{d}"
+  fr: "du %{d}"
+date.from_year:
+  en: "from %{d}"
+  fr: "de %{d}"
+date.to_day:
+  en: "to %{d}"
+  fr: "au %{d}"
+date.to_year:
+  en: "to %{d}"
+  fr: "à %{d}"
+date.from_to:
+  en: "%{from} %{to}"
+  fr: "%{from} %{to}"
+date.error.no_year:
+  en: missing year
+  fr: année manquante
+date.error.year_zero:
+  en: there is no year 0
+  fr: "l'année 0 n'existe pas"
+date.error.bce_calendar:
+  en: “BC” only exists in the Gregorian and Julian calendars
+  fr: « av. J.-C. » n'existe qu'en calendrier grégorien ou julien
+date.error.month:
+  en: invalid month
+  fr: mois invalide
+date.error.day_without_month:
+  en: day without a month
+  fr: jour sans mois
+date.error.too_many_days:
+  en: "%{month} only has %{max} days"
+  fr: "%{month} n'a que %{max} jours"
+date.error.order:
+  en: the first date must come before the second
+  fr: la première date doit précéder la seconde
+date.quoted:
+  en: "“%{phrase}”"
+  fr: "« %{phrase} »"
+date.error.two_calendars:
+  en: "two different calendars"
+  fr: "deux calendriers différents"
+date.error.day:
+  en: "invalid day"
+  fr: "jour invalide"
+date.error.year_word:
+  en: "“year” goes with the French Republican calendar"
+  fr: "« an » s'emploie avec le calendrier républicain"
+date.error.month_calendar:
+  en: "this month does not exist in the %{calendar} calendar"
+  fr: "ce mois n'existe pas dans le calendrier %{calendar}"
+date.error.gregorian_month_republican:
+  en: "Gregorian month in the French Republican calendar"
+  fr: "mois grégorien dans le calendrier républicain"
+date.error.gregorian_month_hebrew:
+  en: "Gregorian month in the Hebrew calendar"
+  fr: "mois grégorien dans le calendrier hébraïque"
+date.error.republican_year:
+  en: "French Republican year expected, e.g. “year XII”"
+  fr: "année républicaine attendue, ex. « an XII »"
+date.error.month_number:
+  en: "invalid month %{month}"
+  fr: "mois %{month} invalide"

@@ -207,7 +207,7 @@ impl Workspace {
                 .collect(),
         );
         // Corrections en lot : une par code qui en a une, avec le nombre concerné.
-        let mut batches: Vec<(&'static str, &'static str, usize)> = Vec::new();
+        let mut batches: Vec<(&'static str, std::borrow::Cow<'static, str>, usize)> = Vec::new();
         for i in shown.iter().filter(|i| !i.ignored) {
             if let Some(label) = quality::fix_of(i.code).and_then(|f| f.batch) {
                 match batches.iter_mut().find(|b| b.0 == i.code) {

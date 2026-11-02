@@ -12,8 +12,10 @@
 //! ```
 
 use crate::document::Gedcom;
+use crate::keywords::from_french;
 use crate::node::Node;
 use crate::query::{Scope, chip_label, words};
+use rust_i18n::t;
 
 pub const FIND_TAG: &str = "_GR_FIND";
 const ZONE_TAG: &str = "_GR_ZONE";
@@ -53,10 +55,11 @@ fn zone(tag: &str) -> Option<Scope> {
 
 impl SavedSearch {
     fn read(n: &Node) -> Option<Self> {
+        let scope = zone(n.child_val(ZONE_TAG)?)?;
         Some(Self {
             name: n.val().trim().to_string(),
-            scope: zone(n.child_val(ZONE_TAG)?)?,
-            query: n.child_val(QUERY_TAG).unwrap_or("").trim().to_string(),
+            scope,
+            query: n.child_val(QUERY_TAG).map(|q| from_french(scope, q.trim())).unwrap_or_default(),
             media_type: n.child_val(TYPE_TAG).map(str::trim).filter(|t| !t.is_empty()).map(str::to_string),
         })
     }
@@ -92,10 +95,10 @@ pub fn default_name(g: &Gedcom, scope: Scope, query: &str, media_type: Option<&s
         }
     }
     if !free.is_empty() {
-        parts.push(format!("« {} »", free.join(" ")));
+        parts.push(t!("search.saved.free_words", words = free.join(" ")).into_owned());
     }
     if parts.is_empty() {
-        return "Recherche".into();
+        return t!("search.saved.default").into_owned();
     }
     parts.join(" · ")
 }
@@ -178,30 +181,28 @@ mod tests {
         let mut g = Gedcom::parse(GED).unwrap();
         assert!(g.saved_searches().is_empty());
         let s = SavedSearch {
-            name: default_name(&g, Scope::Individuals, "né:1850±5 guyot", None),
+            name: default_name(&g, Scope::Individuals, "born:1850±5 guyot", None),
             scope: Scope::Individuals,
-            query: "né:1850±5 guyot".into(),
+            query: "born:1850±5 guyot".into(),
             media_type: None,
         };
-        assert_eq!(s.name, "Né vers 1850 (± 5 ans) · « guyot »");
+        assert_eq!(s.name, "Born about 1850 (± 5 years) · “guyot”");
         g.save_search(&s);
         let m = SavedSearch {
             name: "Actes".into(),
             scope: Scope::Media,
-            query: "sans:lien".into(),
+            query: "without:link".into(),
             media_type: Some("Actes".into()),
         };
         assert_eq!(g.save_search(&m), 1);
         let out = g.to_gedcom_string();
-        assert!(
-            out.contains(
-                "1 _GR_FIND Né vers 1850 (± 5 ans) · « guyot »\n2 _GR_ZONE INDI\n2 _GR_QUERY né:1850±5 guyot\n"
-            )
-        );
+        assert!(out.contains(
+            "1 _GR_FIND Born about 1850 (± 5 years) · “guyot”\n2 _GR_ZONE INDI\n2 _GR_QUERY born:1850±5 guyot\n"
+        ));
         assert!(out.contains("2 TAG _GR_FIND https://"));
         let g2 = Gedcom::parse(&out).unwrap();
         assert_eq!(g2.saved_searches(), vec![s.clone(), m.clone()]);
-        assert!(g2.saved_searches()[1].same(Scope::Media, " sans:lien ", Some("Actes")));
+        assert!(g2.saved_searches()[1].same(Scope::Media, " without:link ", Some("Actes")));
 
         assert!(g.rename_search(0, "Nés vers 1850"));
         assert!(g.move_search(1, 0));
@@ -209,5 +210,12 @@ mod tests {
         assert_eq!(g.delete_search(0).map(|s| s.name).as_deref(), Some("Actes"));
         g.delete_search(0);
         assert!(!g.to_gedcom_string().contains("_GR_"));
+    }
+
+    #[test]
+    fn french_queries_of_earlier_versions_are_read_in_english() {
+        let ged = GED.replace("0 @I1@", "1 _GR_FIND Nés\n2 _GR_ZONE INDI\n2 _GR_QUERY né:1850 sans:source\n0 @I1@");
+        let g = Gedcom::parse(&ged).unwrap();
+        assert_eq!(g.saved_searches()[0].query, "born:1850 without:source");
     }
 }

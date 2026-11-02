@@ -147,7 +147,8 @@ impl Workspace {
         let email = text_input(&t!("settings.email_placeholder"), &s.email, window, cx);
         let copyright = text_input("© 2026 …", &s.copyright, window, cx);
         let description = cx.new(|cx| TextareaState::new(window, cx).rows(3).default_value(s.description));
-        let mut langs: Vec<(&str, &str)> = gedcom::complete::LANGUAGES.to_vec();
+        let languages = gedcom::complete::languages();
+        let mut langs: Vec<(&str, &str)> = languages.iter().map(|(c, l)| (*c, l.as_ref())).collect();
         if !s.language.is_empty() && !langs.iter().any(|(c, _)| c.eq_ignore_ascii_case(&s.language)) {
             langs.push((s.language.as_str(), s.language.as_str()));
         }
@@ -382,7 +383,7 @@ impl Workspace {
             about.push_str(&format!(" · {}", info.software));
         }
         if let Some((date, _)) = &info.saved {
-            about.push_str(&t!("settings.saved_on", date = Date::parse(date).to_french()));
+            about.push_str(&t!("settings.saved_on", date = Date::parse(date).display()));
         }
         let counts = [RecordKind::Individual, RecordKind::Family, RecordKind::Source, RecordKind::Media]
             .iter()
@@ -856,10 +857,10 @@ fn type_options(g: &Gedcom) -> Vec<(String, Vec<String>)> {
     const ATTRIBUTES: &[&str] = &["RESI", "OCCU", "EDUC", "RELI", "TITL", "NATI", "FACT", "EVEN", "CHR"];
     let mut out: Vec<(String, Vec<String>)> = gedcom::EVENT_TAGS
         .iter()
-        .filter(|(t, _)| !ATTRIBUTES.contains(t))
-        .map(|(t, l)| {
+        .filter(|t| !ATTRIBUTES.contains(t))
+        .map(|t| {
             let tags = if *t == "BAPM" { vec!["BAPM".into(), "CHR".into()] } else { vec![t.to_string()] };
-            (l.to_string(), tags)
+            (gedcom::event_name(t), tags)
         })
         .collect();
     // Les actes d'état civil d'abord.

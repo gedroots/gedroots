@@ -1823,6 +1823,9 @@ dependencies = [
 [[package]]
 name = "gedcom"
 version = "0.1.0"
+dependencies = [
+ "rust-i18n",
+]
 
 [[package]]
 name = "gedroots"

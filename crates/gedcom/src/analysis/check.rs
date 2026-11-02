@@ -494,9 +494,9 @@ pub(crate) fn check_all(g: &Gedcom, t: &Thresholds) -> Vec<Issue> {
                         format!(
                             "{} : acte daté {} dans « {} », qui couvre {}",
                             name(x),
-                            crate::date::Date::parse(date).to_french(),
+                            crate::date::Date::parse(date).display(),
                             name(sx),
-                            crate::date::Date::parse(period).to_french()
+                            crate::date::Date::parse(period).display()
                         ),
                     );
                 }

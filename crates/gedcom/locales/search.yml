@@ -1,0 +1,220 @@
+_version: 2
+search.chip.images:
+  en: "Images"
+  fr: "Images"
+search.chip.web_links:
+  en: "Web Links"
+  fr: "Liens web"
+search.type.other:
+  en: "Others"
+  fr: "Autres"
+search.years.before:
+  en: "before %{year}"
+  fr: "avant %{year}"
+search.years.after:
+  en: "after %{year}"
+  fr: "après %{year}"
+search.years.about:
+  en: "about %{year} (± %{margin} years)"
+  fr: "vers %{year} (± %{margin} ans)"
+search.years.in:
+  en: "in %{year}"
+  fr: "en %{year}"
+search.chip.born:
+  en: "Born %{years}"
+  fr: "Né %{years}"
+search.chip.died:
+  en: "Died %{years}"
+  fr: "Mort %{years}"
+search.chip.lived:
+  en: "Alive in %{year}"
+  fr: "Vivant en %{year}"
+search.chip.place:
+  en: "Place %{place}"
+  fr: "Lieu %{place}"
+search.chip.occupation:
+  en: "Occupation %{occupation}"
+  fr: "Profession %{occupation}"
+search.chip.exact_name:
+  en: "Exact Name %{name}"
+  fr: "Nom exact %{name}"
+search.chip.name:
+  en: "Name %{name}"
+  fr: "Nom %{name}"
+search.chip.men:
+  en: "Men"
+  fr: "Hommes"
+search.chip.women:
+  en: "Women"
+  fr: "Femmes"
+search.chip.unknown_sex:
+  en: "Unknown Sex"
+  fr: "Sexe inconnu"
+search.chip.act_type:
+  en: "%{kind} Records"
+  fr: "Actes de %{kind}"
+search.chip.repository:
+  en: "Repository %{name}"
+  fr: "Dépôt %{name}"
+search.chip.with_media:
+  en: "With Media"
+  fr: "Avec média"
+search.chip.without_media:
+  en: "Without Media"
+  fr: "Sans média"
+search.chip.cited:
+  en: "Cited"
+  fr: "Citée"
+search.chip.not_cited:
+  en: "Not Cited"
+  fr: "Non citée"
+search.chip.attached:
+  en: "Attached"
+  fr: "Rattaché"
+search.chip.not_attached:
+  en: "Not Attached"
+  fr: "Non rattaché"
+search.chip.within:
+  en: "In %{place}"
+  fr: "Dans %{place}"
+search.chip.with_coordinates:
+  en: "With Coordinates"
+  fr: "Avec coordonnées"
+search.chip.without_coordinates:
+  en: "Without Coordinates"
+  fr: "Sans coordonnées"
+search.chip.event:
+  en: "Event %{event}"
+  fr: "Événement %{event}"
+search.chip.person:
+  en: "Linked to %{name}"
+  fr: "Lié à %{name}"
+search.chip.medium:
+  en: "Medium %{medium}"
+  fr: "Support %{medium}"
+search.chip.with_source:
+  en: "With Source"
+  fr: "Avec source"
+search.chip.without_source:
+  en: "Without Sources"
+  fr: "Sans source"
+search.chip.with_parents:
+  en: "With Parents"
+  fr: "Avec parents"
+search.chip.without_parents:
+  en: "Without Parents"
+  fr: "Sans parents"
+search.chip.with_date:
+  en: "With Date"
+  fr: "Avec date"
+search.chip.without_date:
+  en: "Without Dates"
+  fr: "Sans date"
+search.chip.with_spouse:
+  en: "With Spouse"
+  fr: "Avec conjoint"
+search.chip.without_spouse:
+  en: "Without Spouse"
+  fr: "Sans conjoint"
+search.chip.with_note:
+  en: "With Note"
+  fr: "Avec note"
+search.chip.without_note:
+  en: "Without Note"
+  fr: "Sans note"
+search.chip.married:
+  en: "Married"
+  fr: "Mariés"
+search.chip.union_without_marriage:
+  en: "Union Without Marriage"
+  fr: "Union sans mariage"
+search.chip.with:
+  en: "With %{what}"
+  fr: "Avec %{what}"
+search.chip.without:
+  en: "Without %{what}"
+  fr: "Sans %{what}"
+search.kin.spouses:
+  en: "Spouses of %{name}"
+  fr: "Conjoints de %{name}"
+search.kin.children:
+  en: "Children of %{name}"
+  fr: "Enfants de %{name}"
+search.kin.parents:
+  en: "Parents of %{name}"
+  fr: "Parents de %{name}"
+search.kin.siblings:
+  en: "Siblings of %{name}"
+  fr: "Frères et sœurs de %{name}"
+search.kin.ancestors:
+  en: "Ancestors of %{name}"
+  fr: "Ascendants de %{name}"
+search.kin.descendants:
+  en: "Descendants of %{name}"
+  fr: "Descendants de %{name}"
+search.group.family:
+  en: "Family"
+  fr: "Famille"
+search.group.dates:
+  en: "Dates"
+  fr: "Dates"
+search.group.place:
+  en: "Place"
+  fr: "Lieu"
+search.group.name:
+  en: "Name"
+  fr: "Nom"
+search.group.occupation:
+  en: "Occupation"
+  fr: "Profession"
+search.group.act_type:
+  en: "Record Type"
+  fr: "Type d'acte"
+search.group.repository:
+  en: "Repository"
+  fr: "Dépôt"
+search.group.jurisdiction:
+  en: "Jurisdiction"
+  fr: "Juridiction"
+search.group.event:
+  en: "Event"
+  fr: "Événement"
+search.group.person:
+  en: "Person"
+  fr: "Personne"
+search.group.medium:
+  en: "Medium"
+  fr: "Support"
+search.group.criteria:
+  en: "Criteria"
+  fr: "Critères"
+search.fixed.sosa:
+  en: "Sosa"
+  fr: "Sosa"
+search.fixed.pdf:
+  en: "PDF"
+  fr: "PDF"
+search.suggest.born:
+  en: "Born %{years}"
+  fr: "Né %{years}"
+search.suggest.born_about:
+  en: "Born about %{year}"
+  fr: "Né vers %{year}"
+search.suggest.died:
+  en: "Died %{years}"
+  fr: "Mort %{years}"
+search.suggest.died_about:
+  en: "Died about %{year}"
+  fr: "Mort vers %{year}"
+search.suggest.alive_in:
+  en: "Alive in %{year}"
+  fr: "Vivant en %{year}"
+search.suggest.acts_of:
+  en: "%{kind} records"
+  fr: "Actes de %{kind}"
+search.saved.free_words:
+  en: "“%{words}”"
+  fr: "« %{words} »"
+search.saved.default:
+  en: "Search"
+  fr: "Recherche"

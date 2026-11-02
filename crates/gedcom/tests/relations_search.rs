@@ -14,29 +14,29 @@ fn search_queries() {
     assert_eq!(names(&g, "marchand"), vec!["Paul Émile", "Émile"]);
     assert_eq!(names(&g, "emile"), vec!["Paul Émile", "Émile"]);
     assert_eq!(names(&g, "paul marchand"), vec!["Paul Émile"]);
-    assert_eq!(names(&g, "sexe:f"), vec!["Jeanne"]);
-    assert_eq!(names(&g, "né:1880-1920"), vec!["Jeanne", "Paul Émile"]);
-    assert_eq!(names(&g, "né:<1800"), vec!["Émile"]); // an IV = 1796
-    assert_eq!(names(&g, "lieu:coutances"), vec!["Jeanne"]);
-    assert_eq!(names(&g, "lieu:saint-lo"), vec!["Paul Émile"]);
-    assert_eq!(names(&g, "prof:instit"), vec!["Paul Émile"]);
-    assert_eq!(names(&g, "sans:parents"), vec!["Jeanne", "Émile"]);
-    assert_eq!(names(&g, "avec:média"), vec!["Paul Émile"]);
+    assert_eq!(names(&g, "sex:f"), vec!["Jeanne"]);
+    assert_eq!(names(&g, "born:1880-1920"), vec!["Jeanne", "Paul Émile"]);
+    assert_eq!(names(&g, "born:<1800"), vec!["Émile"]); // an IV = 1796
+    assert_eq!(names(&g, "place:coutances"), vec!["Jeanne"]);
+    assert_eq!(names(&g, "place:saint-lo"), vec!["Paul Émile"]);
+    assert_eq!(names(&g, "occupation:instit"), vec!["Paul Émile"]);
+    assert_eq!(names(&g, "without:parents"), vec!["Jeanne", "Émile"]);
+    assert_eq!(names(&g, "with:media"), vec!["Paul Émile"]);
     assert_eq!(names(&g, "sosa"), vec!["Paul Émile", "Émile"]);
     assert_eq!(names(&g, "sosa:2-3"), vec!["Émile"]);
     assert_eq!(names(&g, "@I00003@"), vec!["Jeanne"]);
-    assert_eq!(names(&g, "vécu:1900"), vec!["Jeanne", "Émile"]);
-    assert_eq!(names(&g, "sans:source"), vec!["Jeanne", "Paul Émile", "Émile"]);
-    let q = IndividualQuery::parse("né:abc dupont");
-    assert_eq!(q.unknown, vec!["né:abc"]);
+    assert_eq!(names(&g, "alive:1900"), vec!["Jeanne", "Émile"]);
+    assert_eq!(names(&g, "without:source"), vec!["Jeanne", "Paul Émile", "Émile"]);
+    let q = IndividualQuery::parse("born:abc dupont");
+    assert_eq!(q.unknown, vec!["born:abc"]);
 }
 
 #[test]
 fn toggle_tokens() {
-    assert_eq!(toggle_token("", "sexe:h"), "sexe:h ");
-    assert_eq!(toggle_token("dupont sexe:h ", "sexe:f"), "dupont sexe:f ");
-    assert_eq!(toggle_token("dupont sans:source ", "sans:source"), "dupont ");
-    assert!(has_token("a SANS:SOURCE", "sans:source"));
+    assert_eq!(toggle_token("", "sex:m"), "sex:m ");
+    assert_eq!(toggle_token("dupont sex:m ", "sex:f"), "dupont sex:f ");
+    assert_eq!(toggle_token("dupont without:source ", "without:source"), "dupont ");
+    assert!(has_token("a WITHOUT:SOURCE", "without:source"));
 }
 
 fn consistent(g: &Gedcom) {
@@ -124,11 +124,11 @@ fn link_and_unlink() {
 #[test]
 fn marriage_criterion() {
     let mut g = Gedcom::parse(SAMPLE).unwrap();
-    assert!(names(&g, "sans:mariage").is_empty());
-    assert_eq!(names(&g, "avec:mariage"), vec!["Jeanne", "Émile"]);
+    assert!(names(&g, "without:marriage").is_empty());
+    assert_eq!(names(&g, "with:marriage"), vec!["Jeanne", "Émile"]);
     // Une union sans mariage ; une personne sans union ne compte pas.
     g.add_relative("I00001", Relation::Spouse, None).unwrap();
-    let mut without = names(&g, "sans:mariage");
+    let mut without = names(&g, "without:marriage");
     without.retain(|n| !n.is_empty());
     assert_eq!(without, vec!["Paul Émile"]);
 }

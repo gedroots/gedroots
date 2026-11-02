@@ -1,9 +1,12 @@
-//! Saisie d'une date en français courant.
+//! Saisie d'une date en langage courant, en français ou en anglais quelle que soit la
+//! langue de l'interface.
 //!
 //! Un seul champ, comme dans Gramps ou RootsMagic : on tape « vers 1850 »,
 //! « 14/03/1912 », « entre 1820 et 1825 », « du 10 mai au 12 juin 1926 »,
-//! « 15 brumaire an XII », « 3 mars 1700 julien », « 44 av. J.-C. »…
-//! Les mots-clés GEDCOM (`ABT 1850`, `FRENCH_R 15 BRUM 12`) sont aussi compris.
+//! « 15 brumaire an XII », « 3 mars 1700 julien », « 44 av. J.-C. », ou en anglais
+//! “about 1850”, “from 10 May to 12 Jun 1926”, “15 Brumaire year XII”, “44 BC”…
+//! Les nombres se lisent jour d'abord (14/03/1912). Les mots-clés GEDCOM
+//! (`ABT 1850`, `FRENCH_R 15 BRUM 12`) sont aussi compris.
 //!
 //! Le texte entre parenthèses en fin de saisie devient la `PHRASE` de la date
 //! (« vers 1850 (d'après l'âge au décès) ») ; un texte sans date reconnaissable
@@ -11,6 +14,7 @@
 
 use super::{Calendar, Date, SimpleDate};
 use crate::model::sort_key;
+use rust_i18n::t;
 
 /// Résultat d'une saisie : une date GEDCOM et/ou une phrase.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -36,7 +40,9 @@ impl Parsed {
             Some(d) => format!("{} ({})", d.to_input_text(), self.phrase),
             None if self.phrase.is_empty() => String::new(),
             // Une phrase qui ressemblerait à une date est mise entre guillemets.
-            None if parse_input(&self.phrase).is_ok_and(|p| p.date.is_some()) => format!("« {} »", self.phrase),
+            None if parse_input(&self.phrase).is_ok_and(|p| p.date.is_some()) => {
+                t!("date.quoted", phrase = self.phrase).into_owned()
+            }
             None => self.phrase.clone(),
         }
     }
@@ -110,10 +116,10 @@ fn normalize_word(w: &str) -> String {
 /// Mots de calendrier et d'époque, réduits à un marqueur.
 fn marker(w: &str) -> Option<&'static str> {
     Some(match w {
-        "julien" | "calendrierjulien" | "vieuxstyle" => "§jul",
-        "gregorien" | "calendriergregorien" | "nouveaustyle" => "§greg",
-        "republicain" | "revolutionnaire" | "calendrierrepublicain" => "§rep",
-        "hebreu" | "hebraique" | "juif" | "calendrierhebraique" => "§heb",
+        "julien" | "calendrierjulien" | "vieuxstyle" | "julian" | "oldstyle" | "os" => "§jul",
+        "gregorien" | "calendriergregorien" | "nouveaustyle" | "gregorian" | "newstyle" | "ns" => "§greg",
+        "republicain" | "revolutionnaire" | "calendrierrepublicain" | "republican" | "frenchrepublican" => "§rep",
+        "hebreu" | "hebraique" | "juif" | "calendrierhebraique" | "hebrew" | "jewish" => "§heb",
         _ => return None,
     })
 }
@@ -194,7 +200,8 @@ fn tokenize(s: &str) -> Vec<String> {
             i += 2;
             continue;
         }
-        if w == "calendrier" {
+        if matches!(w, "calendrier" | "calendar") || (w == "french" && next.is_some_and(|x| marker(x) == Some("§rep")))
+        {
             i += 1;
             continue;
         }
@@ -203,8 +210,8 @@ fn tokenize(s: &str) -> Vec<String> {
             i += 1;
             continue;
         }
-        if w == "vieux" && next == Some("style") {
-            res.push("§jul".into());
+        if matches!(w, "vieux" | "old" | "nouveau" | "new") && next == Some("style") {
+            res.push(if matches!(w, "vieux" | "old") { "§jul" } else { "§greg" }.into());
             i += 2;
             continue;
         }
@@ -234,10 +241,11 @@ fn qualifier(t: &[String]) -> Option<(Q, usize)> {
     let after = |n: usize, extra: &[&str]| if w(n).is_some_and(|x| extra.contains(&x)) { n + 1 } else { n };
     Some(match w(0)? {
         "vers" | "v" | "env" | "environ" | "~" | "ca" | "circa" | "c" | "approx" | "approximativement" | "abt"
-        | "about" => (Q::About, 1),
+        | "about" | "approximately" => (Q::About, 1),
         "autour" => (Q::About, after(1, &["de", "du", "d'"])),
-        "calcule" | "calculee" | "calc" | "cal" => (Q::Cal, 1),
-        "estime" | "estimee" | "est" | "estimation" => (Q::Est, 1),
+        "around" => (Q::About, 1),
+        "calcule" | "calculee" | "calc" | "cal" | "calculated" => (Q::Cal, 1),
+        "estime" | "estimee" | "est" | "estimation" | "estimated" => (Q::Est, 1),
         "avant" | "av" | "<" | "bef" | "before" | "anterieur" | "anterieurement" => {
             (Q::Bef, after(1, &["a", "au", "le", "l'"]))
         }
@@ -249,8 +257,8 @@ fn qualifier(t: &[String]) -> Option<(Q, usize)> {
         "depuis" | "des" | "since" => (Q::From, after(1, &["le", "l'"])),
         "a" if w(1) == Some("partir") => (Q::From, after(2, &["de", "du", "d'"])),
         "jusqu'" => (Q::To, after(1, &["a", "au", "en", "l'"])),
-        "jusque" | "to" | "until" | "jusqua" | "jusquau" | "jusquen" => (Q::To, after(1, &["a", "au", "en"])),
-        "le" | "en" | "l'" | "int" => (Q::Exact, 1),
+        "jusque" | "to" | "until" | "till" | "jusqua" | "jusquau" | "jusquen" => (Q::To, after(1, &["a", "au", "en"])),
+        "le" | "en" | "l'" | "int" | "on" | "in" => (Q::Exact, 1),
         _ => return None,
     })
 }
@@ -336,7 +344,7 @@ fn parse_natural(body: &str) -> R<(Date, bool)> {
             let (a, b) = pair(&rest[..i], &rest[i + 1..])?;
             Date::Between(a, b)
         }
-        Q::FromTo | Q::From => match find(rest, &["a", "au", "aux", "jusqu'", "jusque", "to", "-"]) {
+        Q::FromTo | Q::From => match find(rest, &["a", "au", "aux", "jusqu'", "jusque", "to", "until", "till", "-"]) {
             Some(i) => {
                 let mut j = i + 1;
                 if rest[i].starts_with("jusqu") && rest.get(j).is_some_and(|x| matches!(x.as_str(), "a" | "au" | "en"))
@@ -348,13 +356,13 @@ fn parse_natural(body: &str) -> R<(Date, bool)> {
             }
             None => Date::From(simple(rest)?.0),
         },
-        Q::Exact => match find(rest, &["-", "a", "au", "ou"]) {
+        Q::Exact => match find(rest, &["-", "a", "au", "ou", "or", "to"]) {
             Some(i) => {
                 let sep = rest[i].as_str();
                 let (a, b) = pair(&rest[..i], &rest[i + 1..])?;
                 match sep {
                     "-" => Date::Between(a, b),
-                    "ou" => {
+                    "ou" | "or" => {
                         auto_phrase = true;
                         Date::Between(a, b)
                     }
@@ -415,7 +423,7 @@ fn month(w: &str) -> Option<(Calendar, u8)> {
         "messidor" | "mess" => r(10),
         "thermidor" | "ther" | "therm" => r(11),
         "fructidor" | "fruc" | "fruct" => r(12),
-        "complementaire" | "complementaires" | "sansculottide" | "sansculottides" | "comp" => r(13),
+        "complementaire" | "complementaires" | "complementary" | "sansculottide" | "sansculottides" | "comp" => r(13),
         "tishri" | "tichri" | "tishrei" | "tisri" | "tsh" => h(1),
         "heshvan" | "hechvan" | "cheshvan" | "marheshvan" | "marcheshvan" | "hesvan" | "csh" => h(2),
         "kislev" | "kislew" | "ksl" => h(3),
@@ -452,6 +460,13 @@ fn roman_value(s: &str) -> Option<i32> {
     (n > 0 && super::roman(n).eq_ignore_ascii_case(s)).then_some(n)
 }
 
+/// An English ordinal day: `1st`, `22nd`, `3rd`, `14th`.
+fn ordinal(s: &str) -> Option<i32> {
+    let digits = s.strip_suffix("st").or_else(|| s.strip_suffix("nd")).or_else(|| s.strip_suffix("rd"));
+    let digits = digits.or_else(|| s.strip_suffix("th"))?;
+    num(digits).filter(|n| (1..=31).contains(n))
+}
+
 fn num(s: &str) -> Option<i32> {
     (!s.is_empty() && s.len() <= 6 && s.bytes().all(|b| b.is_ascii_digit())).then(|| s.parse().ok()).flatten()
 }
@@ -486,18 +501,24 @@ fn simple(t: &[String]) -> R<(SimpleDate, bool)> {
                     _ => Calendar::Hebrew,
                 };
                 if cal_marker.as_ref().is_some_and(|x| *x != c) {
-                    return Err(Fail::Invalid("deux calendriers différents".into()));
+                    return Err(Fail::Invalid(t!("date.error.two_calendars").into()));
                 }
                 cal_marker = Some(c);
             }
-            "an" => {
+            "an" | "year" => {
                 let y = t.get(i).ok_or(Fail::Unknown)?;
                 i += 1;
                 year = Some(num(y).or_else(|| roman_value(y)).ok_or(Fail::Unknown)?);
                 republican_year = true;
             }
             "1er" | "1re" | "premier" => push(1, &mon, &mut nums_before, &mut nums_after),
-            "jour" | "jours" if t.get(i).is_some_and(|x| x.starts_with("complementaire")) => {
+            // English ordinals: “1st”, “22nd”, “3rd”, “14th”.
+            _ if ordinal(w).is_some() => push(ordinal(w).unwrap(), &mon, &mut nums_before, &mut nums_after),
+            // « complementary days » : the month is already read.
+            "day" | "days" if i >= 2 && t[i - 2] == "complementary" => {}
+            "jour" | "jours" | "day" | "days"
+                if t.get(i).is_some_and(|x| x.starts_with("complementaire") || x == "complementary") =>
+            {
                 i += 1;
                 mon = Some((Calendar::FrenchRepublican, 13));
             }
@@ -566,12 +587,17 @@ fn simple(t: &[String]) -> R<(SimpleDate, bool)> {
             d.month = Some(*m);
             d.day = match before {
                 [] => None,
-                [x] => Some(u8::try_from(*x).map_err(|_| Fail::Invalid("jour invalide".into()))?),
+                [x] => Some(u8::try_from(*x).map_err(|_| Fail::Invalid(t!("date.error.day").into()))?),
                 _ => return Err(Fail::Unknown),
             };
             d.year = match (after, y) {
                 ([], Some(y)) => Some(y),
                 ([y], None) => Some(*y),
+                // Month first, as in English: “March 14, 1912”.
+                ([day, y], None) if d.day.is_none() && (1..=31).contains(day) => {
+                    d.day = Some(*day as u8);
+                    Some(*y)
+                }
                 // Jour et mois sans année : GEDCOM demande une année, on garde le texte.
                 _ => return Err(Fail::Unknown),
             };
@@ -585,30 +611,35 @@ fn simple(t: &[String]) -> R<(SimpleDate, bool)> {
         _ => None,
     };
     if republican_year && implied.as_ref() != Some(&Calendar::FrenchRepublican) {
-        return Err(Fail::Invalid("« an » s'emploie avec le calendrier républicain".into()));
+        return Err(Fail::Invalid(t!("date.error.year_word").into()));
     }
     d.calendar = match (implied, cal_marker) {
         (Some(a), Some(b)) if a != b => {
-            return Err(Fail::Invalid(format!("ce mois n'existe pas dans le calendrier {}", b.label().to_lowercase())));
+            let calendar = b.label().to_lowercase();
+            return Err(Fail::Invalid(t!("date.error.month_calendar", calendar = calendar).into()));
         }
         (Some(a), _) => a,
         (None, Some(Calendar::FrenchRepublican)) if d.month.is_some() => {
-            return Err(Fail::Invalid("mois grégorien dans le calendrier républicain".into()));
+            return Err(Fail::Invalid(t!("date.error.gregorian_month_republican").into()));
         }
         (None, Some(Calendar::Hebrew)) if d.month.is_some() => {
-            return Err(Fail::Invalid("mois grégorien dans le calendrier hébraïque".into()));
+            return Err(Fail::Invalid(t!("date.error.gregorian_month_hebrew").into()));
         }
         (None, Some(b)) => b,
         (None, None) => Calendar::Gregorian,
     };
     if d.calendar == Calendar::FrenchRepublican && !republican_year && d.year.is_some_and(|y| y > 100) {
-        return Err(Fail::Invalid("année républicaine attendue, ex. « an XII »".into()));
+        return Err(Fail::Invalid(t!("date.error.republican_year").into()));
     }
     Ok((d, dual))
 }
 
 fn month_u8(m: i32) -> R<u8> {
-    if (1..=12).contains(&m) { Ok(m as u8) } else { Err(Fail::Invalid(format!("mois {m} invalide"))) }
+    if (1..=12).contains(&m) {
+        Ok(m as u8)
+    } else {
+        Err(Fail::Invalid(t!("date.error.month_number", month = m).into()))
+    }
 }
 
 #[cfg(test)]
@@ -668,7 +699,7 @@ mod tests {
         assert_eq!(g("jusqu'en 1860"), "TO 1860");
         assert_eq!(g("jusqu’au 10 mai 1926"), "TO 10 MAY 1926");
         assert_eq!(g("1820 ou 1821"), "BET 1820 AND 1821 + 1820 ou 1821");
-        assert_eq!(g("entre 1860 et 1850"), "ERR la première date doit précéder la seconde");
+        assert_eq!(g("entre 1860 et 1850"), "ERR the first date must come before the second");
     }
 
     #[test]
@@ -687,13 +718,13 @@ mod tests {
         assert_eq!(g("5785 hébreu"), "HEBREW 5785");
         assert_eq!(g("44 av. J.-C."), "44 BCE");
         assert_eq!(g("entre 50 et 44 av. J.-C."), "BET 50 BCE AND 44 BCE");
-        assert_eq!(g("15 brumaire 1803"), "ERR année républicaine attendue, ex. « an XII »");
+        assert_eq!(g("15 brumaire 1803"), "ERR French Republican year expected, e.g. “year XII”");
         assert_eq!(g("_MAYA 5 _XUL 1000"), "_MAYA 5 _XUL 1000");
     }
 
     #[test]
     fn invalid_and_phrases() {
-        assert_eq!(g("30 février 1900"), "ERR févr. 1900 n'a que 28 jours");
+        assert_eq!(g("30 février 1900"), "ERR Feb 1900 only has 28 days");
         assert_eq!(g("29 février 1900 julien"), "JULIAN 29 FEB 1900");
         assert_eq!(g("vers 1850 (d'après l'âge au décès)"), "ABT 1850 + d'après l'âge au décès");
         assert_eq!(g("30 janvier 1648/49"), "30 JAN 1649 + 30 janvier 1648/49");
@@ -701,6 +732,33 @@ mod tests {
         assert_eq!(g("pendant la guerre"), " + pendant la guerre");
         assert_eq!(g("« 1850 »"), " + 1850");
         assert_eq!(g(""), "");
+    }
+
+    #[test]
+    fn english() {
+        assert_eq!(g("14 March 1912"), "14 MAR 1912");
+        assert_eq!(g("March 14th, 1912"), "14 MAR 1912");
+        assert_eq!(g("on 1st Jan 1900"), "1 JAN 1900");
+        assert_eq!(g("about 1850"), "ABT 1850");
+        assert_eq!(g("circa 1850"), "ABT 1850");
+        assert_eq!(g("calculated 1850"), "CAL 1850");
+        assert_eq!(g("estimated Mar 1850"), "EST MAR 1850");
+        assert_eq!(g("before 23 May 1809"), "BEF 23 MAY 1809");
+        assert_eq!(g("after 1900"), "AFT 1900");
+        assert_eq!(g("between 1820 and 1825"), "BET 1820 AND 1825");
+        assert_eq!(g("from 10 May to 12 Jun 1926"), "FROM 10 MAY 1926 TO 12 JUN 1926");
+        assert_eq!(g("from 1850 to 1860"), "FROM 1850 TO 1860");
+        assert_eq!(g("since 1850"), "FROM 1850");
+        assert_eq!(g("until 1860"), "TO 1860");
+        assert_eq!(g("1820 or 1821"), "BET 1820 AND 1821 + 1820 or 1821");
+        assert_eq!(g("15 Brumaire year XII"), "FRENCH_R 15 BRUM 12");
+        assert_eq!(g("3 complementary days year III"), "FRENCH_R 3 COMP 3");
+        assert_eq!(g("3 Mar 1700 Julian"), "JULIAN 3 MAR 1700");
+        assert_eq!(g("3 Mar 1700 old style"), "JULIAN 3 MAR 1700");
+        assert_eq!(g("1700 French Republican"), "ERR French Republican year expected, e.g. “year XII”");
+        assert_eq!(g("15 Nisan 5784 Hebrew"), "HEBREW 15 NSN 5784");
+        assert_eq!(g("44 BC"), "44 BCE");
+        assert_eq!(g("“1850”"), " + 1850");
     }
 
     #[test]
@@ -739,9 +797,11 @@ mod tests {
             "_MAYA 5 _XUL 1000",
         ] {
             let d = Date::parse(raw);
-            let text = d.to_input_text();
-            let back = parse_input(&text).unwrap_or_else(|e| panic!("{raw} → {text} : {e}"));
-            assert_eq!(back.value(), raw, "{raw} → « {text} »");
+            for lang in crate::i18n::LANGUAGES {
+                let text = d.to_input_text_in(lang);
+                let back = parse_input(&text).unwrap_or_else(|e| panic!("{raw} → {text} : {e}"));
+                assert_eq!(back.value(), raw, "{raw} → « {text} » ({lang})");
+            }
         }
         let p = Parsed::from_gedcom("ABT 1850", "d'après l'âge");
         assert_eq!(parse_input(&p.to_input_text()).unwrap(), p);
