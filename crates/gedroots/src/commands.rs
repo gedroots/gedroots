@@ -103,6 +103,10 @@ actions!(
         CenterTree,
         MoreGenerations,
         FewerGenerations,
+        ZoomIn,
+        ZoomOut,
+        ZoomToFit,
+        ActualSize,
         FilterMen,
         FilterWomen,
         FilterAncestors,
@@ -206,6 +210,12 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new(shortcut!("alt-3"), ShowRaw, WS),
         KeyBinding::new(shortcut!("="), MoreGenerations, WS),
         KeyBinding::new(shortcut!("-"), FewerGenerations, WS),
+        // Large images: like Preview, Photos and browsers. ⌘= ⌘- are shared with the fan chart's
+        // generations: only one of them is available at a time, the key goes to that one.
+        KeyBinding::new(shortcut!("="), ZoomIn, WS),
+        KeyBinding::new(shortcut!("+"), ZoomIn, WS),
+        KeyBinding::new(shortcut!("-"), ZoomOut, WS),
+        KeyBinding::new(shortcut!("0"), ZoomToFit, WS),
         KeyBinding::new("pageup", PreviousPage, WS),
         KeyBinding::new("pagedown", NextPage, WS),
         // Raw GEDCOM editor suggestions on demand.
@@ -548,6 +558,16 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
             a(t!("cmd.toggle_sidebar"), ToggleSidebar),
             a(t!("cmd.relative_events"), ToggleRelativeEvents),
             Sep,
+            Sub(
+                t!("menu.zoom").into(),
+                vec![
+                    a(t!("cmd.zoom_in"), ZoomIn),
+                    a(t!("cmd.zoom_out"), ZoomOut),
+                    Sep,
+                    a(t!("cmd.zoom_to_fit"), ZoomToFit),
+                    a(t!("cmd.actual_size"), ActualSize),
+                ],
+            ),
             Sub(
                 t!("menu.tree").into(),
                 vec![

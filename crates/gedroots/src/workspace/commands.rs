@@ -154,6 +154,13 @@ impl Workspace {
                     }
                 })
             })
+            // Zoom of the large image shown (act, proposal to review, media).
+            .when(self.active_zoom(cx).is_some(), |d| {
+                let d = on!(d, cx, ZoomIn, |this, w, cx| this.with_zoom(w, cx, |z| z.zoom_in()));
+                let d = on!(d, cx, ZoomOut, |this, w, cx| this.with_zoom(w, cx, |z| z.zoom_out()));
+                let d = on!(d, cx, ZoomToFit, |this, w, cx| this.with_zoom(w, cx, |z| z.zoom_to_fit()));
+                on!(d, cx, ActualSize, |this, w, cx| this.with_zoom(w, cx, |z| z.actual_size()))
+            })
             // Chart and filters of the individuals list.
             .when(individuals, |d| {
                 let d = on!(d, cx, ShowTree, |this, w, cx| this.show_tab(CenterTab::Tree, cx));
@@ -238,6 +245,30 @@ impl Workspace {
     }
 
     /// (Existing) image of the displayed page of a media.
+    /// Zoom of the large image shown, if any: the act's in the act editor, the proposal's on the
+    /// review page, otherwise the displayed media's.
+    fn active_zoom(&self, cx: &App) -> Option<crate::viewer::Zoom> {
+        let z = if let Some((editor, _)) = &self.act_editor {
+            editor.read(cx).zoom().clone()
+        } else if self.review.open {
+            self.review.zoom.clone()
+        } else {
+            let media = self.selected.as_ref().filter(|x| self.photo_file(x).is_some());
+            if media.is_none() || self.tab != CenterTab::Form {
+                return None;
+            }
+            self.photo_zoom.clone()
+        };
+        z.is_shown().then_some(z)
+    }
+
+    fn with_zoom(&self, window: &mut Window, cx: &App, f: impl FnOnce(&crate::viewer::Zoom)) {
+        if let Some(z) = self.active_zoom(cx) {
+            f(&z);
+            window.refresh();
+        }
+    }
+
     pub(super) fn photo_file(&self, media: &str) -> Option<PathBuf> {
         let doc = self.doc.as_ref()?;
         let m = Media::new(doc.ged.get(media)?);

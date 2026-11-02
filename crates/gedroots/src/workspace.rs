@@ -240,6 +240,8 @@ pub struct Workspace {
     /// Frame being drawn on a photo.
     photo_draw: Option<photo::PhotoDraw>,
     photo_bounds: photo::PhotoBounds,
+    /// Zoom of the image of the displayed media.
+    photo_zoom: crate::viewer::Zoom,
     /// Person hovered on the photo or in the list of links.
     photo_hover: Option<String>,
     /// Displayed page of a multi-page media (from 1).
@@ -342,6 +344,7 @@ impl Workspace {
             window_title: String::new(),
             photo_draw: None,
             photo_bounds: Default::default(),
+            photo_zoom: Default::default(),
             photo_hover: None,
             media_page: 1,
             media_marked: Vec::new(),

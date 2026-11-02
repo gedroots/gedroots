@@ -165,6 +165,19 @@ field.
 - Selection: `accent()` outline + `accent_soft()` background, never a mere tint.
 - Links: discreet curves or elbows, even thickness.
 
+## Large images
+
+Record scans, photos and proposals to review all go through one viewer
+([`viewer.rs`](crates/gedroots/src/viewer.rs)), so that they behave the same everywhere, like
+Preview, Photos or an archive viewer:
+
+- the image first fits its panel; pinch or `⌘` / `Ctrl` + scroll zooms around the pointer,
+  double-click toggles between the fitted image and its actual size;
+- View › Zoom: Zoom In `⌘+`, Zoom Out `⌘−`, Zoom to Fit `⌘0`, Actual Size;
+- once zoomed, drag or scroll to move; a minimap in the bottom right corner (like the tree's)
+  shows the visible part and the zoom level, and a click or drag in it moves there;
+- no zoom buttons: frames and names laid over a photo follow the zoom.
+
 ## Interaction
 
 Rules shared by the three guidelines, to apply everywhere.

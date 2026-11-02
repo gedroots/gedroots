@@ -44,6 +44,8 @@ pub(super) struct Review {
     sel: usize,
     /// GEDCOM section expanded.
     gedcom: bool,
+    /// Zoom of the act's image.
+    pub(super) zoom: crate::viewer::Zoom,
 }
 
 impl Review {
@@ -319,37 +321,34 @@ impl Workspace {
             .min_w_0()
             .relative()
             .bg(theme::viewer())
-            .flex()
-            .items_center()
-            .justify_center()
-            .p_4()
             .map(|d| match pending.preview.as_ref().or(pending.image.as_ref()) {
-                Some(path) => {
+                // Never a silent black viewer: say which file could not be shown.
+                Some(path) if crate::images::image_size(path).is_none() => {
                     let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-                    d.child(
-                        crate::images::picture(path.clone(), 1600., 1600., ObjectFit::Contain)
-                            .size_full()
-                            // Never a silent black viewer: say which file could not be shown.
-                            .with_fallback(move || {
-                                div()
-                                    .size_full()
-                                    .flex()
-                                    .items_center()
-                                    .justify_center()
-                                    .text_color(theme::image_muted())
-                                    .child(t!("review.unreadable_image", file = name.clone()).into_owned())
-                                    .into_any_element()
-                            }),
+                    self.review.zoom.clear();
+                    d.flex().items_center().justify_center().p_4().child(
+                        div()
+                            .text_color(theme::image_muted())
+                            .child(t!("review.unreadable_image", file = name).into_owned()),
                     )
                 }
-                None => d.child(div().text_color(theme::image_muted()).child(t!("review.no_image").into_owned())),
+                Some(path) => d.child(self.review.zoom.view("review-image", path.clone()).max_fit(f32::INFINITY)),
+                None => {
+                    self.review.zoom.clear();
+                    d.flex()
+                        .items_center()
+                        .justify_center()
+                        .p_4()
+                        .child(div().text_color(theme::image_muted()).child(t!("review.no_image").into_owned()))
+                }
             })
             .when_some(caption, |d, c| {
                 d.child(
                     div()
                         .absolute()
                         .bottom_3()
-                        .right_3()
+                        // Bottom left: the minimap of a zoomed image takes the right corner.
+                        .left_3()
                         .px_2()
                         .py_0p5()
                         .rounded(theme::RADIUS_SM)
