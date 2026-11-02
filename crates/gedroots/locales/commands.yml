@@ -81,6 +81,15 @@ cmd:
   connect_agent:
     en: Connect an AI Agent…
     fr: Connecter un agent IA…
+  review_proposals:
+    en: Review Agent Proposals
+    fr: Relire les propositions de l'agent
+  accept_proposal:
+    en: Save Proposal to Tree
+    fr: Enregistrer la proposition dans l'arbre
+  reject_proposal:
+    en: Reject Proposal
+    fr: Rejeter la proposition
   # Edit
   undo:
     en: Undo

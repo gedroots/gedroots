@@ -55,6 +55,7 @@ pub mod node;
 pub mod parse;
 pub mod pedigree;
 pub mod phonetic;
+pub mod proposal;
 pub mod quality;
 pub mod query;
 pub mod relations;

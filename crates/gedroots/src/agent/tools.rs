@@ -1,5 +1,7 @@
-//! Outils MCP de GEDRoots, en lecture seule, et serveur HTTP qui les sert.
+//! Outils MCP de GEDRoots et serveur HTTP qui les sert. Ils lisent le fichier ; le seul
+//! outil d'écriture, `propose_act`, ajoute une proposition à relire dans l'app.
 
+use super::propose::{self, Pending, ProposeParams};
 use super::{Request, Snapshot};
 use axum::extract::State;
 use axum::http::{StatusCode, header};
@@ -40,6 +42,47 @@ pub struct GapsParams {
     pub generations: Option<u32>,
     /// Maximum number of gaps returned (default 100).
     pub limit: Option<usize>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct SourceSearch {
+    /// Words of the source's title, register, call number or repository name.
+    pub query: String,
+    /// Maximum number of results (default 30).
+    pub limit: Option<usize>,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct RepositoryRef {
+    pub id: String,
+    pub name: String,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct SourceRef {
+    pub id: String,
+    pub title: String,
+    /// Register or collection (PUBL).
+    pub register: String,
+    pub repository: Option<RepositoryRef>,
+    pub call_number: String,
+    /// Acts recorded from this source: 1 for a source per act, more for a whole register.
+    pub acts: usize,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct Sources {
+    pub sources: Vec<SourceRef>,
+    /// Repositories whose name matches, to cite in a new source.
+    pub repositories: Vec<RepositoryRef>,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct Proposed {
+    /// Always "waiting for review": the user compares and saves it in GEDRoots.
+    pub status: String,
+    /// Proposals waiting for review in GEDRoots.
+    pub waiting: usize,
 }
 
 #[derive(Debug, Serialize, JsonSchema)]
@@ -143,16 +186,110 @@ impl GedrootsMcp {
         let total = all.len();
         Ok(Json(Gaps { gaps: all.into_iter().take(p.limit.unwrap_or(100)).collect(), total }))
     }
+
+    #[tool(
+        name = "search_sources",
+        description = "Searches the tree's sources (with their register, repository and number of acts) and repositories. Use it before proposing an act, to cite an existing source or repository.",
+        annotations(read_only_hint = true, open_world_hint = false)
+    )]
+    async fn sources(&self, Parameters(p): Parameters<SourceSearch>) -> Res<Sources> {
+        let s = self.snapshot().await?;
+        let g = &s.ged;
+        let words: Vec<String> = p.query.split_whitespace().map(str::to_lowercase).collect();
+        let matches = |text: &str| {
+            let t = text.to_lowercase();
+            words.iter().all(|w| t.contains(w.as_str()))
+        };
+        let repo = |x: &str| {
+            g.get(x)
+                .filter(|n| n.tag == "REPO")
+                .map(|n| RepositoryRef { id: x.to_string(), name: n.child_val("NAME").unwrap_or_default().to_string() })
+        };
+        let limit = p.limit.unwrap_or(30).min(200);
+        let sources = g
+            .records_of(RecordKind::Source)
+            .filter_map(|n| {
+                let src = gedcom::Source::new(n);
+                let repository = src.repository().and_then(repo);
+                let text = format!(
+                    "{} {} {} {}",
+                    src.title(),
+                    src.publication().unwrap_or_default(),
+                    src.call_number().unwrap_or_default(),
+                    repository.as_ref().map(|r| r.name.as_str()).unwrap_or_default()
+                );
+                matches(&text).then(|| SourceRef {
+                    id: src.xref().to_string(),
+                    title: src.title(),
+                    register: src.publication().unwrap_or_default(),
+                    call_number: src.call_number().unwrap_or_default().to_string(),
+                    acts: g.acts(src.xref()).len(),
+                    repository,
+                })
+            })
+            .take(limit)
+            .collect();
+        let repositories = g
+            .records_of(RecordKind::Repository)
+            .filter_map(|n| repo(n.xref.as_deref()?))
+            .filter(|r| matches(&r.name))
+            .take(limit)
+            .collect();
+        Ok(Json(Sources { sources, repositories }))
+    }
+
+    #[tool(
+        name = "propose_act",
+        description = "Proposes an act found in the archives (birth, marriage, death…), with its source, people and image. Nothing is written: the proposal waits in GEDRoots' review page, where the user compares it with the tree and saves or rejects it. It is refused, with the reason, if it does not fit the tree (unknown source or person, one source per act or per register as the file does, a parent other than the tree's, impossible date): fix it and propose again. Give the place as the tree names it, the date in GEDCOM format, and the downloaded file (a PDF register needs pdf_page).",
+        annotations(
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
+    )]
+    async fn propose(&self, Parameters(p): Parameters<ProposeParams>) -> Res<Proposed> {
+        let s = self.snapshot().await?;
+        let mut proposal = propose::to_proposal(&p)?;
+        let year = current_year();
+        proposal.complete(&s.ged);
+        proposal.check(&s.ged, year)?;
+        let original =
+            p.file.as_ref().map(|f| std::path::PathBuf::from(f.trim())).filter(|f| !f.as_os_str().is_empty());
+        let image = match &original {
+            Some(path) => {
+                let (path, page, images) = (path.clone(), p.pdf_page, propose::prefers_images(&s.ged));
+                let prepared = tokio::task::spawn_blocking(move || {
+                    propose::prepare_file(&path, page, images, &propose::cache_dir())
+                })
+                .await
+                .map_err(|e| e.to_string())??;
+                Some(prepared)
+            }
+            None => None,
+        };
+        propose::attach(&mut proposal, image.as_deref());
+        let pending = Pending { proposal, original, pdf_page: p.pdf_page, image, url: p.url.unwrap_or_default() };
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        self.bridge
+            .send(Request::Propose(Box::new(pending), tx))
+            .await
+            .map_err(|_| "GEDRoots is closing".to_string())?;
+        let waiting = rx.await.map_err(|_| "GEDRoots is closing".to_string())??;
+        Ok(Json(Proposed { status: "waiting for review".into(), waiting }))
+    }
 }
 
 // Consignes données à l'agent à la connexion.
 #[tool_handler(
     name = "gedroots",
     instructions = "GEDRoots is a genealogy app. These tools read the GEDCOM 7 family tree open in \
-the app (its active window) and never change it. Living people are hidden. Ids (I12, F3, S4…) are \
+the app (its active window). They never change it: `propose_act` only adds an act to the \
+app's review page, where the user compares it with the tree before saving it. Living people are hidden. Ids (I12, F3, S4…) are \
 only for passing between tools: never show them to the user. To look for records (birth, marriage, \
 death acts), call `research_gaps`, then `person_sheet` on the person to learn their places, dates \
-and the sources already cited."
+and the sources already cited. When you find an act, read it, check it matches the person, \
+call `search_sources` to reuse the source or repository, then `propose_act`."
 )]
 impl ServerHandler for GedrootsMcp {}
 
@@ -267,8 +404,11 @@ mod tests {
         let (_, _, list) =
             post(port, "secret", Some(&sid), serde_json::json!({"jsonrpc":"2.0","id":2,"method":"tools/list"}));
         let tools = list["result"]["tools"].as_array().expect("tools");
-        assert_eq!(tools.len(), 4);
-        assert!(tools.iter().all(|t| t["annotations"]["readOnlyHint"] == true));
+        assert_eq!(tools.len(), 6);
+        // Seul `propose_act` n'est pas en lecture seule, et il n'écrit rien.
+        let writers: Vec<_> =
+            tools.iter().filter(|t| t["annotations"]["readOnlyHint"] != true).map(|t| t["name"].clone()).collect();
+        assert_eq!(writers, ["propose_act"]);
         let (_, _, call) = post(
             port,
             "secret",

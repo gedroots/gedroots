@@ -1,0 +1,112 @@
+_version: 2
+# Page « À relire » : actes proposés par un agent IA (crates/gedroots/src/workspace/review.rs)
+review:
+  title:
+    en: To Review
+    fr: À relire
+  received:
+    one:
+      en: "An AI agent proposed an act: it is waiting in To Review"
+      fr: "Un agent IA a proposé un acte : il attend dans À relire"
+    other:
+      en: "An AI agent proposed an act: %{n} are waiting in To Review"
+      fr: "Un agent IA a proposé un acte : %{n} attendent dans À relire"
+  none:
+    en: No proposals to review
+    fr: Aucune proposition à relire
+  rejected:
+    en: Proposal rejected, nothing was written
+    fr: Proposition rejetée, rien n'a été écrit
+  by_agent:
+    en: proposed by an AI agent
+    fr: proposé par un agent IA
+  sosa:
+    en: "Sosa %{n}"
+    fr: "Sosa %{n}"
+  record:
+    en: RECORD
+    fr: FICHE
+  in_tree:
+    en: In the Tree
+    fr: Dans l'arbre
+  proposed:
+    en: Proposed
+    fr: Proposé
+  date:
+    en: Date
+    fr: Date
+  place:
+    en: Place
+    fr: Lieu
+  same:
+    en: "= same"
+    fr: "= identique"
+  added:
+    en: "+ Add"
+    fr: "+ Ajouter"
+  refined:
+    en: "≠ More precise"
+    fr: "≠ Précisé"
+  differs:
+    en: "≠ Different"
+    fr: "≠ Différent"
+  create:
+    en: "+ Create"
+    fr: "+ Créer"
+  link:
+    en: "+ Link"
+    fr: "+ Lier"
+  mention:
+    en: "+ Mention"
+    fr: "+ Mentionner"
+  existing:
+    en: "= existing"
+    fr: "= existant"
+  attachment:
+    en: ATTACHMENT
+    fr: RATTACHEMENT
+  repository:
+    en: Repository
+    fr: Dépôt
+  source:
+    en: Source
+    fr: Source
+  file:
+    en: File
+    fr: Fichier
+  event:
+    en: Event
+    fr: Événement
+  same_register:
+    en: "%{register}, like %{n} other sources of the file"
+    fr: "%{register}, comme %{n} autres sources du fichier"
+  extracted:
+    en: "JPEG, page %{page} extracted from the PDF"
+    fr: "JPEG, page %{page} extraite du PDF"
+  pdf_page:
+    en: "Page %{page} of %{file}"
+    fr: "Page %{page} de %{file}"
+  no_image:
+    en: No image
+    fr: Pas d'image
+  transcription:
+    en: TRANSCRIPTION
+    fr: TRANSCRIPTION
+  open_page:
+    en: Open the Archive Page
+    fr: Ouvrir la page des archives
+  gedcom:
+    en: GEDCOM
+    fr: GEDCOM
+  reject:
+    en: Reject
+    fr: Rejeter
+  edit:
+    en: Edit in Record Entry…
+    fr: Modifier dans la saisie d'acte…
+  save:
+    en: Save to Tree
+    fr: Enregistrer dans l'arbre
+  save_ged_first:
+    en: Save the .ged file first, so the act's image can be stored next to it
+    fr: Enregistrez d'abord le fichier .ged, pour ranger l'image de l'acte à côté

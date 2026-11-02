@@ -41,6 +41,7 @@ mod photo;
 mod places;
 mod quality;
 mod relatives;
+mod review;
 mod saved;
 mod settings;
 mod tree;
@@ -252,6 +253,8 @@ pub struct Workspace {
     add_dialog: Option<add::AddDialog>,
     /// Fenêtre « Médias » (galerie d'un individu, d'un événement, d'une source).
     gallery: Option<gallery::Gallery>,
+    /// Page « À relire » : actes proposés par un agent IA, en attente de relecture.
+    review: review::Review,
     /// Champ de lieu en cours de saisie dans la fiche.
     place_focus: Option<EntityId>,
     /// Lieux réels proposés pendant la saisie d'un lieu.
@@ -354,6 +357,7 @@ impl Workspace {
             editor_subs: Vec::new(),
             add_dialog: None,
             gallery: None,
+            review: review::Review::default(),
             _subs: vec![sub, map_sub, appearance_sub, activation_sub],
         };
         if let Some(p) = path {
@@ -546,6 +550,7 @@ impl Workspace {
     /// Affiche une liste et un élément (`None` : le dernier vu dans cette liste).
     fn open_location(&mut self, view: View, key: Option<String>, window: &mut Window, cx: &mut Context<Self>) {
         self.new_place = None;
+        self.review.open = false;
         if self.view == view {
             if let Some(k) = key {
                 self.select(k, window, cx);
@@ -870,7 +875,13 @@ impl Workspace {
                 Act::new(&source, &event)
             }
         };
-        let (ged, path) = (g.clone(), doc.path.clone());
+        self.show_act_editor(act, window, cx);
+    }
+
+    /// Ouvre la saisie d'acte sur `act`, dans la fiche de sa source affichée.
+    pub(super) fn show_act_editor(&mut self, act: Act, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(doc) = &self.doc else { return };
+        let (ged, path) = (doc.ged.clone(), doc.path.clone());
         let editor = cx.new(|cx| ActEditor::new(ged, path, act, window, cx));
         let sub = cx.subscribe_in(&editor, window, |this, editor, ev: &ActEditorEvent, window, cx| match ev {
             ActEditorEvent::Close => {
@@ -1445,6 +1456,7 @@ impl Workspace {
                     .children(n.map(|n| div().text_xs().text_color(theme::muted()).child(group_thousands(n))))
                     .on_click(cx.listener(move |this, _, w, cx| this.show_view(v, w, cx)))
             }))
+            .children(self.render_review_zone(cx))
             .children(self.render_saved(cx))
     }
 
@@ -2740,6 +2752,15 @@ impl Render for Workspace {
                 .when(self.sidebar, |d| d.child(self.render_sidebar(cx)))
                 .child(self.render_list(cx))
                 .child(editor.clone())
+                .into_any_element()
+        } else if self.doc.is_some() && self.review.open {
+            // Actes proposés par un agent : la page prend la place des listes.
+            h_flex()
+                .flex_1()
+                .min_h_0()
+                .items_stretch()
+                .when(self.sidebar, |d| d.child(self.render_sidebar(cx)))
+                .child(self.render_review(cx))
                 .into_any_element()
         } else if self.doc.is_some() {
             h_flex()

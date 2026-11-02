@@ -2,7 +2,9 @@
 
 GEDRoots can serve the [Model Context Protocol](https://modelcontextprotocol.io) so that an AI
 agent, such as Claude Code, reads the family tree open in the app and helps with research:
-which records are still missing, where and when to look for them.
+which records are still missing, where and when to look for them. When the agent finds a record
+in the archives, it proposes it; the act waits in the app's **To Review** page until a person
+compares it with the tree and saves it.
 
 ## Connecting
 
@@ -19,8 +21,9 @@ Streamable HTTP with a header works the same way.
 
 ## Tools
 
-All tools are read-only (`readOnlyHint`) and return structured JSON (`outputSchema`). They read
-the file of the most recently active window.
+The tools return structured JSON (`outputSchema`) and work on the file of the most recently
+active window. All are read-only (`readOnlyHint`) except `propose_act`, which writes nothing
+either: it only adds a proposal to review.
 
 | Tool | Returns |
 | --- | --- |
@@ -28,9 +31,42 @@ the file of the most recently active window.
 | `search_people` | People matching a search, as in the app's search box |
 | `person_sheet` | Events with date, place, cited sources (`PAGE`) and media; parents, unions, children; Sosa number |
 | `research_gaps` | Births, marriages and deaths missing or without a source among the root person's direct ancestors, by Sosa number, with each person's known places |
+| `search_sources` | Sources (register, repository, call number, number of acts) and repositories, to cite an existing one |
+| `propose_act` | Adds an act to the To Review page: event, date, place, source, reference, transcription, people with their role, downloaded file |
 
 Ids (`I12`, `F3`…) are only for passing between tools; the server's instructions ask the agent
 not to show them.
+
+## Proposals and review
+
+`propose_act` takes the same model as Source › Enter Record… (`crates/gedcom/src/act.rs`): an
+event, the people with their standard GEDCOM 7 role (each linked to an existing person, created,
+or only mentioned), the reference (`PAGE`), the transcription and the source. Nothing raw goes
+into the file: GEDRoots writes the whole chain itself, repository → source → file → event →
+people (`crates/gedcom/src/proposal.rs`).
+
+Before a proposal reaches the review page it must fit the tree. Otherwise it is refused with the
+reason, which the agent reads to fix it:
+
+- the source and repository must exist, or the new source must name its register;
+- the source follows the file's habit for that register: one source per act, or one per register
+  with the act's reference as `PAGE`;
+- a parent other than the one already in the tree is refused (link that person, or mention the
+  other one);
+- linked people must exist and not be living; dates must be valid, and are rewritten in
+  GEDCOM 7 syntax; a place named like a place of the tree becomes that place.
+
+The downloaded file takes the format of the acts already attached to the file's sources: the
+act's page of a PDF register becomes a JPEG image (rendered in pure Rust, on every platform) kept
+in the app's cache until the act is saved.
+
+The **To Review** page (sidebar, or Source › Review Agent Proposals) shows, for each proposal,
+the act's image, a comparison of what the tree holds and what is proposed (each person can be
+unchecked), the attachment (repository, source, file, event), the transcription and, on demand,
+the exact GEDCOM lines that will change, computed on a copy of the file. **Save to Tree** (⌘↩)
+writes everything at once, as a single undo step, and stores the image next to the `.ged`,
+named by File Settings › Media; **Reject** (⌘⌫) drops it; **Edit in Record Entry…** opens it in
+the act editor. Proposals live in memory: they are lost when the app closes.
 
 ## Privacy and safety
 
@@ -40,8 +76,7 @@ not to show them.
   is replaced by « Living person » wherever they appear (`crates/gedcom/src/research.rs`).
 - **Local only.** The server listens on `127.0.0.1:47280`, requires the token in the
   `Authorization` header and rejects requests sent by a web page (`Origin` header).
-- **Nothing is written.** Writing (attaching a record found in the archives, creating a source)
-  will come as proposals that a person reviews and compares in the app before anything is saved.
+- **Nothing is written by the agent.** It can only propose; a person reviews, compares and saves.
 - The setting and the token belong to the machine, not to the file: they are kept in
   `GEDRoots/agents` in the platform's configuration folder (`~/Library/Application Support` on
   macOS, `~/.config` on Linux, `%APPDATA%` on Windows), never in the `.ged`.
