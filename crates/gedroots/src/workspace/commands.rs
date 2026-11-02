@@ -46,7 +46,7 @@ impl Workspace {
         let root = g.and_then(|g| g.root());
         let is_root = indi.is_some() && root == indi;
         let can_undo = doc.is_some_and(|d| !d.history.is_empty());
-        let individuals = has_doc && self.view == View::Individuals && self.entry_form.is_none();
+        let individuals = has_doc && self.view == View::Individuals && self.act_editor.is_none();
         let attachable = matches!(sel_kind, Some(RecordKind::Individual | RecordKind::Family | RecordKind::Source));
         let web_linkable = sel.as_ref().is_some_and(|x| g.is_some_and(|g| g.can_have_web_links(x)));
 
@@ -60,7 +60,7 @@ impl Workspace {
         let d = on!(d, cx, SaveFile, |this, w, cx| this.save_file(&SaveFile, w, cx));
         let d = on!(d, cx, OpenFileSettings, |this, w, cx| this.open_settings(w, cx));
         let d = on!(d, cx, SaveFileAs, |this, w, cx| this.save_file_as(w, cx));
-        let d = on!(d, cx, EnterRecord, |this, w, cx| this.open_entry(&EnterRecord, w, cx));
+        let d = on!(d, cx, EnterRecord, |this, w, cx| this.enter_act(w, cx));
         let d = on!(d, cx, FocusSearch, |this, w, cx| this.filter.update(cx, |f, cx| f.focus(w, cx)));
         let d = on!(d, cx, ClearSearch, |this, w, cx| this.set_query(String::new(), w, cx));
         let d = on!(d, cx, ToggleSearchHelp, |this, w, cx| {
@@ -72,7 +72,13 @@ impl Workspace {
         // Créations : on passe dans la bonne liste puis on crée.
         let d = on!(d, cx, NewIndividual, |this, w, cx| this.create_in(View::Individuals, w, cx));
         let d = on!(d, cx, NewFamily, |this, w, cx| this.create_in(View::Families, w, cx));
-        let d = on!(d, cx, NewSource, |this, w, cx| this.create_in(View::Sources, w, cx));
+        // Nouvelle source : elle s'ouvre sur un acte vide (une source sans acte reste possible : « ‹ »).
+        let d = on!(d, cx, NewSource, |this, w, cx| {
+            this.create_in(View::Sources, w, cx);
+            if let Some(s) = this.selected.clone() {
+                this.open_act(s, None, w, cx);
+            }
+        });
         let d = on!(d, cx, NewMedia, |this, w, cx| this.create_in(View::Media, w, cx));
 
         // Vues.
@@ -263,7 +269,7 @@ impl Workspace {
 
     /// Change de liste, en quittant la saisie d'acte si besoin.
     fn show_view(&mut self, view: View, window: &mut Window, cx: &mut Context<Self>) {
-        self.entry_form = None;
+        self.act_editor = None;
         self.set_view(view, window, cx);
         cx.notify();
     }

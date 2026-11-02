@@ -50,6 +50,17 @@ pub(crate) fn choice<T: 'static>(
     window: &mut Window,
     cx: &mut Context<T>,
 ) -> Entity<PickerState> {
+    choice_with_search(options, selected, false, window, cx)
+}
+
+/// Comme [`choice`], avec un champ de recherche pour les longues listes.
+pub(crate) fn choice_with_search<T: 'static>(
+    options: &[(&str, &str)],
+    selected: &str,
+    searchable: bool,
+    window: &mut Window,
+    cx: &mut Context<T>,
+) -> Entity<PickerState> {
     let items: Vec<Pick> = options
         .iter()
         .map(|(v, l)| Pick { xref: v.to_string(), label: SharedString::from(l.to_string()), search: sort_key(l) })
@@ -58,7 +69,7 @@ pub(crate) fn choice<T: 'static>(
     let selected =
         items.iter().find(|p| p.xref.eq_ignore_ascii_case(selected.trim())).map(|p| p.xref.clone()).unwrap_or_default();
     cx.new(|cx| {
-        let mut s = SelectState::new(SearchableVec::new(items), None, window, cx);
+        let mut s = SelectState::new(SearchableVec::new(items), None, window, cx).searchable(searchable);
         if !selected.is_empty() {
             s.set_selected_value(&selected, window, cx);
         }

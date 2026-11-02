@@ -20,6 +20,8 @@ pub enum PickPurpose {
     MergeInto { media: String },
     /// Le média choisi est lié à l'événement `ix` de `owner`.
     MediaToEvent { owner: String, ix: usize },
+    /// Source où saisir un acte (ou nouvelle source, choix vide).
+    ActSource,
     /// Lien de parenté entre `indi` et la personne choisie (rien n'est modifié).
     Kinship { indi: String },
 }
@@ -36,6 +38,7 @@ impl PickPurpose {
             PickPurpose::TagPerson { .. } => "Qui est sur cette zone de la photo ?".into(),
             PickPurpose::Kinship { indi } => format!("Lien de parenté de {} avec…", g.record_label(indi)),
             PickPurpose::MergeInto { media } => format!("Ajouter à « {} » les pages du média…", g.record_label(media)),
+            PickPurpose::ActSource => "Saisir un acte dans la source…".into(),
             PickPurpose::MediaToEvent { owner, ix } => format!(
                 "Lier un média à « {} » · {}",
                 g.event_title(owner, *ix).unwrap_or_default(),
@@ -179,6 +182,7 @@ impl Workspace {
     pub(super) fn open_picker(&mut self, purpose: PickPurpose, window: &mut Window, cx: &mut Context<Self>) {
         let hint = match purpose {
             PickPurpose::MergeInto { .. } | PickPurpose::MediaToEvent { .. } => "Titre ou fichier du média…",
+            PickPurpose::ActSource => "Titre de la source, ou d'une nouvelle source…",
             _ => "Nom, prénom… (critères : né:1850 lieu:troyes)",
         };
         let input = cx.new(|cx| InputState::new(window, cx).placeholder(hint));
@@ -281,6 +285,22 @@ impl Workspace {
             out.truncate(80);
             return out;
         }
+        if let PickPurpose::ActSource = p.purpose {
+            // Sources d'après leur titre ; en dernier, « Nouvelle source » (choix vide).
+            let words: Vec<String> = text.split_whitespace().map(sort_key).collect();
+            let mut found: Vec<(String, String)> = g
+                .records_of(RecordKind::Source)
+                .filter_map(|r| {
+                    let x = r.xref.clone()?;
+                    let k = sort_key(&g.record_label(&x));
+                    words.iter().all(|w| k.contains(w.as_str())).then_some((k, x))
+                })
+                .collect();
+            found.sort();
+            out.extend(found.into_iter().map(|(_, x)| x).take(79));
+            out.push(String::new());
+            return out;
+        }
         if let PickPurpose::MediaTo { .. } = p.purpose {
             // Sources et familles aussi, d'après le texte libre.
             let words: Vec<String> = q.words.clone();
@@ -316,6 +336,24 @@ impl Workspace {
     fn pick(&mut self, chosen: String, window: &mut Window, cx: &mut Context<Self>) {
         let Some(p) = self.picker.take() else { return };
         window.focus(&self.focus, cx);
+        if let PickPurpose::ActSource = p.purpose {
+            let source = if chosen.is_empty() {
+                // Nouvelle source, titrée d'après la recherche (sinon titre automatique au premier acte).
+                let title = p.input.read(cx).value().trim().to_string();
+                self.checkpoint();
+                let Some(doc) = &mut self.doc else { return };
+                let x = doc.ged.create(RecordKind::Source);
+                if !title.is_empty() {
+                    doc.ged.get_mut(&x).unwrap().set_child_text("TITL", &title);
+                }
+                self.rebuild_rows(cx);
+                x
+            } else {
+                chosen
+            };
+            self.open_act(source, None, window, cx);
+            return;
+        }
         if let PickPurpose::Kinship { indi } = p.purpose {
             self.kinship = Some((indi.clone(), chosen));
             self.open_location(View::Individuals, Some(indi), window, cx);
@@ -354,6 +392,8 @@ impl Workspace {
                     let what = g.event_title(&owner, ix).unwrap_or_default().to_lowercase();
                     Ok((format!("« {who} » lié à l'événement {what} de {}", g.record_label(&owner)), None))
                 }
+                // Traité avant (n'écrit rien par lui-même).
+                PickPurpose::ActSource => Ok((String::new(), None)),
                 PickPurpose::TagPerson { media, page, crop } => {
                     g.tag_person_on(&chosen, &media, page, crop)?;
                     Ok((format!("{who} identifié(e) sur la photo"), None))
@@ -818,12 +858,13 @@ impl Workspace {
                                         .when(n == 0, |d| d.bg(theme::hover()))
                                         .hover(|d| d.bg(theme::surface()))
                                         .child(
-                                            div()
-                                                .flex_1()
-                                                .overflow_hidden()
-                                                .whitespace_nowrap()
-                                                .text_ellipsis()
-                                                .child(g.record_label(&x)),
+                                            div().flex_1().overflow_hidden().whitespace_nowrap().text_ellipsis().child(
+                                                if x.is_empty() {
+                                                    "+ Nouvelle source".to_string()
+                                                } else {
+                                                    g.record_label(&x)
+                                                },
+                                            ),
                                         )
                                         .child(mono(meta))
                                         .on_click(cx.listener(move |this, _, w, cx| this.pick(target.clone(), w, cx)))

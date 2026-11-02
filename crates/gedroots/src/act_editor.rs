@@ -1,27 +1,32 @@
-//! Écran « Saisie d'acte » : saisie guidée d'une source, à la manière
-//! d'Ancestral Sources (Family Historian). À gauche l'image de l'acte, à droite
-//! le formulaire du modèle choisi : référence de l'acte, personnes citées (lier à
-//! un individu existant, créer, ou mentionner seulement) et aperçu du GEDCOM.
+//! Éditeur d'acte, ouvert dans la fiche d'une source : à gauche l'image de
+//! l'acte, à droite l'événement (n'importe quel événement GEDCOM), sa référence
+//! et les personnes citées avec leur rôle (lier à un individu existant, créer,
+//! ou mentionner seulement). Il n'y a pas de modèles : les champs de chaque
+//! personne et les liens familiaux découlent de son rôle.
 //!
-//! Le formulaire travaille sur une copie du document ; l'écriture réelle est
-//! faite par l'espace de travail quand il reçoit [`EntryFormEvent::Save`].
+//! L'éditeur travaille sur une copie du document ; l'écriture réelle est faite
+//! par l'espace de travail quand il reçoit [`ActEditorEvent::Save`].
 
 use crate::date_field::{DateField, date_field};
+use crate::editor::{PickerState, choice_with_search};
 use crate::images::picture;
 use crate::theme;
 use gedcom::*;
+use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::checkbox::Checkbox;
 use gpui_kit::component::input::{Input, InputEvent, InputState, Textarea, TextareaState};
+use gpui_kit::component::menu::{DropdownMenu, PopupMenuItem};
+use gpui_kit::component::select::{Select, SelectEvent};
 use gpui_kit::component::{Disableable, Sizable, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 use std::path::{Path, PathBuf};
 
-pub enum EntryFormEvent {
+pub enum ActEditorEvent {
     /// Écrire l'acte ; `next` : enchaîner sur l'acte suivant du même registre.
     Save {
-        entry: Box<Entry>,
+        act: Box<Act>,
         next: bool,
     },
     Close,
@@ -33,46 +38,37 @@ enum Kind {
     Plain,
     /// Lieu : propose les lieux du fichier.
     Place,
-    /// Nom ou prénom d'une personne : relance les suggestions.
+    /// Nom, prénom, âge ou date : relance les suggestions.
     Name,
-    /// Recherche de source.
-    SourceSearch,
-    /// Recherche de dépôt (nouvelle source).
-    RepoSearch,
 }
 
 struct PersonRow {
-    id: u64,
-    role: String,
+    role: ActRole,
+    of: usize,
     inputs: Vec<(PersonField, Entity<InputState>)>,
-    /// Sexe choisi par boutons (`Some("")` : à choisir) ; `None` : fixé par le rôle.
+    /// Sexe choisi par boutons ; `None` : fixé par le rôle ou sans objet.
     sex: Option<String>,
     choice: PersonChoice,
     suggestions: Vec<Suggestion>,
+    _subs: Vec<Subscription>,
 }
 
-pub struct EntryForm {
+pub struct ActEditor {
     ged: Gedcom,
     base_dir: Option<PathBuf>,
-    templates: Vec<Template>,
-    template: usize,
-    source: Option<String>,
-    new_source: bool,
-    source_search: Entity<InputState>,
-    repo_search: Entity<InputState>,
-    repo: Option<String>,
-    call_number: Entity<InputState>,
-    publication: Entity<InputState>,
+    /// L'acte ouvert : source, version d'origine, note gardée telle quelle.
+    base: Act,
+    event: Entity<PickerState>,
+    event_type: Entity<InputState>,
     date: Entity<DateField>,
     place: Entity<InputState>,
+    page: Entity<InputState>,
     record_date: Entity<DateField>,
-    fields: Vec<(String, String, Entity<InputState>)>,
     transcription: Entity<TextareaState>,
     quality: Option<u8>,
     media: MediaChoice,
     estimate_births: bool,
     rows: Vec<PersonRow>,
-    next_row_id: u64,
     /// Champ de lieu actif (pour afficher les lieux proposés sous ce champ).
     place_focus: Option<EntityId>,
     places: Vec<(String, String)>,
@@ -84,60 +80,90 @@ pub struct EntryForm {
     _subs: Vec<Subscription>,
 }
 
-impl EventEmitter<EntryFormEvent> for EntryForm {}
+impl EventEmitter<ActEditorEvent> for ActEditor {}
 
 const QUALITY: [&str; 4] = ["Peu fiable", "Douteuse", "Indirecte", "Directe"];
 
-impl EntryForm {
-    /// `source` : source présélectionnée (son modèle est alors repris).
-    pub fn new(
-        ged: Gedcom,
-        ged_path: Option<PathBuf>,
-        source: Option<String>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Self {
-        let templates = ged.templates();
-        let template = source
-            .as_deref()
-            .and_then(|s| ged.source_template(s))
-            .and_then(|t| templates.iter().position(|x| x.id == t.id))
-            .unwrap_or(0);
+/// Événements individuels proposés (les familiaux viennent de [`gedcom::act::FAMILY_ACT_EVENTS`]).
+const INDIVIDUAL_ACT_EVENTS: &[&str] = &[
+    "BIRT", "BAPM", "DEAT", "BURI", "CREM", "CENS", "CONF", "FCOM", "ADOP", "NATU", "EMIG", "IMMI", "EDUC", "GRAD",
+    "RETI", "WILL", "PROB",
+];
+
+/// Valeur de la liste des événements → (balise, type, événement familial).
+fn parse_event(v: &str) -> (String, String, bool) {
+    let (family, rest) = match v.strip_prefix("FAM:") {
+        Some(r) => (true, r),
+        None => (false, v),
+    };
+    match rest.split_once(':') {
+        Some((tag, ty)) => (tag.to_string(), ty.to_string(), family),
+        None => (rest.to_string(), String::new(), family),
+    }
+}
+
+/// Valeur de la liste des événements pour un acte.
+fn event_value(act: &Act, custom: &[EventType]) -> String {
+    if act.event == "EVEN" {
+        let fam = if act.family_even { "FAM:" } else { "" };
+        let known = custom.iter().any(|t| t.family == act.family_even && t.label == act.event_type.trim());
+        return if known { format!("{fam}EVEN:{}", act.event_type.trim()) } else { format!("{fam}EVEN") };
+    }
+    act.event.clone()
+}
+
+impl ActEditor {
+    pub fn new(ged: Gedcom, ged_path: Option<PathBuf>, act: Act, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let places = ged.places().into_iter().map(|p| (p.short(), p.name)).collect();
-        let mk = |cx: &mut Context<Self>, window: &mut Window, ph: &str| {
-            let ph = ph.to_string();
-            cx.new(|cx| InputState::new(window, cx).placeholder(ph))
+        // Événements : individuels, familiaux, types personnalisés du fichier, puis « Autre… ».
+        let custom = ged.event_types();
+        let mut options: Vec<(String, String)> = INDIVIDUAL_ACT_EVENTS
+            .iter()
+            .chain(gedcom::act::FAMILY_ACT_EVENTS.iter().filter(|t| **t != "MARS"))
+            .map(|t| (t.to_string(), event_label(t).unwrap_or(t).to_string()))
+            .collect();
+        for t in &custom {
+            let fam = if t.family { "FAM:" } else { "" };
+            options.push((format!("{fam}EVEN:{}", t.label), t.label.clone()));
+        }
+        options.push(("EVEN".into(), "Autre événement…".into()));
+        options.push(("FAM:EVEN".into(), "Autre événement familial…".into()));
+        let current = event_value(&act, &custom);
+        if !options.iter().any(|(v, _)| *v == current) {
+            options.insert(0, (current.clone(), act.event_label()));
+        }
+        let opts: Vec<(&str, &str)> = options.iter().map(|(v, l)| (v.as_str(), l.as_str())).collect();
+        let event = choice_with_search(&opts, &current, true, window, cx);
+        let mk = |cx: &mut Context<Self>, window: &mut Window, ph: &str, v: &str| {
+            let (ph, v) = (ph.to_string(), v.to_string());
+            cx.new(|cx| InputState::new(window, cx).placeholder(ph).default_value(v))
         };
-        let source_search = mk(cx, window, "Chercher une source ou saisir le titre d'une nouvelle…");
-        let repo_search = mk(cx, window, "Dépôt (archives, mairie…)");
-        let call_number = mk(cx, window, "Cote, ex. 3 E 502/112");
-        let publication = mk(cx, window, "ex. Saint-Lô, Naissances (1893-1912)");
-        let date = date_field("", "", window, cx);
-        let place = mk(cx, window, "Commune…");
-        let record_date = date_field("", "", window, cx);
-        let transcription = cx.new(|cx| TextareaState::new(window, cx).rows(4));
+        let custom_type =
+            if current == "EVEN" || current == "FAM:EVEN" { act.event_type.clone() } else { String::new() };
+        let event_type = mk(cx, window, "ex. Registre matricule", &custom_type);
+        let page = mk(cx, window, "Acte n° 27, vue 12", &act.page);
+        let place = mk(cx, window, "Commune…", &act.place);
+        let date = date_field(&act.date, &act.date_phrase, window, cx);
+        let record_date = date_field(&act.record_date, &act.record_date_phrase, window, cx);
+        let transcription = {
+            let t = act.transcription.clone();
+            cx.new(|cx| TextareaState::new(window, cx).rows(4).default_value(t))
+        };
         let mut this = Self {
             ged,
             base_dir: ged_path.and_then(|p| p.parent().map(Path::to_path_buf)),
-            templates,
-            template,
-            source: source.clone(),
-            new_source: false,
-            source_search,
-            repo_search,
-            repo: None,
-            call_number,
-            publication,
+            quality: act.quality,
+            media: act.media.clone(),
+            estimate_births: act.estimate_births,
+            base: act.clone(),
+            event,
+            event_type,
             date,
             place,
+            page,
             record_date,
-            fields: Vec::new(),
             transcription,
-            quality: None,
-            media: MediaChoice::None,
-            estimate_births: true,
             rows: Vec::new(),
-            next_row_id: 0,
             place_focus: None,
             places,
             preview: None,
@@ -147,16 +173,18 @@ impl EntryForm {
             scroll: ScrollHandle::new(),
             _subs: Vec::new(),
         };
+        if this.base.original.is_none() && this.media == MediaChoice::None {
+            this.media = this.default_media();
+        }
         for (e, kind) in [
-            (this.source_search.clone(), Kind::SourceSearch),
-            (this.repo_search.clone(), Kind::RepoSearch),
-            (this.call_number.clone(), Kind::Plain),
-            (this.publication.clone(), Kind::Plain),
+            (this.event_type.clone(), Kind::Plain),
+            (this.page.clone(), Kind::Plain),
             (this.date.read(cx).input().clone(), Kind::Name),
             (this.place.clone(), Kind::Place),
             (this.record_date.read(cx).input().clone(), Kind::Plain),
         ] {
-            this.watch(&e, kind, window, cx);
+            let sub = this.watch(&e, kind, window, cx);
+            this._subs.push(sub);
         }
         let t = this.transcription.clone();
         let sub = cx.subscribe_in(&t, window, |this, _, ev: &InputEvent, _, cx| {
@@ -166,13 +194,25 @@ impl EntryForm {
             }
         });
         this._subs.push(sub);
-        this.media = this.default_media();
-        this.reset_template(None, window, cx);
+        let e = this.event.clone();
+        let sub = cx.subscribe_in(&e, window, |this, _, ev: &SelectEvent<_>, window, cx| {
+            if let SelectEvent::Confirm(Some(_)) = ev {
+                this.event_changed(window, cx);
+            }
+        });
+        this._subs.push(sub);
+        this.set_rows(act.participants, window, cx);
         this
     }
 
-    fn watch(&mut self, e: &Entity<InputState>, kind: Kind, window: &mut Window, cx: &mut Context<Self>) {
-        let sub = cx.subscribe_in(e, window, move |this, input, ev: &InputEvent, _window, cx| {
+    fn watch(
+        &mut self,
+        e: &Entity<InputState>,
+        kind: Kind,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Subscription {
+        cx.subscribe_in(e, window, move |this, input, ev: &InputEvent, _window, cx| {
             match ev {
                 InputEvent::Focus => {
                     this.place_focus = (kind == Kind::Place).then(|| input.entity_id());
@@ -183,94 +223,74 @@ impl EntryForm {
                     match kind {
                         Kind::Place => this.place_focus = Some(input.entity_id()),
                         Kind::Name => this.refresh_suggestions(cx),
-                        Kind::RepoSearch => this.repo = None,
-                        _ => {}
+                        Kind::Plain => {}
                     }
                 }
                 _ => return,
             }
             cx.notify();
-        });
-        self._subs.push(sub);
+        })
     }
 
-    fn input(
-        &mut self,
-        value: &str,
-        ph: &str,
-        kind: Kind,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Entity<InputState> {
-        let (value, ph) = (value.to_string(), ph.to_string());
-        let e = cx.new(|cx| InputState::new(window, cx).placeholder(ph).default_value(value));
-        self.watch(&e, kind, window, cx);
-        e
-    }
-
-    fn template(&self) -> &Template {
-        &self.templates[self.template]
-    }
-
-    /// Recrée les champs du modèle courant. `from` : acte précédent à enchaîner.
-    fn reset_template(&mut self, from: Option<&Entry>, window: &mut Window, cx: &mut Context<Self>) {
-        let t = self.template().clone();
-        let old: Vec<(String, String)> =
-            self.fields.iter().map(|(k, _, e)| (k.clone(), e.read(cx).value().to_string())).collect();
-        self.fields = Vec::new();
-        for f in &t.fields {
-            let v = match from {
-                Some(e) => e.field(&f.key).to_string(),
-                None => old.iter().find(|(k, _)| *k == f.key).map(|(_, v)| v.clone()).unwrap_or_default(),
-            };
-            let e = self.input(&v, "", Kind::Plain, window, cx);
-            self.fields.push((f.key.clone(), f.label.clone(), e));
+    /// Événement choisi : (balise, type, familial).
+    fn event(&self, cx: &App) -> (String, String, bool) {
+        let v = self.event.read(cx).selected_value().cloned().unwrap_or_default();
+        let (tag, ty, family) = parse_event(&v);
+        if tag == "EVEN" && ty.is_empty() {
+            return (tag, self.event_type.read(cx).value().trim().to_string(), family);
         }
+        (tag, ty, family)
+    }
+
+    /// Recrée les lignes des personnes (les champs dépendent du rôle et de l'événement).
+    fn set_rows(&mut self, people: Vec<Participant>, window: &mut Window, cx: &mut Context<Self>) {
+        let mut act = self.collect(cx);
+        act.participants = people;
         self.rows.clear();
-        for r in t.roles.iter().filter(|r| r.default) {
-            self.add_row(&r.key.clone(), window, cx);
+        for i in 0..act.participants.len() {
+            let p = act.participants[i].clone();
+            let mut inputs = Vec::new();
+            let mut subs = Vec::new();
+            let mut sex = None;
+            for f in act.fields_of(i) {
+                if f == PersonField::Sex {
+                    if act.imposed_sex(i).is_none() {
+                        sex = Some(p.get(PersonField::Sex).to_string());
+                    }
+                    continue;
+                }
+                let kind = match f {
+                    PersonField::Surname | PersonField::Given | PersonField::Age => Kind::Name,
+                    PersonField::Residence | PersonField::Birthplace => Kind::Place,
+                    _ => Kind::Plain,
+                };
+                let ph = match f {
+                    PersonField::Age => "32 ans",
+                    PersonField::Kinship => "fils, épouse, voisin",
+                    _ => "",
+                }
+                .to_string();
+                let v = p.get(f).to_string();
+                let e = cx.new(|cx| InputState::new(window, cx).placeholder(ph).default_value(v));
+                subs.push(self.watch(&e, kind, window, cx));
+                inputs.push((f, e));
+            }
+            self.rows.push(PersonRow {
+                role: p.role,
+                of: p.of,
+                inputs,
+                sex,
+                choice: p.choice.clone(),
+                suggestions: Vec::new(),
+                _subs: subs,
+            });
         }
         self.preview = None;
         self.refresh_suggestions(cx);
     }
 
-    fn add_row(&mut self, role: &str, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(def) = self.template().role(role).cloned() else { return };
-        let mut inputs = Vec::new();
-        let mut sex = None;
-        for f in &def.fields {
-            if *f == PersonField::Sex {
-                if def.sex.is_none() {
-                    sex = Some(String::new());
-                }
-                continue;
-            }
-            let kind = match f {
-                PersonField::Surname | PersonField::Given | PersonField::Age => Kind::Name,
-                PersonField::Residence | PersonField::Birthplace => Kind::Place,
-                _ => Kind::Plain,
-            };
-            let ph = match f {
-                PersonField::Age => "ex. 32 ans",
-                PersonField::Kinship => "ex. fils, épouse, voisin",
-                _ => "",
-            };
-            let e = self.input("", ph, kind, window, cx);
-            inputs.push((*f, e));
-        }
-        self.next_row_id += 1;
-        self.rows.push(PersonRow {
-            id: self.next_row_id,
-            role: role.to_string(),
-            inputs,
-            sex,
-            choice: PersonChoice::Create,
-            suggestions: Vec::new(),
-        });
-    }
-
     fn default_media(&self) -> MediaChoice {
-        let Some(s) = self.source.as_deref().and_then(|s| self.ged.get(s)) else { return MediaChoice::None };
+        let Some(s) = self.ged.get(&self.base.source) else { return MediaChoice::None };
         Source::new(s)
             .media_xrefs()
             .into_iter()
@@ -280,38 +300,29 @@ impl EntryForm {
     }
 
     /// Construit l'acte à partir des champs.
-    fn collect(&self, cx: &App) -> Entry {
+    fn collect(&self, cx: &App) -> Act {
         let v = |e: &Entity<InputState>| e.read(cx).value().trim().to_string();
-        let source = match (&self.source, self.new_source) {
-            (Some(x), _) => SourceChoice::Existing(x.clone()),
-            _ => SourceChoice::New {
-                title: v(&self.source_search),
-                publication: v(&self.publication),
-                repository: self.repo.clone(),
-                call_number: v(&self.call_number),
-            },
-        };
-        let mut e = Entry::new(self.template().clone(), source);
+        let mut a = self.base.clone();
+        (a.event, a.event_type, a.family_even) = self.event(cx);
         // Date impossible : le texte saisi est gardé, `save` signale l'erreur.
         let date = |d: &Entity<DateField>| {
             let f = d.read(cx);
             f.value(cx).unwrap_or_else(|_| (f.input().read(cx).value().trim().to_string(), String::new()))
         };
-        (e.date, e.date_phrase) = date(&self.date);
-        e.place = v(&self.place);
-        (e.record_date, e.record_date_phrase) = date(&self.record_date);
-        for (k, _, i) in &self.fields {
-            e.set_field(k, v(i));
-        }
-        e.transcription = self.transcription.read(cx).value().to_string();
-        e.quality = self.quality;
-        e.media = self.media.clone();
-        e.estimate_births = self.estimate_births;
-        e.participants = self
+        (a.date, a.date_phrase) = date(&self.date);
+        a.place = v(&self.place);
+        a.page = v(&self.page);
+        (a.record_date, a.record_date_phrase) = date(&self.record_date);
+        a.transcription = self.transcription.read(cx).value().to_string();
+        a.quality = self.quality;
+        a.media = self.media.clone();
+        a.estimate_births = self.estimate_births;
+        a.participants = self
             .rows
             .iter()
             .map(|r| Participant {
-                role: r.role.clone(),
+                role: r.role,
+                of: r.of,
                 values: r
                     .inputs
                     .iter()
@@ -321,67 +332,83 @@ impl EntryForm {
                 choice: r.choice.clone(),
             })
             .collect();
-        e
+        a
     }
 
     fn refresh_suggestions(&mut self, cx: &mut Context<Self>) {
-        let entry = self.collect(cx);
+        let act = self.collect(cx);
         for (i, r) in self.rows.iter_mut().enumerate() {
-            r.suggestions = if r.choice == PersonChoice::Create { entry.suggestions(&self.ged, i) } else { Vec::new() };
+            r.suggestions = if r.choice == PersonChoice::Create { act.suggestions(&self.ged, i) } else { Vec::new() };
         }
     }
 
-    fn set_choice(&mut self, row: u64, choice: PersonChoice, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(i) = self.rows.iter().position(|r| r.id == row) else { return };
+    fn event_changed(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let act = self.collect(cx);
+        let mut people = act.participants.clone();
+        if people.iter().all(|p| p.is_blank() && p.choice == PersonChoice::Create) {
+            // Rien de saisi : les personnes attendues pour ce nouvel événement.
+            people = act.default_participants();
+        } else if act.is_family() {
+            while people.iter().filter(|p| p.role == ActRole::Principal).count() < 2 {
+                people.insert(1, Participant::new(ActRole::Principal));
+            }
+        }
+        self.set_rows(people, window, cx);
+        self.error = None;
+        cx.notify();
+    }
+
+    fn add_person(&mut self, role: ActRole, window: &mut Window, cx: &mut Context<Self>) {
+        let mut people = self.collect(cx).participants;
+        // Une personne principale de plus va après les autres personnes principales.
+        let at = match role {
+            ActRole::Principal => people.iter().rposition(|p| p.role == ActRole::Principal).map_or(0, |i| i + 1),
+            _ => people.len(),
+        };
+        people.insert(at, Participant::new(role));
+        self.set_rows(people, window, cx);
+        cx.notify();
+    }
+
+    fn remove_person(&mut self, idx: usize, window: &mut Window, cx: &mut Context<Self>) {
+        let mut people = self.collect(cx).participants;
+        if idx < people.len() {
+            people.remove(idx);
+        }
+        self.set_rows(people, window, cx);
+        cx.notify();
+    }
+
+    fn set_choice(&mut self, idx: usize, choice: PersonChoice, window: &mut Window, cx: &mut Context<Self>) {
+        let mut people = self.collect(cx).participants;
+        let Some(p) = people.get_mut(idx) else { return };
         // En liant, on complète les champs vides avec l'individu choisi.
         if let PersonChoice::Link(x) = &choice
             && let Some(ind) = self.ged.individual(x)
         {
-            let (s, g, sex) = (ind.surname(), ind.given(), ind.sex().to_string());
-            for (f, input) in &self.rows[i].inputs {
-                let val = match f {
-                    PersonField::Surname => s.clone(),
-                    PersonField::Given => g.clone(),
-                    PersonField::Sex if sex != "U" => sex.clone(),
-                    _ => continue,
-                };
-                if input.read(cx).value().trim().is_empty() {
-                    input.update(cx, |st, cx| st.set_value(val, window, cx));
+            for (f, val) in [
+                (PersonField::Surname, ind.surname()),
+                (PersonField::Given, ind.given()),
+                (PersonField::Sex, ind.sex().into()),
+            ] {
+                if p.get(f).is_empty() && val != "U" {
+                    p.set(f, val);
                 }
             }
-            if let Some(s) = self.rows[i].sex.as_mut().filter(|s| s.is_empty() && sex != "U") {
-                *s = sex;
-            }
         }
-        self.rows[i].choice = choice;
-        self.preview = None;
+        p.choice = choice;
+        self.set_rows(people, window, cx);
         self.error = None;
+        cx.notify();
+    }
+
+    fn set_of(&mut self, idx: usize, of: usize, cx: &mut Context<Self>) {
+        if let Some(r) = self.rows.get_mut(idx) {
+            r.of = of;
+        }
+        self.preview = None;
         self.refresh_suggestions(cx);
         cx.notify();
-    }
-
-    fn pick_source(&mut self, xref: Option<String>, window: &mut Window, cx: &mut Context<Self>) {
-        self.new_source = xref.is_none();
-        self.source = xref;
-        if let Some(t) = self.source.as_deref().and_then(|s| self.ged.source_template(s))
-            && let Some(i) = self.templates.iter().position(|x| x.id == t.id)
-            && i != self.template
-        {
-            self.template = i;
-            self.reset_template(None, window, cx);
-        }
-        self.media = self.default_media();
-        self.preview = None;
-        self.error = None;
-        cx.notify();
-    }
-
-    fn set_template(&mut self, i: usize, window: &mut Window, cx: &mut Context<Self>) {
-        if i != self.template {
-            self.template = i;
-            self.reset_template(None, window, cx);
-            cx.notify();
-        }
     }
 
     fn pick_file(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -425,11 +452,11 @@ impl EntryForm {
     }
 
     fn save(&mut self, next: bool, cx: &mut Context<Self>) {
-        let entry = self.collect(cx);
+        let act = self.collect(cx);
         let dates = [&self.date, &self.record_date].map(|d| d.read(cx).value(cx));
-        let checked = dates.into_iter().try_for_each(|d| d.map(|_| ())).and_then(|_| entry.validate(&self.ged));
+        let checked = dates.into_iter().try_for_each(|d| d.map(|_| ())).and_then(|_| act.validate(&self.ged));
         match checked {
-            Ok(()) => cx.emit(EntryFormEvent::Save { entry: Box::new(entry), next }),
+            Ok(()) => cx.emit(ActEditorEvent::Save { act: Box::new(act), next }),
             Err(e) => {
                 self.error = Some(e.into());
                 cx.notify();
@@ -437,45 +464,30 @@ impl EntryForm {
         }
     }
 
-    /// Appelé par l'espace de travail après un enregistrement réussi.
-    pub fn saved(
-        &mut self,
-        ged: Gedcom,
-        result: &EntryResult,
-        next: bool,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        let entry = self.collect(cx);
-        // Source propre à chaque acte (titre automatique) : l'acte suivant en aura une nouvelle.
-        let per_act = matches!(&entry.source, SourceChoice::New { title, .. } if title.is_empty());
+    /// Appelé par l'espace de travail après un enregistrement réussi, pour enchaîner
+    /// sur l'acte suivant du même registre.
+    pub fn saved(&mut self, ged: Gedcom, result: &ActResult, window: &mut Window, cx: &mut Context<Self>) {
+        let mut n = self.collect(cx).next();
+        if let MediaChoice::NewFile(_) = n.media {
+            n.media = result.media.clone().map(MediaChoice::Existing).unwrap_or_default();
+        }
         self.ged = ged;
         self.saved_count += 1;
-        self.source = if per_act { None } else { Some(result.source.clone()) };
-        self.new_source = per_act;
         self.places = self.ged.places().into_iter().map(|p| (p.short(), p.name)).collect();
-        if next {
-            let n = entry.next();
-            self.media = match &n.media {
-                _ if per_act => MediaChoice::None,
-                MediaChoice::NewFile(_) => result.media.clone().map(MediaChoice::Existing).unwrap_or_default(),
-                m => m.clone(),
-            };
-            if per_act {
-                self.call_number.update(cx, |s, cx| s.set_value("", window, cx));
-            }
-            self.date.update(cx, |s, cx| s.clear(window, cx));
-            self.record_date.update(cx, |s, cx| s.clear(window, cx));
-            self.transcription.update(cx, |s, cx| s.set_value("", window, cx));
-            self.reset_template(Some(&n), window, cx);
-            self.error = None;
-            // Retour en haut du formulaire, curseur sur la première personne.
-            self.scroll.set_offset(point(px(0.), px(0.)));
-            if let Some((_, first)) = self.rows.first().and_then(|r| r.inputs.first()) {
-                first.update(cx, |s, cx| s.focus(window, cx));
-            }
-            cx.notify();
+        self.base = n.clone();
+        self.media = n.media.clone();
+        self.page.update(cx, |s, cx| s.set_value(n.page.clone(), window, cx));
+        self.date.update(cx, |s, cx| s.clear(window, cx));
+        self.record_date.update(cx, |s, cx| s.clear(window, cx));
+        self.transcription.update(cx, |s, cx| s.set_value("", window, cx));
+        self.set_rows(n.participants, window, cx);
+        self.error = None;
+        // Retour en haut du formulaire, curseur sur la première personne.
+        self.scroll.set_offset(point(px(0.), px(0.)));
+        if let Some((_, first)) = self.rows.first().and_then(|r| r.inputs.first()) {
+            first.update(cx, |s, cx| s.focus(window, cx));
         }
+        cx.notify();
     }
 
     pub fn set_error(&mut self, e: String, cx: &mut Context<Self>) {
@@ -534,11 +546,11 @@ fn chip(id: impl Into<SharedString>, label: impl Into<SharedString>, on: bool) -
         .child(label.into())
 }
 
-fn section(title: &'static str) -> Div {
+fn section(title: impl Into<SharedString>) -> Div {
     v_flex().gap_2().p_3().rounded_md().border_1().border_color(theme::border()).bg(theme::panel()).child(caps(title))
 }
 
-impl EntryForm {
+impl ActEditor {
     /// Lieux du fichier qui correspondent au champ de lieu actif.
     fn place_suggestions(&self, input: &Entity<InputState>, cx: &mut Context<Self>) -> Option<Div> {
         if self.place_focus != Some(input.entity_id()) {
@@ -573,9 +585,8 @@ impl EntryForm {
 
     fn render_image(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let candidates: Vec<(String, String)> = self
-            .source
-            .as_deref()
-            .and_then(|s| self.ged.get(s))
+            .ged
+            .get(&self.base.source)
             .map(|s| {
                 Source::new(s)
                     .media_xrefs()
@@ -597,7 +608,7 @@ impl EntryForm {
                     // À 100 % l'image tient dans le panneau ; au-delà on la grossit et on fait défiler.
                     let (w, h) =
                         imagesize::size(p).map(|s| (s.width as f32, s.height as f32)).unwrap_or((1000., 1400.));
-                    let width = 500. * zoom;
+                    let width = 460. * zoom;
                     // Décodée pour la largeur affichée (le panneau fait rarement plus de 900 px).
                     let shown = width.max(900.);
                     let i = picture(p.clone(), shown, shown * h / w.max(1.), ObjectFit::Contain);
@@ -616,15 +627,14 @@ impl EntryForm {
                 .flex_1()
                 .items_center()
                 .justify_center()
-                .gap_2()
                 .p_4()
                 .text_color(theme::muted())
-                .child("Aucune image pour cet acte")
-                .child(mono("Choisissez une image de la source ou un fichier"))
+                .child("Aucune image")
                 .into_any_element(),
         };
         v_flex()
-            .w(px(520.))
+            .w(relative(0.42))
+            .max_w(px(620.))
             .flex_none()
             .border_r_1()
             .border_color(theme::border())
@@ -685,7 +695,7 @@ impl EntryForm {
                             MediaChoice::NewFile(f) => Some(f.clone()),
                             _ => None,
                         },
-                        |d, f| d.child(chip("media-new", format!("Nouveau : {f}"), true)),
+                        |d, f| d.child(chip("media-new", f, true)),
                     )
                     .child(
                         Button::new("pick-file")
@@ -706,145 +716,31 @@ impl EntryForm {
             )
     }
 
-    fn render_source(&self, cx: &mut Context<Self>) -> Div {
-        let mut sec = section("Source (registre)");
-        if let Some(x) = &self.source {
-            let title = self.ged.record_label(x);
-            let repo = self.ged.get(x).and_then(|n| Source::new(n).repository()).map(|r| self.ged.record_label(r));
-            return sec.child(
-                h_flex()
-                    .gap_2()
-                    .items_center()
-                    .child(
-                        v_flex()
-                            .flex_1()
-                            .min_w_0()
-                            .child(div().font_weight(FontWeight::MEDIUM).child(title))
-                            .when_some(repo, |d, r| d.child(div().text_xs().text_color(theme::muted()).child(r))),
-                    )
-                    .child(Button::new("change-source").ghost().xsmall().label("Changer").on_click(cx.listener(
-                        |this, _, _, cx| {
-                            this.source = None;
-                            this.new_source = false;
-                            this.preview = None;
-                            cx.notify();
-                        },
-                    ))),
-            );
-        }
-        sec = sec.child(Input::new(&self.source_search).small().cleanable(true));
-        let q = sort_key(self.source_search.read(cx).value().trim());
-        if self.new_source {
-            let rq = sort_key(self.repo_search.read(cx).value().trim());
-            let repos: Vec<(String, String)> = if self.repo.is_none() && rq.len() >= 2 {
-                self.ged
-                    .records_of(RecordKind::Repository)
-                    .filter_map(|r| {
-                        let name = Repository::new(r).name().to_string();
-                        sort_key(&name).contains(&rq).then(|| (r.xref.clone().unwrap_or_default(), name))
-                    })
-                    .take(6)
-                    .collect()
-            } else {
-                Vec::new()
-            };
-            let title = if q.is_empty() {
-                format!("Titre automatique : {}", self.collect(cx).auto_title())
-            } else {
-                "Nouvelle source : le titre est celui saisi ci-dessus.".to_string()
-            };
-            return sec
-                .child(mono(title))
-                .child(field("Registre / publication", &self.publication))
-                .child(
-                    h_flex()
-                        .gap_2()
-                        .child(div().flex_1().child(field("Dépôt", &self.repo_search)))
-                        .child(div().w(px(180.)).child(field("Cote", &self.call_number))),
-                )
-                .when(self.repo.is_some(), |d| {
-                    d.child(div().text_xs().text_color(theme::ok()).child("Dépôt existant lié"))
-                })
-                .child(h_flex().flex_wrap().gap_1().children(repos.into_iter().map(|(x, name)| {
-                    chip(format!("repo-{x}"), name.clone(), false).on_click(cx.listener(move |this, _, window, cx| {
-                        this.repo_search.update(cx, |s, cx| s.set_value(name.clone(), window, cx));
-                        this.repo = Some(x.clone());
-                        cx.notify();
-                    }))
-                })))
-                .child(
-                    Button::new("cancel-new-source").ghost().xsmall().label("Choisir une source existante").on_click(
-                        cx.listener(|this, _, _, cx| {
-                            this.new_source = false;
-                            cx.notify();
-                        }),
-                    ),
-                );
-        }
-        let hits: Vec<(String, String)> = self
-            .ged
-            .records_of(RecordKind::Source)
-            .filter_map(|r| {
-                let t = Source::new(r).title();
-                (q.is_empty() || sort_key(&t).contains(&q)).then(|| (r.xref.clone().unwrap_or_default(), t))
-            })
-            .take(8)
-            .collect();
-        sec.child(v_flex().gap_0p5().children(hits.into_iter().map(|(x, title)| {
-            div()
-                .id(SharedString::from(format!("src-{x}")))
-                .px_2()
-                .py_1()
-                .rounded_sm()
-                .cursor_pointer()
-                .overflow_hidden()
-                .whitespace_nowrap()
-                .text_ellipsis()
-                .hover(|d| d.bg(theme::hover()))
-                .child(title)
-                .on_click(cx.listener(move |this, _, w, cx| this.pick_source(Some(x.clone()), w, cx)))
-        })))
-        .child(
-            Button::new("new-source")
-                .ghost()
-                .xsmall()
-                .label(if q.is_empty() {
-                    "+ Nouvelle source pour cet acte (titre automatique)"
-                } else {
-                    "+ Nouvelle source avec ce titre"
-                })
-                .on_click(cx.listener(|this, _, w, cx| this.pick_source(None, w, cx))),
-        )
-    }
-
-    fn render_reference(&self, cx: &mut Context<Self>) -> Div {
+    fn render_act(&self, act: &Act, cx: &mut Context<Self>) -> Div {
         let place_hints = self.place_suggestions(&self.place, cx);
-        let page = self.template().format_page(
-            &self.fields.iter().map(|(k, _, e)| (k.clone(), e.read(cx).value().to_string())).collect::<Vec<_>>(),
-        );
-        section("Référence de l'acte")
+        let (tag, _, _) = parse_event(&self.event.read(cx).selected_value().cloned().unwrap_or_default());
+        let free_type = tag == "EVEN" && act.event == "EVEN" && {
+            let v = self.event.read(cx).selected_value().cloned().unwrap_or_default();
+            v == "EVEN" || v == "FAM:EVEN"
+        };
+        section("Acte")
             .child(
                 h_flex()
                     .gap_2()
-                    .child(
-                        div()
-                            .w(px(200.))
-                            .child(date_cell(format!("Date — {}", self.template().event_label()), &self.date)),
-                    )
-                    .child(div().flex_1().child(field("Lieu", &self.place))),
-            )
-            .when_some(place_hints, |d, h| d.child(h))
-            .child(
-                h_flex()
-                    .gap_2()
-                    .children(self.fields.iter().map(|(_, label, e)| div().flex_1().child(field(label.clone(), e))))
+                    .child(v_flex().w(px(220.)).gap_1().child(caps("Événement")).child(
+                        Select::new(&self.event).small().placeholder("Choisir…").search_placeholder("Rechercher…"),
+                    ))
+                    .when(free_type, |d| d.child(div().flex_1().child(field("Type", &self.event_type))))
+                    .child(div().w(px(200.)).child(date_cell("Date", &self.date)))
                     .child(div().w(px(200.)).child(date_cell("Date de l'acte", &self.record_date))),
             )
-            .child(h_flex().gap_2().items_center().child(caps("Référence")).child(mono(if page.is_empty() {
-                "—".to_string()
-            } else {
-                page
-            })))
+            .child(
+                h_flex()
+                    .gap_2()
+                    .child(div().flex_1().child(field("Lieu", &self.place)))
+                    .child(div().flex_1().child(field("Référence", &self.page))),
+            )
+            .when_some(place_hints, |d, h| d.child(h))
             .child(h_flex().gap_1().items_center().child(caps("Qualité").mr_1()).children(
                 QUALITY.iter().enumerate().map(|(q, label)| {
                     let on = self.quality == Some(q as u8);
@@ -857,12 +753,8 @@ impl EntryForm {
             ))
     }
 
-    fn render_person(&self, idx: usize, row: &PersonRow, cx: &mut Context<Self>) -> impl IntoElement {
-        let t = self.template();
-        let def = t.role(&row.role).cloned();
-        let label = def.as_ref().map(|d| d.label.clone()).unwrap_or_else(|| row.role.clone());
-        let removable = def.as_ref().is_some_and(|d| d.multiple || !d.default);
-        let id = row.id;
+    fn render_person(&self, act: &Act, idx: usize, row: &PersonRow, cx: &mut Context<Self>) -> impl IntoElement {
+        let label = act.role_label(idx);
         let status: AnyElement = match &row.choice {
             PersonChoice::Link(x) => h_flex()
                 .gap_1()
@@ -888,6 +780,18 @@ impl EntryForm {
                 ))
                 .into_any_element(),
         };
+        // Père, mère ou conjoint de quelle personne principale ?
+        let principals = act.principal_count();
+        let of_chips: Vec<Stateful<Div>> = if row.role.relative() && principals > 1 {
+            (0..principals)
+                .map(|k| {
+                    chip(format!("of-{idx}-{k}"), format!("de {}", act.principal_name(k)), row.of == k)
+                        .on_click(cx.listener(move |this, _, _, cx| this.set_of(idx, k, cx)))
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
         let place_hints: Vec<Div> = row.inputs.iter().filter_map(|(_, e)| self.place_suggestions(e, cx)).collect();
         let cols = row.inputs.len().clamp(2, 4) as u16;
         v_flex()
@@ -905,54 +809,39 @@ impl EntryForm {
                 h_flex()
                     .gap_2()
                     .items_center()
-                    .child(
-                        div()
-                            .size(px(18.))
-                            .flex_none()
-                            .rounded_full()
-                            .bg(theme::hover())
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .text_xs()
-                            .child((idx + 1).to_string()),
-                    )
                     .child(div().font_weight(FontWeight::SEMIBOLD).child(label))
+                    .children(of_chips)
                     .child(status)
                     .child(div().flex_1())
                     .when(row.choice != PersonChoice::Create, |d| {
                         d.child(
-                            Button::new(SharedString::from(format!("unlink-{id}")))
+                            Button::new(SharedString::from(format!("unlink-{idx}")))
                                 .ghost()
                                 .xsmall()
                                 .label(if matches!(row.choice, PersonChoice::Link(_)) { "Délier" } else { "Annuler" })
                                 .on_click(
-                                    cx.listener(move |this, _, w, cx| this.set_choice(id, PersonChoice::Create, w, cx)),
+                                    cx.listener(move |this, _, w, cx| {
+                                        this.set_choice(idx, PersonChoice::Create, w, cx)
+                                    }),
                                 ),
                         )
                     })
-                    .when(removable, |d| {
-                        d.child(
-                            Button::new(SharedString::from(format!("rm-{id}")))
-                                .ghost()
-                                .xsmall()
-                                .label("Retirer")
-                                .on_click(cx.listener(move |this, _, _, cx| {
-                                    this.rows.retain(|r| r.id != id);
-                                    this.preview = None;
-                                    this.refresh_suggestions(cx);
-                                    cx.notify();
-                                })),
-                        )
-                    }),
+                    .child(
+                        Button::new(SharedString::from(format!("rm-{idx}")))
+                            .ghost()
+                            .xsmall()
+                            .icon(IconName::Close)
+                            .tooltip("Retirer de l'acte")
+                            .on_click(cx.listener(move |this, _, w, cx| this.remove_person(idx, w, cx))),
+                    ),
             )
             .child(div().grid().grid_cols(cols).gap_2().children(row.inputs.iter().map(|(f, e)| field(f.label(), e))))
             .when_some(row.sex.clone(), |d, current| {
                 d.child(h_flex().gap_1().items_center().child(caps("Sexe")).children(
                     [("M", "Homme"), ("F", "Femme")].into_iter().map(|(v, label)| {
-                        chip(format!("sex-{id}-{v}"), label, current == v).on_click(cx.listener(
+                        chip(format!("sex-{idx}-{v}"), label, current == v).on_click(cx.listener(
                             move |this, _, _, cx| {
-                                if let Some(r) = this.rows.iter_mut().find(|r| r.id == id) {
+                                if let Some(r) = this.rows.get_mut(idx) {
                                     // Second clic : on désélectionne.
                                     r.sex = Some(if r.sex.as_deref() == Some(v) { String::new() } else { v.into() });
                                 }
@@ -973,7 +862,7 @@ impl EntryForm {
                         .children(row.suggestions.iter().map(|s| {
                             let x = s.xref.clone();
                             chip(
-                                format!("sug-{id}-{}", s.xref),
+                                format!("sug-{idx}-{}", s.xref),
                                 if s.reason.is_empty() {
                                     format!("Lier à {}", s.label)
                                 } else {
@@ -982,51 +871,65 @@ impl EntryForm {
                                 false,
                             )
                             .on_click(cx.listener(move |this, _, w, cx| {
-                                this.set_choice(id, PersonChoice::Link(x.clone()), w, cx)
+                                this.set_choice(idx, PersonChoice::Link(x.clone()), w, cx)
                             }))
                         }))
-                        .when(def.as_ref().is_some_and(|d| d.relation != RoleRelation::Principal), |d| {
-                            d.child(chip(format!("mention-{id}"), "Mentionner sans créer", false).on_click(
-                                cx.listener(move |this, _, w, cx| this.set_choice(id, PersonChoice::Mention, w, cx)),
+                        .when(row.role != ActRole::Principal, |d| {
+                            d.child(chip(format!("mention-{idx}"), "Mentionner sans créer", false).on_click(
+                                cx.listener(move |this, _, w, cx| this.set_choice(idx, PersonChoice::Mention, w, cx)),
                             ))
                         }),
                 )
             })
     }
 
-    fn render_people(&self, cx: &mut Context<Self>) -> Div {
-        let t = self.template();
-        let addable: Vec<(String, String)> = t
-            .roles
-            .iter()
-            .filter(|r| r.multiple || !self.rows.iter().any(|row| row.role == r.key))
-            .map(|r| (r.key.clone(), r.label.clone()))
-            .collect();
+    fn render_people(&self, act: &Act, cx: &mut Context<Self>) -> Div {
         let rows: Vec<AnyElement> =
-            self.rows.iter().enumerate().map(|(i, r)| self.render_person(i, r, cx).into_any_element()).collect();
-        section("Personnes citées")
+            self.rows.iter().enumerate().map(|(i, r)| self.render_person(act, i, r, cx).into_any_element()).collect();
+        // « + » : une personne de plus, avec son rôle.
+        let family = act.is_family();
+        let event = act.event.clone();
+        let next_principal = act.principal_count();
+        let me = cx.entity().downgrade();
+        let add = Button::new("add-person")
+            .ghost()
+            .xsmall()
+            .icon(IconName::Plus)
+            .tooltip("Ajouter une personne")
+            .dropdown_menu(move |mut menu, _, _| {
+                for role in ActRole::ALL {
+                    let label = role.label(&event, family, if role == ActRole::Principal { next_principal } else { 0 });
+                    let me = me.clone();
+                    menu = menu.item(PopupMenuItem::new(label).on_click(move |_, window, cx| {
+                        let me = me.clone();
+                        window.defer(cx, move |window, cx| {
+                            let _ = me.update(cx, |this, cx| this.add_person(role, window, cx));
+                        });
+                    }));
+                }
+                menu
+            });
+        v_flex()
+            .gap_2()
+            .p_3()
+            .rounded_md()
+            .border_1()
+            .border_color(theme::border())
+            .bg(theme::panel())
+            .child(h_flex().gap_1().items_center().child(caps("Personnes")).child(add))
             .children(rows)
-            .child(h_flex().gap_1().flex_wrap().items_center().child(caps("Ajouter :").mr_1()).children(
-                addable.into_iter().map(|(key, label)| {
-                    chip(format!("add-{key}"), format!("+ {label}"), false).on_click(cx.listener(
-                        move |this, _, w, cx| {
-                            this.add_row(&key, w, cx);
+            .when(self.rows.iter().any(|r| r.inputs.iter().any(|(f, _)| *f == PersonField::Age)), |d| {
+                d.child(
+                    Checkbox::new("estimate")
+                        .checked(self.estimate_births)
+                        .label("Naissance estimée d'après l'âge déclaré")
+                        .on_click(cx.listener(|this, checked: &bool, _, cx| {
+                            this.estimate_births = *checked;
                             this.preview = None;
                             cx.notify();
-                        },
-                    ))
-                }),
-            ))
-            .child(
-                Checkbox::new("estimate")
-                    .checked(self.estimate_births)
-                    .label("Créer une naissance estimée d'après l'âge déclaré (si absente)")
-                    .on_click(cx.listener(|this, checked: &bool, _, cx| {
-                        this.estimate_births = *checked;
-                        this.preview = None;
-                        cx.notify();
-                    })),
-            )
+                        })),
+                )
+            })
     }
 
     fn render_footer(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -1042,12 +945,9 @@ impl EntryForm {
             summary += &format!(" · {to_decide} à décider");
         }
         if self.saved_count > 0 {
-            summary += &format!(
-                " · {} acte{} enregistré{}",
-                self.saved_count,
-                if self.saved_count > 1 { "s" } else { "" },
-                if self.saved_count > 1 { "s" } else { "" }
-            );
+            let n = self.saved_count;
+            summary +=
+                &format!(" · {n} acte{} enregistré{}", if n > 1 { "s" } else { "" }, if n > 1 { "s" } else { "" });
         }
         h_flex()
             .h(px(48.))
@@ -1071,7 +971,7 @@ impl EntryForm {
                     .on_click(cx.listener(|this, _, _, cx| this.toggle_preview(cx))),
             )
             .child(
-                Button::new("save-entry")
+                Button::new("save-act")
                     .small()
                     .label("Enregistrer")
                     .on_click(cx.listener(|this, _, _, cx| this.save(false, cx))),
@@ -1086,54 +986,53 @@ impl EntryForm {
     }
 }
 
-impl Render for EntryForm {
+impl Render for ActEditor {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let template_bar = h_flex()
-            .px_4()
-            .h(px(44.))
+        let act = self.collect(cx);
+        let title = if self.base.original.is_some() { act.title() } else { "Nouvel acte".to_string() };
+        let header = h_flex()
+            .px_3()
+            .h(px(40.))
             .flex_none()
-            .gap_1()
+            .gap_2()
             .items_center()
             .border_b_1()
             .border_color(theme::border())
             .bg(theme::panel())
-            .child(div().font_weight(FontWeight::SEMIBOLD).mr_3().child("Saisie d'acte"))
-            .children(self.templates.iter().enumerate().map(|(i, t)| {
-                chip(format!("tpl-{i}"), t.name.clone(), i == self.template)
-                    .on_click(cx.listener(move |this, _, w, cx| this.set_template(i, w, cx)))
-            }))
-            .child(div().flex_1())
             .child(
-                Button::new("close-entry")
+                Button::new("close-act")
                     .ghost()
                     .small()
-                    .label("Fermer")
-                    .on_click(cx.listener(|_, _, _, cx| cx.emit(EntryFormEvent::Close))),
-            );
+                    .icon(IconName::ChevronLeft)
+                    .label(self.ged.record_label(&self.base.source))
+                    .tooltip("Retour à la fiche de la source")
+                    .on_click(cx.listener(|_, _, _, cx| cx.emit(ActEditorEvent::Close))),
+            )
+            .child(div().text_color(theme::muted()).child("›"))
+            .child(div().font_weight(FontWeight::SEMIBOLD).child(title));
 
         let preview = self.preview.clone();
-        let form = div().id("entry-scroll").flex_1().min_w_0().overflow_y_scroll().track_scroll(&self.scroll).child(
+        let form = div().id("act-scroll").flex_1().min_w_0().overflow_y_scroll().track_scroll(&self.scroll).child(
             v_flex()
                 .p_4()
                 .gap_3()
                 .max_w(px(980.))
-                .child(self.render_source(cx))
-                .child(self.render_reference(cx))
-                .child(self.render_people(cx))
+                .child(self.render_act(&act, cx))
+                .child(self.render_people(&act, cx))
                 .child(
                     section("Transcription").child(Textarea::new(&self.transcription).h(px(110.))).child(
                         h_flex().gap_2().items_center().child(
                             Button::new("auto-text")
                                 .ghost()
                                 .xsmall()
-                                .label("Générer un résumé depuis le formulaire")
+                                .label("Générer un résumé")
                                 .on_click(cx.listener(|this, _, w, cx| this.fill_transcription(w, cx))),
                         ),
                     ),
                 )
                 .when_some(preview, |d, p| {
                     d.child(
-                        section("Aperçu GEDCOM 7 généré").child(match p {
+                        section("Aperçu GEDCOM").child(match p {
                             Ok(text) => div()
                                 .font_family("monospace")
                                 .text_xs()
@@ -1151,7 +1050,7 @@ impl Render for EntryForm {
             .min_w_0()
             .min_h_0()
             .bg(theme::bg())
-            .child(template_bar)
+            .child(header)
             .child(h_flex().flex_1().min_h_0().items_stretch().child(self.render_image(cx)).child(form))
             .child(self.render_footer(cx))
     }
