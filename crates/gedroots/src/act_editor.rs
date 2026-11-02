@@ -709,7 +709,13 @@ impl ActEditor {
                 Source::new(s)
                     .media_xrefs()
                     .into_iter()
-                    .filter_map(|m| self.ged.get(m).map(|n| (m.to_string(), Media::new(n).title())))
+                    // A web link of the source is not the act's image.
+                    .filter_map(|m| {
+                        self.ged
+                            .get(m)
+                            .filter(|n| !Media::new(n).is_web())
+                            .map(|n| (m.to_string(), Media::new(n).title()))
+                    })
                     .collect()
             })
             .unwrap_or_default();

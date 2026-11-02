@@ -620,8 +620,9 @@ impl Act {
         if self.event == "EVEN" && self.event_type.trim().is_empty() {
             return Err(t!("act.error.no_event_type").into());
         }
+        // A web page (`FILE https://…`) is a link of the source, not the act's image.
         if let MediaChoice::Existing(x) = &self.media
-            && ged.get(x).is_none_or(|n| n.tag != "OBJE")
+            && ged.get(x).is_none_or(|n| n.tag != "OBJE" || crate::model::Media::new(n).is_web())
         {
             return Err(t!("act.error.no_media").into());
         }

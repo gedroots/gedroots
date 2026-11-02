@@ -65,7 +65,7 @@ pub struct ProposeParams {
     /// Transcription of the act.
     pub transcription: Option<String>,
     pub people: Vec<PersonParams>,
-    /// Absolute path of the downloaded image or PDF of the act.
+    /// Absolute path of the downloaded image or PDF of the act (required with `url`).
     pub file: Option<String>,
     /// For a PDF of several pages: page of the act (from 1).
     pub pdf_page: Option<usize>,

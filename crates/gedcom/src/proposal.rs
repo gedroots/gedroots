@@ -661,6 +661,33 @@ mod tests {
     }
 
     #[test]
+    fn act_image_and_web_page_stay_two_media() {
+        let g = ged();
+        let mut p = birth(new_source());
+        p.act.media = MediaChoice::NewFiles(vec!["/tmp/cache/acte p2.jpg".into()]);
+        p.url = "https://archives.marne.fr/ark:/86869/r6w32ml0z8k7/36f5".into();
+        let mut after = g.clone();
+        let res = p.apply(&mut after).unwrap();
+        let source = res.touched[0].clone();
+        let image = res.media.clone().unwrap();
+        let image_media = crate::model::Media::new(after.get(&image).unwrap());
+        assert!(image_media.is_image() && !image_media.is_web());
+        assert_eq!(image_media.files().len(), 1);
+        let links = after.web_links(&source);
+        assert_eq!(links.len(), 1);
+        assert!(matches!(&links[0].kind, crate::WebLinkKind::Media(m) if *m != image));
+        assert_eq!(after.images_of(&source).len(), 1);
+        // Read back, the act's image is the image, never the web page.
+        let act = after.acts(&source).into_iter().next().unwrap();
+        assert_eq!(act.media, MediaChoice::Existing(image));
+        // And a web page cannot be chosen as an act's image.
+        let mut wrong = act.clone();
+        let crate::WebLinkKind::Media(web) = &links[0].kind else { unreachable!() };
+        wrong.media = MediaChoice::Existing(web.clone());
+        assert!(wrong.validate(&after).is_err());
+    }
+
+    #[test]
     fn diff_marks_added_and_removed_lines() {
         let d = line_diff("a\nb\nc\n", "a\nc\nd\n");
         assert_eq!(d, vec![(' ', "a".into()), ('-', "b".into()), (' ', "c".into()), ('+', "d".into())]);
