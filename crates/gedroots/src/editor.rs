@@ -266,7 +266,7 @@ impl RecordEditor {
                         let content = SourceContent::read(node);
                         field!("Actes", "Naissances, mariages, décès", content.events_label());
                         fields.push(Field {
-                            label: "Période",
+                            label: "Période".into(),
                             state: FieldState::Date(cx.new(|cx| {
                                 DateField::new(&content.period, "", window, cx).with_placeholder(
                                     "de 1793 à 1802",
@@ -291,7 +291,7 @@ impl RecordEditor {
                         field!("Titre", "", f.title);
                         field!("Fichier", "Actes/acte.jpg", f.file);
                         let medi = choice(MEDIUMS, medium(node).unwrap_or(""), window, cx);
-                        fields.push(Field { label: "Support", state: FieldState::Choice(medi), place: false });
+                        fields.push(Field { label: "Support".into(), state: FieldState::Choice(medi), place: false });
                     }
                     RecordKind::SharedNote => {
                         long_text = Some(("Texte", textarea(window, cx, &node.text())));
