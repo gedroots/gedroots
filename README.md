@@ -97,7 +97,7 @@ et suit le [design system GEDRoots](design.md) (fonds neutres et touches de viol
   pas modifiés. Les fichiers introuvables gardent leur `FILE` et sont listés à la fin, chacun
   menant à son média.
 - **Réglages du fichier** (⌘ / Ctrl + `,` ; menu GEDRoots sur macOS, Fichier ailleurs) : auteur, e-mail, droits,
-  description, langue et individu racine, plus la liste des anomalies masquées (« Réafficher »).
+  description, langue et individu racine.
   Tout est rangé dans l'en-tête du .ged en GEDCOM 7 standard (`HEAD.SUBM`, `COPR`, `NOTE`,
   `LANG`). À chaque enregistrement, `HEAD.SOUR` et `HEAD.DATE` indiquent GEDRoots et la date.
   - **Lieux** : format des lieux (`HEAD.PLAC.FORM`) — juridictions à renommer, réordonner,

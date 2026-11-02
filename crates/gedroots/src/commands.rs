@@ -42,7 +42,6 @@ actions!(
         LinkSpouse,
         LinkChild,
         LinkSibling,
-        SetRoot,
         GoToRoot,
         AttachFiles,
         LinkMedia,
@@ -187,7 +186,6 @@ pub mod label {
     pub const CHILD_LINK: &str = "Enfant…";
     pub const SIBLING_LINK: &str = "Frère ou sœur…";
     pub const ADD_EVENT: &str = "Ajouter un événement…";
-    pub const SET_ROOT: &str = "Définir comme individu racine";
     pub const GO_TO_ROOT: &str = "Aller à l'individu racine";
     pub const CENTER_TREE: &str = "Centrer l'arbre sur la personne";
     pub const ENTER_ACT: &str = "Saisir un acte…";
@@ -309,7 +307,6 @@ fn model_with(recents: &[std::path::PathBuf]) -> Vec<(&'static str, Vec<Item>)> 
             a("Lier un média existant…", LinkMedia),
             a("Recadrer un média existant…", CropMedia),
             Sep,
-            a(label::SET_ROOT, SetRoot),
             a(label::GO_TO_ROOT, GoToRoot),
             a("Lien de parenté avec…", KinshipWith),
         ],
