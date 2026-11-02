@@ -19,10 +19,12 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: jdx/mise-action@v5
         with:
-          node-version: 22
-      - run: npm install && npx blume build
+          version: 2026.10.25
+          working_directory: website
+          install_args: bun
+      - run: bun install --frozen-lockfile && bun run build
         working-directory: website
         env:
           DOCS_SITE: https://gedroots.github.io
