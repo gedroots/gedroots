@@ -7,7 +7,7 @@
 //! L'éditeur travaille sur une copie du document ; l'écriture réelle est faite
 //! par l'espace de travail quand il reçoit [`ActEditorEvent::Save`].
 
-use crate::date_field::{DateField, date_field};
+use crate::date_field::DateField;
 use crate::editor::{PickerState, choice_with_search};
 use crate::images::picture;
 use crate::theme;
@@ -143,8 +143,12 @@ impl ActEditor {
         let event_type = mk(cx, window, "ex. Registre matricule", &custom_type);
         let page = mk(cx, window, "Acte n° 27, vue 12", &act.page);
         let place = mk(cx, window, "Commune…", &act.place);
-        let date = date_field(&act.date, &act.date_phrase, window, cx);
-        let record_date = date_field(&act.record_date, &act.record_date_phrase, window, cx);
+        // Colonnes étroites (grille à 4) : exemple sans « ex. » pour qu'il ne soit pas tronqué.
+        let short = |value: &str, phrase: &str, window: &mut Window, cx: &mut Context<Self>| {
+            cx.new(|cx| DateField::new(value, phrase, window, cx).with_placeholder("3 mars 1912", window, cx))
+        };
+        let date = short(&act.date, &act.date_phrase, window, cx);
+        let record_date = short(&act.record_date, &act.record_date_phrase, window, cx);
         let transcription = {
             let t = act.transcription.clone();
             cx.new(|cx| TextareaState::new(window, cx).rows(4).default_value(t))
@@ -522,6 +526,39 @@ fn mono(s: impl Into<SharedString>) -> Div {
     div().font_family("monospace").text_xs().text_color(theme::muted()).child(s.into())
 }
 
+/// Colonnes de la grille commune aux sections « Acte » et « Personnes ».
+const GRID: u16 = 4;
+
+/// Largeur (en colonnes) de chaque champ d'une personne : le nom et les prénoms
+/// occupent chacun une demi-ligne, la note une ligne entière, les autres une colonne ;
+/// le dernier champ d'une ligne incomplète s'étire jusqu'au bord pour ne pas laisser de trou.
+fn grid_spans(fields: impl Iterator<Item = PersonField>) -> Vec<u16> {
+    let mut spans: Vec<u16> = fields
+        .map(|f| match f {
+            PersonField::Surname | PersonField::Given => GRID / 2,
+            PersonField::Note => GRID,
+            _ => 1,
+        })
+        .collect();
+    let mut used = 0;
+    for i in 0..spans.len() {
+        if used + spans[i] > GRID {
+            if let Some(prev) = i.checked_sub(1) {
+                spans[prev] += GRID - used;
+            }
+            used = 0;
+        }
+        used += spans[i];
+    }
+    if used > 0
+        && used < GRID
+        && let Some(last) = spans.last_mut()
+    {
+        *last += GRID - used;
+    }
+    spans
+}
+
 fn date_cell(label: impl Into<SharedString>, date: &Entity<DateField>) -> Div {
     v_flex().gap_1().min_w_0().child(caps(label)).child(date.clone())
 }
@@ -725,20 +762,28 @@ impl ActEditor {
         };
         section("Acte")
             .child(
-                h_flex()
+                div()
+                    .grid()
+                    .grid_cols(GRID)
                     .gap_2()
-                    .child(v_flex().w(px(220.)).gap_1().child(caps("Événement")).child(
-                        Select::new(&self.event).small().placeholder("Choisir…").search_placeholder("Rechercher…"),
-                    ))
-                    .when(free_type, |d| d.child(div().flex_1().child(field("Type", &self.event_type))))
-                    .child(div().w(px(200.)).child(date_cell("Date", &self.date)))
-                    .child(div().w(px(200.)).child(date_cell("Date de l'acte", &self.record_date))),
-            )
-            .child(
-                h_flex()
-                    .gap_2()
-                    .child(div().flex_1().child(field("Lieu", &self.place)))
-                    .child(div().flex_1().child(field("Référence", &self.page))),
+                    .child(
+                        v_flex()
+                            .gap_1()
+                            .min_w_0()
+                            .col_span(if free_type { 1 } else { 2 })
+                            .child(caps("Événement"))
+                            .child(
+                                Select::new(&self.event)
+                                    .small()
+                                    .placeholder("Choisir…")
+                                    .search_placeholder("Rechercher…"),
+                            ),
+                    )
+                    .when(free_type, |d| d.child(field("Type", &self.event_type)))
+                    .child(date_cell("Date", &self.date))
+                    .child(date_cell("Date de l'acte", &self.record_date))
+                    .child(field("Lieu", &self.place).col_span(2))
+                    .child(field("Référence", &self.page).col_span(2)),
             )
             .when_some(place_hints, |d, h| d.child(h))
             .child(h_flex().gap_1().items_center().child(caps("Qualité").mr_1()).children(
@@ -793,7 +838,6 @@ impl ActEditor {
             Vec::new()
         };
         let place_hints: Vec<Div> = row.inputs.iter().filter_map(|(_, e)| self.place_suggestions(e, cx)).collect();
-        let cols = row.inputs.len().clamp(2, 4) as u16;
         v_flex()
             .gap_2()
             .p_3()
@@ -835,7 +879,14 @@ impl ActEditor {
                             .on_click(cx.listener(move |this, _, w, cx| this.remove_person(idx, w, cx))),
                     ),
             )
-            .child(div().grid().grid_cols(cols).gap_2().children(row.inputs.iter().map(|(f, e)| field(f.label(), e))))
+            .child(
+                div().grid().grid_cols(GRID).gap_2().children(
+                    row.inputs
+                        .iter()
+                        .zip(grid_spans(row.inputs.iter().map(|(f, _)| *f)))
+                        .map(|((f, e), span)| field(f.label(), e).col_span(span)),
+                ),
+            )
             .when_some(row.sex.clone(), |d, current| {
                 d.child(h_flex().gap_1().items_center().child(caps("Sexe")).children(
                     [("M", "Homme"), ("F", "Femme")].into_iter().map(|(v, label)| {
