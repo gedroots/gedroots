@@ -16,6 +16,7 @@ pub(super) enum AddDialog {
     Import(Box<super::import::ImportDialog>),
     Settings(Box<super::settings::SettingsDialog>),
     RenameMedia(Box<super::media_files::RenameDialog>),
+    Gedzip(Box<super::export::GedzipReport>),
 }
 
 /// Action d'une ligne de la fenêtre des proches.
@@ -159,7 +160,7 @@ impl Workspace {
         cx.notify();
     }
 
-    fn close_add_dialog(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn close_add_dialog(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.add_dialog = None;
         window.focus(&self.focus, cx);
         cx.notify();
@@ -269,6 +270,7 @@ impl Workspace {
             AddDialog::Import(d) => (self.import_title(d), self.import_body(d, cx)),
             AddDialog::Settings(d) => ("Réglages du fichier".into(), self.settings_body(d, cx)),
             AddDialog::RenameMedia(d) => ("Renommer selon le modèle".into(), self.rename_body(d, cx)),
+            AddDialog::Gedzip(d) => (self.gedzip_title(d), self.gedzip_body(d, cx)),
         };
         Some(
             div()

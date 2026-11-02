@@ -25,6 +25,7 @@ use std::rc::Rc;
 mod add;
 mod chart;
 mod commands;
+mod export;
 mod filters;
 mod history;
 mod import;

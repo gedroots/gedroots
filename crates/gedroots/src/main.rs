@@ -8,6 +8,7 @@ mod commands;
 mod completion;
 mod date_field;
 mod editor;
+mod gedzip;
 mod images;
 mod map;
 mod recent;

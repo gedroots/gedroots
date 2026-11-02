@@ -59,6 +59,7 @@ impl Workspace {
         let d = on!(d, cx, SaveFile, |this, w, cx| this.save_file(&SaveFile, w, cx));
         let d = on!(d, cx, OpenFileSettings, |this, w, cx| this.open_settings(w, cx));
         let d = on!(d, cx, SaveFileAs, |this, w, cx| this.save_file_as(w, cx));
+        let d = on!(d, cx, ExportGedzip, |this, w, cx| this.export_gedzip(w, cx));
         let d = on!(d, cx, EnterRecord, |this, w, cx| this.enter_act(w, cx));
         let d = on!(d, cx, FocusSearch, |this, w, cx| this.filter.update(cx, |f, cx| f.focus(w, cx)));
         let d = on!(d, cx, ClearSearch, |this, w, cx| this.set_query(String::new(), w, cx));

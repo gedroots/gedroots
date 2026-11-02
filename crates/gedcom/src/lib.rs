@@ -11,6 +11,7 @@
 //! - [`relations`] : ajout/liaison/suppression de proches, lieux et médias ;
 //! - [`events`] : modification et suppression des événements ;
 //! - [`quality`] : page Qualité des données (cohérence, schéma GEDCOM 7, éléments vides ou inutilisés) ;
+//! - [`gedzip`] : préparation de l'export GEDZIP (`gedcom.ged` + médias dans une archive) ;
 //! - [`import`] : contrôles de l'assistant d'import (balises non standard → GEDCOM 7) ;
 //! - [`custom`] : format des lieux (`HEAD.PLAC.FORM`) et types d'événements personnalisés ;
 //! - [`media_naming`] : dossier et modèle de nom des fichiers médias (`_GR_MEDIA`) ;
@@ -31,6 +32,7 @@ pub mod custom;
 pub mod date;
 pub mod document;
 pub mod events;
+pub mod gedzip;
 pub mod geo;
 pub mod import;
 pub mod kinds;

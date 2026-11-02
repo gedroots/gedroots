@@ -90,6 +90,12 @@ et suit le [design system GEDRoots](design.md) (fonds neutres et touches de viol
   logiciel, liste ce qu'il contient de non standard et propose de le convertir en GEDCOM 7
   (annulable). Premier contrôle : les balises `_URL` deviennent des liens multimédia (`WWW`
   pour les dépôts). Les contrôles sont dans `crates/gedcom/src/import.rs`.
+- **Export GEDZIP** (Fichier › « Exporter en GEDZIP… ») : une archive `.gdz` (GEDCOM 7,
+  chapitre 4) avec `gedcom.ged` et les fichiers des médias, pour transmettre l'arbre complet.
+  Les chemins relatifs gardent leur dossier (`Actes/…`), les fichiers hors du dossier du .ged
+  vont dans `media/`, les `FILE` sont réécrits pour l'archive ; le .ged et les médias ne sont
+  pas modifiés. Les fichiers introuvables gardent leur `FILE` et sont listés à la fin, chacun
+  menant à son média.
 - **Réglages du fichier** (⌘ / Ctrl + `,` ; menu GEDRoots sur macOS, Fichier ailleurs) : auteur, e-mail, droits,
   description, langue et individu racine, plus la liste des anomalies masquées (« Réafficher »).
   Tout est rangé dans l'en-tête du .ged en GEDCOM 7 standard (`HEAD.SUBM`, `COPR`, `NOTE`,
@@ -177,20 +183,52 @@ et suit le [design system GEDRoots](design.md) (fonds neutres et touches de viol
 
 ![Acte dans la fiche source](docs/capture-saisie.png)
 
+## Environnement de développement
+
+Les outils (Rust épinglé, avec rustfmt et clippy) et les commandes du projet sont décrits dans
+[`mise.toml`](mise.toml), les versions exactes dans `mise.lock`. Avec [mise](https://mise.jdx.dev) :
+
+```sh
+mise trust && mise install   # une fois : installe la toolchain du projet
+mise tasks                   # liste des tâches
+mise run app arbre.ged       # lancer l'app
+mise run ci                  # formatage, tests et clippy, comme la CI
+mise run fmt                 # formater
+```
+
+Sous Linux, installer d'abord les dépendances de GPUI :
+`libxkbcommon-dev libxkbcommon-x11-dev libfontconfig-dev libwayland-dev libvulkan-dev`.
+
+Les réglages propres à une machine vont dans `mise.local.toml` (non versionné), par exemple un
+dossier de compilation hors du dépôt :
+
+```toml
+[env]
+CARGO_TARGET_DIR = "{{env.HOME}}/Developer/gedroots-target"
+```
+
+Pour changer de version de Rust : modifier `mise.toml`, puis
+`mise lock --platform linux-x64,macos-arm64`.
+
+La CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) lance les mêmes tâches :
+`mise run ci` sur Linux, et `mise run bundle --dmg` sur macOS (sur `main` ou à la demande), dont
+le `.dmg` est téléchargeable dans les artefacts. Le cache de mise-action garde la toolchain
+(rustup est rangé dans le dossier de mise), et un cache indexé sur `Cargo.lock` garde les crates
+et `target/`.
+
 ## Installer
 
 ### macOS
 
 ```sh
-packaging/macos/bundle.sh --install
+mise run install
 ```
 
 Compile GEDRoots en mode release, construit `GEDRoots.app` (icône, nom dans la barre de menus et
 le Dock, pas de Terminal) et la copie dans `/Applications`. Les fichiers `.ged` s'ouvrent ensuite
 d'un double-clic ou par « Ouvrir avec » dans le Finder. Sans `--install`, l'app reste dans
-`target/release/GEDRoots.app` ; avec `--dmg`, une image disque `GEDRoots.dmg` est créée à côté
-(utile pour la CI). Pour un autre cargo :
-`CARGO="mise exec rust@stable -- cargo" packaging/macos/bundle.sh --install`.
+`target/release/GEDRoots.app` (`mise run bundle`) ; avec `mise run bundle --dmg`, une image
+disque `GEDRoots.dmg` est créée à côté (utile pour la CI).
 
 L'app est signée « ad hoc », ce qui suffit sur le Mac qui l'a compilée. Une app téléchargée
 (le `.dmg` de la CI) est bloquée par Gatekeeper au premier lancement : clic droit › Ouvrir, ou
@@ -201,14 +239,14 @@ Apple (compte Apple Developer payant).
 ### Linux
 
 ```sh
-packaging/linux/install.sh
+mise run install
 ```
 
 Installe `~/.local/bin/gedroots`, l'icône et l'entrée du menu des applications.
 
 ### Windows
 
-`cargo build --release -p gedroots` produit `target\release\gedroots.exe`, qui s'ouvre sans
+`mise run install` (ou `cargo build --release -p gedroots`) produit `target\release\gedroots.exe`, qui s'ouvre sans
 fenêtre de console.
 
 L'icône (`packaging/icon.png`) vient du kit de marque GEDRoots (app icon sombre, posée sur la grille macOS).
@@ -216,7 +254,7 @@ L'icône (`packaging/icon.png`) vient du kit de marque GEDRoots (app icon sombre
 ## Lancer depuis les sources
 
 ```sh
-cargo run --release -- chemin/vers/arbre.ged
+mise run app chemin/vers/arbre.ged
 ```
 
 Sans argument, l'app propose d'ouvrir un fichier ou d'en créer un nouveau.
@@ -228,24 +266,21 @@ Variables d'environnement facultatives pour la carte : `GEDROOTS_OFFLINE=1` (dé
 cache, par défaut `~/Library/Caches/GEDRoots/tiles` ou `~/.cache/gedroots/tiles`),
 `GEDROOTS_GEOCODER` (autre instance Nominatim).
 
-Sous Linux, installer d'abord les dépendances de GPUI :
-`libxkbcommon-dev libxkbcommon-x11-dev libfontconfig-dev libwayland-dev libvulkan-dev`.
-
 ## Organisation du code
 
 | Crate | Rôle |
 | --- | --- |
-| [`crates/gedcom`](crates/gedcom) | Lecture/écriture GEDCOM 7 sans perte, vues typées (individus, familles, sources, lieux, médias), recadrage `CROP` (`crop.rs`), médias multipages (`multipage.rs`), liens web (`weblink.rs`) et assistant d'import (`import.rs`), formulaires d'édition, dates, coordonnées (`geo.rs`), outils d'analyse (`analysis/`), contrôles de la page Qualité (`quality.rs`), recherche (`search.rs`), ajout/liaison de proches et médias (`relations.rs`), descendance (`pedigree.rs`) et actes des sources (`act.rs`). Sans dépendance. |
-| [`crates/gedroots`](crates/gedroots) | Application GPUI : `commands.rs` (toutes les commandes, raccourcis et menus), `workspace.rs` (fenêtre et vues) et `workspace/` (`commands.rs` commandes et palette, `tree.rs` arbres, `relatives.rs` proches/sélecteur/médias, `add.rs` fenêtres d'ajout et de modification d'événement, `menus.rs` menus du clic droit, `photo.rs` recadrage et personnes sur les photos, `pages.rs` médias multipages et fusion, `weblinks.rs` liens web, `import.rs` assistant d'import, `filters.rs` filtres rapides, `quality.rs` page Qualité, `insights.rs` page Statistiques et lien de parenté), `editor.rs` (éditeurs visuel et brut), `act_editor.rs` (éditeur d'acte), `map.rs` (carte des lieux), `theme.rs` (palette de la maquette). |
+| [`crates/gedcom`](crates/gedcom) | Lecture/écriture GEDCOM 7 sans perte, vues typées (individus, familles, sources, lieux, médias), recadrage `CROP` (`crop.rs`), médias multipages (`multipage.rs`), liens web (`weblink.rs`), assistant d'import (`import.rs`), préparation de l'export GEDZIP (`gedzip.rs`), formulaires d'édition, dates, coordonnées (`geo.rs`), outils d'analyse (`analysis/`), contrôles de la page Qualité (`quality.rs`), recherche (`search.rs`), ajout/liaison de proches et médias (`relations.rs`), descendance (`pedigree.rs`) et actes des sources (`act.rs`). Sans dépendance. |
+| [`crates/gedroots`](crates/gedroots) | Application GPUI : `commands.rs` (toutes les commandes, raccourcis et menus), `workspace.rs` (fenêtre et vues) et `workspace/` (`commands.rs` commandes et palette, `tree.rs` arbres, `relatives.rs` proches/sélecteur/médias, `add.rs` fenêtres d'ajout et de modification d'événement, `menus.rs` menus du clic droit, `photo.rs` recadrage et personnes sur les photos, `pages.rs` médias multipages et fusion, `weblinks.rs` liens web, `import.rs` assistant d'import, `export.rs` export GEDZIP, `filters.rs` filtres rapides, `quality.rs` page Qualité, `insights.rs` page Statistiques et lien de parenté), `editor.rs` (éditeurs visuel et brut), `act_editor.rs` (éditeur d'acte), `gedzip.rs` (écriture de l'archive `.gdz`), `map.rs` (carte des lieux), `theme.rs` (palette de la maquette). |
 
 ## Tests
 
 ```sh
-cargo test -p gedcom
+mise run test
 # Contrôle de cohérence et statistiques d'un fichier, en ligne de commande :
-cargo run -p gedcom --example analyse -- ~/Genealogie/arbre.ged
+mise exec -- cargo run -p gedcom --example analyse -- ~/Genealogie/arbre.ged
 # Vérifier qu'un vrai fichier est relu et réécrit à l'identique :
-GEDROOTS_TEST_GED=~/Genealogie/arbre.ged cargo test -p gedcom real_file -- --nocapture
+GEDROOTS_TEST_GED=~/Genealogie/arbre.ged mise run test real_file -- --nocapture
 ```
 
 Le fichier d'exemple `crates/gedcom/tests/fixtures/exemple.ged` est fictif. Les fichiers

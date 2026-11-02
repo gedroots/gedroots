@@ -20,6 +20,7 @@ actions!(
         OpenFileSettings,
         SaveFile,
         SaveFileAs,
+        ExportGedzip,
         Quit,
         // Édition
         Undo,
@@ -252,6 +253,8 @@ fn model_with(recents: &[std::path::PathBuf]) -> Vec<(&'static str, Vec<Item>)> 
         Sep,
         a("Enregistrer", SaveFile),
         a("Enregistrer sous…", SaveFileAs),
+        Sep,
+        a("Exporter en GEDZIP…", ExportGedzip),
     ]);
     if !mac {
         file.extend([Sep, a("Réglages du fichier…", OpenFileSettings), Sep, a("Quitter", Quit)]);
@@ -511,6 +514,7 @@ mod tests {
         let entries = palette_entries();
         assert!(entries.iter().any(|e| e.path == "Individu › Ajouter un proche › Père"));
         assert!(entries.iter().any(|e| e.path == "Source › Saisir un acte"));
+        assert!(entries.iter().any(|e| e.path == "Fichier › Exporter en GEDZIP"));
         for (i, e) in entries.iter().enumerate() {
             assert!(!entries[i + 1..].iter().any(|o| o.action.partial_eq(e.action.as_ref())), "{} en double", e.path);
         }
