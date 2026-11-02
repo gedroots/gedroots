@@ -6,7 +6,7 @@ description = "GEDRoots — logiciel de généalogie libre et local, GEDCOM 7"
 
 [dependencies]
 gpui-kit = "=0.8.1"
-gedcom = { path = "../gedcom" }
+gedcom = { path = "../gedcom", features = ["serde"] }
 lsp-types = "0.97"
 # Déjà utilisée par GPUI : dimensions des images (recadrage) et décodage à la taille d'affichage.
 image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "tiff", "webp", "gif", "bmp"] }
@@ -20,13 +20,18 @@ sys-locale = "0.3.2"
 imagesize = "0.14"
 # Export GEDZIP (.gdz) : archive zip, gedcom.ged compressé, médias stockés tels quels.
 zip = { version = "9.2.2", default-features = false, features = ["deflate-flate2"] }
+# Agents IA : serveur MCP local (HTTP sur 127.0.0.1), sur un fil à part.
+rmcp = { version = "3.8.0", features = ["server", "macros", "schemars", "transport-streamable-http-server"] }
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "net", "macros", "sync"] }
+axum = { version = "0.8.9", default-features = false, features = ["http1", "tokio"] }
+serde = { version = "1.0.229", features = ["derive"] }
+schemars = "1"
+# Dossier de configuration de la plateforme (réglage des agents IA, fichiers récents hors macOS).
+dirs = "6"
+tokio-util = "0.7.20"
 
 # Fichiers récents : liste du système sous macOS (NSDocumentController)…
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
 objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "NSDocumentController"] }
 objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSArray", "NSString", "NSURL"] }
-
-# … petit fichier dans le dossier de configuration de la plateforme ailleurs.
-[target.'cfg(not(target_os = "macos"))'.dependencies]
-dirs = "6"

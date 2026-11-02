@@ -4,6 +4,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod act_editor;
+mod agent;
 mod commands;
 mod completion;
 mod date_field;
@@ -120,6 +121,7 @@ fn main() {
         theme::install(cx);
         commands::bind_keys(cx);
         commands::install_menus(cx);
+        agent::install(cx);
         cx.on_action(|_: &Quit, cx| cx.quit());
 
         let main = open_workspace(path, cx);

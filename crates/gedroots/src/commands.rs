@@ -26,6 +26,7 @@ actions!(
         ExportGedzip,
         ExportGedcom551,
         ExportGeneanet,
+        ConnectAgent,
         Quit,
         // Edit
         Undo,
@@ -383,6 +384,8 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
                 a(t!("cmd.export_geneanet"), ExportGeneanet),
             ],
         ),
+        Sep,
+        a(t!("cmd.connect_agent"), ConnectAgent),
     ]);
     if !mac {
         file.extend([Sep, a(t!("cmd.file_settings"), OpenFileSettings), Sep, a(t!("cmd.quit"), Quit)]);

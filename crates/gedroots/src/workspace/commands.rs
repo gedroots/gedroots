@@ -60,6 +60,7 @@ impl Workspace {
         }
         let d = on!(d, cx, SaveFile, |this, w, cx| this.save_file(&SaveFile, w, cx));
         let d = on!(d, cx, OpenFileSettings, |this, w, cx| this.open_settings(w, cx));
+        let d = on!(d, cx, ConnectAgent, |this, w, cx| this.open_agent_dialog(cx));
         let d = on!(d, cx, SaveFileAs, |this, w, cx| this.save_file_as(w, cx));
         let d = on!(d, cx, ExportGedzip, |this, w, cx| this.export_gedzip(w, cx));
         let d = on!(d, cx, ExportGedcom551, |this, w, cx| this.export_gedcom(Flavor::Standard, w, cx));
