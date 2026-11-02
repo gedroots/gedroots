@@ -1,15 +1,12 @@
-//! Menus contextuels (clic droit).
+//! Context menus (right-click).
 //!
-//! Chaque menu agit sur l'élément cliqué, sans avoir à le sélectionner
-//! d'abord, et appelle les mêmes fonctions que les commandes de la barre de
-//! menus. Règles :
-//! - le clic droit ne crée pas de commande : une action sur l'élément lui-même
-//!   existe aussi dans la barre de menus, sous le même libellé (`commands::label`) ;
-//! - il ne propose que ce qui s'applique à l'élément (pas de « Père » quand il
-//!   est déjà connu…) ;
-//! - exceptions : les actions sur une partie d'une fiche (un événement, un média
-//!   rattaché, un membre de famille), que la barre de menus ne peut pas viser, et
-//!   les liens pour s'y rendre (« Ouvrir la fiche », « Afficher le lieu »…).
+//! Each menu acts on the clicked item, without having to select it first, and calls the same
+//! functions as the menu bar commands. Rules:
+//! - the right-click does not create commands: an action on the item itself also exists in the menu
+//!   bar, under the same label (`commands::label`);
+//! - it only offers what applies to the item (no “Father” when already known…);
+//! - exceptions: actions on a part of a record (an event, an attached media, a family member),
+//!   which the menu bar cannot target, and the links to go there (“Open Record”, “Show Place”…).
 
 use super::relatives::PickPurpose;
 use super::*;
@@ -17,30 +14,30 @@ use crate::commands::label;
 use gpui_kit::component::menu::{ContextMenu, ContextMenuExt, PopupMenu, PopupMenuItem};
 use rust_i18n::t;
 
-/// Fonction de construction d'un menu, pour `.context_menu(…)`.
+/// Builder function of a menu, for `.context_menu(…)`.
 pub(super) type MenuBuilder = Rc<dyn Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu>;
 
-/// D'où le menu est ouvert : quelques entrées en dépendent.
+/// Where the menu is opened from: a few entries depend on it.
 #[derive(Clone)]
 pub(super) enum From {
-    /// Une ligne de la liste de gauche (on peut y supprimer l'élément).
+    /// A row of the left list (the item can be deleted there).
     List,
-    /// Un lien du panneau de détail, une case de l'éventail…
+    /// A link of the detail panel, a cell of the fan chart…
     Link,
-    /// Une case de l'arbre libre.
+    /// A cell of the free tree.
     Tree,
-    /// Une image rattachée à l'enregistrement donné (vignettes du panneau).
+    /// An image attached to the given record (thumbnails of the panel).
     Attached(String),
-    /// Un média d'un événement (enregistrement porteur, position de l'événement).
+    /// A media of an event (owner record, position of the event).
     OnEvent(String, usize),
-    /// Un proche dans la section « Famille » d'un individu : le lien (individu,
-    /// famille) que « Détacher » défait, et le libellé de la commande.
+    /// A relative in the “Family” section of an individual: the (individual, family) link that
+    /// “Detach” undoes, and the command’s label.
     Relative(String, String, SharedString),
 }
 
 type Ws = WeakEntity<Workspace>;
 
-/// `.with_menu(builder)` : comme `.context_menu(…)`, avec un menu construit à l'avance.
+/// `.with_menu(builder)`: like `.context_menu(…)`, with a menu built in advance.
 pub(super) trait WithMenu: ContextMenuExt + Sized {
     fn with_menu(self, builder: MenuBuilder) -> ContextMenu<Self> {
         self.context_menu(move |m, w, cx| builder(m, w, cx))
@@ -49,9 +46,8 @@ pub(super) trait WithMenu: ContextMenuExt + Sized {
 
 impl<E: ContextMenuExt> WithMenu for E {}
 
-/// Une entrée qui agit sur l'espace de travail. L'action est différée : le
-/// menu se ferme d'abord (et rend le focus), puis la fenêtre ouverte par
-/// l'action (sélecteur, événement…) prend le focus.
+/// An entry acting on the workspace. The action is deferred: the menu closes first (and gives back
+/// the focus), then the window opened by the action (picker, event…) takes the focus.
 pub(super) fn act(
     ws: &Ws,
     label: impl Into<SharedString>,
@@ -67,7 +63,7 @@ pub(super) fn act(
     })
 }
 
-/// Lit l'état de l'espace de travail au moment d'ouvrir le menu.
+/// Reads the workspace state when the menu opens.
 fn read<R>(ws: &Ws, cx: &App, f: impl FnOnce(&Workspace, &Gedcom) -> R) -> Option<R> {
     let ws = ws.upgrade()?;
     let this = ws.read(cx);
@@ -76,7 +72,7 @@ fn read<R>(ws: &Ws, cx: &App, f: impl FnOnce(&Workspace, &Gedcom) -> R) -> Optio
 }
 
 impl Workspace {
-    /// Ouvre un enregistrement dans l'onglet voulu.
+    /// Opens a record in the given tab.
     pub(super) fn open_in(&mut self, xref: String, tab: CenterTab, window: &mut Window, cx: &mut Context<Self>) {
         self.act_editor = None;
         self.goto(xref, window, cx);
@@ -84,7 +80,7 @@ impl Workspace {
         cx.notify();
     }
 
-    /// Supprimer depuis la liste : on affiche l'élément et sa confirmation.
+    /// Delete from the list: the item and its confirmation are shown.
     fn delete_from_list(&mut self, key: String, window: &mut Window, cx: &mut Context<Self>) {
         self.select(key, window, cx);
         self.tab = CenterTab::Form;
@@ -95,7 +91,7 @@ impl Workspace {
         cx.entity().downgrade()
     }
 
-    /// Menu d'un enregistrement quelconque, selon son type.
+    /// Menu of any record, according to its type.
     pub(super) fn record_menu(&self, xref: &str, from: From, cx: &Context<Self>) -> MenuBuilder {
         record_menu(Self::ws(cx), xref.to_string(), from)
     }
@@ -104,7 +100,7 @@ impl Workspace {
         person_menu(Self::ws(cx), xref.to_string(), from)
     }
 
-    /// Menu d'un acte, dans la fiche de sa source.
+    /// Menu of a record entry, in its source’s record.
     pub(super) fn act_menu(&self, source: &str, key: ActKey, cx: &Context<Self>) -> MenuBuilder {
         let ws = Self::ws(cx);
         let source = source.to_string();
@@ -118,7 +114,7 @@ impl Workspace {
         })
     }
 
-    /// Menu d'un événement du panneau de détail.
+    /// Menu of an event of the detail panel.
     pub(super) fn event_menu(&self, owner: String, ix: usize, cx: &Context<Self>) -> MenuBuilder {
         let ws = Self::ws(cx);
         Rc::new(move |menu, _, cx| {
@@ -163,14 +159,14 @@ impl Workspace {
         })
     }
 
-    /// Menu de la liste : l'élément visé, ou sous les lignes, créer un élément.
+    /// Menu of the list: the targeted item, or below the rows, create an item.
     pub(super) fn list_menu(&self, cx: &Context<Self>) -> MenuBuilder {
         let ws = Self::ws(cx);
         let view = self.view;
         Rc::new(move |menu, w, cx| {
-            // Clic droit sur une ligne : le menu de cet élément.
+            // Right-click on a row: the menu of that item.
             if let Some(key) = read(&ws, cx, |this, _| this.menu_row.take()).flatten() {
-                // Catégories de la page Qualité : pas de menu.
+                // Categories of the Quality page: no menu.
                 if view == View::Quality {
                     return menu;
                 }
@@ -217,7 +213,7 @@ impl Workspace {
         })
     }
 
-    /// Case vide de l'arbre (parent inconnu…) : nouvelle personne ou personne existante.
+    /// Empty cell of the tree (unknown parent…): new person or existing person.
     pub(super) fn slot_menu(&self, indi: &str, rel: Relation, cx: &Context<Self>) -> MenuBuilder {
         let (ws, indi) = (Self::ws(cx), indi.to_string());
         Rc::new(move |menu, _, _| {
@@ -249,7 +245,7 @@ pub(super) fn place_menu(ws: Ws, name: String, from: From) -> MenuBuilder {
     })
 }
 
-/// Menu d'un enregistrement, son type lu à l'ouverture (lignes de la liste).
+/// Menu of a record, its type read on opening (list rows).
 pub(super) fn record_menu(ws: Ws, xref: String, from: From) -> MenuBuilder {
     Rc::new(move |menu, w, cx| {
         let Some(kind) = read(&ws, cx, |_, g| g.get(&xref).and_then(|n| RecordKind::from_tag(&n.tag))).flatten() else {
@@ -269,8 +265,8 @@ fn ellipsize(s: &str, n: usize) -> String {
     if s.chars().count() <= n { s.to_string() } else { format!("{}…", s.chars().take(n - 1).collect::<String>()) }
 }
 
-/// Entrées communes en bas de menu, dans l'ordre du menu Édition : copier le
-/// nom, l'identifiant, supprimer (depuis la liste).
+/// Common entries at the bottom of the menu, in the Edit menu’s order: copy the name, the
+/// identifier, delete (from the list).
 fn tail(menu: PopupMenu, ws: &Ws, xref: &str, from: &From) -> PopupMenu {
     let (a, b, c) = (xref.to_string(), xref.to_string(), xref.to_string());
     menu.separator()
@@ -359,7 +355,7 @@ pub(super) fn person_menu(ws: Ws, x: String, from: From) -> MenuBuilder {
     })
 }
 
-/// Union citée dans un lien (source, média…) : elle s'ouvre sur la fiche d'un conjoint.
+/// Family cited in a link (source, media…): it opens on the record of a spouse.
 fn family_menu(ws: Ws, x: String, from: From) -> MenuBuilder {
     Rc::new(move |menu, _, _| {
         let x1 = x.clone();
@@ -368,17 +364,18 @@ fn family_menu(ws: Ws, x: String, from: From) -> MenuBuilder {
     })
 }
 
-/// Sources, médias, dépôts, notes.
+/// Sources, media, repositories, notes.
 fn other_menu(ws: Ws, x: String, kind: RecordKind, from: From) -> MenuBuilder {
     Rc::new(move |menu, _, cx| {
         let Some((photo, marked, portrait_of)) = read(&ws, cx, |this, g| {
-            // Médias sélectionnés ensemble (⌘ / Maj + clic) dont celui-ci : on peut les fusionner.
+            // Media selected together (⌘ / Shift + click) including this one: they can be merged.
             let marked = if this.media_marked.len() >= 2 && this.media_marked.contains(&x) {
                 this.media_marked.clone()
             } else {
                 vec![]
             };
-            // Photo (ou image sans support) d'un individu dont elle n'est pas déjà le portrait.
+            // Photo (or image without medium) of an individual of whom it is not already the
+            // portrait.
             let portrait_of = match &from {
                 From::Attached(owner)
                     if g.get(owner).is_some_and(|n| n.tag == "INDI")

@@ -1,7 +1,7 @@
-//! Recadrage des médias (`CROP`) et identification de personnes sur les photos.
+//! Media cropping (`CROP`) and identifying people in photos.
 //!
-//! En GEDCOM 7, un lien vers un média (`n OBJE @M1@`) peut porter une
-//! sous-structure `CROP` qui délimite la partie de l'image concernée :
+//! In GEDCOM 7, a link to a media (`n OBJE @M1@`) can carry a `CROP` substructure that delimits the
+//! relevant part of the image:
 //!
 //! ```text
 //! 1 OBJE @M1@
@@ -12,20 +12,18 @@
 //! 3 WIDTH 200
 //! ```
 //!
-//! Les valeurs sont en pixels de l'image d'origine. `TOP` et `LEFT` valent 0
-//! par défaut ; sans `HEIGHT`/`WIDTH`, le recadrage s'étend jusqu'au bord.
+//! The values are in pixels of the original image. `TOP` and `LEFT` default to 0; without
+//! `HEIGHT`/`WIDTH`, the crop extends to the edge.
 //!
-//! Identifier une personne sur une photo de groupe revient donc simplement à
-//! lier le média à l'individu avec un `CROP` autour de son visage : c'est la
-//! représentation standard, lisible par les autres logiciels, et aucune
-//! extension n'est nécessaire. Le portrait d'une personne utilise aussi ce
-//! recadrage.
+//! Identifying a person in a group photo is therefore simply linking the media to the individual
+//! with a `CROP` around their face: it is the standard representation, readable by other software,
+//! and no extension is needed. A person's portrait uses this crop too.
 
 use crate::document::Gedcom;
 use crate::multipage::{PAGE_TAG, PAGE_URI, page_of_link};
 use crate::node::Node;
 
-/// Zone d'une image, en pixels, telle qu'écrite dans `CROP`.
+/// Area of an image, in pixels, as written in `CROP`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Crop {
     pub top: u32,
@@ -34,18 +32,17 @@ pub struct Crop {
     pub width: Option<u32>,
 }
 
-/// Rectangle résolu sur une image de taille connue : `(x, y, largeur, hauteur)`.
+/// Rectangle resolved on an image of known size: `(x, y, width, height)`.
 pub type Rect = (u32, u32, u32, u32);
 
 impl Crop {
-    /// Recadrage complet à partir d'un rectangle.
+    /// Full crop from a rectangle.
     pub fn from_rect((x, y, w, h): Rect) -> Self {
         Self { top: y, left: x, height: Some(h), width: Some(w) }
     }
 
-    /// Lit le `CROP` d'un lien `OBJE` (le nœud du lien lui-même).
-    /// Les valeurs illisibles sont ignorées, comme le prévoit la norme pour
-    /// les valeurs absentes.
+    /// Reads the `CROP` of an `OBJE` link (the link node itself). Unreadable values are ignored, as
+    /// the standard prescribes for missing values.
     pub fn from_link(link: &Node) -> Option<Self> {
         let c = link.child("CROP")?;
         let num = |t: &str| c.child_val(t).and_then(|v| v.trim().parse::<u32>().ok());
@@ -57,11 +54,11 @@ impl Crop {
         })
     }
 
-    /// Structure `CROP` à placer sous un lien `OBJE`.
+    /// `CROP` structure to put under an `OBJE` link.
     pub fn to_node(&self) -> Node {
         let mut n = Node::new("CROP");
-        // On écrit toujours TOP et LEFT : plus lisible pour un humain, et
-        // équivalent à leur absence quand ils valent 0.
+        // TOP and LEFT are always written: easier for a human to read, and equivalent to leaving
+        // them out when they are 0.
         n.children.push(Node::with_value("TOP", self.top.to_string()));
         n.children.push(Node::with_value("LEFT", self.left.to_string()));
         if let Some(h) = self.height {
@@ -73,8 +70,8 @@ impl Crop {
         n
     }
 
-    /// Rectangle effectif sur une image `img_w × img_h`, borné à l'image.
-    /// `None` si la zone est vide (recadrage hors de l'image).
+    /// Effective rectangle on an `img_w × img_h` image, clamped to the image. `None` if the area is
+    /// empty (crop outside the image).
     pub fn rect(&self, img_w: u32, img_h: u32) -> Option<Rect> {
         let x = self.left.min(img_w);
         let y = self.top.min(img_h);
@@ -83,27 +80,27 @@ impl Crop {
         (w > 0 && h > 0).then_some((x, y, w, h))
     }
 
-    /// Le recadrage couvre-t-il toute l'image (donc sans effet) ?
+    /// Does the crop cover the whole image (and so have no effect)?
     pub fn is_full(&self, img_w: u32, img_h: u32) -> bool {
         self.rect(img_w, img_h) == Some((0, 0, img_w, img_h))
     }
 
-    /// Libellé court, ex. « 200 × 260 px à (340, 120) ».
+    /// Short label, e.g. “200 × 260 px at (340, 120)”.
     pub fn describe(&self) -> String {
         let dim = |v: Option<u32>| v.map(|v| v.to_string()).unwrap_or_else(|| "…".into());
-        format!("{} × {} px à ({}, {})", dim(self.width), dim(self.height), self.left, self.top)
+        rust_i18n::t!("model.crop", w = dim(self.width), h = dim(self.height), x = self.left, y = self.top).into_owned()
     }
 }
 
-/// Un lien vers un média depuis un enregistrement, avec son éventuel recadrage.
+/// A link to a media from a record, with its crop if any.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MediaLink {
-    /// Enregistrement qui porte le lien (individu, famille, source…).
+    /// Record holding the link (individual, family, source…).
     pub owner: String,
     /// Balise de cet enregistrement (`INDI`, `FAM`, `SOUR`…).
     pub owner_tag: String,
     pub crop: Option<Crop>,
-    /// Page du média visée par le lien (1 pour la première, voir [`crate::multipage`]).
+    /// Page of the media the link points to (1 for the first one, see [`crate::multipage`]).
     pub page: usize,
 }
 
@@ -112,7 +109,7 @@ fn ptr(x: &str) -> String {
 }
 
 impl Gedcom {
-    /// Tous les liens directs (`1 OBJE @media@`) vers un média, dans l'ordre du fichier.
+    /// Every direct link (`1 OBJE @media@`) to a media, in file order.
     pub fn media_links(&self, media: &str) -> Vec<MediaLink> {
         let p = ptr(media);
         let mut out = Vec::new();
@@ -130,19 +127,19 @@ impl Gedcom {
         out
     }
 
-    /// Personnes identifiées sur un média : individus liés avec un recadrage.
+    /// People identified in a media: individuals linked with a crop.
     pub fn people_on(&self, media: &str) -> Vec<MediaLink> {
         self.media_links(media).into_iter().filter(|l| l.owner_tag == "INDI" && l.crop.is_some()).collect()
     }
 
-    /// Recadrage du (premier) lien de `owner` vers `media`.
+    /// Crop of the (first) link from `owner` to `media`.
     pub fn link_crop(&self, owner: &str, media: &str) -> Option<Crop> {
         let p = ptr(media);
         let r = self.get(owner)?;
         r.children.iter().find(|c| c.tag == "OBJE" && c.val() == p).and_then(Crop::from_link)
     }
 
-    /// Page visée par le (premier) lien de `owner` vers `media`.
+    /// Page pointed to by the (first) link from `owner` to `media`.
     pub fn link_page(&self, owner: &str, media: &str) -> usize {
         let p = ptr(media);
         self.get(owner)
@@ -151,13 +148,13 @@ impl Gedcom {
             .unwrap_or(1)
     }
 
-    /// Définit (ou retire, avec `None`) le recadrage du lien de `owner` vers
-    /// `media`. Le lien est créé s'il n'existe pas encore.
+    /// Sets (or removes, with `None`) the crop of the link from `owner` to `media`. The link is
+    /// created if it does not exist yet.
     pub fn set_link_crop(&mut self, owner: &str, media: &str, crop: Option<Crop>) -> Result<(), String> {
         self.set_link_crop_on(owner, media, 1, crop)
     }
 
-    /// Comme [`Gedcom::set_link_crop`], pour la page `page` d'un média multipage.
+    /// Like [`Gedcom::set_link_crop`], for page `page` of a multi-page media.
     pub fn set_link_crop_on(
         &mut self,
         owner: &str,
@@ -174,7 +171,7 @@ impl Gedcom {
         let find = |r: &Node| {
             let link = |c: &Node| c.tag == "OBJE" && c.val() == p;
             r.children.iter().position(|c| link(c) && page_of_link(c) == page).or_else(|| {
-                // Une zone sur une autre page : le lien vers le document entier la reçoit.
+                // An area on another page: the link to the whole document gets it.
                 crop.and(r.children.iter().position(|c| link(c) && c.children.is_empty()))
             })
         };
@@ -190,7 +187,7 @@ impl Gedcom {
         let before = link.clone();
         link.children.retain(|c| c.tag != "CROP" && c.tag != PAGE_TAG);
         if let Some(c) = crop {
-            // CROP précède TITL dans l'ordre de la norme.
+            // CROP comes before TITL in the standard's order.
             link.children.insert(0, c.to_node());
             if page > 1 {
                 let at = link
@@ -203,7 +200,7 @@ impl Gedcom {
         }
         let changed = *link != before;
         if changed {
-            // Sans zone, le lien redevient un lien vers le document entier : pas de doublon.
+            // Without an area, the link becomes a link to the whole document again: no duplicate.
             if crop.is_none() {
                 let dup = r
                     .children
@@ -222,7 +219,7 @@ impl Gedcom {
         Ok(())
     }
 
-    /// Identifie une personne sur une photo : lie le média à l'individu avec ce recadrage.
+    /// Identifies a person in a photo: links the media to the individual with this crop.
     pub fn tag_person(&mut self, indi: &str, media: &str, crop: Crop) -> Result<(), String> {
         if self.get(indi).is_none_or(|n| n.tag != "INDI") {
             return Err(rust_i18n::t!("error.person_not_found").into());
@@ -230,7 +227,7 @@ impl Gedcom {
         self.set_link_crop(indi, media, Some(crop))
     }
 
-    /// Identifie une personne sur la page `page` d'un média.
+    /// Identifies a person on page `page` of a media.
     pub fn tag_person_on(&mut self, indi: &str, media: &str, page: usize, crop: Crop) -> Result<(), String> {
         if self.get(indi).is_none_or(|n| n.tag != "INDI") {
             return Err(rust_i18n::t!("error.person_not_found").into());
@@ -238,7 +235,7 @@ impl Gedcom {
         self.set_link_crop_on(indi, media, page, Some(crop))
     }
 
-    /// Retire l'identification d'une personne sur une page (les liens vers les autres pages restent).
+    /// Removes the identification of a person on a page (the links to the other pages stay).
     pub fn untag_person_on(&mut self, indi: &str, media: &str, page: usize) {
         let p = ptr(media);
         if let Some(r) = self.get_mut(indi) {
@@ -250,7 +247,7 @@ impl Gedcom {
         }
     }
 
-    /// Retire l'identification d'une personne sur une photo (supprime le lien).
+    /// Removes the identification of a person in a photo (deletes the link).
     pub fn untag_person(&mut self, indi: &str, media: &str) {
         let p = ptr(media);
         if let Some(r) = self.get_mut(indi) {

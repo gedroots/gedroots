@@ -1,22 +1,20 @@
-//! Modification et suppression des événements d'un individu ou d'une famille.
+//! Editing and deleting the events of an individual or a family.
 //!
-//! Un événement est désigné par sa position parmi les sous-structures de
-//! l'enregistrement (`index`), ce qui distingue deux résidences ou deux
-//! professions. Seuls les champs de la fenêtre d'édition (type, précision,
-//! date, lieu, première source) sont touchés : notes, médias, âge, adresse,
-//! sources supplémentaires… restent en place.
+//! An event is designated by its position among the record's substructures (`index`), which tells
+//! two residences or two occupations apart. Only the fields of the edit window (type, detail, date,
+//! place, first source) are touched: notes, media, age, address, additional sources… stay in place.
 //!
-//! La fiche d'un individu montre ses événements et ceux de ses unions
-//! (mariage, divorce…) dans une seule chronologie : voir [`Gedcom::person_events`].
-//! Chaque événement peut avoir ses médias (`2 OBJE @M1@`, GEDCOM 7 standard).
+//! A person's record shows their events and those of their unions (marriage, divorce…) in a single
+//! timeline: see [`Gedcom::person_events`]. Each event can have its media (`2 OBJE @M1@`, standard
+//! GEDCOM 7).
 
 use crate::document::Gedcom;
 use crate::model::{Event, event_label};
 use crate::node::Node;
 use crate::relations::NewEvent;
 
-/// Attributs dont la précision est la valeur de la ligne (`1 OCCU Meunier`).
-/// Pour les autres balises, elle va dans `TYPE`.
+/// Attributes whose detail is the line's value (`1 OCCU Miller`). For other tags, it goes into
+/// `TYPE`.
 fn detail_in_value(tag: &str) -> bool {
     matches!(tag, "OCCU" | "EDUC" | "RELI" | "TITL" | "NATI" | "FACT")
 }
@@ -25,24 +23,23 @@ fn is_attribute(tag: &str) -> bool {
     detail_in_value(tag) || tag == "RESI"
 }
 
-/// Un événement de la chronologie d'une personne.
+/// An event in a person's timeline.
 #[derive(Debug, Clone)]
 pub struct PersonEvent<'a> {
-    /// Enregistrement qui porte l'événement : l'individu, ou la famille d'une union.
+    /// Record holding the event: the individual, or the family of a union.
     pub owner: String,
-    /// Position de l'événement dans `owner`.
+    /// Position of the event in `owner`.
     pub index: usize,
     pub event: Event<'a>,
-    /// Événement d'une union (porté par la famille, pas par l'individu).
+    /// Event of a union (held by the family, not by the individual).
     pub family: bool,
-    /// Événement d'une union : le conjoint, s'il est connu.
+    /// Event of a union: the spouse, if known.
     pub spouse: Option<String>,
 }
 
 impl Gedcom {
-    /// Chronologie d'un individu : ses propres événements et ceux de ses unions
-    /// (mariage, divorce…), triés par date ; les événements sans date viennent
-    /// à la fin, dans l'ordre du fichier.
+    /// Timeline of an individual: their own events and those of their unions (marriage, divorce…),
+    /// sorted by date; undated events come last, in file order.
     pub fn person_events(&self, indi: &str) -> Vec<PersonEvent<'_>> {
         let Some(i) = self.individual(indi) else { return Vec::new() };
         let mut out: Vec<PersonEvent> = self
@@ -59,14 +56,14 @@ impl Gedcom {
         out
     }
 
-    /// Médias liés à un événement.
+    /// Media linked to an event.
     pub fn event_media(&self, owner: &str, index: usize) -> Vec<&str> {
         self.event_node(owner, index)
             .map(|e| e.children_with("OBJE").filter_map(|n| n.pointer()).collect())
             .unwrap_or_default()
     }
 
-    /// Lie un média à un événement (`2 OBJE @M1@`). Sans effet s'il l'est déjà.
+    /// Links a media to an event (`2 OBJE @M1@`). No effect if it already is.
     pub fn attach_media_to_event(&mut self, owner: &str, index: usize, media: &str) -> Result<(), String> {
         if self.get(media).is_none_or(|m| m.tag != "OBJE") {
             return Err(rust_i18n::t!("error.media_not_found").into());
@@ -80,7 +77,7 @@ impl Gedcom {
         if e.children.iter().any(|c| c.tag == "OBJE" && c.val() == p) {
             return Ok(());
         }
-        // Après les citations et médias existants, sinon à la fin.
+        // After the existing citations and media, otherwise at the end.
         let at = e
             .children
             .iter()
@@ -88,7 +85,7 @@ impl Gedcom {
             .map(|i| i + 1)
             .unwrap_or(e.children.len());
         e.children.insert(at, Node::with_value("OBJE", p));
-        // « 1 MARR Y » : l'événement a maintenant un détail.
+        // “1 MARR Y”: the event now has a detail.
         if e.value.as_deref() == Some("Y") {
             e.value = None;
         }
@@ -98,7 +95,7 @@ impl Gedcom {
         Ok(())
     }
 
-    /// Détache un média d'un événement (le média reste dans le fichier).
+    /// Detaches a media from an event (the media stays in the file).
     pub fn detach_media_from_event(&mut self, owner: &str, index: usize, media: &str) -> Result<(), String> {
         let p = format!("@{}@", media.trim_matches('@'));
         let e = self
@@ -120,7 +117,7 @@ impl Gedcom {
         Ok(())
     }
 
-    /// Événements d'un enregistrement, avec leur position.
+    /// Events of a record, with their position.
     pub fn events_of(&self, owner: &str) -> Vec<(usize, Event<'_>)> {
         let Some(node) = self.get(owner) else { return Vec::new() };
         node.children
@@ -135,7 +132,7 @@ impl Gedcom {
         self.get(owner)?.children.get(index).filter(|c| event_label(&c.tag).is_some())
     }
 
-    /// Les champs modifiables d'un événement, pour pré-remplir la fenêtre d'édition.
+    /// The editable fields of an event, to prefill the edit window.
     pub fn read_event(&self, owner: &str, index: usize) -> Option<NewEvent> {
         let e = self.event_node(owner, index)?;
         let detail = if detail_in_value(&e.tag) {
@@ -153,7 +150,7 @@ impl Gedcom {
         })
     }
 
-    /// Libellé d'un événement (« Naissance », « Profession : Meunier »).
+    /// Label of an event (“Birth”, “Occupation: Miller”).
     pub fn event_title(&self, owner: &str, index: usize) -> Option<String> {
         let e = Event { node: self.event_node(owner, index)? };
         Some(match e.value() {
@@ -162,7 +159,7 @@ impl Gedcom {
         })
     }
 
-    /// Modifie un événement existant.
+    /// Edits an existing event.
     pub fn update_event(&mut self, owner: &str, index: usize, ev: &NewEvent) -> Result<(), String> {
         let detail = ev.detail.trim();
         if ev.tag == "EVEN" && detail.is_empty() {
@@ -172,7 +169,7 @@ impl Gedcom {
             return Err(rust_i18n::t!("error.unknown_event_type").into());
         }
         let place = ev.place.trim();
-        // Lieu déjà connu ailleurs : on reprend ses coordonnées.
+        // Place already known elsewhere: reuse its coordinates.
         let known_map = self.place_map(place);
         let source = ev.source.as_deref().map(|s| s.trim_matches('@')).filter(|s| !s.is_empty());
         if let Some(s) = source
@@ -186,7 +183,7 @@ impl Gedcom {
             .filter(|c| event_label(&c.tag).is_some())
             .ok_or_else(|| rust_i18n::t!("error.event_not_found"))?;
 
-        // Type et précision.
+        // Type and detail.
         let old_in_value = detail_in_value(&node.tag);
         if !old_in_value {
             node.children.retain(|c| c.tag != "TYPE");
@@ -195,12 +192,12 @@ impl Gedcom {
         if detail_in_value(&ev.tag) {
             node.value = (!detail.is_empty()).then(|| detail.to_string());
         } else {
-            // La valeur d'origine (ex. « 1 RESI Paris ») est gardée, sauf si c'était la précision.
+            // The original value (e.g. “1 RESI Paris”) is kept, unless it was the detail.
             if old_in_value || node.value.as_deref() == Some("Y") {
                 node.value = None;
             }
             if !detail.is_empty() {
-                // TYPE en tête, comme à l'ajout.
+                // TYPE first, as when adding.
                 node.children.insert(0, Node::with_value("TYPE", detail));
             }
         }
@@ -208,7 +205,7 @@ impl Gedcom {
         // Date.
         crate::date::write_date(node, &ev.date.trim().to_uppercase(), &ev.date_phrase);
 
-        // Lieu : si le nom change, les anciennes coordonnées ne valent plus.
+        // Place: if the name changes, the old coordinates no longer apply.
         if place.is_empty() {
             node.children.retain(|c| c.tag != "PLAC");
         } else if node.child_val("PLAC") != Some(place) {
@@ -224,7 +221,7 @@ impl Gedcom {
             }
         }
 
-        // Première source citée (les autres ne sont pas touchées).
+        // First cited source (the others are not touched).
         let first = node.children.iter().position(|c| c.tag == "SOUR" && c.pointer().is_some());
         match (first, source) {
             (Some(i), None) => {
@@ -233,7 +230,7 @@ impl Gedcom {
             (Some(i), Some(s)) => {
                 let cit = &mut node.children[i];
                 if cit.pointer() != Some(s) {
-                    // La page, la qualité… concernaient l'ancienne source.
+                    // The page, the quality… were about the old source.
                     *cit = Node::with_value("SOUR", format!("@{s}@"));
                 }
             }
@@ -241,7 +238,7 @@ impl Gedcom {
             (None, None) => {}
         }
 
-        // Événement sans aucun détail : « 1 DEAT Y » (il a eu lieu).
+        // Event without any detail: “1 DEAT Y” (it happened).
         if !is_attribute(&ev.tag) && node.value.is_none() && node.children.is_empty() {
             node.value = Some("Y".into());
         }
@@ -251,7 +248,7 @@ impl Gedcom {
         Ok(())
     }
 
-    /// Supprime un événement et renvoie son libellé.
+    /// Deletes an event and returns its label.
     pub fn delete_event(&mut self, owner: &str, index: usize) -> Result<String, String> {
         let title = self.event_title(owner, index).ok_or_else(|| rust_i18n::t!("error.event_not_found"))?;
         let r = self.get_mut(owner).ok_or_else(|| rust_i18n::t!("error.record_not_found"))?;
@@ -260,7 +257,7 @@ impl Gedcom {
         Ok(title)
     }
 
-    /// Coordonnées (`MAP`) d'un lieu, prises sur une de ses occurrences.
+    /// Coordinates (`MAP`) of a place, taken from one of its occurrences.
     fn place_map(&self, name: &str) -> Option<Node> {
         if name.is_empty() {
             return None;

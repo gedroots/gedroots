@@ -1,14 +1,14 @@
-//! Champ de date réutilisable.
+//! Reusable date field.
 //!
-//! Inspiré des meilleurs éditeurs de dates (Gramps, RootsMagic, Heredis) :
-//! - une seule saisie en français courant (« vers 1850 », « entre 1820 et 1825 »,
-//!   « 15 brumaire an XII », « 3 mars 1700 julien »…), comprise à la volée ;
-//! - une ligne d'aperçu discrète quand l'interprétation apporte quelque chose
-//!   (forme normalisée, équivalent grégorien, erreur) ;
-//! - un bouton calendrier qui ouvre les détails : précision, calendrier (avec la
-//!   date convertie dans chacun, un clic pour convertir) et texte d'origine.
+//! Inspired by the best date editors (Gramps, RootsMagic, Heredis):
+//! - a single input in everyday language (“about 1850”, “between 1820 and 1825”, “15 brumaire an
+//!   XII”, “3 mars 1700 julien”…), understood as you type;
+//! - a discreet preview line when the interpretation adds something (normalized form, Gregorian
+//!   equivalent, error);
+//! - a calendar button that opens the details: precision, calendar (with the date converted into
+//!   each, one click to convert) and original text.
 //!
-//! La valeur stockée n'est réécrite que si l'utilisateur modifie le champ.
+//! The stored value is only rewritten if the user edits the field.
 
 use crate::theme;
 use gedcom::date::{Calendar, Date, DateKind, Parsed, parse_input};
@@ -25,12 +25,12 @@ use rust_i18n::t;
 pub struct DateField {
     input: Entity<InputState>,
     phrase: Entity<InputState>,
-    /// Texte affiché à l'ouverture, et la valeur (`DATE`, `PHRASE`) d'origine.
+    /// Text displayed on opening, and the original value (`DATE`, `PHRASE`).
     original: (String, String, String),
     _subs: Vec<Subscription>,
 }
 
-/// Crée un champ de date pour une valeur GEDCOM et sa phrase.
+/// Creates a date field for a GEDCOM value and its phrase.
 pub fn date_field<T: 'static>(
     value: &str,
     phrase: &str,
@@ -41,7 +41,7 @@ pub fn date_field<T: 'static>(
 }
 
 impl DateField {
-    /// Remplace l'exemple grisé du champ vide (ex. une période).
+    /// Replaces the greyed example of the empty field (e.g. a period).
     pub fn with_placeholder(self, hint: impl Into<SharedString>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         self.input.update(cx, |s, cx| s.set_placeholder(hint.into(), window, cx));
         self
@@ -60,7 +60,7 @@ impl DateField {
         };
         let main = cx.subscribe_in(&input, window, |this, _, ev: &InputEvent, window, cx| {
             if matches!(ev, InputEvent::Change) {
-                // Le texte d'origine suit la saisie principale.
+                // The original text follows the main input.
                 if let Ok(p) = this.parsed(cx) {
                     let p = if p.date.is_none() { String::new() } else { p.phrase };
                     if this.phrase.read(cx).value().as_ref() != p {
@@ -88,7 +88,7 @@ impl DateField {
         }
     }
 
-    /// Champ de saisie (pour la mise au point ou l'écoute des modifications).
+    /// Input field (to focus it or listen to its changes).
     pub fn input(&self) -> &Entity<InputState> {
         &self.input
     }
@@ -101,7 +101,7 @@ impl DateField {
         parse_input(&self.text(cx))
     }
 
-    /// `(valeur de DATE, PHRASE)` à écrire ; erreur si la date est impossible.
+    /// `(DATE value, PHRASE)` to write; error if the date is impossible.
     pub fn value(&self, cx: &App) -> Result<(String, String), String> {
         let text = self.text(cx);
         if text.trim() == self.original.0.trim() {
@@ -118,7 +118,7 @@ impl DateField {
         cx.notify();
     }
 
-    /// Remplace la saisie par la forme française de `p` (annulable).
+    /// Replaces the input with the written form of `p` (undoable).
     fn replace(&mut self, p: Parsed, window: &mut Window, cx: &mut Context<Self>) {
         let text = p.to_input_text();
         self.input.update(cx, |s, cx| s.replace_all(text, window, cx));
@@ -141,7 +141,7 @@ impl DateField {
         }
     }
 
-    /// Ligne d'aperçu, seulement si elle apprend quelque chose.
+    /// Preview line, only if it tells something new.
     fn preview(&self, cx: &App) -> Option<(String, Hsla)> {
         let text = self.text(cx);
         let t = text.trim();
@@ -160,7 +160,7 @@ impl DateField {
                 if same && shown == d.to_input_text() && p.phrase.is_empty() {
                     return None;
                 }
-                // Saisie déjà normalisée : seul l'équivalent grégorien est utile.
+                // Input already normalized: only the Gregorian equivalent is useful.
                 let eq: Vec<String> = d.dates().iter().filter_map(|x| x.gregorian_equivalent()).collect();
                 let mut s = if same && !eq.is_empty() { format!("= {}", eq.join(" – ")) } else { shown };
                 if !p.phrase.is_empty() {
@@ -172,7 +172,7 @@ impl DateField {
     }
 }
 
-/// Convertit les dates complètes ; sinon, grégorien ↔ julien change seulement l'étiquette.
+/// Converts complete dates; otherwise, Gregorian ↔ Julian only changes the label.
 fn switch_calendar(d: &Date, to: &Calendar) -> Option<Date> {
     d.try_map(|s| {
         s.convert(to).or_else(|| {
@@ -219,7 +219,7 @@ fn details(this: &Entity<DateField>, cx: &App) -> AnyElement {
     let calendars = Calendar::KNOWN.into_iter().map(|c| {
         let converted = date.as_ref().and_then(|d| switch_calendar(d, &c));
         let on = current.as_ref() == Some(&c);
-        // Seulement les dates converties, sans le qualificatif ni le nom du calendrier.
+        // Only the converted dates, without the qualifier or the calendar name.
         let shown = converted
             .as_ref()
             .filter(|_| !on)

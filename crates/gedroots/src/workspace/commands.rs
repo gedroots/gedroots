@@ -1,8 +1,7 @@
-//! Commandes des menus et de la palette, reliées à l'espace de travail.
+//! Commands of the menus and the palette, connected to the workspace.
 //!
-//! Une commande n'est déclarée que lorsqu'elle s'applique (individu
-//! sélectionné, fichier ouvert…) : les menus macOS et la palette grisent ou
-//! masquent alors d'eux-mêmes celles qui ne sont pas disponibles.
+//! A command is only declared when it applies (individual selected, file open…): macOS menus and
+//! the palette then grey out or hide on their own those that are not available.
 
 use super::relatives::PickPurpose;
 use super::tree::TreeMode;
@@ -11,7 +10,7 @@ use gedcom::gedcom551::Flavor;
 use gpui_kit::component::command::{Command, CommandItem, CommandState};
 use rust_i18n::t;
 
-/// Déclare un gestionnaire d'action sur l'élément racine.
+/// Declares an action handler on the root element.
 macro_rules! on {
     ($d:expr, $cx:expr, $action:ty, |$this:ident, $w:ident, $c:ident| $body:expr) => {
         $d.on_action($cx.listener(
@@ -31,7 +30,7 @@ pub struct Palette {
 }
 
 impl Workspace {
-    /// Enregistre les gestionnaires des commandes applicables dans l'état courant.
+    /// Registers the handlers of the commands that apply in the current state.
     pub(super) fn bind_actions(&self, d: Div, _window: &mut Window, cx: &mut Context<Self>) -> Div {
         let doc = self.doc.as_ref();
         let g = doc.map(|d| &d.ged);
@@ -72,9 +71,10 @@ impl Workspace {
         let d = on!(d, cx, FocusSearch, |this, w, cx| this.filter.update(cx, |f, cx| f.focus(w, cx)));
         let d = on!(d, cx, ClearSearch, |this, w, cx| this.set_query(String::new(), w, cx));
 
-        // Créations : on passe dans la bonne liste puis on crée.
+        // Creations: switch to the right list, then create.
         let d = on!(d, cx, NewIndividual, |this, w, cx| this.create_in(View::Individuals, w, cx));
-        // Nouvelle source : elle s'ouvre sur un acte vide (une source sans acte reste possible : « ‹ »).
+        // New source: it opens on an empty record (a source without a record is still possible:
+        // “‹”).
         let d = on!(d, cx, NewSource, |this, w, cx| {
             this.create_in(View::Sources, w, cx);
             if let Some(s) = this.selected.clone() {
@@ -151,12 +151,12 @@ impl Workspace {
                     }
                 })
             })
-            // Arbre et filtres de la liste des individus.
+            // Chart and filters of the individuals list.
             .when(individuals, |d| {
                 let d = on!(d, cx, ShowTree, |this, w, cx| this.show_tab(CenterTab::Tree, cx));
                 let d = on!(d, cx, TreeChart, |this, w, cx| this.set_tree_mode(TreeMode::Chart, cx));
                 let d = on!(d, cx, TreeFan, |this, w, cx| this.set_tree_mode(TreeMode::Fan, cx));
-                // L'arbre libre charge ses générations tout seul ; l'éventail se règle.
+                // The free chart loads its generations on its own; the fan chart is adjustable.
                 let d = d.when(self.tree_mode == TreeMode::Fan, |d| {
                     let d = on!(d, cx, MoreGenerations, |this, w, cx| this.step_generations(1, cx));
                     on!(d, cx, FewerGenerations, |this, w, cx| this.step_generations(-1, cx))
@@ -170,7 +170,7 @@ impl Workspace {
                 let d = on!(d, cx, FilterNoMarriage, |this, w, cx| this.toggle_filter("without:marriage", w, cx));
                 on!(d, cx, FilterWithMedia, |this, w, cx| this.toggle_filter("with:media", w, cx))
             })
-            // Individu sélectionné.
+            // Selected individual.
             .when(indi.is_some(), |d| {
                 let d = on!(d, cx, CenterTree, |this, w, cx| {
                     if let Some(x) = this.selected.clone() {
@@ -234,7 +234,7 @@ impl Workspace {
             })
     }
 
-    /// Image (existante) de la page affichée d'un média.
+    /// (Existing) image of the displayed page of a media.
     pub(super) fn photo_file(&self, media: &str) -> Option<PathBuf> {
         let doc = self.doc.as_ref()?;
         let m = Media::new(doc.ged.get(media)?);
@@ -276,7 +276,7 @@ impl Workspace {
         cx.notify();
     }
 
-    /// Change de liste, en quittant la saisie d'acte si besoin.
+    /// Switches lists, leaving record entry if needed.
     pub(super) fn show_view(&mut self, view: View, window: &mut Window, cx: &mut Context<Self>) {
         self.act_editor = None;
         self.review.open = false;
@@ -292,7 +292,7 @@ impl Workspace {
         cx.notify();
     }
 
-    /// Referme l'onglet GEDCOM brut et revient à la première vue de la liste.
+    /// Closes the raw GEDCOM tab and goes back to the list's first view.
     pub(super) fn close_raw(&mut self, cx: &mut Context<Self>) {
         self.raw_open = false;
         if self.tab == CenterTab::Raw {
@@ -329,7 +329,7 @@ impl Workspace {
         cx.notify();
     }
 
-    /// Recherche les ascendants ou descendants de la personne affichée.
+    /// Searches the ancestors or descendants of the displayed person.
     fn search_kin(&mut self, kin: Kin, window: &mut Window, cx: &mut Context<Self>) {
         let Some(x) = self.selected.clone() else { return };
         if self.view != View::Individuals {
@@ -339,8 +339,7 @@ impl Workspace {
         self.filter.update(cx, |f, cx| f.focus(window, cx));
     }
 
-    /// Ouvre dans le navigateur la recherche de la personne `xref` sur le site
-    /// `index` des réglages du fichier.
+    /// Opens in the browser the search for person `xref` on site `index` of the file settings.
     pub(super) fn search_web(&mut self, index: usize, xref: &str, cx: &mut Context<Self>) {
         let Some(g) = self.doc.as_ref().map(|d| &d.ged) else { return };
         if let Some(site) = g.search_sites().get(index) {
@@ -353,7 +352,7 @@ impl Workspace {
         self.set_query(toggle_token(&current, token), window, cx);
     }
 
-    /// Ajoute un nouveau proche, ou ouvre le sélecteur pour lier une personne existante.
+    /// Adds a new relative, or opens the picker to link an existing person.
     fn relative(&mut self, rel: Relation, existing: bool, window: &mut Window, cx: &mut Context<Self>) {
         let Some(indi) = self.selected.clone() else { return };
         if existing {
@@ -373,12 +372,12 @@ impl Workspace {
             cx.notify();
             return;
         }
-        // Seules les commandes applicables maintenant (vérifié depuis l'espace de travail).
+        // Only the commands that apply now (checked from the workspace).
         let items = crate::commands::palette_entries()
             .into_iter()
             .filter(|e| window.is_action_available(e.action.as_ref(), cx))
             .map(|e| {
-                // Mots-clés sans accents : « pere » trouve « Père ».
+                // Keywords without accents: “pere” finds “Père”.
                 let words: Vec<String> = e.path.split(" › ").map(fold_accents).collect();
                 CommandItem::new().label(e.path).keywords(words).action(e.action)
             })
@@ -431,7 +430,7 @@ impl Workspace {
                         .border_color(theme::border_strong())
                         .shadow_lg()
                         .overflow_hidden()
-                        // Un clic dans la palette ne la ferme pas.
+                        // A click in the palette does not close it.
                         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                         .child(command),
                 )
@@ -440,7 +439,7 @@ impl Workspace {
     }
 }
 
-/// Retire les accents (é → e, œ → oe…) pour la recherche dans la palette.
+/// Removes accents (é → e, œ → oe…) for the search in the palette.
 fn fold_accents(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for c in s.chars() {

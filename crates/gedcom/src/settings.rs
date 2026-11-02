@@ -1,43 +1,42 @@
-//! Réglages du fichier (menu Fichier › Réglages du fichier…) : ce qui décrit la
-//! base elle-même, rangé dans l'en-tête `HEAD` en GEDCOM 7 standard.
+//! File settings (File › File Settings… menu): what describes the database itself, stored in the
+//! `HEAD` header in standard GEDCOM 7.
 //!
-//! - auteur : `HEAD.SUBM` → enregistrement `SUBM` (`NAME`, `EMAIL`) ;
-//! - droits : `HEAD.COPR` ; description : `HEAD.NOTE` ; langue : `HEAD.LANG` ;
-//! - informations en lecture seule : version, logiciel et date du dernier
-//!   enregistrement (`HEAD.SOUR`, `HEAD.DATE`, mis à jour par [`Gedcom::stamp_header`]),
-//!   extensions déclarées (`HEAD.SCHMA`).
+//! - author: `HEAD.SUBM` → `SUBM` record (`NAME`, `EMAIL`);
+//! - copyright: `HEAD.COPR`; description: `HEAD.NOTE`; language: `HEAD.LANG`;
+//! - read-only information: version, software and date of the last save (`HEAD.SOUR`, `HEAD.DATE`,
+//!   updated by [`Gedcom::stamp_header`]), declared extensions (`HEAD.SCHMA`).
 //!
-//! Les anomalies masquées (`_GR_IGNORE`) se listent et se réaffichent ici aussi.
+//! Hidden problems (`_GR_IGNORE`) are listed and shown again here too.
 
 use crate::analysis::check::{IGNORE_TAG, code_label};
 use crate::document::{Gedcom, RecordKind};
 use crate::node::{Node, now_gedcom};
 
-/// Champs modifiables du panneau.
+/// Editable fields of the panel.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct FileSettings {
     pub author: String,
     pub email: String,
     pub copyright: String,
     pub description: String,
-    /// Code de langue BCP 47 (`fr`), vide si absent.
+    /// BCP 47 language code (`fr`), empty if absent.
     pub language: String,
 }
 
-/// Informations en lecture seule.
+/// Read-only information.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct FileInfo {
     /// `7.0.13`
     pub version: String,
-    /// « Ancestris 13 », « GEDRoots 0.1.0 »… (vide si inconnu).
+    /// “Ancestris 13”, “GEDRoots 0.1.0”… (empty if unknown).
     pub software: String,
-    /// Date (et heure) du dernier enregistrement déclarée dans `HEAD.DATE`, au format GEDCOM.
+    /// Date (and time) of the last save declared in `HEAD.DATE`, in GEDCOM format.
     pub saved: Option<(String, Option<String>)>,
-    /// Extensions déclarées dans `HEAD.SCHMA` (balises seulement).
+    /// Extensions declared in `HEAD.SCHMA` (tags only).
     pub extensions: Vec<String>,
 }
 
-/// Une anomalie masquée par `_GR_IGNORE`.
+/// A problem hidden by `_GR_IGNORE`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IgnoredIssue {
     pub xref: String,
@@ -46,7 +45,7 @@ pub struct IgnoredIssue {
 }
 
 impl Gedcom {
-    /// Auteur déclaré dans l'en-tête (`HEAD.SUBM`), s'il existe encore.
+    /// Author declared in the header (`HEAD.SUBM`), if it still exists.
     fn submitter(&self) -> Option<&Node> {
         self.header.child("SUBM").and_then(|n| n.pointer()).and_then(|x| self.get(x))
     }
@@ -62,7 +61,7 @@ impl Gedcom {
         }
     }
 
-    /// Enregistre les réglages. Renvoie `false` si rien n'a changé.
+    /// Saves the settings. Returns `false` if nothing changed.
     pub fn set_file_settings(&mut self, s: &FileSettings) -> bool {
         let s = FileSettings {
             author: s.author.trim().to_string(),
@@ -84,7 +83,7 @@ impl Gedcom {
     fn set_submitter(&mut self, name: &str, email: &str) {
         let current = self.submitter().and_then(|n| n.xref.clone());
         if name.is_empty() && email.is_empty() {
-            // Plus d'auteur : on retire le lien, et l'enregistrement s'il ne sert qu'à l'en-tête.
+            // No more author: remove the link, and the record if it only serves the header.
             self.header.children.retain(|c| c.tag != "SUBM");
             if let Some(x) = current
                 && self.referrers(&x).is_empty()
@@ -102,7 +101,7 @@ impl Gedcom {
             }
         };
         let Some(r) = self.get_mut(&x) else { return };
-        // `NAME` est obligatoire sur un `SUBM` : on le garde, même vide.
+        // `NAME` is required on a `SUBM`: keep it, even empty.
         match r.child_mut("NAME") {
             Some(n) => n.value = (!name.is_empty()).then(|| name.to_string()),
             None => r.children.insert(0, Node::with_value("NAME", name)),
@@ -137,12 +136,12 @@ impl Gedcom {
         FileInfo { version: self.version().to_string(), software, saved, extensions }
     }
 
-    /// Avant l'enregistrement : GEDRoots devient le logiciel qui a produit le
-    /// fichier (`HEAD.SOUR`), daté du moment présent (`HEAD.DATE`).
+    /// Before saving: GEDRoots becomes the software that produced the file (`HEAD.SOUR`), dated now
+    /// (`HEAD.DATE`).
     pub fn stamp_header(&mut self) {
         let sour = self.header.ensure_child("SOUR");
         if sour.val() != "GEDROOTS" {
-            // Le logiciel précédent (et ses `CORP`, `DATA`…) ne décrit plus ce fichier.
+            // The previous software (and its `CORP`, `DATA`…) no longer describes this file.
             *sour = Node::with_value("SOUR", "GEDROOTS");
         }
         sour.set_child_val("VERS", env!("CARGO_PKG_VERSION"));
@@ -153,7 +152,7 @@ impl Gedcom {
         d.set_child_val("TIME", &time);
     }
 
-    /// Anomalies masquées dans tout le fichier, dans l'ordre du fichier.
+    /// Hidden problems in the whole file, in file order.
     pub fn ignored_issues(&self) -> Vec<IgnoredIssue> {
         self.records
             .iter()
@@ -168,7 +167,7 @@ impl Gedcom {
             .collect()
     }
 
-    /// Réaffiche une anomalie masquée. Renvoie `false` si elle ne l'était pas.
+    /// Shows a hidden problem again. Returns `false` if it was not hidden.
     pub fn unignore_issue(&mut self, xref: &str, code: &str) -> bool {
         let Some(r) = self.get_mut(xref) else { return false };
         let before = r.children.len();
@@ -183,7 +182,7 @@ impl Gedcom {
         true
     }
 
-    /// Retire la déclaration d'une extension qui n'est plus utilisée.
+    /// Removes the declaration of an extension that is no longer used.
     pub fn undeclare_extension(&mut self, tag: &str) {
         if let Some(s) = self.header.child_mut("SCHMA") {
             s.children.retain(|t| !(t.tag == "TAG" && t.val().split_whitespace().next() == Some(tag)));

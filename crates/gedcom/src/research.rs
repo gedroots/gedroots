@@ -1,13 +1,13 @@
-//! Données de recherche pour les agents IA (serveur MCP de GEDRoots) : fiche résumée
-//! d'un individu, recherche, lacunes des ascendants et masquage des personnes vivantes.
+//! Research data for AI agents (GEDRoots' MCP server): summarized record of an individual, search,
+//! gaps in the ancestry and hiding of living people.
 //!
-//! Tout est en lecture seule : ces fonctions ne modifient jamais le document.
+//! Everything is read only: these functions never modify the document.
 
 use crate::document::{Gedcom, RecordKind};
 use crate::model::{Event, Media};
 use std::collections::HashMap;
 
-/// Une personne citée dans un résultat. Une personne vivante n'a ni nom ni années.
+/// A person named in a result. A living person has neither name nor years.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, schemars::JsonSchema))]
 pub struct PersonRef {
@@ -17,7 +17,7 @@ pub struct PersonRef {
     pub living: bool,
 }
 
-/// Source citée par un événement, avec la référence dans la source (`PAGE`).
+/// Source cited by an event, with the reference in the source (`PAGE`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, schemars::JsonSchema))]
 pub struct Citation {
@@ -27,7 +27,7 @@ pub struct Citation {
     pub page: String,
 }
 
-/// Média lié, avec ses fichiers (chemins relatifs au `.ged` ou URL).
+/// Linked media, with its files (paths relative to the `.ged`, or URLs).
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, schemars::JsonSchema))]
 pub struct MediaRef {
@@ -36,7 +36,7 @@ pub struct MediaRef {
     pub files: Vec<String>,
 }
 
-/// Un événement ou attribut, tel qu'un chercheur le lit.
+/// An event or attribute, as a researcher reads it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, schemars::JsonSchema))]
 pub struct EventInfo {
@@ -54,7 +54,7 @@ pub struct EventInfo {
     pub media: Vec<MediaRef>,
 }
 
-/// Une union : conjoint, événements familiaux et enfants.
+/// A union: spouse, family events and children.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, schemars::JsonSchema))]
 pub struct Union {
@@ -64,14 +64,14 @@ pub struct Union {
     pub children: Vec<PersonRef>,
 }
 
-/// Fiche d'un individu pour un agent.
+/// Record of an individual for an agent.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, schemars::JsonSchema))]
 pub struct PersonSheet {
     pub person: PersonRef,
-    /// `M`, `F`, `X` ou `U`.
+    /// `M`, `F`, `X` or `U`.
     pub sex: String,
-    /// Numéro Sosa depuis l'individu racine, pour un ascendant direct.
+    /// Sosa number from the root individual, for a direct ancestor.
     pub sosa: Option<u64>,
     pub events: Vec<EventInfo>,
     pub father: Option<PersonRef>,
@@ -80,57 +80,57 @@ pub struct PersonSheet {
     pub notes: Vec<String>,
 }
 
-/// Pourquoi un événement figure dans les lacunes.
+/// Why an event is among the gaps.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, schemars::JsonSchema))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 pub enum GapKind {
-    /// L'événement n'est pas dans le fichier.
+    /// The event is not in the file.
     Missing,
-    /// L'événement est là, sans source.
+    /// The event is there, without a source.
     Unsourced,
 }
 
-/// Un acte à chercher pour un ascendant direct.
+/// A record to look for, for a direct ancestor.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, schemars::JsonSchema))]
 pub struct Gap {
     pub person: PersonRef,
     pub sosa: u64,
-    /// Génération (1 : l'individu racine, 2 : ses parents…).
+    /// Generation (1: the root individual, 2: their parents…).
     pub generation: u32,
-    /// `BIRT`, `MARR` ou `DEAT`.
+    /// `BIRT`, `MARR` or `DEAT`.
     pub event: String,
     pub kind: GapKind,
-    /// Pour un mariage : la famille et le conjoint.
+    /// For a marriage: the family and the spouse.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub family_id: Option<String>,
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub spouse: Option<PersonRef>,
-    /// Date et lieu déjà connus de l'événement (lacune « sans source »).
+    /// Date and place of the event already known (“without source” gap).
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "String::is_empty"))]
     pub date: String,
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "String::is_empty"))]
     pub place: String,
-    /// Lieux des autres événements de la personne, pour savoir où chercher.
+    /// Places of the person's other events, to know where to look.
     pub known_places: Vec<String>,
 }
 
-/// Une personne née il y a moins de ce nombre d'années, sans décès, est vivante.
+/// A person born less than this number of years ago, without a death, is living.
 pub const LIVING_YEARS: i32 = 100;
 
-/// Année en cours (calendrier grégorien, UTC).
+/// Current year (Gregorian calendar, UTC).
 pub fn current_year() -> i32 {
     let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
     1970 + (secs as f64 / (365.2425 * 86_400.0)) as i32
 }
 
-/// Événements qui prouvent un décès.
+/// Events that prove a death.
 const DEATH_TAGS: [&str; 3] = ["DEAT", "BURI", "CREM"];
 
 impl Gedcom {
-    /// La personne est-elle peut-être vivante ? Prudent : sans décès ni date qui permette
-    /// de la situer à plus de [`LIVING_YEARS`] ans, elle est considérée comme vivante.
+    /// Could the person be living? Cautious: without a death or a date that places them more than
+    /// [`LIVING_YEARS`] years ago, they are considered living.
     pub fn is_living(&self, xref: &str, this_year: i32) -> bool {
         let Some(ind) = self.individual(xref) else { return false };
         if ind.events().iter().any(|e| DEATH_TAGS.contains(&e.tag())) {
@@ -142,9 +142,9 @@ impl Gedcom {
         }
     }
 
-    /// Année de naissance connue ou déduite : naissance ou baptême, sinon plus ancien
-    /// événement daté de la personne, de ses unions ou de ses enfants (moins 15 ans),
-    /// sinon naissance d'un parent (plus 15 ans).
+    /// Birth year known or inferred: birth or baptism, otherwise the oldest dated event of the
+    /// person, their unions or their children (minus 15 years), otherwise the birth of a parent
+    /// (plus 15 years).
     fn estimated_birth_year(&self, xref: &str) -> Option<i32> {
         let ind = self.individual(xref)?;
         let year = |e: &Event| e.date().and_then(|d| d.year());
@@ -173,7 +173,7 @@ impl Gedcom {
         [f, m].into_iter().flatten().filter_map(|p| p.birth().as_ref().and_then(year)).min().map(|y| y + 15)
     }
 
-    /// Référence à une personne, masquée si elle est vivante.
+    /// Reference to a person, hidden if they are living.
     pub fn person_ref(&self, xref: &str, this_year: i32) -> PersonRef {
         let living = self.is_living(xref, this_year);
         let ind = self.individual(xref);
@@ -223,7 +223,7 @@ impl Gedcom {
         })
     }
 
-    /// Fiche d'un individu. `None` s'il n'existe pas ou s'il est vivant.
+    /// Record of an individual. `None` if they do not exist or are living.
     pub fn person_sheet(&self, xref: &str, this_year: i32) -> Option<PersonSheet> {
         let ind = self.individual(xref)?;
         if self.is_living(xref, this_year) {
@@ -257,8 +257,8 @@ impl Gedcom {
         })
     }
 
-    /// Individus correspondant à la requête (syntaxe de la recherche de l'app), vivants
-    /// exclus, au plus `limit`.
+    /// Individuals matching the query (the app's search syntax), living people excluded, at most
+    /// `limit`.
     pub fn search_people(&self, query: &str, limit: usize, this_year: i32) -> Vec<PersonRef> {
         let ids: Vec<String> = if query.trim().is_empty() {
             self.records_of(RecordKind::Individual).filter_map(|n| n.xref.clone()).collect()
@@ -272,9 +272,9 @@ impl Gedcom {
             .collect()
     }
 
-    /// Actes à chercher pour les ascendants directs jusqu'à la génération `max_generation` :
-    /// naissance, mariage (porté par le père) et décès absents ou sans source. Les
-    /// personnes vivantes sont ignorées. Triés par numéro Sosa.
+    /// Records to look for, for the direct ancestors up to generation `max_generation`: birth,
+    /// marriage (held by the father) and death missing or without a source. Living people are
+    /// ignored. Sorted by Sosa number.
     pub fn research_gaps(&self, max_generation: u32, this_year: i32) -> Vec<Gap> {
         let numbers = self.sosa_numbers();
         let mut ancestors: Vec<(&String, u64)> =
@@ -313,13 +313,13 @@ impl Gedcom {
                     known_places: known_places.clone(),
                 })
             };
-            // Un baptême sourcé vaut acte de naissance ; une inhumation, acte de décès.
+            // A sourced baptism counts as a birth record; a burial, as a death record.
             let pick = |tags: &[&str]| {
                 let all: Vec<&Event> = events.iter().filter(|e| tags.contains(&e.tag())).collect();
                 all.iter().find(|e| e.is_sourced()).or(all.first()).copied()
             };
             out.extend(gap("BIRT", pick(&["BIRT", "BAPM", "CHR"])));
-            // Mariage des parents : porté par le père (Sosa pair), avec la mère (Sosa + 1).
+            // Marriage of the parents: held by the father (even Sosa), with the mother (Sosa + 1).
             if sosa % 2 == 0
                 && let Some(wife) = by_sosa.get(&(sosa + 1))
             {
@@ -400,9 +400,9 @@ mod tests {
         let g = ged();
         assert!(g.is_living("I1", 2026));
         assert!(!g.is_living("I2", 2026));
-        // Née en 1855, sans décès : plus de 100 ans.
+        // Born in 1855, no death: more than 100 years.
         assert!(!g.is_living("I3", 2026));
-        // Sans date, mais père d'un enfant né en 1850.
+        // No date, but father of a child born in 1850.
         assert!(!g.is_living("I4", 2026));
         assert_eq!(g.person_ref("I1", 2026).name, "Living person");
         assert!(g.person_sheet("I1", 2026).is_none());
@@ -443,7 +443,7 @@ mod tests {
         assert_eq!(marr.family_id.as_deref(), Some("F1"));
         assert_eq!(marr.spouse.as_ref().unwrap().id, "I3");
         assert_eq!(gaps[3].known_places, vec!["Vitré".to_string()]);
-        // Génération 2 seulement : les parents de la racine.
+        // Generation 2 only: the root's parents.
         assert!(g.research_gaps(2, 2026).iter().all(|g| g.generation == 2));
     }
 }

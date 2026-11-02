@@ -1,10 +1,8 @@
-//! Page « Qualité » : les anomalies du fichier par catégorie, avec leur
-//! correction sur place (voir `gedcom::quality`).
+//! “Quality” page: the file’s issues by category, with their in-place fix (see `gedcom::quality`).
 //!
-//! La liste de gauche donne les catégories, la zone centrale les anomalies de
-//! la catégorie choisie. Un clic ouvre l'élément concerné (⌘[ ramène ici),
-//! le bouton de la ligne applique la correction quand elle est sûre, le clic
-//! droit permet de masquer l'anomalie (`_GR_IGNORE`).
+//! The left list gives the categories, the central area the issues of the chosen category. A click
+//! opens the item concerned (⌘[ comes back here), the row’s button applies the fix when it is safe,
+//! the right-click allows hiding the issue (`_GR_IGNORE`).
 
 use super::*;
 use gedcom::analysis::check::{self, Issue, Severity};
@@ -14,30 +12,30 @@ use gpui_kit::component::menu::PopupMenu;
 use rust_i18n::t;
 use std::cell::RefCell;
 
-/// État de la page.
+/// State of the page.
 #[derive(Default)]
 pub(super) struct QualityState {
-    /// Toutes les anomalies (masquées comprises).
+    /// All issues (hidden ones included).
     pub issues: Rc<Vec<Issue>>,
-    /// Le fichier a changé depuis le dernier contrôle.
+    /// The file has changed since the last check.
     pub stale: bool,
-    /// Afficher aussi les anomalies masquées (Affichage › Anomalies masquées).
+    /// Also show the hidden issues (View › Hidden Issues).
     pub show_ignored: bool,
-    /// Correction en lot en attente de confirmation (code d'anomalie).
+    /// Bulk fix waiting for confirmation (issue code).
     pub confirm: Option<&'static str>,
-    /// Ligne visée par le dernier clic droit.
+    /// Row targeted by the last right-click.
     pub menu_issue: Rc<RefCell<Option<Issue>>>,
 }
 
 impl Workspace {
-    /// Relance les contrôles si le fichier a changé.
+    /// Reruns the checks if the file has changed.
     pub(super) fn refresh_quality(&mut self) {
         let Some(doc) = &self.doc else {
             self.quality.issues = Rc::default();
             return;
         };
         if self.quality.stale {
-            // Le dossier a pu changer depuis l'ouverture (fichiers ajoutés, déplacés).
+            // The folder may have changed since opening (files added, moved).
             let path = doc.path.clone();
             self.media_files = Rc::new(relatives::scan_media_files(path.as_deref()));
             let doc = self.doc.as_ref().unwrap();
@@ -53,7 +51,7 @@ impl Workspace {
         self.quality.show_ignored || !i.ignored
     }
 
-    /// Lignes de la liste : une par catégorie non vide.
+    /// Rows of the list: one per non-empty category.
     pub(super) fn quality_rows(&self, q: &str) -> Vec<Row> {
         Category::ALL
             .into_iter()
@@ -96,8 +94,7 @@ impl Workspace {
         self.quality_edit(|g| g.fix_issue(&issue), msg, window, cx);
     }
 
-    /// Corrige toutes les anomalies visibles d'un code. Les suppressions et
-    /// fusions demandent un second clic.
+    /// Fixes all visible issues of a code. Deletions and merges require a second click.
     fn fix_all(&mut self, code: &'static str, window: &mut Window, cx: &mut Context<Self>) {
         let harmless = matches!(code, "missing_backlink" | "moved_file" | "missing_form" | "unattached_file");
         if !harmless && self.quality.confirm != Some(code) {
@@ -112,7 +109,7 @@ impl Workspace {
         self.quality_edit(|g| g.fix_issues(&issues) > 0, msg, window, cx);
     }
 
-    /// Ouvre l'élément d'une anomalie : son enregistrement, ou le lieu concerné.
+    /// Opens the item of an issue: its record, or the place concerned.
     fn open_issue(&mut self, issue: &Issue, window: &mut Window, cx: &mut Context<Self>) {
         if !issue.xref.is_empty() {
             self.goto(issue.xref.clone(), window, cx);
@@ -123,8 +120,8 @@ impl Workspace {
         }
     }
 
-    /// « Localiser… » : choisir le fichier d'un média introuvable, ou ouvrir le
-    /// lieu sur la carte pour le localiser (un lieu à la fois).
+    /// “Locate…”: choose the file of a missing media, or open the place on the map to locate it
+    /// (one place at a time).
     fn locate_file(&mut self, issue: Issue, window: &mut Window, cx: &mut Context<Self>) {
         if place_issue(&issue) {
             self.open_issue(&issue, window, cx);
@@ -172,7 +169,7 @@ impl Workspace {
         );
     }
 
-    /// Ouvre la page Qualité sur une catégorie (Média › Fichiers à rattacher).
+    /// Opens the Quality page on a category (Media › Files to Attach).
     pub(super) fn open_quality(&mut self, cat: Category, window: &mut Window, cx: &mut Context<Self>) {
         self.open_location(View::Quality, Some(cat.id().to_string()), window, cx);
         cx.notify();
@@ -184,7 +181,7 @@ impl Workspace {
         cx.notify();
     }
 
-    /// Zone centrale : les anomalies de la catégorie choisie.
+    /// Central area: the issues of the chosen category.
     pub(super) fn render_quality(&self, cx: &mut Context<Self>) -> AnyElement {
         let Some(cat) = self.selected.as_deref().and_then(Category::from_id) else {
             let empty = self.quality.issues.iter().all(|i| !self.visible_issue(i));
@@ -206,7 +203,7 @@ impl Workspace {
                 .cloned()
                 .collect(),
         );
-        // Corrections en lot : une par code qui en a une, avec le nombre concerné.
+        // Bulk fixes: one per code that has one, with the number concerned.
         let mut batches: Vec<(&'static str, std::borrow::Cow<'static, str>, usize)> = Vec::new();
         for i in shown.iter().filter(|i| !i.ignored) {
             if let Some(label) = quality::fix_of(i.code).and_then(|f| f.batch) {
@@ -333,14 +330,14 @@ impl Workspace {
             .into_any_element()
     }
 
-    /// Menu du clic droit sur une anomalie.
+    /// Right-click menu of an issue.
     fn issue_menu(&self, cx: &mut Context<Self>) -> menus::MenuBuilder {
         let ws = cx.entity().downgrade();
         let target = self.quality.menu_issue.clone();
         Rc::new(move |menu: PopupMenu, _, _| {
             let Some(issue) = target.borrow_mut().take() else { return menu };
             let (a, b, c, d) = (issue.clone(), issue.clone(), issue.clone(), issue.clone());
-            // Fichier sans média : rien à ouvrir ni où écrire `_GR_IGNORE`.
+            // File without media: nothing to open nor anywhere to write `_GR_IGNORE`.
             let record = !issue.xref.is_empty();
             let menu = if record || place_issue(&issue) {
                 menu.item(menus::act(&ws, t!("quality.open"), move |this, w, cx| this.open_issue(&a, w, cx)))
@@ -369,12 +366,12 @@ impl Workspace {
     }
 }
 
-/// Anomalies qui portent sur un lieu (sans enregistrement).
+/// Issues about a place (without a record).
 fn place_issue(i: &Issue) -> bool {
     i.xref.is_empty() && matches!(quality::category(i.code), Category::Places | Category::Coords)
 }
 
-/// Anomalies avec un bouton « Localiser… ».
+/// Issues with a “Locate…” button.
 fn locatable(code: &str) -> bool {
     matches!(code, "missing_file" | "missing_coords" | "bad_coords")
 }

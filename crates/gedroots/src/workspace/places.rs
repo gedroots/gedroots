@@ -1,9 +1,9 @@
-//! Lieux : menu du champ Lieu (lieux du fichier, lieu-dit d'un lieu connu, lieux réels
-//! trouvés dans OpenStreetMap, création), fenêtre « Nouveau lieu » découpée selon le
-//! format des lieux du fichier, et « Localiser » sur la fiche d'un lieu sans coordonnées.
+//! Places: menu of the Place field (places of the file, locality of a known place, real places
+//! found in OpenStreetMap, creation), “New Place” window split according to the file’s place
+//! format, and “Locate” on the record of a place without coordinates.
 //!
-//! Les recherches en ligne se font une à la fois, après une pause de saisie ; rien n'est
-//! écrit sans un clic.
+//! Online searches are done one at a time, after a typing pause; nothing is written without a
+//! click.
 
 use super::*;
 use crate::gazetteer;
@@ -11,18 +11,18 @@ use gedcom::gazetteer::{Candidate, Level, join_parts, sub_place};
 use rust_i18n::t;
 use std::collections::HashMap;
 
-/// Lieux réels proposés pendant la saisie d'un lieu.
+/// Real places suggested while typing a place.
 #[derive(Default)]
 pub(super) struct PlaceSearch {
-    /// Saisie dont les résultats sont affichés.
+    /// Input whose results are displayed.
     query: String,
     results: Vec<Candidate>,
     cache: HashMap<String, Vec<Candidate>>,
     generation: u64,
 }
 
-/// Coordonnées d'un lieu créé, écrites dès que le lieu apparaît dans le fichier
-/// (à l'enregistrement de l'événement ou de la fiche).
+/// Coordinates of a created place, written as soon as the place appears in the file (when the event
+/// or record is saved).
 pub(super) struct PendingPlace {
     pub(super) name: String,
     lat: f64,
@@ -30,9 +30,9 @@ pub(super) struct PendingPlace {
     exid: Option<(String, String)>,
 }
 
-/// Fenêtre « Nouveau lieu ».
+/// “New Place” window.
 pub(super) struct NewPlace {
-    /// Champ de lieu qui recevra le nom.
+    /// Place field that will receive the name.
     target: Entity<InputState>,
     fields: Vec<(SharedString, Entity<InputState>)>,
     pin: Option<(f64, f64)>,
@@ -42,14 +42,14 @@ pub(super) struct NewPlace {
     _sub: Subscription,
 }
 
-/// « Localiser » sur la fiche d'un lieu.
+/// “Locate” on a place’s record.
 pub(super) struct Locate {
     name: String,
-    /// `None` : recherche en cours.
+    /// `None`: search in progress.
     results: Option<Result<Vec<Candidate>, String>>,
 }
 
-/// Exemple affiché dans le champ vide d'une juridiction.
+/// Example shown in a jurisdiction’s empty field.
 fn example(level: Level) -> SharedString {
     match level {
         Level::Locality => t!("places.example_locality").into(),
@@ -62,7 +62,7 @@ fn example(level: Level) -> SharedString {
     }
 }
 
-/// Une ligne cliquable du menu de lieux : nom, et dessous les juridictions plus larges.
+/// A clickable row of the places menu: name, and below it the broader jurisdictions.
 fn place_row(id: SharedString, ic: IconName, name: SharedString, context: Option<SharedString>) -> Stateful<Div> {
     h_flex()
         .id(id)
@@ -93,14 +93,14 @@ fn place_row(id: SharedString, ic: IconName, name: SharedString, context: Option
 }
 
 impl Workspace {
-    /// Saisie dans un champ de lieu : affiche le menu, et cherche les lieux réels après une pause.
+    /// Typing in a place field: shows the menu, and searches real places after a pause.
     pub(super) fn on_place_input(&mut self, input: &Entity<InputState>, ev: &InputEvent, cx: &mut Context<Self>) {
         if matches!(ev, InputEvent::Focus | InputEvent::Change) {
             self.place_input(input, matches!(ev, InputEvent::Change), cx);
         }
     }
 
-    /// Champ de lieu actif ; `changed` : relancer la recherche des lieux réels.
+    /// Active place field; `changed`: restart the search for real places.
     pub(super) fn place_input(&mut self, input: &Entity<InputState>, changed: bool, cx: &mut Context<Self>) {
         self.place_focus = Some(input.entity_id());
         if changed {
@@ -114,7 +114,7 @@ impl Workspace {
         let q = value.trim().to_string();
         let s = &mut self.place_search;
         s.generation += 1;
-        // Lieu-dit d'un lieu du fichier (« La Borde, Troyes ») : pas de recherche en ligne.
+        // Locality of a place of the file (“La Borde, Troyes”): no online search.
         if q.chars().count() < 3 || q.contains(',') || gazetteer::offline() {
             return;
         }
@@ -146,7 +146,7 @@ impl Workspace {
         .detach();
     }
 
-    /// Menu sous le champ de lieu en cours de saisie.
+    /// Menu under the place field being typed in.
     pub(super) fn place_suggestions(&self, input: &Entity<InputState>, cx: &mut Context<Self>) -> Option<AnyElement> {
         if self.place_focus != Some(input.entity_id()) {
             return None;
@@ -170,7 +170,7 @@ impl Workspace {
             .filter(|p| key.chars().count() >= 2 && sort_key(&p.name).contains(&key))
             .map(|p| (p.short(), p.name.clone()))
             .collect();
-        // Les lieux qui commencent par la saisie d'abord.
+        // Places starting with the input first.
         hits.sort_by_key(|(short, _)| (!sort_key(short).starts_with(&key), short.clone()));
         hits.truncate(4);
         let sub = sub_place(&typed, &places, &form);
@@ -277,7 +277,7 @@ impl Workspace {
         Some(list.into_any_element())
     }
 
-    /// Ouvre la fenêtre « Nouveau lieu », juridictions pré-remplies.
+    /// Opens the “New Place” window, jurisdictions prefilled.
     #[allow(clippy::too_many_arguments)]
     fn open_new_place(
         &mut self,
@@ -316,7 +316,7 @@ impl Workspace {
                 cx.notify();
             }
         });
-        // Le curseur dans la première juridiction à compléter (Échap ferme la fenêtre).
+        // The cursor in the first jurisdiction to complete (Esc closes the window).
         let first = fields.iter().find(|(_, f)| f.read(cx).value().is_empty()).or(fields.first());
         if let Some((_, f)) = first {
             f.update(cx, |s, cx| s.focus(window, cx));
@@ -331,7 +331,7 @@ impl Workspace {
         cx.notify();
     }
 
-    /// « Créer le lieu » : le nom va dans le champ, les coordonnées attendent l'enregistrement.
+    /// “Create Place”: the name goes into the field, the coordinates wait for the save.
     fn create_new_place(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(d) = &mut self.new_place else { return };
         let values: Vec<String> = d.fields.iter().map(|(_, s)| s.read(cx).value().trim().to_string()).collect();
@@ -353,7 +353,7 @@ impl Workspace {
         cx.notify();
     }
 
-    /// Écrit les coordonnées des lieux créés qui sont maintenant dans le fichier.
+    /// Writes the coordinates of the created places that are now in the file.
     pub(super) fn apply_pending_places(&mut self) {
         if self.pending_places.is_empty() {
             return;
@@ -476,10 +476,10 @@ impl Workspace {
     }
 
     // ------------------------------------------------------------------
-    // Localiser un lieu existant
+    // Locate an existing place
     // ------------------------------------------------------------------
 
-    /// Cherche un lieu du fichier dans OpenStreetMap, avec toutes ses juridictions.
+    /// Searches a place of the file in OpenStreetMap, with all its jurisdictions.
     pub(super) fn start_locate(&mut self, name: String, cx: &mut Context<Self>) {
         if gazetteer::offline() {
             self.set_status(t!("places.offline"), true);
@@ -529,7 +529,7 @@ impl Workspace {
         cx.notify();
     }
 
-    /// Section « Position » de la fiche d'un lieu sans coordonnées.
+    /// “Position” section of the record of a place without coordinates.
     pub(super) fn render_locate(&self, place: &Place, cx: &mut Context<Self>) -> Option<AnyElement> {
         if place.coords().is_some() {
             return None;
@@ -590,7 +590,7 @@ impl Workspace {
     }
 }
 
-/// Valeur `PLAC` d'un lieu saisi (le champ affiche le lieu sans ses juridictions vides).
+/// `PLAC` value of an entered place (the field shows the place without its empty jurisdictions).
 pub(super) fn place_value(ged: Option<&Gedcom>, pending: &[PendingPlace], typed: &str) -> String {
     let created: Vec<String> = pending.iter().map(|p| p.name.clone()).collect();
     match ged {

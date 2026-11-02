@@ -49,15 +49,15 @@ fn typed_citations_are_checked() {
 #[test]
 fn portrait_skips_documents_and_follows_link_order() {
     let mut g = Gedcom::parse(TYPED).unwrap();
-    // Le scan d'acte (MANUSCRIPT) n'est pas un portrait.
+    // The scanned record (MANUSCRIPT) is not a portrait.
     assert_eq!(g.portrait("I1").unwrap().xref(), "M2");
-    // _PRIM : le lien passe en tête.
+    // _PRIM: the link moves to the top.
     assert_eq!(import::analyze(&g).iter().find(|f| f.id == "prim").map(|f| f.count), Some(1));
     import::apply(&mut g, &["prim"]);
     let links: Vec<&str> = g.get("I1").unwrap().children_with("OBJE").map(|n| n.val()).collect();
     assert_eq!(links, vec!["@M2@", "@M1@"]);
     assert_eq!(g.prim_count(), 0);
-    // Définir comme portrait : lien en tête et support PHOTO s'il n'en avait pas.
+    // Set as portrait: link at the top and PHOTO medium if it had none.
     assert!(g.set_portrait("I1", "M1"));
     let links: Vec<&str> = g.get("I1").unwrap().children_with("OBJE").map(|n| n.val()).collect();
     assert_eq!(links, vec!["@M1@", "@M2@"]);

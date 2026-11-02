@@ -1,39 +1,38 @@
-//! Fichiers récemment ouverts, pour Fichier › Ouvrir récent et la page d'accueil.
+//! Recently opened files, for File › Open Recent and the welcome page.
 //!
-//! La liste est propre à la machine, pas au fichier : elle ne peut donc pas vivre dans le .ged.
-//! - macOS : la liste du système (`NSDocumentController`), la même que celle du Dock et du
-//!   Finder ;
-//! - Linux et Windows : un petit fichier texte (un chemin par ligne) dans le dossier de
-//!   configuration de la plateforme (`~/.config/GEDRoots/recents`, `%APPDATA%\GEDRoots\recents`).
+//! The list belongs to the machine, not to the file: so it cannot live in the .ged.
+//! - macOS: the system's list (`NSDocumentController`), the same as the Dock's and the Finder's;
+//! - Linux and Windows: a small text file (one path per line) in the platform's configuration
+//!   folder (`~/.config/GEDRoots/recents`, `%APPDATA%\GEDRoots\recents`).
 
 use gpui_kit::App;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-/// Nombre de fichiers gardés (comme le réglage par défaut de macOS).
+/// Number of files kept (like macOS' default setting).
 const MAX: usize = 10;
 
-/// Liste lue une fois puis gardée en mémoire ; `None` = à relire.
+/// List read once, then kept in memory; `None` = to read again.
 static CACHE: Mutex<Option<Vec<PathBuf>>> = Mutex::new(None);
-/// Incrémenté à chaque changement, pour que chaque fenêtre recharge sa barre de menus.
+/// Incremented on each change, so that each window reloads its menu bar.
 static GENERATION: AtomicU64 = AtomicU64::new(0);
 
-/// Fichiers récents existants, du plus récent au plus ancien.
+/// Existing recent files, most recent first.
 pub fn list() -> Vec<PathBuf> {
     let mut cache = CACHE.lock().unwrap_or_else(|e| e.into_inner());
     cache.get_or_insert_with(|| store::read().into_iter().filter(|p| p.is_file()).take(MAX).collect()).clone()
 }
 
-/// Numéro de version de la liste.
+/// Version number of the list.
 pub fn generation() -> u64 {
     GENERATION.load(Ordering::Relaxed)
 }
 
-/// Note `path` comme le fichier le plus récent.
+/// Records `path` as the most recent file.
 pub fn add(path: &Path, cx: &mut App) {
     let path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
-    // macOS : liste du système ; ailleurs, sans effet (on écrit notre propre fichier).
+    // macOS: the system's list; elsewhere, no effect (we write our own file).
     cx.add_recent_document(&path);
     #[cfg(not(target_os = "macos"))]
     {
@@ -43,7 +42,7 @@ pub fn add(path: &Path, cx: &mut App) {
     changed(cx);
 }
 
-/// Vide la liste.
+/// Clears the list.
 pub fn clear(cx: &mut App) {
     store::clear();
     changed(cx);
@@ -55,7 +54,7 @@ fn changed(cx: &mut App) {
     crate::commands::install_menus(cx);
 }
 
-/// Place `path` en tête, sans doublon, en gardant au plus `MAX` entrées.
+/// Puts `path` first, without duplicates, keeping at most `MAX` entries.
 #[cfg_attr(target_os = "macos", allow(dead_code))]
 fn push_front(paths: &mut Vec<PathBuf>, path: PathBuf) -> Vec<PathBuf> {
     paths.retain(|p| p != &path);
@@ -64,8 +63,7 @@ fn push_front(paths: &mut Vec<PathBuf>, path: PathBuf) -> Vec<PathBuf> {
     paths.clone()
 }
 
-/// Libellés des entrées : le nom du fichier, suivi de son dossier quand deux fichiers portent le
-/// même nom.
+/// Labels of the entries: the file name, followed by its folder when two files have the same name.
 pub fn labels(paths: &[PathBuf]) -> Vec<String> {
     let name = |p: &PathBuf| p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
     paths
@@ -83,7 +81,7 @@ pub fn labels(paths: &[PathBuf]) -> Vec<String> {
         .collect()
 }
 
-/// Dossier d'un fichier pour l'affichage, avec `~` pour le dossier personnel.
+/// Folder of a file for display, with `~` for the home folder.
 pub fn folder(path: &Path) -> String {
     let dir = path.parent().unwrap_or(path);
     if let Some(home) = std::env::var_os("HOME").map(PathBuf::from)
@@ -100,7 +98,7 @@ mod store {
     use objc2_app_kit::NSDocumentController;
     use std::path::PathBuf;
 
-    /// Liste du système. Appelée depuis le fil principal (menus, rendu).
+    /// The system's list. Called from the main thread (menus, rendering).
     pub fn read() -> Vec<PathBuf> {
         let Some(mtm) = MainThreadMarker::new() else { return Vec::new() };
         let dc = NSDocumentController::sharedDocumentController(mtm);
@@ -109,7 +107,7 @@ mod store {
 
     pub fn clear() {
         let Some(mtm) = MainThreadMarker::new() else { return };
-        // SAFETY : `clearRecentDocuments:` accepte un émetteur nul.
+        // SAFETY: `clearRecentDocuments:` accepts a null sender.
         unsafe { NSDocumentController::sharedDocumentController(mtm).clearRecentDocuments(None) };
     }
 }

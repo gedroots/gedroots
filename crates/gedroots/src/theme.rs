@@ -1,9 +1,10 @@
-//! Design system GEDRoots : jetons de couleur (clair / sombre), typographie, espacements et rayons.
-//! Fonds neutres (blanc et ocre en clair, gris et noir en sombre) ; le violet n'est qu'un accent.
+//! GEDRoots design system: color tokens (light / dark), typography, spacing and radii. Neutral
+//! backgrounds (white and ochre in light mode, grey and black in dark mode); violet is only an
+//! accent.
 //!
-//! Les valeurs viennent du kit de marque v1.0 (`design.md`). Les vues n'emploient jamais
-//! de couleur en dur : elles passent par les fonctions de ce module, qui lisent la palette du mode
-//! courant. Le mode suit l'apparence du système (`sync`), et chaque changement redessine les fenêtres.
+//! The values come from the brand kit v1.0 (`design.md`). Views never use hard-coded colors: they
+//! go through this module's functions, which read the palette of the current mode. The mode follows
+//! the system's appearance (`sync`), and each change redraws the windows.
 
 use gpui_kit::component::{Theme, ThemeMode};
 use gpui_kit::{
@@ -14,25 +15,25 @@ use std::borrow::Cow;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-/// Rôles de couleur de l'application. Un jeu par mode.
+/// Color roles of the application. One set per mode.
 struct Palette {
-    /// Fond du canevas principal.
+    /// Background of the main canvas.
     bg: u32,
-    /// Barres et panneaux latéraux.
+    /// Bars and side panels.
     panel: u32,
     /// Cartes, champs.
     surface: u32,
-    /// Survol / sélection discrète.
+    /// Hover / discreet selection.
     hover: u32,
     border: u32,
     border_strong: u32,
     text: u32,
     muted: u32,
-    /// Violet primaire : actions, liens, sélection.
+    /// Primary violet: actions, links, selection.
     accent: u32,
     accent_hover: u32,
     accent_pressed: u32,
-    /// Texte posé sur le violet primaire.
+    /// Text on the primary violet.
     on_accent: u32,
     paternal: u32,
     maternal: u32,
@@ -106,7 +107,7 @@ pub fn with_alpha(mut c: Hsla, a: f32) -> Hsla {
 pub fn bg() -> Hsla {
     c(p().bg)
 }
-/// Barres et panneaux.
+/// Bars and panels.
 pub fn panel() -> Hsla {
     c(p().panel)
 }
@@ -114,7 +115,7 @@ pub fn panel() -> Hsla {
 pub fn surface() -> Hsla {
     c(p().surface)
 }
-/// Survol / sélection discrète.
+/// Hover / discreet selection.
 pub fn hover() -> Hsla {
     c(p().hover)
 }
@@ -139,11 +140,11 @@ pub fn accent_soft() -> Hsla {
 pub fn on_accent() -> Hsla {
     c(p().on_accent)
 }
-/// Lignée paternelle.
+/// Paternal line.
 pub fn paternal() -> Hsla {
     c(p().paternal)
 }
-/// Lignée maternelle.
+/// Maternal line.
 pub fn maternal() -> Hsla {
     c(p().maternal)
 }
@@ -156,17 +157,17 @@ pub fn warn() -> Hsla {
 pub fn danger() -> Hsla {
     c(p().danger)
 }
-/// Voile sous les fenêtres modales.
+/// Veil under modal windows.
 pub fn scrim() -> Hsla {
     with_alpha(c(0x000000), if is_dark() { 0.55 } else { 0.35 })
 }
-/// Fond des visionneuses d'images : sombre dans les deux modes, pour juger les documents.
+/// Background of image viewers: dark in both modes, to judge the documents.
 pub fn viewer() -> Hsla {
     c(0x0E0E0E)
 }
 
-/// Sur une image (cadres et étiquettes posés sur une photo ou un acte) : couleurs du mode sombre,
-/// quel que soit le mode, sur un fond d'étiquette noir translucide.
+/// On an image (frames and labels set on a photo or a record): dark mode colors, whatever the mode,
+/// on a translucent black label background.
 pub fn image_label_bg() -> Hsla {
     with_alpha(c(0x000000), 0.72)
 }
@@ -180,7 +181,7 @@ pub fn image_accent() -> Hsla {
     c(DARK.accent)
 }
 
-/// Couleur de lignée d'un numéro Sosa (1 = de cujus, puis paternelle/maternelle).
+/// Line color of a Sosa number (1 = root person, then paternal/maternal).
 pub fn lineage(sosa: usize) -> Hsla {
     if sosa <= 1 {
         return accent();
@@ -196,22 +197,22 @@ pub fn lineage(sosa: usize) -> Hsla {
 
 /// Champs, puces, vignettes, cases de l'arbre.
 pub const RADIUS_SM: Pixels = px(8.);
-/// Boutons, menus, listes déroulantes.
+/// Buttons, menus, drop-down lists.
 pub const RADIUS_MD: Pixels = px(12.);
-/// Cartes et fenêtres modales.
+/// Cards and modal windows.
 pub const RADIUS_LG: Pixels = px(20.);
 
-// --- Zones qui défilent ----------------------------------------------------------------------
+// --- Scrolling areas -------------------------------------------------------------------------
 
-/// Place laissée à l'anneau de focus des champs (3 px, peint hors de leur bordure).
+/// Room left for the focus ring of fields (3 px, painted outside their border).
 pub const FOCUS_ROOM: Pixels = px(4.);
 
-/// Zone qui défile verticalement sans rogner l'anneau de focus des champs qu'elle contient.
+/// Area that scrolls vertically without clipping the focus ring of the fields it contains.
 ///
-/// Une zone qui défile coupe tout ce qui dépasse de ses bords, y compris l'anneau d'un champ posé
-/// contre eux. Elle prend donc `FOCUS_ROOM` de retrait intérieur, compensé par une marge négative :
-/// le contenu reste aligné au pixel près sur ce qui l'entoure. Toute zone qui défile et contient
-/// des champs passe par ici plutôt que par `overflow_y_scroll()`.
+/// A scrolling area clips everything that goes past its edges, including the ring of a field set
+/// against them. So it takes `FOCUS_ROOM` of inner padding, offset by a negative margin: the
+/// content stays aligned to the pixel with what surrounds it. Every scrolling area that contains
+/// fields goes through here rather than through `overflow_y_scroll()`.
 pub fn scroll_y(id: impl Into<ElementId>) -> Stateful<Div> {
     div().id(id).overflow_y_scroll().p(FOCUS_ROOM).m(-FOCUS_ROOM)
 }
@@ -227,14 +228,14 @@ const FONTS: [&[u8]; 4] = [
     include_bytes!("../assets/fonts/Inter-Bold.ttf"),
 ];
 
-/// Chiffres tabulaires : dates et effectifs restent alignés en colonne.
+/// Tabular figures: dates and counts stay aligned in columns.
 pub fn tabular_nums() -> FontFeatures {
     FontFeatures(Arc::new(vec![("tnum".into(), 1)]))
 }
 
 // --- Installation ---------------------------------------------------------------------------
 
-/// Mode imposé pour les captures et les tests (`GEDROOTS_APPEARANCE=light|dark`).
+/// Mode forced for screenshots and tests (`GEDROOTS_APPEARANCE=light|dark`).
 fn forced_dark() -> Option<bool> {
     match std::env::var("GEDROOTS_APPEARANCE").ok()?.as_str() {
         "light" => Some(false),
@@ -255,7 +256,7 @@ pub fn install(cx: &mut App) {
     apply(forced_dark().unwrap_or_else(|| appearance_is_dark(cx.window_appearance())), cx);
 }
 
-/// Suit l'apparence de la fenêtre (appelé quand le système passe en clair ou en sombre).
+/// Follows the window's appearance (called when the system switches to light or dark).
 pub fn sync(window: &Window, cx: &mut App) {
     let dark = forced_dark().unwrap_or_else(|| appearance_is_dark(window.appearance()));
     if dark != is_dark() {

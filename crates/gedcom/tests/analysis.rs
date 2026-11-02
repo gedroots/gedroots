@@ -3,7 +3,7 @@ use gedcom::*;
 
 const SAMPLE: &str = include_str!("fixtures/example.ged");
 
-/// Arbre de test : deux frères, leurs enfants (cousins germains), une demi-sœur.
+/// Test tree: two brothers, their children (first cousins), a half-sister.
 const FAMILY: &str = "0 HEAD
 1 GEDC
 2 VERS 7.0
@@ -57,7 +57,7 @@ const FAMILY: &str = "0 HEAD
 0 TRLR
 ";
 
-/// Ces tests vérifient les textes écrits par l'app en français, la langue des fichiers d'exemple.
+/// These tests check the texts the app writes in French, the language of the sample files.
 fn french() {
     rust_i18n::set_locale("fr");
 }
@@ -67,8 +67,8 @@ fn consistency_check_on_sample() {
     french();
     let g = Gedcom::parse(SAMPLE).unwrap();
     let issues = check::check(&g, &check::Thresholds::default());
-    // Émile (né en 1796) aurait eu 115 ans à la naissance de Paul (1912).
-    let old = issues.iter().find(|i| i.code == "father_too_old").expect("père trop âgé");
+    // Émile (born in 1796) would have been 115 at Paul's birth (1912).
+    let old = issues.iter().find(|i| i.code == "father_too_old").expect("father too old");
     assert_eq!(old.xref, "I00001");
     assert_eq!(old.related, vec!["I00002"]);
     assert!(!issues.iter().any(|i| i.code == "broken_link"));
@@ -85,7 +85,7 @@ fn ignored_issue_disappears_and_extension_is_declared() {
     let out = g.to_gedcom_string();
     assert!(out.contains("1 _GR_IGNORE father_too_old"));
     assert!(out.contains("2 TAG _GR_IGNORE https://"));
-    // Le fichier se relit et reste stable.
+    // The file reads back and stays stable.
     let again = Gedcom::parse(&out).unwrap();
     assert_eq!(again.to_gedcom_string(), out);
 }
@@ -128,7 +128,7 @@ fn timeline_with_ages() {
     french();
     let g = Gedcom::parse(FAMILY).unwrap();
     let t = timeline::timeline(&g, "GP");
-    let birth = t.iter().find(|e| e.label.contains("petit-fils")).expect("naissance du petit-fils");
+    let birth = t.iter().find(|e| e.label.contains("petit-fils")).expect("grandson’s birth");
     assert_eq!(birth.age.as_deref(), Some("~69 ans"));
     let g = Gedcom::parse(SAMPLE).unwrap();
     let t = timeline::timeline(&g, "I00003");
@@ -146,7 +146,8 @@ fn statistics() {
     assert_eq!(s.generations[1].found, 2);
     assert_eq!(s.generations[2].found, 2);
     assert_eq!(s.implexe, 0.);
-    // B1 et A1 descendent du même couple ; un mariage entre leurs enfants créerait de l'implexe.
+    // B1 and A1 descend from the same couple; a marriage between their children would create
+    // pedigree collapse.
     let g = Gedcom::parse(SAMPLE).unwrap();
     let s = stats::stats(&g, Some("I00001"));
     assert_eq!(s.surnames[0], ("MARCHAND".to_string(), 2));

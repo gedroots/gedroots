@@ -1,42 +1,41 @@
-//! Contrôles de l'assistant d'import : ce qu'un fichier venu d'un autre
-//! logiciel contient de non standard, et sa conversion en GEDCOM 7.
+//! Checks of the import assistant: what a file from other software contains that is not standard,
+//! and its conversion to GEDCOM 7.
 //!
-//! Chaque contrôle est indépendant : [`analyze`] liste ceux qui trouvent
-//! quelque chose, [`apply`] applique ceux que l'utilisateur a gardés. Pour en
-//! ajouter un, il suffit d'une entrée dans [`CHECKS`].
+//! Each check is independent: [`analyze`] lists those that find something, [`apply`] applies those
+//! the user kept. Adding one only takes an entry in [`CHECKS`].
 
 use crate::document::Gedcom;
 use rust_i18n::t;
 use std::borrow::Cow;
 
-/// Un contrôle d'import.
+/// An import check.
 pub struct Check {
     /// Identifiant stable (`"url"`).
     pub id: &'static str,
-    /// Nombre d'éléments concernés dans le fichier.
+    /// Number of items concerned in the file.
     count: fn(&Gedcom) -> usize,
-    /// Applique la conversion, renvoie le nombre d'éléments convertis.
+    /// Applies the conversion, returns the number of items converted.
     fix: fn(&mut Gedcom) -> usize,
 }
 
-/// Les contrôles, dans l'ordre où l'assistant les présente.
+/// The checks, in the order the assistant shows them.
 pub static CHECKS: &[Check] = &[
     Check { id: "url", count: Gedcom::legacy_url_count, fix: Gedcom::migrate_url_tags },
     Check { id: "prim", count: Gedcom::prim_count, fix: Gedcom::migrate_prim_tags },
     Check { id: "events", count: Gedcom::extension_event_count, fix: Gedcom::migrate_extension_events },
 ];
 
-/// Ce qu'un contrôle a trouvé.
+/// What a check found.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Finding {
     pub id: &'static str,
     pub count: usize,
-    /// « 213 liens _URL »
+    /// “213 _URL links”
     pub label: String,
     pub into: Cow<'static, str>,
 }
 
-/// « 213 liens _URL » et ce qu'ils deviennent, pour le contrôle `id`.
+/// “213 _URL links” and what they become, for check `id`.
 fn texts(id: &str, count: usize) -> (Cow<'static, str>, Cow<'static, str>) {
     match id {
         "url" => (tn!("import.url", count), t!("import.url_into")),
@@ -45,7 +44,7 @@ fn texts(id: &str, count: usize) -> (Cow<'static, str>, Cow<'static, str>) {
     }
 }
 
-/// Contrôles qui trouvent quelque chose à normaliser dans ce fichier.
+/// Checks that find something to normalize in this file.
 pub fn analyze(g: &Gedcom) -> Vec<Finding> {
     CHECKS
         .iter()
@@ -59,7 +58,7 @@ pub fn analyze(g: &Gedcom) -> Vec<Finding> {
         .collect()
 }
 
-/// Applique les contrôles choisis. Renvoie, pour chacun, le nombre d'éléments convertis.
+/// Applies the chosen checks. Returns, for each, the number of items converted.
 pub fn apply(g: &mut Gedcom, ids: &[&str]) -> Vec<(&'static str, usize)> {
     CHECKS.iter().filter(|c| ids.contains(&c.id)).map(|c| (c.id, (c.fix)(g))).collect()
 }

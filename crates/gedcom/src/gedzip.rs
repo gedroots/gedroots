@@ -1,69 +1,65 @@
-//! Préparation d'un export GEDZIP (GEDCOM 7, chapitre 4) : une archive zip qui
-//! contient `gedcom.ged` à la racine et chaque fichier local cité par un `FILE`,
-//! sous le nom que donne ce `FILE`.
+//! Preparing a GEDZIP export (GEDCOM 7, chapter 4): a zip archive that contains `gedcom.ged` at its
+//! root and every local file referenced by a `FILE`, under the name that `FILE` gives.
 //!
-//! [`pack`] ne lit pas le disque (l'application lui dit quels fichiers existent) :
-//! il donne une copie du fichier dont les `FILE` locaux sont réécrits en chemins
-//! relatifs à l'archive, la liste des fichiers à y mettre avec leur valeur `FILE`
-//! d'origine, et les fichiers introuvables, dont le `FILE` ne change pas.
-//! L'application écrit l'archive. Le fichier ouvert n'est pas modifié.
+//! [`pack`] does not read the disk (the application tells it which files exist): it gives a copy of
+//! the file whose local `FILE`s are rewritten as paths relative to the archive, the list of files
+//! to put in it with their original `FILE` value, and the missing files, whose `FILE` does not
+//! change. The application writes the archive. The open file is not modified.
 //!
-//! Noms dans l'archive :
-//! - un chemin relatif (`Actes/naissance.jpg`, `./Actes\naissance.jpg`) garde
-//!   son nom, avec des `/` : décompressée, l'archive se range comme le dossier
-//!   du `.ged` ;
-//! - un chemin absolu, `file://`, ou qui remonte (`..`) va dans `media/` sous son
-//!   nom de fichier, comme le recommande la norme ;
-//! - deux fichiers différents ne prennent jamais le même nom (`x (2).jpg`), et
-//!   les noms réservés (`gedcom.ged`, `META-INF/…`) sont évités.
+//! Names in the archive:
+//! - a relative path (`Records/birth.jpg`, `./Records\birth.jpg`) keeps its name, with `/`:
+//!   unzipped, the archive is laid out like the `.ged` folder;
+//! - an absolute path, `file://`, or a path that goes up (`..`) goes into `media/` under its file
+//!   name, as the standard recommends;
+//! - two different files never get the same name (`x (2).jpg`), and reserved names (`gedcom.ged`,
+//!   `META-INF/…`) are avoided.
 //!
-//! Les liens web (`FILE https://…`) restent tels quels.
+//! Web links (`FILE https://…`) stay as they are.
 
 use crate::Gedcom;
 use std::collections::{HashMap, HashSet};
 
-/// Nom du jeu de données dans l'archive.
+/// Name of the dataset in the archive.
 pub const DATASET: &str = "gedcom.ged";
 
-/// Extension recommandée par la norme.
+/// Extension recommended by the standard.
 pub const EXTENSION: &str = "gdz";
 
-/// Un fichier à mettre dans l'archive.
+/// A file to put in the archive.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PackedFile {
-    /// Nom dans l'archive (UTF-8, séparateurs `/`, sans échappement).
+    /// Name in the archive (UTF-8, `/` separators, no escaping).
     pub name: String,
-    /// Valeur `FILE` d'origine, à retrouver sur le disque.
+    /// Original `FILE` value, to find on the disk.
     pub original: String,
-    /// Médias qui citent ce fichier.
+    /// Media that reference this file.
     pub media: Vec<String>,
 }
 
-/// Un fichier local introuvable : son `FILE` est gardé tel quel.
+/// A local file that cannot be found: its `FILE` is kept as is.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MissingFile {
     /// Valeur `FILE` d'origine.
     pub original: String,
-    /// Médias qui citent ce fichier.
+    /// Media that reference this file.
     pub media: Vec<String>,
 }
 
-/// Copie du fichier prête pour l'archive, fichiers à y joindre et fichiers introuvables.
+/// Copy of the file ready for the archive, files to add to it and missing files.
 pub struct Packed {
     pub ged: Gedcom,
     pub files: Vec<PackedFile>,
     pub missing: Vec<MissingFile>,
 }
 
-/// Prépare l'export GEDZIP de `g` (voir le module). `exists` dit si le fichier
-/// d'une valeur `FILE` se trouve sur le disque : un fichier introuvable n'a pas
-/// de place dans l'archive et son `FILE` reste tel quel, pour ne pas perdre le
-/// chemin d'origine ni pointer vers une entrée absente.
+/// Prepares the GEDZIP export of `g` (see the module). `exists` says whether the file of a `FILE`
+/// value is on the disk: a missing file has no place in the archive and its `FILE` stays as is, so
+/// as not to lose the original path nor point to an absent entry.
 pub fn pack(g: &Gedcom, exists: &dyn Fn(&str) -> bool) -> Packed {
     let mut ged = g.clone();
     let mut files: Vec<PackedFile> = Vec::new();
     let mut missing: Vec<MissingFile> = Vec::new();
-    // Valeur `FILE` d'origine → nom dans l'archive (`None` : introuvable).
+    // Original `FILE` value → name in the archive (`None`: missing).
     let mut by_original: HashMap<String, Option<usize>> = HashMap::new();
     let mut used: HashSet<String> = HashSet::new();
     for r in ged.records.iter_mut().filter(|r| r.tag == "OBJE") {
@@ -103,14 +99,14 @@ pub fn pack(g: &Gedcom, exists: &dyn Fn(&str) -> bool) -> Packed {
     Packed { ged, files, missing }
 }
 
-/// Le `FILE` désigne-t-il un fichier local (et non une adresse web) ?
+/// Does the `FILE` designate a local file (and not a web address)?
 pub fn is_local(file: &str) -> bool {
     let f = file.trim();
     if f.is_empty() {
         return false;
     }
     match f.split_once(':') {
-        // `C:\…` : lecteur Windows ; `file:` : fichier local.
+        // `C:\…`: Windows drive; `file:`: local file.
         Some((scheme, _)) if scheme.len() > 1 && is_scheme(scheme) => scheme.eq_ignore_ascii_case("file"),
         _ => true,
     }
@@ -122,7 +118,7 @@ fn is_scheme(s: &str) -> bool {
         && c.all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'))
 }
 
-/// Nom dans l'archive pour une valeur `FILE` locale, avant dédoublonnage.
+/// Name in the archive for a local `FILE` value, before deduplication.
 fn archive_name(file: &str) -> String {
     let f = file.trim();
     let path = match f.get(..5) {
@@ -148,12 +144,12 @@ fn file_name(path: &str) -> String {
     if reserved(n) { format!("_{n}") } else { n.to_string() }
 }
 
-/// Noms que la norme réserve ou déconseille.
+/// Names that the standard reserves or advises against.
 fn reserved(name: &str) -> bool {
     name == DATASET || name == "MANIFEST.MF" || name == "META-INF" || name.starts_with("META-INF/")
 }
 
-/// `name`, ou `name (2)`, `name (3)`… s'il est déjà pris.
+/// `name`, or `name (2)`, `name (3)`… if it is already taken.
 fn free_name(name: String, used: &mut HashSet<String>) -> String {
     let name = if used.contains(&name) {
         let (dir, file) = name.rsplit_once('/').map_or(("", name.as_str()), |(d, f)| (d, f));
@@ -170,9 +166,8 @@ fn free_name(name: String, used: &mut HashSet<String>) -> String {
     name
 }
 
-/// Valeur `FILE` pour un nom d'archive : les caractères qui ne peuvent pas
-/// figurer tels quels dans une URL sont échappés (`%20`…). Les lettres
-/// accentuées restent lisibles (chaîne d'URL valide).
+/// `FILE` value for an archive name: characters that cannot appear as is in a URL are escaped
+/// (`%20`…). Accented letters stay readable (valid URL string).
 pub fn escape(name: &str) -> String {
     let mut out = String::with_capacity(name.len());
     for c in name.chars() {

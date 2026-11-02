@@ -2,7 +2,7 @@ use gedcom::*;
 
 const SAMPLE: &str = include_str!("fixtures/example.ged");
 
-/// Une photo de groupe ajoutée au fichier d'exemple.
+/// A group photo added to the sample file.
 fn with_group_photo() -> Gedcom {
     let mut g = Gedcom::parse(SAMPLE).unwrap();
     let m = g.create(RecordKind::Media);
@@ -25,14 +25,14 @@ fn tag_people_on_a_photo() {
     assert_eq!(people.iter().map(|l| l.owner.as_str()).collect::<Vec<_>>(), ["I00002", "I00003"]);
     assert_eq!(g.link_crop("I00002", "M00002"), Some(crop));
 
-    // Écriture standard GEDCOM 7, relue à l'identique.
+    // Standard GEDCOM 7 writing, read back identically.
     let text = g.to_gedcom_string();
     assert!(text.contains("1 OBJE @M00002@\n2 CROP\n3 TOP 120\n3 LEFT 340\n3 HEIGHT 260\n3 WIDTH 200\n"));
     let g2 = Gedcom::parse(&text).unwrap();
     assert_eq!(g2.link_crop("I00002", "M00002"), Some(crop));
     assert_eq!(g2.to_gedcom_string(), text);
 
-    // Redessiner remplace la zone ; un seul lien est conservé.
+    // Drawing again replaces the area; only one link is kept.
     let moved = Crop::from_rect((350, 130, 190, 250));
     g.tag_person("I00002", "M00002", moved).unwrap();
     assert_eq!(g.link_crop("I00002", "M00002"), Some(moved));
@@ -46,7 +46,7 @@ fn tag_people_on_a_photo() {
 #[test]
 fn crop_on_existing_link_keeps_other_substructures() {
     let mut g = Gedcom::parse(SAMPLE).unwrap();
-    // Le lien source → acte existe déjà : on ne fait qu'y ajouter le recadrage.
+    // The source → record link already exists: only the crop is added to it.
     let r = g.get_mut("S00001").unwrap();
     let link = r.children.iter_mut().find(|c| c.tag == "OBJE").unwrap();
     link.children.push(Node::with_value("TITL", "Vue 37"));
@@ -65,7 +65,7 @@ fn errors() {
     let mut g = with_group_photo();
     assert!(g.tag_person("S00001", "M00002", Crop::default()).is_err());
     assert!(g.tag_person("I00001", "I00002", Crop::default()).is_err());
-    // Retirer un recadrage inexistant ne crée pas de lien.
+    // Removing a crop that does not exist does not create a link.
     g.set_link_crop("I00002", "M00002", None).unwrap();
     assert!(g.media_links("M00002").is_empty());
 }

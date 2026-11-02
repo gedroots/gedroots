@@ -1,4 +1,4 @@
-//! Vues en arbre : arbre libre (voir `chart`) et éventail.
+//! Tree views: free tree (see `chart`) and fan chart.
 
 use super::*;
 use gpui_kit::component::menu::ContextMenuExt;
@@ -8,7 +8,7 @@ use std::f32::consts::PI;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TreeMode {
-    /// Ascendants et descendants autour d'une personne, à parcourir librement.
+    /// Ancestors and descendants around a person, to browse freely.
     Chart,
     Fan,
 }
@@ -23,18 +23,18 @@ impl TreeMode {
 
     pub(super) fn generations(self) -> std::ops::RangeInclusive<u32> {
         match self {
-            // Générations chargées au fil du déplacement.
+            // Generations loaded as you move around.
             TreeMode::Chart => 0..=0,
             TreeMode::Fan => 2..=7,
         }
     }
 }
 
-/// Angle d'ouverture de l'éventail (degrés), de part et d'autre de la verticale.
+/// Opening angle of the fan chart (degrees), on each side of the vertical.
 const FAN_SPAN: f32 = 240.;
 const FAN_LEFT: f32 = 90. + FAN_SPAN / 2.;
 
-/// Rayons extérieurs de chaque génération (1 = disque central).
+/// Outer radii of each generation (1 = central disc).
 fn fan_radii(gens: u32) -> Vec<f32> {
     let widths = [64., 70., 70., 70., 62., 46., 38.];
     let mut r = 0.;
@@ -48,15 +48,15 @@ fn fan_radii(gens: u32) -> Vec<f32> {
         .collect()
 }
 
-/// Point à l'angle `deg` (sens trigonométrique, 0° = à droite) et au rayon `r`.
+/// Point at angle `deg` (counterclockwise, 0° = right) and radius `r`.
 fn polar(c: Point<Pixels>, r: f32, deg: f32) -> Point<Pixels> {
     let a = deg * PI / 180.;
     point(c.x + px(r * a.cos()), c.y - px(r * a.sin()))
 }
 
-/// Secteur du Sosa `k` : (rayon intérieur, extérieur, angle de début, de fin).
+/// Sector of Sosa `k`: (inner radius, outer radius, start angle, end angle).
 fn sector(k: usize, radii: &[f32]) -> (f32, f32, f32, f32) {
-    let g = (usize::BITS - k.leading_zeros()) as usize; // génération (1 = racine)
+    let g = (usize::BITS - k.leading_zeros()) as usize; // generation (1 = root)
     let first = 1usize << (g - 1);
     let n = first as f32;
     let i = (k - first) as f32;
@@ -93,11 +93,11 @@ fn with_alpha(mut c: Hsla, a: f32) -> Hsla {
 }
 
 impl Workspace {
-    /// Onglet « Arbre » : choix de la vue et du nombre de générations.
+    /// “Tree” tab: choice of view and number of generations.
     pub(super) fn render_tree_tab(&self, cx: &mut Context<Self>) -> AnyElement {
         let mode = self.tree_mode;
         let gens = self.tree_gens.clamp(*mode.generations().start(), *mode.generations().end());
-        // Vue et générations : menu Affichage › Arbre (⌘= / ⌘-).
+        // View and generations: View › Tree menu (⌘= / ⌘-).
         let body: AnyElement = match mode {
             TreeMode::Chart => self.render_chart(cx),
             TreeMode::Fan => self.render_fan(gens, cx),
@@ -106,7 +106,7 @@ impl Workspace {
     }
 
     // ------------------------------------------------------------------
-    // Éventail
+    // Fan chart
     // ------------------------------------------------------------------
 
     fn render_fan(&self, gens: u32, cx: &mut Context<Self>) -> AnyElement {
@@ -118,7 +118,7 @@ impl Workspace {
         let (w, h) = (2. * rmax + 24., rmax * (1. + (FAN_SPAN / 2. - 90.).to_radians().sin()) + 24.);
         let center_rel = point(px(w / 2.), px(rmax + 12.));
 
-        // Couleurs de chaque secteur, calculées avant le dessin.
+        // Colors of each sector, computed before drawing.
         let fills: Vec<(usize, Hsla)> = (1..anc.len())
             .map(|k| {
                 let gn = (usize::BITS - k.leading_zeros()) as f32;
@@ -152,7 +152,7 @@ impl Workspace {
         .absolute()
         .inset_0();
 
-        // Libellés, posés au centre de chaque secteur.
+        // Labels, placed at the center of each sector.
         let labels = (1..anc.len()).filter_map(|k| {
             let i = g.individual(anc[k].as_deref()?)?;
             let gn = (usize::BITS - k.leading_zeros()) as usize;
@@ -201,7 +201,7 @@ impl Workspace {
         });
 
         let hit_radii = radii.clone();
-        // Personne sous le pointeur (indice Sosa dans `anc`).
+        // Person under the pointer (Sosa index in `anc`).
         let hit = Rc::new(move |pos: Point<Pixels>| -> Option<usize> {
             let b = bounds_cell.get()?;
             let c = b.origin + center_rel;
@@ -223,7 +223,7 @@ impl Workspace {
             Some(n + i)
         });
         let (anc_click, hit_left) = (anc.clone(), hit.clone());
-        // Clic droit : on retient la personne visée, le menu est construit juste après.
+        // Right-click: the targeted person is remembered, the menu is built right after.
         let target: Rc<RefCell<Option<String>>> = Rc::default();
         let (t_set, t_get, anc_right) = (target.clone(), target, anc.clone());
         let ws = cx.entity().downgrade();

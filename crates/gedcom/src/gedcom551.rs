@@ -1,27 +1,25 @@
-//! Export en GEDCOM 5.5.1, pour les logiciels et sites qui ne lisent pas encore
-//! GEDCOM 7 (Geneanet, Heredis…).
+//! GEDCOM 5.5.1 export, for software and websites that do not read GEDCOM 7 yet (Geneanet,
+//! Heredis…).
 //!
-//! [`export`] part d'une copie du fichier : le fichier ouvert n'est pas modifié.
-//! Ce qui change par rapport à GEDCOM 7 :
-//! - en-tête : `GEDC.VERS 5.5.1`, `GEDC.FORM LINEAGE-LINKED`, `CHAR UTF-8`,
-//!   langue en toutes lettres (`fr` → `French`), plus de `SCHMA` ;
-//! - notes partagées : `SNOTE` devient `NOTE` (enregistrement et lien) ;
-//! - dates : calendriers échappés (`FRENCH_R` → `@#DFRENCH R@`), `BCE` → `B.C.`,
-//!   une date accompagnée d'un `PHRASE` devient une date interprétée
-//!   (`INT 1 JAN 1800 (texte)`) ou une phrase seule (`(texte)`) ;
-//! - âges : `> 39y` → `>39y`, semaines comptées en jours ;
-//! - médias : type MIME → format (`image/jpeg` → `jpeg`), `MEDI` → `TYPE` ;
-//! - associations : `ROLE` → `RELA` en clair (`WITN` → `Witness`) ;
-//! - valeurs énumérées en minuscules (`PEDI`, `NAME.TYPE`, `RESN`…), `SEX X` → `U` ;
-//! - structures propres à GEDCOM 7 sans équivalent retirées (`EXID`, `CREA`,
-//!   `CROP`, `NO`, `TRAN`, `SDATE`, `PHRASE`…), ainsi que les pointeurs `@VOID@`
-//!   et les extensions internes de GEDRoots (`_GR_*`) ; `UID` devient `_UID` ;
-//! - texte : tous les `@` doublés, lignes longues coupées en `CONC`.
+//! [`export`] starts from a copy of the file: the open file is not modified. What changes compared
+//! to GEDCOM 7:
+//! - header: `GEDC.VERS 5.5.1`, `GEDC.FORM LINEAGE-LINKED`, `CHAR UTF-8`, language in full (`fr` →
+//!   `French`), no more `SCHMA`;
+//! - shared notes: `SNOTE` becomes `NOTE` (record and link);
+//! - dates: escaped calendars (`FRENCH_R` → `@#DFRENCH R@`), `BCE` → `B.C.`, a date with a `PHRASE`
+//!   becomes an interpreted date (`INT 1 JAN 1800 (text)`) or a phrase alone (`(text)`);
+//! - ages: `> 39y` → `>39y`, weeks counted in days;
+//! - media: MIME type → format (`image/jpeg` → `jpeg`), `MEDI` → `TYPE`;
+//! - associations: `ROLE` → `RELA` in words (`WITN` → `Witness`);
+//! - enumerated values in lowercase (`PEDI`, `NAME.TYPE`, `RESN`…), `SEX X` → `U`;
+//! - GEDCOM 7 structures without an equivalent removed (`EXID`, `CREA`, `CROP`, `NO`, `TRAN`,
+//!   `SDATE`, `PHRASE`…), as well as `@VOID@` pointers and GEDRoots' internal extensions (`_GR_*`);
+//!   `UID` becomes `_UID`;
+//! - text: every `@` doubled, long lines split into `CONC`.
 //!
-//! La variante [`Flavor::Geneanet`] suit en plus ce qu'attend l'import de
-//! Geneanet (GeneWeb) : lieux-dits au format `[Lieu-dit] - Commune, …` quand la
-//! première juridiction du format des lieux est un lieu-dit, et rôles des
-//! témoins dans le vocabulaire de GeneWeb (`GODP`, `Civil officer`…).
+//! The [`Flavor::Geneanet`] variant also follows what Geneanet's (GeneWeb) import expects:
+//! localities in the `[Locality] - Municipality, …` format when the first jurisdiction of the place
+//! format is a locality, and witness roles in GeneWeb's vocabulary (`GODP`, `Civil officer`…).
 
 use crate::{Gedcom, Node};
 use std::sync::Arc;
@@ -31,18 +29,18 @@ use std::sync::Arc;
 pub enum Flavor {
     /// GEDCOM 5.5.1 standard.
     Standard,
-    /// GEDCOM 5.5.1 adapté à l'import de Geneanet.
+    /// GEDCOM 5.5.1 adapted to Geneanet's import.
     Geneanet,
 }
 
-/// Page d'import d'un fichier GEDCOM sur Geneanet (ouverte après l'export).
+/// Geneanet's page for importing a GEDCOM file (opened after the export).
 pub const GENEANET_IMPORT_URL: &str = "https://www.geneanet.org/creer-votre-arbre/gedcom";
 
-/// Longueur maximale d'une valeur avant découpe en `CONC` (la norme limite la
-/// ligne entière à 255 caractères).
+/// Maximum length of a value before it is split into `CONC` (the standard limits the whole line to
+/// 255 characters).
 const MAX_VALUE: usize = 200;
 
-/// Texte GEDCOM 5.5.1 de `g` (voir le module).
+/// GEDCOM 5.5.1 text of `g` (see the module).
 pub fn export(g: &Gedcom, flavor: Flavor) -> String {
     let mut out = g.clone();
     out.stamp_header();
@@ -57,9 +55,9 @@ pub fn export(g: &Gedcom, flavor: Flavor) -> String {
 
 struct Cx<'a> {
     flavor: Flavor,
-    /// Format des lieux du fichier (`HEAD.PLAC.FORM`).
+    /// Place format of the file (`HEAD.PLAC.FORM`).
     form: &'a [String],
-    /// La première juridiction du format est un lieu-dit à réécrire (Geneanet).
+    /// The first jurisdiction of the format is a locality to rewrite (Geneanet).
     sub: bool,
 }
 
@@ -72,7 +70,7 @@ fn header(h: &Node, cx: &Cx) -> Node {
     h.children.insert(at, gedc);
     h.children.insert(at + 1, Node::with_value("CHAR", "UTF-8"));
     if cx.sub {
-        // Le lieu-dit passe dans le nom de la commune : une juridiction de moins.
+        // The locality moves into the municipality's name: one jurisdiction less.
         if let Some(f) = h.child_mut("PLAC").and_then(|p| p.child_mut("FORM")) {
             f.value = Some(cx.form[1..].join(", "));
         }
@@ -80,7 +78,7 @@ fn header(h: &Node, cx: &Cx) -> Node {
     h
 }
 
-/// Nom de langue GEDCOM 5.5.1 d'une étiquette BCP 47 (`fr`, `fr-FR`).
+/// GEDCOM 5.5.1 language name of a BCP 47 tag (`fr`, `fr-FR`).
 fn language(tag: &str) -> Option<&'static str> {
     let primary = tag.split('-').next().unwrap_or("").to_ascii_lowercase();
     Some(match primary.as_str() {
@@ -111,16 +109,16 @@ fn language(tag: &str) -> Option<&'static str> {
     })
 }
 
-/// Structures de GEDCOM 7 sans équivalent en 5.5.1.
+/// GEDCOM 7 structures without an equivalent in 5.5.1.
 const DROPPED: [&str; 10] = ["EXID", "CREA", "CROP", "NO", "INIL", "MIME", "TRAN", "SDATE", "SCHMA", "PHRASE"];
 
-/// Convertit `n` (et ses sous-structures) ; `None` : à retirer.
+/// Converts `n` (and its substructures); `None`: to remove.
 fn convert(n: &Node, parent: Option<&str>, cx: &Cx) -> Option<Node> {
     let tag = n.tag.as_str();
     if tag.starts_with("_GR_") || DROPPED.contains(&tag) || n.val() == "@VOID@" {
         return None;
     }
-    // Langue : seulement dans l'en-tête et les auteurs.
+    // Language: only in the header and the submitters.
     if tag == "LANG" && !matches!(parent, Some("HEAD" | "SUBM")) {
         return None;
     }
@@ -165,7 +163,7 @@ fn convert(n: &Node, parent: Option<&str>, cx: &Cx) -> Option<Node> {
         }
         _ => {}
     }
-    // Lien vers un média : pas de sous-structures en 5.5.1 (hors extensions).
+    // Link to a media: no substructures in 5.5.1 (except extensions).
     let media_link = tag == "OBJE" && n.pointer().is_some();
     for c in &n.children {
         if media_link && !c.tag.starts_with('_') {
@@ -192,7 +190,7 @@ fn convert(n: &Node, parent: Option<&str>, cx: &Cx) -> Option<Node> {
     Some(out)
 }
 
-/// Format 5.5.1 d'un type MIME (`image/jpeg` → `jpeg`, `text/html` → `html`).
+/// 5.5.1 format of a MIME type (`image/jpeg` → `jpeg`, `text/html` → `html`).
 fn file_format(mime: &str) -> String {
     let sub = mime.rsplit('/').next().unwrap_or(mime).to_ascii_lowercase();
     match sub.as_str() {
@@ -205,7 +203,7 @@ fn file_format(mime: &str) -> String {
     }
 }
 
-/// Date GEDCOM 7 → 5.5.1 ; `phrase` : texte libre qui l'accompagne.
+/// GEDCOM 7 → 5.5.1 date; `phrase`: free text that goes with it.
 fn date(v: &str, phrase: Option<&str>) -> Option<String> {
     let words: Vec<String> = v
         .split_whitespace()
@@ -230,7 +228,7 @@ fn date(v: &str, phrase: Option<&str>) -> Option<String> {
     }
 }
 
-/// Âge GEDCOM 7 → 5.5.1 : `> 39y 2w` → `>39y 14d`.
+/// GEDCOM 7 → 5.5.1 age: `> 39y 2w` → `>39y 14d`.
 fn age(v: &str) -> String {
     let v = v.trim();
     let (sign, rest) = match v.chars().next() {
@@ -253,13 +251,13 @@ fn age(v: &str) -> String {
     format!("{sign}{}", parts.join(" "))
 }
 
-/// Rôle d'un témoin (`ASSO.ROLE`) en clair pour `RELA`. `event` : la structure
-/// qui porte l'association (un baptême a un officiant religieux).
+/// Role of a witness (`ASSO.ROLE`) in words for `RELA`. `event`: the structure holding the
+/// association (a baptism has a religious officiant).
 fn relation(role: &Node, event: Option<&str>, flavor: Flavor) -> String {
     let r = role.val().trim();
     let phrase = role.child_val("PHRASE").map(str::trim).filter(|p| !p.is_empty());
     if flavor == Flavor::Geneanet {
-        // Vocabulaire lu par GeneWeb (`ged2gwb`) ; le reste devient un témoin.
+        // Vocabulary read by GeneWeb (`ged2gwb`); the rest becomes a witness.
         let religious =
             matches!(event, Some("BAPM" | "CHR" | "CONF" | "FCOM" | "BURI" | "ORDN" | "BARM" | "BASM" | "BLES"));
         return match r {
@@ -293,7 +291,7 @@ fn relation(role: &Node, event: Option<&str>, flavor: Flavor) -> String {
     .into()
 }
 
-/// Nom de juridiction qui désigne une subdivision de commune (lieu-dit, hameau…).
+/// Jurisdiction name that designates a subdivision of a municipality (locality, hamlet…).
 fn is_sublocality(name: &str) -> bool {
     let n: String = name
         .chars()
@@ -309,8 +307,8 @@ fn is_sublocality(name: &str) -> bool {
     matches!(n.as_str(), "lieudit" | "lieuxdits" | "hameau" | "quartier" | "subdivision" | "ecart" | "souscommune")
 }
 
-/// Lieu au format de Geneanet : `[Lieu-dit] - Commune, …`, ou `Commune, …` sans
-/// lieu-dit. `own` : format propre du lieu (`PLAC.FORM`), sinon celui du fichier.
+/// Place in Geneanet's format: `[Locality] - Municipality, …`, or `Municipality, …` without a
+/// locality. `own`: the place's own format (`PLAC.FORM`), otherwise the file's.
 fn geneanet_place(v: &str, own: Option<&str>, form: &[String]) -> String {
     if let Some(f) = own
         && !f.split(',').next().is_some_and(is_sublocality)
@@ -329,14 +327,14 @@ fn geneanet_place(v: &str, own: Option<&str>, form: &[String]) -> String {
     }
 }
 
-/// Échappe le texte d'une structure pour 5.5.1 (tous les `@` doublés) et coupe
-/// les lignes trop longues en `CONC`. Les pointeurs ne changent pas.
+/// Escapes the text of a structure for 5.5.1 (every `@` doubled) and splits lines that are too long
+/// into `CONC`. Pointers do not change.
 fn escape_text(n: &mut Node) {
     if n.pointer().is_some() {
         return;
     }
     let esc = |v: &str| {
-        // GEDCOM 7 n'échappe que le `@` initial (`@@`).
+        // GEDCOM 7 only escapes the leading `@` (`@@`).
         let literal = v.strip_prefix("@@").map(|s| format!("@{s}")).unwrap_or_else(|| v.to_string());
         literal.replace('@', "@@")
     };
@@ -346,7 +344,7 @@ fn escape_text(n: &mut Node) {
     let long = |v: &Option<String>| v.as_ref().is_some_and(|v| v.len() > MAX_VALUE);
     let has_conc = n.children.iter().any(|c| c.tag == "CONC");
     if has_conc || (!long(&first) && !conts.iter().any(long)) {
-        // Rien à couper (ou déjà coupé, fichier 5.5.1 importé) : on échappe sur place.
+        // Nothing to split (or already split, imported 5.5.1 file): escape in place.
         n.value = first;
         let mut it = conts.into_iter();
         for c in n.children.iter_mut().filter(|c| c.tag == "CONT") {
@@ -368,8 +366,8 @@ fn escape_text(n: &mut Node) {
     n.children.splice(0..0, lines);
 }
 
-/// Coupe `s` en morceaux d'au plus [`MAX_VALUE`] octets environ, jamais à côté
-/// d'une espace (que certains lecteurs suppriment) ni au milieu d'un `@@`.
+/// Splits `s` into pieces of about [`MAX_VALUE`] bytes at most, never next to a space (which some
+/// readers remove) nor in the middle of an `@@`.
 fn split(s: &str) -> Vec<String> {
     let mut out = Vec::new();
     let mut rest = s;
@@ -472,10 +470,10 @@ mod tests {
         assert!(has("1 OBJE @M1@") && has("2 FORM jpg") && has("3 TYPE photo"));
         assert!(has("1 NOTE @N1@") && has("0 @N1@ NOTE Une note partagée"));
         assert!(has("1 NOTE courriel jean@@exemple.fr") && has("2 CONT @@ début"));
-        // Lieux inchangés hors Geneanet.
+        // Places unchanged outside Geneanet.
         assert!(has("2 PLAC Epeluy, Sury-le-Comtal, 42450, Loire, Rhône-Alpes, France"));
         assert!(!out.starts_with('\u{feff}'));
-        // Le fichier d'origine n'a pas bougé.
+        // The original file did not change.
         assert_eq!(g.version(), "7.0");
     }
 
@@ -497,10 +495,10 @@ mod tests {
         assert!(!is_sublocality(&form[0]));
         assert!(is_sublocality("Lieu-dit") && is_sublocality("Hameau") && is_sublocality("lieudit"));
         let form = ["Lieu-dit".to_string(), "Commune".to_string(), "Pays".to_string()];
-        // Nombre de juridictions inattendu : laissé tel quel.
+        // Unexpected number of jurisdictions: left as is.
         assert_eq!(geneanet_place("Paris, France", None, &form), "Paris, France");
         assert_eq!(geneanet_place("La Côte, Unias, France", None, &form), "[La Côte] - Unias, France");
-        // Format propre au lieu, sans lieu-dit.
+        // The place's own format, without a locality.
         assert_eq!(geneanet_place("a, b, c", Some("Commune, Région, Pays"), &form), "a, b, c");
     }
 
@@ -513,7 +511,7 @@ mod tests {
         assert!(n.val().len() <= MAX_VALUE);
         assert!(n.children.iter().all(|c| c.val().len() <= MAX_VALUE + 4));
         assert_eq!(n.children.last().map(|c| (c.tag.as_str(), c.val())), Some(("CONT", "seconde")));
-        // Recollé (CONC sans séparateur), le texte est le même, `@` doublé.
+        // Joined back (CONC without a separator), the text is the same, `@` doubled.
         let back = n.text();
         assert_eq!(back, format!("{}\nseconde", long.replace('@', "@@")));
         assert_eq!(age("1y 3m"), "1y 3m");

@@ -1,4 +1,4 @@
-//! Éditeurs d'un enregistrement : formulaire visuel + éditeur GEDCOM brut.
+//! Editors of a record: visual form + raw GEDCOM editor.
 
 use crate::completion::GedcomCompletion;
 use crate::date_field::{DateField, date_field};
@@ -10,7 +10,7 @@ use gpui_kit::{App, AppContext, Context, Entity, SharedString, Window, px};
 use rust_i18n::t;
 use std::rc::Rc;
 
-/// Ce qui est sélectionné dans la vue courante.
+/// What is selected in the current view.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Target {
     Record { xref: String, kind: RecordKind },
@@ -20,11 +20,11 @@ pub enum Target {
 pub struct Field {
     pub label: SharedString,
     pub state: FieldState,
-    /// Lieu : propose les lieux déjà présents dans le fichier.
+    /// Place: suggests the places already in the file.
     pub place: bool,
 }
 
-/// Saisie libre, choix dans une liste de valeurs fixes (sexe…), ou date.
+/// Free input, choice from a list of fixed values (sex…), or date.
 pub enum FieldState {
     Text(Entity<InputState>),
     Choice(Entity<PickerState>),
@@ -41,7 +41,7 @@ impl FieldState {
     }
 }
 
-/// Valeurs de `SEX` (GEDCOM 7) et leur libellé.
+/// `SEX` values (GEDCOM 7) and their label.
 fn sexes() -> [(&'static str, String); 4] {
     [
         ("M", t!("sex.male").into()),
@@ -51,7 +51,7 @@ fn sexes() -> [(&'static str, String); 4] {
     ]
 }
 
-/// Liste déroulante de valeurs fixes (valeur GEDCOM, libellé).
+/// Drop-down list of fixed values (GEDCOM value, label).
 pub(crate) fn choice<T: 'static>(
     options: &[(&str, &str)],
     selected: &str,
@@ -61,7 +61,7 @@ pub(crate) fn choice<T: 'static>(
     choice_with_search(options, selected, false, window, cx)
 }
 
-/// Comme [`choice`], avec un champ de recherche pour les longues listes.
+/// Like [`choice`], with a search field for long lists.
 pub(crate) fn choice_with_search<T: 'static>(
     options: &[(&str, &str)],
     selected: &str,
@@ -73,7 +73,7 @@ pub(crate) fn choice_with_search<T: 'static>(
         .iter()
         .map(|(v, l)| Pick { xref: v.to_string(), label: SharedString::from(l.to_string()), search: sort_key(l) })
         .collect();
-    // Valeur du fichier, à la casse près (`m` → `M`, `FR` → `fr`).
+    // Value of the file, ignoring case (`m` → `M`, `FR` → `fr`).
     let selected =
         items.iter().find(|p| p.xref.eq_ignore_ascii_case(selected.trim())).map(|p| p.xref.clone()).unwrap_or_default();
     cx.new(|cx| {
@@ -85,7 +85,7 @@ pub(crate) fn choice_with_search<T: 'static>(
     })
 }
 
-/// Un enregistrement proposé dans un sélecteur (affiché par son nom, jamais par son identifiant).
+/// A record offered in a picker (shown by its name, never by its identifier).
 #[derive(Clone)]
 pub struct Pick {
     xref: String,
@@ -104,7 +104,7 @@ impl SelectItem for Pick {
         &self.xref
     }
 
-    /// Recherche sans accents ; `@I12@` permet la recherche avancée par identifiant.
+    /// Accent-insensitive search; `@I12@` allows advanced search by identifier.
     fn matches(&self, query: &str) -> bool {
         let q = query.trim();
         if q.starts_with('@') {
@@ -117,7 +117,7 @@ impl SelectItem for Pick {
 
 pub type PickerState = SelectState<SearchableVec<Pick>>;
 
-/// Sélecteur d'un enregistrement lié (époux, dépôt…).
+/// Picker of a linked record (spouse, repository…).
 pub struct Picker {
     pub label: SharedString,
     pub placeholder: SharedString,
@@ -162,7 +162,7 @@ pub(crate) fn picker<T: 'static>(
     })
 }
 
-/// États des champs pour l'élément sélectionné.
+/// States of the fields for the selected item.
 pub struct RecordEditor {
     pub target: Target,
     pub pickers: Vec<Picker>,
@@ -172,7 +172,7 @@ pub struct RecordEditor {
     pub error: Option<SharedString>,
 }
 
-/// Champ de saisie ; l'exemple de format s'affiche en grisé tant qu'il est vide.
+/// Input field; the format example is shown greyed out while it is empty.
 fn input<T: 'static>(
     window: &mut Window,
     cx: &mut Context<T>,
@@ -225,8 +225,8 @@ impl RecordEditor {
         match &target {
             Target::Place(name) => {
                 let place = ged.places().into_iter().find(|p| &p.name == name);
-                // Un champ par juridiction du format des lieux (Réglages du fichier › Lieux),
-                // si le lieu le suit ; sinon le nom complet.
+                // One field per jurisdiction of the place format (File Settings › Places), if the
+                // place follows it; otherwise the full name.
                 let form = ged.place_form();
                 let parts: Vec<&str> = name.split(',').map(str::trim).collect();
                 if form.len() >= 2 && parts.len() == form.len() {
@@ -282,7 +282,7 @@ impl RecordEditor {
                         place_field!(t!("editor.death_place"), f.death.place);
                         long_text = Some((t!("editor.note").into(), textarea(window, cx, &f.note)));
                     }
-                    // Les unions se gèrent depuis la fiche des conjoints.
+                    // Unions are managed from the spouses' pages.
                     RecordKind::Family => {}
                     RecordKind::Source => {
                         let f = SourceForm::read(node);
@@ -290,7 +290,7 @@ impl RecordEditor {
                         field!(t!("editor.author"), "", f.author);
                         field!(t!("editor.publication"), "", f.publication);
                         field!(t!("editor.call_number"), "", f.call_number);
-                        // Contenu (`DATA` / `EVEN`) : types d'actes et période.
+                        // Contents (`DATA` / `EVEN`): record types and period.
                         let content = SourceContent::read(node);
                         field!(t!("editor.acts"), t!("editor.acts_placeholder"), content.events_label());
                         fields.push(Field {
@@ -319,7 +319,7 @@ impl RecordEditor {
                     }
                     RecordKind::Media => {
                         let f = MediaForm::read(node);
-                        // Le format (FORM) se déduit du fichier : pas de champ.
+                        // The format (FORM) is inferred from the file: no field.
                         field!(t!("editor.title"), "", f.title);
                         field!(t!("editor.file"), t!("editor.file_placeholder"), f.file);
                         let mediums = gedcom::mediums();
@@ -359,7 +359,7 @@ impl RecordEditor {
         self.fields.iter().map(|f| f.state.value(cx)).collect()
     }
 
-    /// Événement (date + lieu) des champs `n` (date) et `n + 1` (lieu).
+    /// Event (date + place) of fields `n` (date) and `n + 1` (place).
     fn event(&self, n: usize, v: &[String], cx: &App) -> Result<EventForm, String> {
         let (date, phrase) = match &self.fields[n].state {
             FieldState::Date(e) => e.read(cx).value(cx)?,
@@ -372,8 +372,8 @@ impl RecordEditor {
         self.long_text.as_ref().map(|(_, s)| s.read(cx).value().to_string()).unwrap_or_default()
     }
 
-    /// Nom du lieu saisi : le champ « Lieu », ou les juridictions jointes par des virgules
-    /// (le nom d'origine est gardé tel quel s'il n'a pas changé).
+    /// Name of the typed place: the “Place” field, or the jurisdictions joined with commas (the
+    /// original name is kept as is if it did not change).
     pub fn place_name(&self, cx: &App) -> Option<String> {
         let Target::Place(old) = &self.target else { return None };
         let v = self.values(cx);
@@ -387,10 +387,10 @@ impl RecordEditor {
         })
     }
 
-    /// Applique le formulaire visuel au document. Renvoie un message de résultat.
-    /// `created` : lieux créés pas encore écrits dans le fichier.
+    /// Applies the visual form to the document. Returns a result message. `created`: places created
+    /// but not written to the file yet.
     pub fn apply_form(&self, ged: &mut Gedcom, created: &[String], cx: &App) -> Result<String, String> {
-        // Champs de lieu : le libellé affiché redevient la valeur `PLAC` complète.
+        // Place fields: the displayed label becomes the full `PLAC` value again.
         let v: Vec<String> = self
             .fields
             .iter()
@@ -465,7 +465,7 @@ impl RecordEditor {
         }
     }
 
-    /// Applique le texte de l'éditeur GEDCOM brut. Renvoie le nouvel identifiant.
+    /// Applies the text of the raw GEDCOM editor. Returns the new identifier.
     pub fn apply_raw(&self, ged: &mut Gedcom, cx: &App) -> Result<String, String> {
         let Target::Record { xref, kind } = &self.target else { return Err(t!("editor.nothing").into()) };
         let raw = self.raw.as_ref().ok_or_else(|| t!("editor.no_raw").to_string())?;

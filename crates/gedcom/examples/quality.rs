@@ -1,10 +1,10 @@
-//! Résumé de la page Qualité des données pour un fichier : `cargo run --example quality -- fichier.ged`.
+//! Summary of the Data Quality page for a file: `cargo run --example quality -- file.ged`.
 use gedcom::quality::{self, Category};
 use std::collections::BTreeMap;
 
 fn main() {
-    let path = std::env::args().nth(1).expect("chemin du fichier .ged");
-    let g = gedcom::load(&path).expect("lecture");
+    let path = std::env::args().nth(1).expect("path of the .ged file");
+    let g = gedcom::load(&path).expect("cannot read the file");
     let t = std::time::Instant::now();
     let issues = quality::run(&g);
     eprintln!("{} anomalies en {:?}", issues.len(), t.elapsed());

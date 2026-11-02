@@ -1,14 +1,13 @@
-//! Fichier › Exporter :
-//! - GEDZIP avec les médias… : une archive `.gdz` (GEDCOM 7, chapitre 4) avec
-//!   `gedcom.ged` et les fichiers des médias (voir `gedcom::gedzip`) ;
-//! - GEDCOM 5.5.1… et GEDCOM pour Geneanet… : un `.ged` 5.5.1 pour les logiciels
-//!   et sites qui ne lisent pas GEDCOM 7 (voir `gedcom::gedcom551`). Après
-//!   l'export pour Geneanet, sa page d'import s'ouvre dans le navigateur.
+//! File › Export:
+//! - GEDZIP with Media…: a `.gdz` archive (GEDCOM 7, chapter 4) with `gedcom.ged` and the media
+//!   files (see `gedcom::gedzip`);
+//! - GEDCOM 5.5.1… and GEDCOM for Geneanet…: a 5.5.1 `.ged` for software and websites that do not
+//!   read GEDCOM 7 (see `gedcom::gedcom551`). After the Geneanet export, its import page opens in
+//!   the browser.
 //!
-//! L'export part du fichier tel qu'il est affiché, modifications non
-//! enregistrées comprises ; le `.ged` et les médias ne sont pas touchés. Les
-//! fichiers introuvables ne bloquent pas l'export (leur `FILE` reste tel quel) : ils sont listés à la fin,
-//! chacun menant à son média.
+//! The export starts from the file as displayed, unsaved changes included; the `.ged` and the media
+//! are not touched. Missing files do not block the export (their `FILE` stays as is): they are
+//! listed at the end, each leading to its media.
 
 use super::add::AddDialog;
 use super::*;
@@ -17,7 +16,7 @@ use gedcom::gedcom551::Flavor;
 use rust_i18n::t;
 use std::path::Path;
 
-/// Fichiers qui manquaient à l'archive : (média, valeur `FILE`).
+/// Files missing from the archive: (media, `FILE` value).
 pub(super) struct GedzipReport {
     file: String,
     missing: Vec<(String, String)>,
@@ -67,7 +66,7 @@ impl Workspace {
         }
         let text = gedcom::gedcom551::export(&doc.ged, flavor);
         let task = cx.background_spawn(async move {
-            // Écrit à côté puis renomme : jamais de fichier à moitié écrit.
+            // Written next to it, then renamed: never a half-written file.
             let mut part = dest.as_os_str().to_owned();
             part.push(".part");
             let part = PathBuf::from(part);
@@ -104,13 +103,13 @@ impl Workspace {
         let entries: Vec<Entry> = packed
             .files
             .into_iter()
-            // Un fichier disparu entre-temps fait échouer l'écriture, avec son chemin.
+            // A file that disappeared in the meantime makes writing fail, with its path.
             .map(|f| Entry { source: find_file(doc, &f.original).unwrap_or_else(|| f.original.into()), name: f.name })
             .collect();
         let missing: Vec<(String, String)> =
             packed.missing.into_iter().map(|m| (m.media.into_iter().next().unwrap_or_default(), m.original)).collect();
-        // Le dialogue d'enregistrement a déjà demandé s'il fallait remplacer
-        // `dest` ; jamais le .ged ouvert ni un fichier qu'on met dans l'archive.
+        // The save dialog already asked whether to replace `dest`; never the open .ged nor a file
+        // put in the archive.
         let same =
             |p: &Path| std::fs::canonicalize(p).ok().is_some_and(|p| std::fs::canonicalize(&dest).ok() == Some(p));
         if doc.path.as_deref().is_some_and(same) || entries.iter().any(|e| same(&e.source)) {
@@ -190,7 +189,7 @@ impl Workspace {
     }
 }
 
-/// Fichier d'une valeur `FILE` sur le disque (relative au dossier du .ged).
+/// File of a `FILE` value on the disk (relative to the .ged folder).
 fn find_file(doc: &Document, file: &str) -> Option<PathBuf> {
     let unix = file.replace('\\', "/");
     [file, unix.as_str()].into_iter().filter_map(|f| super::pages::file_path(doc, f)).find(|p| p.is_file())

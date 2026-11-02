@@ -1,9 +1,9 @@
-//! Photos : affichage recadré (`CROP`) et identification des personnes.
+//! Photos: cropped display (`CROP`) and identification of people.
 //!
-//! - les vignettes et portraits n'affichent que la zone `CROP` du lien ;
-//! - sur la fiche d'un média, les personnes identifiées sont encadrées sur
-//!   l'image ; on en ajoute en traçant un cadre puis en choisissant la
-//!   personne, ce qui crée un lien `INDI → OBJE` avec `CROP` (GEDCOM 7 standard).
+//! - thumbnails and portraits only show the link’s `CROP` area;
+//! - on a media’s record, identified people are framed on the image; more are added by drawing a
+//!   frame then choosing the person, which creates an `INDI → OBJE` link with `CROP` (standard
+//!   GEDCOM 7).
 
 use super::relatives::PickPurpose;
 use super::*;
@@ -13,13 +13,13 @@ use rust_i18n::t;
 use std::cell::Cell;
 use std::path::Path;
 
-/// Taille maximale de l'image dans la fiche d'un média.
+/// Maximum size of the image in a media’s record.
 const MAX_W: f32 = 1600.;
 const MAX_H: f32 = 900.;
 
-/// Image d'un lien, recadrée si le lien porte un `CROP` (boîte `w × h`).
-/// `cover` : remplit la boîte (en rognant), sinon l'image ou la zone y tient entière.
-/// Seule la zone est décodée : l'élément se cadre et s'arrondit comme une image entière.
+/// Image of a link, cropped if the link has a `CROP` (box `w × h`). `cover`: fills the box
+/// (cropping), otherwise the image or area fits whole. Only the area is decoded: the element is
+/// laid out and rounded like a whole image.
 pub(super) fn linked_img(path: PathBuf, crop: Option<Crop>, w: f32, h: f32, cover: bool) -> Img {
     let fit = if cover { ObjectFit::Cover } else { ObjectFit::Contain };
     let region = crop.zip(image_size(&path)).and_then(|(c, size)| c.rect(size.0, size.1).map(|r| (r, size)));
@@ -31,14 +31,14 @@ pub(super) fn linked_img(path: PathBuf, crop: Option<Crop>, w: f32, h: f32, cove
     .h(px(h))
 }
 
-/// Zone recadrée seule, à sa propre proportion, dans au plus `max_w × max_h`.
+/// Cropped area alone, at its own aspect ratio, within at most `max_w × max_h`.
 pub(super) fn fitted_crop(path: PathBuf, crop: Option<Crop>, max_w: f32, max_h: f32) -> AnyElement {
     let Some((size, r)) = image_size(&path).and_then(|s| crop?.rect(s.0, s.1).map(|r| (s, r))) else {
         return picture(path, max_w, max_h, ObjectFit::Contain).max_w_full().max_h(px(max_h)).into_any_element();
     };
     let (x, y, rw, rh) = (r.0 as f32, r.1 as f32, r.2 as f32, r.3 as f32);
     let s = (max_w / rw).min(max_h / rh).min(2.);
-    // Dimensions relatives : la zone suit la largeur disponible en gardant ses proportions.
+    // Relative dimensions: the area follows the available width, keeping its proportions.
     div()
         .relative()
         .overflow_hidden()
@@ -56,19 +56,20 @@ pub(super) fn fitted_crop(path: PathBuf, crop: Option<Crop>, max_w: f32, max_h: 
         .into_any_element()
 }
 
-/// Tracé en cours d'un cadre sur une photo.
+/// Frame being drawn on a photo.
 pub struct PhotoDraw {
     pub media: String,
-    /// `Some(x)` : on (re)délimite le lien de `x` ; `None` : on identifie une nouvelle personne.
+    /// `Some(x)`: (re)defining the area of the link of `x`; `None`: identifying a new person.
     pub owner: Option<String>,
-    /// Page du média (à partir de 1).
+    /// Page of the media (from 1).
     pub page: usize,
-    /// Coin de départ et position courante, en pixels de l'image.
+    /// Starting corner and current position, in image pixels.
     pub start: Option<(f32, f32)>,
     pub current: Option<(f32, f32)>,
     /// Taille de l'image.
     pub size: (u32, u32),
-    /// Tracé lancé depuis la fiche de `owner` : on y revient (dans cet onglet) une fois la zone enregistrée.
+    /// Drawing started from the record of `owner`: return there (in this tab) once the area is
+    /// saved.
     pub back: Option<CenterTab>,
 }
 
@@ -83,14 +84,14 @@ impl PhotoDraw {
     }
 }
 
-/// État partagé avec le rendu : position de l'image à l'écran.
+/// State shared with rendering: position of the image on screen.
 #[derive(Default, Clone)]
 pub struct PhotoBounds {
-    /// Position de l'image à l'écran (au dernier rendu).
+    /// Position of the image on screen (at the last render).
     bounds: Rc<Cell<Option<Bounds<Pixels>>>>,
-    /// Largeur disponible pour l'image, mesurée au rendu précédent.
+    /// Width available for the image, measured at the previous render.
     avail: Rc<Cell<f32>>,
-    /// Échelle d'affichage : pixels écran par pixel d'image.
+    /// Display scale: screen pixels per image pixel.
     scale: Rc<Cell<f32>>,
 }
 
@@ -118,8 +119,8 @@ impl Workspace {
         cx.notify();
     }
 
-    /// Ouvre l'image `media` pour y délimiter la zone de `owner` (lien `OBJE` avec `CROP`),
-    /// puis revient à la fiche de `owner`.
+    /// Opens the image `media` to define the area of `owner` in it (`OBJE` link with `CROP`), then
+    /// returns to the record of `owner`.
     pub(super) fn start_crop_for(&mut self, owner: String, media: String, window: &mut Window, cx: &mut Context<Self>) {
         let tab = self.tab;
         self.goto(media.clone(), window, cx);
@@ -153,7 +154,7 @@ impl Workspace {
             (w as f32) * s < 6. || (h as f32) * s < 6.
         });
         if tiny {
-            // Simple clic : on attend un vrai tracé.
+            // Single click: wait for a real drawing.
             if let Some(d) = self.photo_draw.as_mut() {
                 d.start = None;
                 d.current = None;
@@ -192,7 +193,7 @@ impl Workspace {
         });
     }
 
-    /// Photo d'un média avec les personnes identifiées, et la liste des liens recadrables.
+    /// Photo of a media with the identified people, and the list of croppable links.
     pub(super) fn render_photo(&self, media: &str, path: PathBuf, cx: &mut Context<Self>) -> AnyElement {
         let g = &self.doc.as_ref().unwrap().ged;
         let Some(size) = image_size(&path) else {
@@ -208,7 +209,7 @@ impl Workspace {
         let draw = self.photo_draw.as_ref().filter(|d| d.media == media);
         let drawing = draw.is_some();
         let links = g.media_links(media);
-        // Média multipage : seules les zones de la page affichée sont encadrées.
+        // Multi-page media: only the areas of the displayed page are framed.
         let page = self.current_page(media);
         let multipage = self.page_count(media) > 1;
         let here = |l: &MediaLink| l.crop.is_some() && l.page == page;
@@ -216,7 +217,7 @@ impl Workspace {
         let bounds = self.photo_bounds.bounds.clone();
         let avail_cell = self.photo_bounds.avail.clone();
 
-        // Personnes identifiées, et zones recadrées pour les autres liens (extrait d'acte pour une source…).
+        // Identified people, and cropped areas for the other links (record excerpt for a source…).
         let boxes = links.iter().filter(|l| here(l)).filter_map(|l| {
             let person = l.owner_tag == "INDI";
             let (x, y, w, h) = l.crop?.rect(size.0, size.1)?;
@@ -321,7 +322,7 @@ impl Workspace {
             .items_center()
             .when(people > 0, |d| d.child(label_caps(crate::tn!("photo.people", people))))
             .child(div().flex_1())
-            // Identifier une personne : menu Média (le tracé se fait ensuite sur la photo).
+            // Identify a person: Media menu (the drawing is then done on the photo).
             .when(drawing, |d| {
                 d.child(
                     Button::new("photo-cancel")
@@ -380,7 +381,7 @@ impl Workspace {
                         .child(g.record_label(&owner))
                         .on_click(cx.listener(move |this, _, w, cx| this.goto(o1.clone(), w, cx))),
                 )
-                // Zone sur une autre page : un clic y mène.
+                // Area on another page: a click leads there.
                 .when(elsewhere, |d| {
                     d.child(
                         Button::new(SharedString::from(format!("goto-page-{owner}-{n}")))
@@ -447,12 +448,12 @@ impl Workspace {
                     .border_color(if drawing { theme::accent() } else { theme::border() })
                     .bg(theme::surface())
                     .p_2()
-                    // Place sous l'image pour les noms des personnes encadrées en bas.
+                    // Space below the image for the names of people framed at the bottom.
                     .pb_6()
                     .overflow_hidden()
                     .relative()
                     .child(picture)
-                    // Mesure la largeur disponible : l'image s'y adapte au rendu suivant.
+                    // Measures the available width: the image adapts to it at the next render.
                     .child(
                         canvas(
                             move |b, window, _| {

@@ -1,5 +1,5 @@
-//! Statistiques de l'arbre (Heredis, Geneanet) : patronymes, prénoms,
-//! longévité, âge au mariage, complétude de l'ascendance et implexe.
+//! Tree statistics (Heredis, Geneanet): surnames, given names, longevity, age at marriage,
+//! completeness of the ancestry and pedigree collapse.
 
 use super::check::parents_of;
 use super::span::{Age, Span};
@@ -9,13 +9,13 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 
 #[derive(Debug, Clone, Default)]
 pub struct Generation {
-    /// Génération 1 = la personne de référence.
+    /// Generation 1 = the reference person.
     pub number: u32,
-    /// Places théoriques (2^(n-1)).
+    /// Theoretical slots (2^(n-1)).
     pub expected: u64,
-    /// Places occupées (un même ancêtre peut en occuper plusieurs).
+    /// Filled slots (the same ancestor can fill several).
     pub found: u64,
-    /// Ancêtres distincts.
+    /// Distinct ancestors.
     pub distinct: u64,
 }
 
@@ -27,10 +27,10 @@ impl Generation {
 
 #[derive(Debug, Clone, Default)]
 pub struct Century {
-    /// Siècle de naissance, ex. 1800 pour le XIXe.
+    /// Century of birth, e.g. 1800 for the 19th.
     pub start: i32,
     pub births: usize,
-    /// Âge moyen au décès (personnes nées dans ce siècle).
+    /// Average age at death (people born in this century).
     pub mean_lifespan: Option<f64>,
     pub deaths_counted: usize,
 }
@@ -47,17 +47,17 @@ pub struct Stats {
     pub given_women: Vec<(String, usize)>,
     pub places: Vec<(String, usize)>,
     pub centuries: Vec<Century>,
-    /// Les plus longues vies : (xref, années).
+    /// The longest lives: (xref, years).
     pub longest: Vec<(String, f64)>,
     pub mean_marriage_age_men: Option<f64>,
     pub mean_marriage_age_women: Option<f64>,
     pub mean_children: Option<f64>,
     pub events: usize,
     pub sourced_events: usize,
-    /// Ascendance de la personne de référence.
+    /// Ancestry of the reference person.
     pub root: Option<String>,
     pub generations: Vec<Generation>,
-    /// Taux d'implexe global de l'ascendance (0 = aucun ancêtre en double).
+    /// Overall pedigree collapse rate of the ancestry (0 = no ancestor twice).
     pub implexe: f64,
 }
 
@@ -77,7 +77,7 @@ fn span(ind: &Individual<'_>, birth: bool) -> Option<Span> {
     Span::parse(e.date_raw()?)
 }
 
-/// Calcule les statistiques ; `root` = personne de référence pour l'ascendance.
+/// Computes the statistics; `root` = reference person for the ancestry.
 pub fn stats(g: &Gedcom, root: Option<&str>) -> Stats {
     let mut s = Stats::default();
     let mut surnames = HashMap::new();
@@ -143,7 +143,7 @@ pub fn stats(g: &Gedcom, root: Option<&str>) -> Stats {
     lifespans.truncate(5);
     s.longest = lifespans;
 
-    // Familles : âge au premier mariage, nombre d'enfants.
+    // Families: age at first marriage, number of children.
     let mut ages_m = Vec::new();
     let mut ages_f = Vec::new();
     let mut kids = Vec::new();
@@ -178,7 +178,7 @@ pub fn stats(g: &Gedcom, root: Option<&str>) -> Stats {
     s.mean_marriage_age_women = mean(&ages_f);
     s.mean_children = mean(&kids);
 
-    // Ascendance et implexe.
+    // Ancestry and pedigree collapse.
     if let Some(root) = root.filter(|r| g.individual(r).is_some()) {
         s.root = Some(root.to_string());
         let mut level: Vec<String> = vec![root.to_string()];
@@ -197,7 +197,7 @@ pub fn stats(g: &Gedcom, root: Option<&str>) -> Stats {
                 total_found += level.len() as u64;
                 all_distinct.extend(level.iter().cloned());
             }
-            // Chaque place occupée engendre ses deux parents (un ancêtre présent deux fois compte deux fois).
+            // Each filled slot yields its two parents (an ancestor present twice counts twice).
             level = level.iter().flat_map(|x| parents_of(g, x)).map(str::to_string).collect();
             n += 1;
         }

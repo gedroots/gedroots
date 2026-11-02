@@ -1,6 +1,6 @@
-//! Vérifie toutes les dates d'un vrai fichier :
-//! `GEDROOTS_TEST_GED=chemin.ged cargo test -p gedcom --test dates_file -- --nocapture`.
-//! Sans la variable, le test ne fait rien (les vrais fichiers ne sont pas versionnés).
+//! Checks every date of a real file: `GEDROOTS_TEST_GED=path.ged cargo test -p gedcom --test
+//! dates_file -- --nocapture`. Without the variable, the test does nothing (real files are not
+//! versioned).
 
 use gedcom::date::{Parsed, parse_input};
 use gedcom::{Date, Node};
@@ -37,7 +37,7 @@ fn every_date_roundtrips() {
         let text = p.to_input_text();
         match parse_input(&text) {
             Ok(back) if back.value() == p.value() && back.phrase == p.phrase => {}
-            r => bad.push(format!("{} → « {text} » → {r:?}", d.val())),
+            r => bad.push(format!("{} → “{text}” → {r:?}", d.val())),
         }
     }
     println!("{} dates ; non standard : {other:?} ; impossibles : {invalid:?}", dates.len());

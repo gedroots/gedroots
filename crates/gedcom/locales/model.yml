@@ -123,3 +123,6 @@ record.missing:
 record.empty_family:
   en: (empty family)
   fr: (famille vide)
+model.crop:
+  en: "%{w} × %{h} px at (%{x}, %{y})"
+  fr: "%{w} × %{h} px à (%{x}, %{y})"

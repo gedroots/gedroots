@@ -1,5 +1,5 @@
-//! Autocomplétion de l'éditeur GEDCOM brut : adapte [`gedcom::complete`] au
-//! menu de complétion de l'éditeur de gpui-kit.
+//! Autocompletion of the raw GEDCOM editor: adapts [`gedcom::complete`] to the completion menu of
+//! gpui-kit's editor.
 
 use gedcom::complete::{self, Catalog, SuggestionKind};
 use gpui_kit::component::input::{CompletionProvider, Rope, RopeExt};
@@ -44,7 +44,7 @@ impl CompletionProvider for GedcomCompletion {
                     SuggestionKind::Keyword => CompletionItemKind::KEYWORD,
                     SuggestionKind::Place => CompletionItemKind::VALUE,
                 }),
-                // La mise en évidence suit la longueur de `filter_text`.
+                // Highlighting follows the length of `filter_text`.
                 filter_text: Some(s.label.get(..s.matched).unwrap_or_default().to_string()),
                 detail: (!s.detail.is_empty()).then_some(s.detail),
                 text_edit: Some(CompletionTextEdit::Edit(TextEdit { range, new_text: s.insert })),
@@ -56,7 +56,7 @@ impl CompletionProvider for GedcomCompletion {
     }
 
     fn is_completion_trigger(&self, _offset: usize, new_text: &str, _: &mut App) -> bool {
-        // Toute frappe sur une ligne (pas les retours à la ligne ni les collages longs).
+        // Any keystroke on a line (not line breaks or long pastes).
         !new_text.is_empty() && new_text.len() <= 4 && !new_text.contains('\n')
     }
 }

@@ -1,5 +1,5 @@
-//! Outils MCP de GEDRoots et serveur HTTP qui les sert. Ils lisent le fichier ; le seul
-//! outil d'écriture, `propose_act`, ajoute une proposition à relire dans l'app.
+//! GEDRoots' MCP tools and the HTTP server that serves them. They read the file; the only writing
+//! tool, `propose_act`, adds a proposal to review in the app.
 
 use super::propose::{self, Pending, ProposeParams};
 use super::{Request, Snapshot};
@@ -110,7 +110,7 @@ pub struct Gaps {
     pub total: usize,
 }
 
-/// Erreur rendue à l'agent (résultat d'outil en erreur, qu'il peut lire et corriger).
+/// Error returned to the agent (tool result marked as an error, which it can read and correct).
 type Res<T> = Result<Json<T>, String>;
 
 #[tool_router]
@@ -287,7 +287,7 @@ impl GedrootsMcp {
     }
 }
 
-// Consignes données à l'agent à la connexion.
+// Instructions given to the agent on connection.
 #[tool_handler(
     name = "gedroots",
     instructions = "GEDRoots is a genealogy app. These tools read the GEDCOM 7 family tree open in \
@@ -306,7 +306,7 @@ impl ServerHandler for GedrootsMcp {
         request: rmcp::model::InitializeRequestParams,
         context: rmcp::service::RequestContext<rmcp::RoleServer>,
     ) -> Result<rmcp::model::InitializeResult, rmcp::ErrorData> {
-        // La fenêtre « Agents IA » montre le dernier agent connecté.
+        // The “AI Agents” window shows the last agent connected.
         let info = &request.client_info;
         super::note_client(info.title.as_deref().filter(|t| !t.is_empty()).unwrap_or(&info.name));
         context.peer.set_peer_info(request.clone());
@@ -314,7 +314,7 @@ impl ServerHandler for GedrootsMcp {
     }
 }
 
-/// Refuse toute requête sans le bon jeton.
+/// Refuses any request without the right token.
 async fn check_token(
     State(token): State<String>,
     req: axum::extract::Request,
@@ -327,7 +327,7 @@ async fn check_token(
     }
 }
 
-/// Sert le protocole MCP sur `127.0.0.1:<port>/mcp` jusqu'à l'annulation.
+/// Serves the MCP protocol on `127.0.0.1:<port>/mcp` until cancelled.
 pub async fn serve(
     bridge: async_channel::Sender<Request>,
     token: String,
@@ -359,7 +359,7 @@ mod tests {
 
     const FILE: &str = "0 HEAD\n1 GEDC\n2 VERS 7.0\n1 _GR_ROOT @I1@\n0 @I1@ INDI\n1 NAME Jean /MARCHAND/\n1 BIRT\n2 DATE 1850\n2 PLAC Rennes\n0 TRLR\n";
 
-    /// Envoie une requête JSON-RPC ; rend le corps JSON (réponse directe ou flux SSE).
+    /// Sends a JSON-RPC request; returns the JSON body (direct response or SSE stream).
     fn post(
         port: u16,
         token: &str,
@@ -395,13 +395,13 @@ mod tests {
     #[test]
     fn serves_read_only_tools_with_token() {
         let (tx, rx) = async_channel::unbounded::<Request>();
-        // Fausse boucle de l'app : rend toujours le même document.
+        // Fake app loop: always returns the same document.
         std::thread::spawn(move || {
             while let Ok(Request::Snapshot(reply)) = rx.recv_blocking() {
                 let _ = reply.send(Some(Snapshot { path: None, ged: gedcom::Gedcom::parse(FILE).unwrap() }));
             }
         });
-        // Port libre quelconque : l'app peut tourner à côté sur le port habituel.
+        // Any free port: the app can run alongside on the usual port.
         let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
         let cancel = CancellationToken::new();
         let c = cancel.clone();
@@ -426,7 +426,7 @@ mod tests {
             post(port, "secret", Some(&sid), serde_json::json!({"jsonrpc":"2.0","id":2,"method":"tools/list"}));
         let tools = list["result"]["tools"].as_array().expect("tools");
         assert_eq!(tools.len(), 6);
-        // Seul `propose_act` n'est pas en lecture seule, et il n'écrit rien.
+        // Only `propose_act` is not read only, and it writes nothing.
         let writers: Vec<_> =
             tools.iter().filter(|t| t["annotations"]["readOnlyHint"] != true).map(|t| t["name"].clone()).collect();
         assert_eq!(writers, ["propose_act"]);
@@ -440,7 +440,7 @@ mod tests {
         let sheet = &call["result"]["structuredContent"];
         assert_eq!(sheet["person"]["name"], "Jean MARCHAND", "{call}");
         assert_eq!(sheet["events"][0]["place"], "Rennes");
-        // Les méthodes de travail sont servies comme prompts, avec ou sans argument.
+        // The working methods are served as prompts, with or without an argument.
         let (_, _, prompts) =
             post(port, "secret", Some(&sid), serde_json::json!({"jsonrpc":"2.0","id":4,"method":"prompts/list"}));
         let names: Vec<_> =

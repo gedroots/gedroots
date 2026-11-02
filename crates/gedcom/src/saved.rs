@@ -22,14 +22,14 @@ const QUERY_TAG: &str = "_GR_QUERY";
 const TYPE_TAG: &str = "_GR_TYPE";
 const URI: &str = extension_uri!("_gr_find");
 
-/// Une recherche enregistrée.
+/// A saved search.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SavedSearch {
     pub name: String,
     pub scope: Scope,
     /// Query text (`born:1850±5 sex:m`).
     pub query: String,
-    /// Type de média choisi dans la barre des types (zone Médias).
+    /// Media type chosen in the type bar (Media zone).
     pub media_type: Option<String>,
 }
 
@@ -75,15 +75,15 @@ impl SavedSearch {
         n
     }
 
-    /// Même recherche (zone, critères, type), quel que soit le nom.
+    /// Same search (zone, criteria, type), whatever the name.
     pub fn same(&self, scope: Scope, query: &str, media_type: Option<&str>) -> bool {
         let norm = |q: &str| q.split_whitespace().collect::<Vec<_>>().join(" ");
         self.scope == scope && norm(&self.query) == norm(query) && self.media_type.as_deref() == media_type
     }
 }
 
-/// Nom proposé pour une recherche : ses jetons (« Né vers 1850 (± 5 ans) · Hommes »),
-/// ses mots libres entre guillemets, précédés du type de média.
+/// Name suggested for a search: its tokens (“Born about 1850 (± 5 years) · Men”), its free words in
+/// quotes, preceded by the media type.
 pub fn default_name(g: &Gedcom, scope: Scope, query: &str, media_type: Option<&str>) -> String {
     let mut parts: Vec<String> = media_type.map(str::to_string).into_iter().collect();
     let mut free: Vec<&str> = Vec::new();
@@ -107,20 +107,20 @@ impl Gedcom {
         self.header.children_with(FIND_TAG).filter_map(SavedSearch::read).collect()
     }
 
-    /// Ajoute une recherche à la fin de la liste ; renvoie sa position.
+    /// Adds a search at the end of the list; returns its position.
     pub fn save_search(&mut self, s: &SavedSearch) -> usize {
         for t in [FIND_TAG, SCOPE_TAG, QUERY_TAG, TYPE_TAG] {
             self.declare_extension(t, URI);
         }
         let n = self.saved_searches().len();
-        // Après la dernière recherche, sinon en fin d'en-tête.
+        // After the last search, otherwise at the end of the header.
         let at =
             self.header.children.iter().rposition(|c| c.tag == FIND_TAG).map_or(self.header.children.len(), |i| i + 1);
         self.header.children.insert(at, s.node());
         n
     }
 
-    /// `HEAD._GR_FIND` lisibles, dans l'ordre : position dans l'en-tête.
+    /// Readable `HEAD._GR_FIND`s, in order: position in the header.
     fn find_index(&self, i: usize) -> Option<usize> {
         self.header
             .children
@@ -142,7 +142,7 @@ impl Gedcom {
         }
     }
 
-    /// Remplace les critères d'une recherche enregistrée (même nom).
+    /// Replaces the criteria of a saved search (same name).
     pub fn update_search(&mut self, i: usize, s: &SavedSearch) -> bool {
         let Some(k) = self.find_index(i) else { return false };
         self.header.children[k] = s.node();
@@ -160,7 +160,7 @@ impl Gedcom {
         SavedSearch::read(&n)
     }
 
-    /// Déplace une recherche enregistrée (ordre de la barre latérale).
+    /// Moves a saved search (order in the sidebar).
     pub fn move_search(&mut self, from: usize, to: usize) -> bool {
         let (Some(a), Some(b)) = (self.find_index(from), self.find_index(to)) else { return false };
         let n = self.header.children.remove(a);

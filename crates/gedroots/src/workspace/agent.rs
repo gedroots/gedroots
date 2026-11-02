@@ -1,5 +1,5 @@
-//! File › Connect an AI Agent… (Fichier › Connecter un agent IA…) : active le serveur MCP local
-//! et donne, pour chaque agent, la façon la plus courte de le brancher.
+//! File › Connect an AI Agent…: turns on the local MCP server and gives, for each agent, the
+//! shortest way to connect it.
 
 use super::add::AddDialog;
 use super::*;
@@ -8,20 +8,20 @@ use crate::agent::{self, Status};
 use gpui_kit::component::switch::Switch;
 use rust_i18n::t;
 
-/// Fenêtre « Agents IA ».
+/// “AI Agents” window.
 pub(super) struct AgentDialog {
     enabled: bool,
     token: String,
     client: Client,
-    /// Jeton visible dans « Autre client MCP ».
+    /// Token visible in “Other MCP Client”.
     reveal: bool,
-    /// Configuration manuelle dépliée (éditeurs).
+    /// Manual configuration unfolded (editors).
     manual: bool,
-    /// Dernier bloc copié, pour la coche.
+    /// Last block copied, for the check mark.
     copied: Option<&'static str>,
 }
 
-/// Largeur de la fenêtre (plus large que les autres : liste + détail).
+/// Width of the window (wider than the others: list + detail).
 pub(super) const WIDTH: f32 = 640.;
 
 fn mono(s: impl Into<SharedString>) -> Div {
@@ -52,7 +52,7 @@ impl Workspace {
         cx.notify();
     }
 
-    /// Copie du document, pour le serveur MCP.
+    /// Copy of the document, for the MCP server.
     pub(crate) fn agent_snapshot(&self) -> Option<agent::Snapshot> {
         let doc = self.doc.as_ref()?;
         Some(agent::Snapshot { path: doc.path.clone(), ged: doc.ged.clone() })
@@ -196,7 +196,7 @@ impl Workspace {
                 body = body.child(field(t!("agent.in_terminal").into_owned(), None, self.code(d, "cmd", &cmd, cx)));
             }
             Setup::Config { file, text } => {
-                // Claude Desktop : Node.js et le fichier d'abord, le bloc est long.
+                // Claude Desktop: Node.js and the file first, the block is long.
                 if c == Client::ClaudeDesktop {
                     let reveal = c.config_file();
                     body = body.child(
@@ -323,7 +323,7 @@ impl Workspace {
             .into_any_element()
     }
 
-    /// Bloc de code (jeton masqué) avec son bouton copier.
+    /// Code block (token masked) with its copy button.
     fn code(&self, d: &AgentDialog, key: &'static str, text: &str, cx: &mut Context<Self>) -> Div {
         let shown = mask(text, &d.token);
         let text = text.to_string();
@@ -356,7 +356,7 @@ impl Workspace {
             }))
     }
 
-    /// « Autre client MCP » : adresse, transport et en-tête.
+    /// “Other MCP Client”: address, transport and header.
     fn generic(&self, d: &AgentDialog, cx: &mut Context<Self>) -> Div {
         let url = agent::url();
         let header = format!("Authorization: Bearer {}", d.token);
@@ -415,7 +415,7 @@ fn name(c: Client) -> String {
     c.product().map(str::to_string).unwrap_or_else(|| t!("agent.other_client").into_owned())
 }
 
-/// Libellé (avec un chemin de fichier éventuel) au-dessus d'un bloc.
+/// Label (with a file path if any) above a block.
 fn field(label: String, file: Option<String>, block: Div) -> Div {
     v_flex()
         .gap_1()

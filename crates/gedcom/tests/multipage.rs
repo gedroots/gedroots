@@ -1,7 +1,7 @@
 use gedcom::*;
 
-/// Un acte en deux médias d'une page, comme dans un export Ancestris :
-/// la source pointe vers les deux, une personne est située sur la page 2.
+/// A record in two one-page media, as in an Ancestris export: the source points to both, a person
+/// is placed on page 2.
 const ACTE: &str = "0 HEAD
 1 GEDC
 2 VERS 7.0
@@ -66,16 +66,16 @@ fn merge_two_single_page_media() {
     let media = Media::new(g.get("M1").unwrap());
     let files = media.files();
     assert_eq!(files.iter().map(|f| f.path).collect::<Vec<_>>(), ["Actes/acte_1.jpg", "Actes/acte_2.jpg"]);
-    // Titre commun sur la première page ; « (2/2) » disparaît.
+    // Common title on the first page; “(2/2)” disappears.
     assert_eq!(media.title(), "Acte de mariage de Michel OHL");
     assert_eq!(files[1].title, None);
-    // La note du média fusionné est conservée.
+    // The note of the merged media is kept.
     assert_eq!(g.get("M1").unwrap().child_val("NOTE"), Some("Page abîmée"));
 
-    // La source et la citation ne pointent plus qu'une fois vers le média.
+    // The source and the citation now point to the media only once.
     assert_eq!(links(&g, "S1"), ["@M1@@1"]);
     assert_eq!(links(&g, "I1"), ["@M1@@2", "@M1@@1"]);
-    // Michel est situé sur la page 2, Jeanne reste sur la page 1.
+    // Michel is placed on page 2, Jeanne stays on page 1.
     let michel = g.media_links("M1").into_iter().find(|l| l.owner == "I1").unwrap();
     assert_eq!((michel.page, michel.crop.map(|c| c.left)), (2, Some(20)));
     assert_eq!(g.link_page("I2", "M1"), 1);
@@ -97,7 +97,7 @@ fn split_restores_the_original_media() {
     assert_eq!(a.page_count(), 1);
     assert_eq!(b.files()[0].path, "Actes/acte_2.jpg");
     assert_eq!(b.title(), "Acte de mariage de Michel OHL (2/2)");
-    // Michel suit sa page, sans numéro de page ; la source pointe vers les deux médias.
+    // Michel follows his page, without a page number; the source points to both media.
     assert_eq!(g.link_page("I1", &new), 1);
     assert!(g.link_crop("I1", &new).is_some());
     assert_eq!(links(&g, "S1"), ["@M1@@1".to_string(), format!("@{new}@@1")]);
@@ -112,7 +112,7 @@ fn reorder_and_remove_pages_follow_links() {
     assert_eq!(Media::new(g.get("M1").unwrap()).page_count(), 3);
     assert_eq!(Media::new(g.get("M1").unwrap()).files()[2].form, Some("image/jpeg"));
 
-    // Page 2 en premier : Michel passe en page 1, Jeanne en page 2 ; le titre suit la première page.
+    // Page 2 first: Michel moves to page 1, Jeanne to page 2; the title follows the first page.
     g.move_media_page("M1", 2, 1).unwrap();
     let m = Media::new(g.get("M1").unwrap());
     assert_eq!(m.page_file(1), Some("Actes/acte_2.jpg"));
@@ -121,7 +121,7 @@ fn reorder_and_remove_pages_follow_links() {
     assert_eq!(g.link_page("I1", "M1"), 1);
     assert_eq!(g.link_page("I2", "M1"), 2);
 
-    // Retirer la page de Michel : il reste lié au document, sans zone.
+    // Removing Michel's page: he stays linked to the document, without an area.
     g.remove_media_page("M1", 1).unwrap();
     assert_eq!(g.link_page("I2", "M1"), 1);
     assert_eq!(g.link_crop("I1", "M1"), None);
@@ -134,14 +134,14 @@ fn tag_person_on_a_given_page() {
     let mut g = acte();
     g.merge_media(&["M1".into(), "M2".into()]).unwrap();
     let crop = Crop::from_rect((5, 6, 7, 8));
-    // Jeanne est aussi sur la page 2 : deux liens, chacun sa page.
+    // Jeanne is also on page 2: two links, each with its page.
     g.tag_person_on("I2", "M1", 2, crop).unwrap();
     let pages: Vec<usize> = g.media_links("M1").iter().filter(|l| l.owner == "I2").map(|l| l.page).collect();
     assert_eq!(pages, [1, 2]);
     g.untag_person_on("I2", "M1", 1);
     let left: Vec<_> = g.media_links("M1").into_iter().filter(|l| l.owner == "I2").collect();
     assert_eq!((left.len(), left[0].page, left[0].crop), (1, 2, Some(crop)));
-    // Sans zone, le lien redevient un lien vers le document entier.
+    // Without an area, the link becomes a link to the whole document again.
     g.set_link_crop_on("I2", "M1", 2, None).unwrap();
     assert_eq!(links(&g, "I2"), ["@M1@@1"]);
 }

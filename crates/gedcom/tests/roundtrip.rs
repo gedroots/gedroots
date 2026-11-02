@@ -89,7 +89,7 @@ fn create_and_delete() {
     assert!(g.individual("I00001").unwrap().cited_sources().is_empty());
 }
 
-/// Teste un vrai fichier : `GEDROOTS_TEST_GED=/chemin/vers/fichier.ged cargo test`.
+/// Tests a real file: `GEDROOTS_TEST_GED=/path/to/file.ged cargo test`.
 #[test]
 fn real_file_roundtrip() {
     let Ok(path) = std::env::var("GEDROOTS_TEST_GED") else { return };
@@ -131,7 +131,7 @@ fn root_extension() {
     let text = g.to_gedcom_string();
     assert_eq!(text.matches("2 TAG _GR_ROOT ").count(), 1, "extension déclarée une fois");
     assert!(text.contains("1 _GR_ROOT @I00003@\n"));
-    // Relecture : la racine survit à l'enregistrement.
+    // Read back: the root survives saving.
     assert_eq!(Gedcom::parse(&text).unwrap().root().as_deref(), Some("I00003"));
     g.delete("I00003");
     assert_eq!(g.root().as_deref(), Some("I00001"));

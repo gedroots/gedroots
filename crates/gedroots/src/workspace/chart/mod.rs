@@ -1,10 +1,9 @@
-//! Arbre libre : on s'y déplace en glissant ou à la molette, dans toutes les
-//! directions. Les générations d'ascendants et de descendants se chargent au
-//! fur et à mesure qu'on s'en approche ; une mini-carte montre où l'on est.
+//! Free chart: move around by dragging or with the wheel, in every direction. Generations of
+//! ancestors and descendants load as you get close to them; a minimap shows where you are.
 //!
-//! Quand une génération s'ajoute, la disposition compacte resserre ou écarte
-//! les cases déjà affichées : elles glissent alors vers leur nouvelle place au
-//! lieu d'y sauter, et la personne au centre de la vue ne bouge pas.
+//! When a generation is added, the compact layout tightens or spreads the boxes already shown: they
+//! then slide to their new place instead of jumping there, and the person at the center of the view
+//! does not move.
 
 pub(super) mod layout;
 
@@ -14,25 +13,25 @@ use std::cell::Cell;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
-/// Générations chargées en arrivant sur une personne.
+/// Generations loaded when arriving on a person.
 const START_UP: u32 = 2;
 const START_DOWN: u32 = 1;
-/// Au-delà, on arrête de charger (fichier incohérent).
+/// Beyond that, stop loading (inconsistent file).
 const MAX_GENS: u32 = 200;
-/// Taille de la vue avant le premier affichage.
+/// Size of the view before the first display.
 const DEFAULT_VIEW: (f32, f32) = (1000., 700.);
 const MINI_W: f32 = 200.;
 const MINI_H: f32 = 130.;
-/// Déplacement au-delà duquel un appui devient un glissement (et non un clic).
+/// Movement beyond which a press becomes a drag (and not a click).
 const DRAG_SLOP: f32 = 4.;
-/// Durée du glissement des cases quand une génération s'ajoute.
+/// Duration of the boxes' slide when a generation is added.
 const GLIDE: Duration = Duration::from_millis(180);
-/// Marge autour de la vue où les cases sont déjà construites : leurs portraits
-/// se chargent avant d'entrer dans la vue.
+/// Margin around the view where boxes are already built: their portraits load before they enter the
+/// view.
 const PRELOAD: f32 = COL;
 
-/// Identité d'une case d'une disposition à l'autre : ce qu'elle montre, sa
-/// colonne, et son rang parmi les cases identiques de la colonne (implexe).
+/// Identity of a box from one layout to the next: what it shows, its column, and its rank among
+/// identical boxes of the column (pedigree collapse).
 type CardKey = (Slot, i32, usize);
 
 fn card_keys(l: &Layout) -> Vec<CardKey> {
@@ -48,38 +47,38 @@ fn card_keys(l: &Layout) -> Vec<CardKey> {
         .collect()
 }
 
-/// Décélération du glissement (`t` de 0 à 1).
+/// Deceleration of the slide (`t` from 0 to 1).
 fn ease_out(t: f32) -> f32 {
     1. - (1. - t).powi(3)
 }
 
-/// État de l'arbre libre.
+/// State of the free chart.
 pub(super) struct Chart {
-    /// Personne autour de laquelle l'arbre est construit.
+    /// Person around whom the chart is built.
     anchor: Option<String>,
-    /// Dernière sélection prise en compte.
+    /// Last selection taken into account.
     seen: Option<String>,
     up: u32,
     down: u32,
-    /// Point de l'arbre affiché au centre de la vue, au signe près :
-    /// position à l'écran = position dans l'arbre + `pan` + demi-vue.
+    /// Point of the chart shown at the center of the view, up to the sign: position on screen =
+    /// position in the chart + `pan` + half view.
     pan: (f32, f32),
-    /// Glissement en cours : position de départ du pointeur et dernière position
-    /// prise en compte. Le déplacement s'ajoute à `pan` pas à pas, pour garder les
-    /// corrections faites entre-temps (génération chargée, bord de l'arbre).
+    /// Drag in progress: start position of the pointer and last position taken into account. The
+    /// movement is added to `pan` step by step, to keep the corrections made in between (generation
+    /// loaded, edge of the chart).
     drag: Option<(Point<Pixels>, Point<Pixels>)>,
-    /// Le dernier appui a déplacé l'arbre : le clic qui suit est ignoré.
+    /// The last press moved the chart: the following click is ignored.
     dragged: bool,
-    /// La mini-carte est en cours de manipulation.
+    /// The minimap is being manipulated.
     mini_drag: bool,
     view: Rc<Cell<Option<Bounds<Pixels>>>>,
     mini: Rc<Cell<Option<Bounds<Pixels>>>>,
-    /// Passage de la mini-carte à l'arbre : origine de l'arbre, échelle, marges.
+    /// From the minimap to the chart: origin of the chart, scale, margins.
     mini_map: Cell<[f32; 4]>,
-    /// Ordonnée de chaque case dans la dernière disposition, et son ancre.
+    /// Y coordinate of each box in the last layout, and its anchor.
     shown: HashMap<CardKey, f32>,
     shown_anchor: Option<String>,
-    /// Glissement des cases en cours : début et ordonnées de départ.
+    /// Boxes sliding: start and starting y coordinates.
     glide: Option<(Instant, HashMap<CardKey, f32>)>,
 }
 
@@ -109,7 +108,7 @@ impl Chart {
         self.view.get().map(|b| (f32::from(b.size.width), f32::from(b.size.height))).unwrap_or(DEFAULT_VIEW)
     }
 
-    /// Recentre l'arbre sur `xref`, avec les générations de départ.
+    /// Recenters the chart on `xref`, with the starting generations.
     fn reanchor(&mut self, xref: &str) {
         self.anchor = Some(xref.to_string());
         self.seen = Some(xref.to_string());
@@ -123,23 +122,22 @@ impl Chart {
         self.pan = (-x, -y);
     }
 
-    /// La case est-elle entièrement dans la vue ?
+    /// Is the box entirely in the view?
     fn visible(&self, c: &Card) -> bool {
         let (w, h) = self.view_size();
         let (sx, sy) = (c.x + self.pan.0 + w / 2., c.y + self.pan.1 + h / 2.);
         sx >= 0. && sy >= 0. && sx + CARD_W <= w && sy + CARD_H <= h
     }
 
-    /// Construit l'arbre, en chargeant les générations dont la vue s'approche.
-    /// Quand une génération s'ajoute, les cases peuvent se décaler : la
-    /// personne la plus proche du centre de la vue reste à sa place à l'écran.
-    /// Renvoie aussi le décalage vertical de la vue que cela a demandé.
+    /// Builds the chart, loading the generations the view gets close to. When a generation is
+    /// added, boxes can shift: the person closest to the center of the view stays in place on
+    /// screen. Also returns the vertical shift of the view this required.
     fn layout(&mut self, g: &Gedcom, anchor: &str) -> (Layout, f32) {
         let before = self.pan.1;
         let mut l = layout::build(g, anchor, self.up, self.down);
         let (w, _) = self.view_size();
         for _ in 0..MAX_GENS {
-            // Dès que la dernière colonne chargée entre dans la vue, on charge la suivante.
+            // As soon as the last loaded column enters the view, load the next one.
             let left = -self.pan.0 - w / 2.;
             let right = -self.pan.0 + w / 2.;
             let need_up = l.more_up && right > self.up as f32 * COL && self.up < MAX_GENS;
@@ -157,7 +155,7 @@ impl Chart {
                 self.pan.1 += old - c.y;
             }
         }
-        // Le centre de la vue reste sur l'arbre : on ne s'en éloigne pas dans le vide.
+        // The center of the view stays on the chart: it does not drift away into the void.
         let [x0, y0, x1, y1] = l.bounds;
         if x0 <= x1 && y0 <= y1 {
             self.pan = (self.pan.0.clamp(-x1, -x0), self.pan.1.clamp(-y1, -y0));
@@ -165,7 +163,7 @@ impl Chart {
         (l, self.pan.1 - before)
     }
 
-    /// Ordonnée affichée d'une case dont la place visée est `y`.
+    /// Displayed y coordinate of a box whose target place is `y`.
     fn glide_y(&self, key: &CardKey, y: f32, now: Instant) -> f32 {
         let Some((start, from)) = &self.glide else { return y };
         let t = now.duration_since(*start).as_secs_f32() / GLIDE.as_secs_f32();
@@ -175,11 +173,10 @@ impl Chart {
         }
     }
 
-    /// Ordonnées où afficher les cases de `l`. Si elles ont changé de place
-    /// depuis l'image précédente (génération chargée, personne ajoutée), elles y
-    /// glissent depuis leur place d'avant ; `shift` est le décalage de la vue
-    /// fait entre-temps pour garder la personne du centre immobile. Renvoie aussi
-    /// si le glissement continue.
+    /// Y coordinates where the boxes of `l` are shown. If they moved since the previous frame
+    /// (generation loaded, person added), they slide there from their previous place; `shift` is
+    /// the shift of the view made in between to keep the center person still. Also returns whether
+    /// the slide continues.
     fn glide(&mut self, l: &Layout, shift: f32, animate: bool) -> (Vec<f32>, bool) {
         let now = Instant::now();
         let keys = card_keys(l);
@@ -188,7 +185,7 @@ impl Chart {
         if !same_tree {
             self.glide = None;
         } else if moved {
-            // Départ : là où chaque case est affichée maintenant, vue décalée comprise.
+            // Start: where each box is shown now, view shift included.
             let from = self.shown.iter().map(|(k, y)| (k.clone(), self.glide_y(k, *y, now) - shift)).collect();
             self.glide = Some((now, from));
         }
@@ -206,7 +203,7 @@ impl Chart {
         self.pan = (self.pan.0 + dx, self.pan.1 + dy);
     }
 
-    /// Point de la mini-carte → centre de la vue.
+    /// Point of the minimap → center of the view.
     fn mini_jump(&mut self, pos: Point<Pixels>) {
         let Some(b) = self.mini.get() else { return };
         let [x0, y0, s, _] = self.mini_map.get();
@@ -217,7 +214,7 @@ impl Chart {
 }
 
 impl Workspace {
-    /// Clic sur une case : sélection ; double clic : l'arbre se recentre dessus.
+    /// Click on a box: selection; double-click: the chart recenters on it.
     fn chart_click(&mut self, xref: String, count: usize, window: &mut Window, cx: &mut Context<Self>) {
         if self.chart.get_mut().dragged {
             return;
@@ -229,7 +226,7 @@ impl Workspace {
         }
     }
 
-    /// Construit l'arbre autour de la personne et l'affiche.
+    /// Builds the chart around the person and shows it.
     pub(super) fn center_chart_on(&mut self, xref: String, window: &mut Window, cx: &mut Context<Self>) {
         self.tab = CenterTab::Tree;
         self.select(xref.clone(), window, cx);
@@ -247,8 +244,8 @@ impl Workspace {
         let anchor = st.anchor.clone().unwrap_or_default();
         let (mut l, mut shift) = st.layout(g, &anchor);
         let mut animate = !cx.reduce_motion();
-        // Nouvelle sélection (liste, Précédent…) : si la personne est déjà dans
-        // l'arbre, on l'amène dans la vue ; sinon l'arbre se recentre sur elle.
+        // New selection (list, Back…): if the person is already in the chart, bring them into view;
+        // otherwise the chart recenters on them.
         if st.seen.as_ref() != Some(sel) {
             st.seen = Some(sel.clone());
             match l.find(sel).cloned() {
@@ -267,7 +264,7 @@ impl Workspace {
         let view_cell = st.view.clone();
         let measure = move |bounds: Bounds<Pixels>, window: &mut Window, running: bool| {
             if view_cell.get().map(|b| b.size) != Some(bounds.size) {
-                // Première mesure, ou fenêtre redimensionnée : on recompose.
+                // First measurement, or window resized: lay out again.
                 window.refresh();
             } else if running {
                 window.request_animation_frame();
@@ -275,8 +272,8 @@ impl Workspace {
             view_cell.set(Some(bounds));
         };
         if st.view.get().is_none() {
-            // Taille de la vue encore inconnue : rien n'est placé avant de la
-            // connaître, pour ne pas montrer l'arbre décalé le temps d'une image.
+            // Size of the view still unknown: nothing is placed before it is known, so as not to
+            // show the chart shifted for a frame.
             return div()
                 .flex_1()
                 .size_full()
@@ -301,7 +298,7 @@ impl Workspace {
             .filter_map(|(c, y)| self.chart_card(doc, c, to_screen(c.x, *y), sel, root.as_deref(), cx))
             .collect();
 
-        // Liaisons, dessinées sous les cases.
+        // Connectors, drawn under the boxes.
         let lines: Vec<[f32; 4]> = l
             .segments(&ys)
             .filter(|s| {
@@ -391,7 +388,7 @@ impl Workspace {
             .on_scroll(cx.listener(|this, ev: &ScrollEvent, _, cx| {
                 let d = ev.delta.pixel_delta(px(40.));
                 let (mut dx, mut dy) = (f32::from(d.x), f32::from(d.y));
-                // Molette classique avec Maj : défilement horizontal.
+                // Classic wheel with Shift: horizontal scrolling.
                 if !ev.delta.precise() && ev.modifiers.shift && dx == 0. {
                     (dx, dy) = (dy, 0.);
                 }
@@ -415,8 +412,8 @@ impl Workspace {
             Slot::Person { xref, side } => {
                 let i = doc.ged.individual(xref)?;
                 let on = xref == sel;
-                // Couleur de lignée pour les ancêtres seulement (comme l'éventail) ;
-                // descendants, conjoints et fratrie restent neutres.
+                // Line color for ancestors only (like the fan chart); descendants, spouses and
+                // siblings stay neutral.
                 let ring = match side {
                     0 => theme::border_strong(),
                     s => theme::lineage(*s as usize),
@@ -488,11 +485,11 @@ impl Workspace {
         Some(el)
     }
 
-    /// Mini-carte, dans le coin inférieur droit, quand l'arbre déborde de la vue.
+    /// Minimap, in the bottom right corner, when the chart overflows the view.
     fn chart_minimap(&self, st: &Chart, l: &Layout, sel: &str, cx: &mut Context<Self>) -> Option<AnyElement> {
         let (vw, vh) = st.view_size();
         let [bx0, by0, bx1, by1] = l.bounds;
-        // Ce qui est visible compte aussi : on voit où l'on est même hors de l'arbre.
+        // What is visible counts too: you can see where you are even off the chart.
         let (v0, v1) = ((-st.pan.0 - vw / 2., -st.pan.1 - vh / 2.), (-st.pan.0 + vw / 2., -st.pan.1 + vh / 2.));
         let fits = bx0 >= v0.0 && by0 >= v0.1 && bx1 <= v1.0 && by1 <= v1.1;
         if fits || st.view.get().is_none() || vw < 2. * MINI_W || vh < 2. * MINI_H {
@@ -501,7 +498,7 @@ impl Workspace {
         let (x0, y0, x1, y1) = (bx0.min(v0.0), by0.min(v0.1), bx1.max(v1.0), by1.max(v1.1));
         let pad = 6.;
         let s = ((MINI_W - 2. * pad) / (x1 - x0)).min((MINI_H - 2. * pad) / (y1 - y0));
-        // Marges pour centrer le contenu dans la mini-carte.
+        // Margins to center the content in the minimap.
         let (ox, oy) = ((MINI_W - (x1 - x0) * s) / 2., (MINI_H - (y1 - y0) * s) / 2.);
         st.mini_map.set([x0 - ox / s, y0 - oy / s, s, 0.]);
         let boxes: Vec<(f32, f32, f32, Hsla)> = l

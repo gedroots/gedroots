@@ -124,19 +124,19 @@ pub struct OpenRecent {
     pub path: std::path::PathBuf,
 }
 
-/// Ouvre la recherche de la personne sélectionnée sur un site d'Individu › Rechercher sur.
+/// Opens the search for the selected person on a site of Person › Search On.
 #[derive(Clone, PartialEq, Action)]
 #[action(namespace = gedroots, no_json)]
 pub struct SearchWeb {
-    /// Position du site dans les réglages du fichier.
+    /// Position of the site in the file settings.
     pub index: usize,
 }
 
-/// Noms des sites de recherche du fichier affiché (Réglages du fichier › Recherche).
+/// Names of the search sites of the displayed file (File Settings › Search).
 static SEARCH_SITES: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
 
-/// Note les sites de recherche du fichier affiché. Renvoie `true` s'ils ont
-/// changé : les menus sont alors à réinstaller.
+/// Records the search sites of the displayed file. Returns `true` if they changed: the menus then
+/// need to be installed again.
 pub fn set_search_sites(names: Vec<String>) -> bool {
     let mut sites = SEARCH_SITES.lock().unwrap_or_else(|e| e.into_inner());
     if *sites == names {
@@ -149,7 +149,7 @@ pub fn set_search_sites(names: Vec<String>) -> bool {
 
 static SEARCH_SITES_GEN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
-/// Numéro de version des sites de recherche, pour que chaque fenêtre recharge sa barre de menus.
+/// Version number of the search sites, so that each window reloads its menu bar.
 pub fn search_sites_generation() -> u64 {
     SEARCH_SITES_GEN.load(std::sync::atomic::Ordering::Relaxed)
 }
@@ -450,7 +450,7 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
             a(t!("cmd.search_descendants"), SearchDescendants),
         ],
     ));
-    // Sites de recherche du fichier ; sous-menu masqué s'il n'y en a aucun.
+    // Search sites of the file; submenu hidden if there are none.
     if !sites.is_empty() {
         let items =
             sites.iter().enumerate().map(|(index, name)| Item::Recent(name.clone(), Box::new(SearchWeb { index })));

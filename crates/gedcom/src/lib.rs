@@ -1,31 +1,31 @@
-//! Bibliothèque GEDCOM 7 de GEDRoots.
+//! GEDRoots' GEDCOM 7 library.
 //!
-//! - [`node`] : arbre générique sans perte (toutes les balises sont conservées) ;
-//! - [`parse`] : lecture/écriture du texte GEDCOM ;
-//! - [`document`] : un fichier chargé, avec index des identifiants et opérations d'édition ;
-//! - [`model`] : vues typées (individus, familles, sources, lieux, médias…) et formulaires d'édition ;
-//! - [`schema`] : schéma GEDCOM 7 (sous-structures permises, types de valeurs) ;
-//! - [`complete`] : autocomplétion du texte GEDCOM brut ;
-//! - [`geo`] : coordonnées des lieux (`MAP`) et projection de la carte ;
-//! - [`gazetteer`] : création de lieux (découpage selon le format, lieux-dits, `EXID`) ;
-//! - [`search`] : recherche et filtres sur les individus ;
-//! - [`relations`] : ajout/liaison/suppression de proches, lieux et médias ;
-//! - [`research`] : fiches, recherche et lacunes pour les agents IA (lecture seule, vivants masqués) ;
-//! - [`events`] : modification et suppression des événements ;
-//! - [`quality`] : page Qualité des données (cohérence, schéma GEDCOM 7, éléments vides ou inutilisés) ;
-//! - [`gedzip`] : préparation de l'export GEDZIP (`gedcom.ged` + médias dans une archive) ;
-//! - [`import`] : contrôles de l'assistant d'import (balises non standard → GEDCOM 7) ;
-//! - [`custom`] : format des lieux (`HEAD.PLAC.FORM`) et types d'événements personnalisés ;
-//! - [`media_links`] : galerie « Médias » (ce qui est lié où, où joindre un nouveau média) ;
-//! - [`media_naming`] : dossier et modèle de nom des fichiers médias (`_GR_MEDIA`) ;
-//! - [`settings`] : réglages du fichier (auteur, droits, langue…) dans l'en-tête ;
-//! - [`kinds`] : types des sources (`DATA` / `EVEN`) et des médias (`MEDI`), portrait ;
-//! - [`weblink`] : liens web en GEDCOM 7 standard (`OBJE` dont le `FILE` est une URL) ;
-//! - [`crop`] : recadrage des médias (`CROP`) et personnes identifiées sur les photos ;
-//! - [`multipage`] : médias à plusieurs pages (plusieurs `FILE`), fusion et séparation ;
-//! - [`pedigree`] : descendance pour les vues en arbre ;
-//! - [`date`] : dates GEDCOM (y compris calendrier républicain) affichées en français ;
-//! - [`act`] : actes d'une source (saisie, lecture depuis les citations, modification).
+//! - [`node`]: lossless generic tree (every tag is kept);
+//! - [`parse`]: reading/writing GEDCOM text;
+//! - [`document`]: a loaded file, with an identifier index and editing operations;
+//! - [`model`]: typed views (individuals, families, sources, places, media…) and edit forms;
+//! - [`schema`]: GEDCOM 7 schema (allowed substructures, value types);
+//! - [`complete`]: autocompletion of raw GEDCOM text;
+//! - [`geo`]: place coordinates (`MAP`) and map projection;
+//! - [`gazetteer`]: creating places (splitting by format, localities, `EXID`);
+//! - [`search`]: search and filters on individuals;
+//! - [`relations`]: adding/linking/removing relatives, places and media;
+//! - [`research`]: records, search and gaps for AI agents (read only, living people hidden);
+//! - [`events`]: editing and deleting events;
+//! - [`quality`]: Data Quality page (consistency, GEDCOM 7 schema, empty or unused items);
+//! - [`gedzip`]: preparing the GEDZIP export (`gedcom.ged` + media in an archive);
+//! - [`import`]: checks of the import assistant (non-standard tags → GEDCOM 7);
+//! - [`custom`]: place format (`HEAD.PLAC.FORM`) and custom event types;
+//! - [`media_links`]: “Media” gallery (what is linked where, where to attach a new media);
+//! - [`media_naming`]: folder and name template of media files (`_GR_MEDIA`);
+//! - [`settings`]: file settings (author, copyright, language…) in the header;
+//! - [`kinds`]: types of sources (`DATA` / `EVEN`) and media (`MEDI`), portrait;
+//! - [`weblink`]: web links in standard GEDCOM 7 (`OBJE` whose `FILE` is a URL);
+//! - [`crop`]: media cropping (`CROP`) and people identified in photos;
+//! - [`multipage`]: multi-page media (several `FILE`s), merging and splitting;
+//! - [`pedigree`]: descendants for the chart views;
+//! - [`date`]: GEDCOM dates (French Republican calendar included), displayed in words;
+//! - [`act`]: records of a source (entry, reading from citations, editing).
 
 rust_i18n::i18n!("locales", fallback = "en");
 
@@ -97,14 +97,14 @@ pub use settings::{FileInfo, FileSettings, IgnoredIssue};
 pub use weblink::{WebLink, WebLinkKind, host, is_web_url, normalize_url};
 pub use websearch::{SearchSite, WEB_TOKENS};
 
-/// Charge un fichier GEDCOM depuis le disque.
+/// Loads a GEDCOM file from the disk.
 pub fn load(path: impl AsRef<std::path::Path>) -> Result<Gedcom, String> {
     let bytes = std::fs::read(path.as_ref()).map_err(|e| e.to_string())?;
     let text = String::from_utf8(bytes).map_err(|_| rust_i18n::t!("error.not_utf8").into_owned())?;
     Gedcom::parse(&text).map_err(|e| e.to_string())
 }
 
-/// Enregistre le fichier, en gardant une copie `.bak` de la version précédente.
+/// Saves the file, keeping a `.bak` copy of the previous version.
 pub fn save(ged: &Gedcom, path: impl AsRef<std::path::Path>) -> std::io::Result<()> {
     let path = path.as_ref();
     if path.exists() {

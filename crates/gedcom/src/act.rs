@@ -1,22 +1,18 @@
-//! Actes d'une source : un éditeur générique, sans modèle.
+//! Records of a source: one generic editor, no templates.
 //!
-//! Un acte (naissance, mariage, recensement, n'importe quel événement GEDCOM)
-//! se saisit dans la fiche de sa source : on choisit l'événement, puis on
-//! ajoute les personnes citées avec leur rôle GEDCOM 7 standard (`CHIL`,
-//! `FATH`, `MOTH`, `HUSB`, `WIFE`, `SPOU`, `WITN`, `GODP`, `OFFICIATOR`…). Les
-//! champs proposés pour chaque personne et les liens familiaux créés découlent
-//! du rôle. Chaque personne est **liée** à un individu existant, **créée**, ou
-//! simplement **mentionnée** (dans la note de la citation).
+//! A record (birth, marriage, census, any GEDCOM event) is entered in its source's page: pick the
+//! event, then add the people it names with their standard GEDCOM 7 role (`CHIL`, `FATH`, `MOTH`,
+//! `HUSB`, `WIFE`, `SPOU`, `WITN`, `GODP`, `OFFICIATOR`…). The fields offered for each person and
+//! the family links created follow from the role. Each person is **linked** to an existing
+//! individual, **created**, or just **mentioned** (in the citation's note).
 //!
-//! [`Act::save`] écrit tout de suite dans l'arbre, en GEDCOM 7 standard :
-//! événement sur la personne principale (ou sur la famille des époux), citation
-//! avec `PAGE`, `DATA`, `EVEN` / `ROLE` sur chaque personne, `ASSO` pour les
-//! témoins. Aucune extension n'est écrite.
+//! [`Act::save`] writes to the tree right away, in standard GEDCOM 7: event on the principal person
+//! (or on the spouses' family), citation with `PAGE`, `DATA`, `EVEN` / `ROLE` on each person,
+//! `ASSO` for witnesses. No extension is written.
 //!
-//! La liste des actes d'une source ([`Gedcom::acts`]) est reconstituée à partir
-//! des citations qui la désignent, regroupées par référence (`PAGE`) et date de
-//! l'acte (`DATA.DATE`). Rouvrir un acte le modifie : l'ancienne version est
-//! retirée ([`Gedcom::remove_act`]) puis la nouvelle écrite.
+//! The list of a source's records ([`Gedcom::acts`]) is rebuilt from the citations that point to
+//! it, grouped by reference (`PAGE`) and record date (`DATA.DATE`). Reopening a record edits it:
+//! the old version is removed ([`Gedcom::remove_act`]), then the new one is written.
 
 use crate::document::{Gedcom, RecordKind};
 use crate::model::{Individual, sort_key};
@@ -25,10 +21,10 @@ use rust_i18n::t;
 use std::borrow::Cow;
 
 // ----------------------------------------------------------------------
-// Événements et rôles
+// Events and roles
 // ----------------------------------------------------------------------
 
-/// Événements familiaux (portés par l'enregistrement `FAM` des époux).
+/// Family events (held by the spouses' `FAM` record).
 pub const FAMILY_ACT_EVENTS: &[&str] = &["MARR", "MARB", "MARC", "MARL", "MARS", "ENGA", "DIV", "DIVF", "ANUL"];
 
 fn is_birth_like(tag: &str) -> bool {
@@ -39,7 +35,7 @@ fn is_death_like(tag: &str) -> bool {
     matches!(tag, "DEAT" | "BURI" | "CREM")
 }
 
-/// Données qu'on peut saisir pour une personne citée.
+/// Data that can be entered for a person named in the record.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PersonField {
     Surname,
@@ -48,11 +44,11 @@ pub enum PersonField {
     Age,
     Occupation,
     Residence,
-    /// Lieu de naissance déclaré (recensements, mariages, décès).
+    /// Declared birthplace (censuses, marriages, deaths).
     Birthplace,
-    /// Lien déclaré (« fils », « épouse », « voisin »…).
+    /// Declared relationship (“son”, “wife”, “neighbour”…).
     Kinship,
-    /// Précisions d'une personne simplement mentionnée.
+    /// Details of a person who is only mentioned.
     Note,
 }
 
@@ -72,10 +68,10 @@ impl PersonField {
     }
 }
 
-/// Rôle d'une personne dans l'acte. Chaque rôle correspond à un rôle GEDCOM 7.
+/// Role of a person in the record. Each role maps to a GEDCOM 7 role.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ActRole {
-    /// Porte l'événement : l'enfant, le défunt, les époux, chaque recensé…
+    /// Holds the event: the child, the deceased, the spouses, each person in a census…
     Principal,
     Father,
     Mother,
@@ -94,7 +90,7 @@ pub enum ActRole {
 use PersonField::*;
 
 impl ActRole {
-    /// Rôles proposés, dans l'ordre d'affichage.
+    /// Roles offered, in display order.
     pub const ALL: [ActRole; 13] = [
         ActRole::Principal,
         ActRole::Father,
@@ -111,22 +107,22 @@ impl ActRole {
         ActRole::Other,
     ];
 
-    /// Lié à une personne principale (père, mère ou conjoint de…).
+    /// Linked to a principal person (father, mother or spouse of…).
     pub fn relative(self) -> bool {
         matches!(self, ActRole::Father | ActRole::Mother | ActRole::Spouse)
     }
 
-    /// Participant associé à l'événement (`ASSO`) plutôt que lié par la famille.
+    /// Participant associated with the event (`ASSO`) rather than linked through the family.
     pub fn associate(self) -> bool {
         !matches!(self, ActRole::Principal | ActRole::Father | ActRole::Mother | ActRole::Spouse)
     }
 
-    /// Libellé du rôle. `nth` : rang parmi les personnes principales.
+    /// Label of the role. `nth`: rank among the principal people.
     pub fn label(self, event: &str, family: bool, nth: usize) -> Cow<'static, str> {
         self.label_in(&crate::i18n::language(), event, family, nth)
     }
 
-    /// Libellé du rôle dans la langue `lang`.
+    /// Label of the role in the `lang` language.
     fn label_in(self, lang: &str, event: &str, family: bool, nth: usize) -> Cow<'static, str> {
         match self {
             ActRole::Principal if family => {
@@ -161,12 +157,12 @@ impl ActRole {
         }
     }
 
-    /// Le rôle porte-t-il ce libellé, dans l'une des langues de l'app ?
+    /// Does the role have this label, in one of the app's languages?
     fn has_label(self, event: &str, family: bool, label: &str) -> bool {
         crate::i18n::LANGUAGES.iter().any(|l| self.label_in(l, event, family, 0) == label)
     }
 
-    /// Rôle GEDCOM 7 écrit dans les citations (`EVEN` / `ROLE`).
+    /// GEDCOM 7 role written in citations (`EVEN` / `ROLE`).
     fn gedcom(self, event: &str, family: bool, nth: usize) -> Option<&'static str> {
         Some(match self {
             ActRole::Principal if family => {
@@ -191,7 +187,7 @@ impl ActRole {
         })
     }
 
-    /// Précision fixe du rôle (`ROLE` / `PHRASE`), dans la langue `lang`.
+    /// Fixed detail of the role (`ROLE` / `PHRASE`), in the `lang` language.
     fn base_phrase(self, lang: &str) -> Option<Cow<'static, str>> {
         match self {
             ActRole::Godfather | ActRole::Godmother | ActRole::Declarant => Some(self.label_in(lang, "", false, 0)),
@@ -199,7 +195,7 @@ impl ActRole {
         }
     }
 
-    /// Sexe imposé par le rôle.
+    /// Sex required by the role.
     pub fn sex(self, family: bool, nth: usize) -> Option<&'static str> {
         match self {
             ActRole::Father | ActRole::Godfather => Some("M"),
@@ -209,7 +205,7 @@ impl ActRole {
         }
     }
 
-    /// Champs saisis pour ce rôle.
+    /// Fields entered for this role.
     pub fn fields(self, event: &str, family: bool, nth: usize) -> &'static [PersonField] {
         match self {
             ActRole::Principal if family => &[Surname, Given, Age, Occupation, Residence, Birthplace],
@@ -223,7 +219,7 @@ impl ActRole {
         }
     }
 
-    /// Rôle d'après la citation (`ROLE`, sa `PHRASE`) et le sexe de la personne.
+    /// Role from the citation (`ROLE`, its `PHRASE`) and the person's sex.
     fn from_gedcom(role: &str, phrase: &str, sex: &str) -> ActRole {
         let p = sort_key(phrase);
         match role {
@@ -248,42 +244,41 @@ impl ActRole {
     }
 }
 
-/// La précision normalisée `p` commence-t-elle par la précision fixe du rôle, dans l'une des
-/// langues de l'app (« marraine », « godmother ») ?
+/// Does the normalized detail `p` start with the role's fixed detail, in one of the app's languages
+/// (“marraine”, “godmother”)?
 fn starts_with_label(p: &str, role: ActRole) -> bool {
     crate::i18n::LANGUAGES.iter().filter_map(|l| role.base_phrase(l)).any(|b| p.starts_with(&sort_key(&b)))
 }
 
 // ----------------------------------------------------------------------
-// Acte en cours de saisie
+// Record being entered
 // ----------------------------------------------------------------------
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum MediaChoice {
     #[default]
     None,
-    /// Média existant (identifiant `OBJE`).
+    /// Existing media (`OBJE` identifier).
     Existing(String),
-    /// Nouveaux fichiers, une page chacun, chemins relatifs au dossier du `.ged`
-    /// de préférence.
+    /// New files, one page each, paths preferably relative to the `.ged` folder.
     NewFiles(Vec<String>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum PersonChoice {
-    /// Créer un nouvel individu.
+    /// Create a new individual.
     #[default]
     Create,
-    /// Lier à un individu existant.
+    /// Link to an existing individual.
     Link(String),
-    /// Mentionner dans la citation sans créer d'individu.
+    /// Mention in the citation without creating an individual.
     Mention,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Participant {
     pub role: ActRole,
-    /// Pour un père, une mère ou un conjoint : rang de la personne principale concernée.
+    /// For a father, mother or spouse: rank of the principal person they relate to.
     pub of: usize,
     pub values: Vec<(PersonField, String)>,
     pub choice: PersonChoice,
@@ -320,64 +315,64 @@ impl Participant {
         self.values.iter().all(|(_, v)| v.trim().is_empty())
     }
 
-    /// « Prénoms NOM ».
+    /// “Given names SURNAME”.
     pub fn display_name(&self) -> String {
         let (g, s) = (self.get(Given), self.get(Surname).to_uppercase());
         format!("{g} {s}").trim().to_string()
     }
 }
 
-/// Identifie un acte parmi les citations d'une source : référence (`PAGE`) et
-/// date de l'acte (`DATA.DATE`).
+/// Identifies a record among a source's citations: reference (`PAGE`) and record date
+/// (`DATA.DATE`).
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub struct ActKey {
     pub page: String,
     pub date: String,
 }
 
-/// Un acte d'une source.
+/// A record of a source.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Act {
     pub source: String,
-    /// Balise de l'événement (`BIRT`, `MARR`, `CENS`, `EVEN`…).
+    /// Event tag (`BIRT`, `MARR`, `CENS`, `EVEN`…).
     pub event: String,
-    /// `TYPE` de l'événement (types personnalisés `EVEN`).
+    /// `TYPE` of the event (custom `EVEN` types).
     pub event_type: String,
-    /// Pour `EVEN` : événement familial (sur la famille des époux).
+    /// For `EVEN`: family event (on the spouses' family).
     pub family_even: bool,
-    /// Date de l'événement (format GEDCOM : `14 MAR 1912`, `ABT 1850`…).
+    /// Date of the event (GEDCOM format: `14 MAR 1912`, `ABT 1850`…).
     pub date: String,
     pub date_phrase: String,
     pub place: String,
-    /// Référence de l'acte dans la source (`PAGE`) : « Acte n° 27, vue 12 ».
+    /// Reference of the record in the source (`PAGE`): “Record no. 27, image 12”.
     pub page: String,
-    /// Date de rédaction de l'acte si elle diffère (`DATA.DATE` de la citation).
+    /// Date the record was written, if different (`DATA.DATE` of the citation).
     pub record_date: String,
     pub record_date_phrase: String,
     /// Transcription (`DATA.TEXT`).
     pub transcription: String,
-    /// Qualité de la preuve (`QUAY` 0 à 3).
+    /// Quality of the evidence (`QUAY` 0 to 3).
     pub quality: Option<u8>,
     pub media: MediaChoice,
     pub participants: Vec<Participant>,
-    /// Créer une naissance estimée (`EST`) à partir de l'âge déclaré quand il n'y en a pas.
+    /// Create an estimated birth (`EST`) from the declared age when there is none.
     pub estimate_births: bool,
-    /// Note de la citation, hors personnes mentionnées (gardée telle quelle).
+    /// Citation note, without the mentioned people (kept as is).
     pub note: String,
-    /// Acte lu dans le fichier : il sera remplacé à l'enregistrement.
+    /// Record read from the file: it is replaced on save.
     pub original: Option<ActKey>,
 }
 
-/// Ce que l'enregistrement d'un acte a produit.
+/// What saving a record produced.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ActResult {
     pub source: String,
     pub media: Option<String>,
-    /// Identifiant de chaque participant (`None` pour une simple mention), dans l'ordre de saisie.
+    /// Identifier of each participant (`None` for a mere mention), in entry order.
     pub persons: Vec<Option<String>>,
     pub created: Vec<String>,
     pub families_created: Vec<String>,
-    /// Tous les enregistrements créés ou modifiés.
+    /// Every record created or modified.
     pub touched: Vec<String>,
 }
 
@@ -397,23 +392,23 @@ impl ActResult {
     }
 }
 
-/// Un individu existant qui pourrait correspondre à une personne citée.
+/// An existing individual who could be a person named in the record.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Suggestion {
     pub xref: String,
     pub label: String,
     pub score: f32,
-    /// Pourquoi on le propose (« père de Paul MARCHAND », « né vers 1880 »…).
+    /// Why it is suggested (“father of Paul MARCHAND”, “born about 1880”…).
     pub reason: String,
 }
 
-/// Titre d'une source tout juste créée (voir [`Gedcom::create`]), dans l'une des langues de l'app.
+/// Title of a source just created (see [`Gedcom::create`]), in one of the app's languages.
 fn is_new_source_title(title: &str) -> bool {
     crate::i18n::LANGUAGES.iter().any(|l| t!("record.new_source", locale = l) == title)
 }
 
 impl Act {
-    /// Nouvel acte vide, avec les personnes attendues pour cet événement.
+    /// New empty record, with the people expected for this event.
     pub fn new(source: &str, event: &str) -> Self {
         let mut a = Self {
             source: source.to_string(),
@@ -438,7 +433,7 @@ impl Act {
         a
     }
 
-    /// Personnes proposées dans un acte vide de cet événement.
+    /// People offered in an empty record for this event.
     pub fn default_participants(&self) -> Vec<Participant> {
         use ActRole::*;
         let p = Participant::new;
@@ -455,12 +450,12 @@ impl Act {
         }
     }
 
-    /// L'événement est-il familial (porté par l'enregistrement `FAM` des époux) ?
+    /// Is the event a family event (held by the spouses' `FAM` record)?
     pub fn is_family(&self) -> bool {
         FAMILY_ACT_EVENTS.contains(&self.event.as_str()) || (self.event == "EVEN" && self.family_even)
     }
 
-    /// Libellé de l'événement.
+    /// Label of the event.
     pub fn event_label(&self) -> String {
         if !self.event_type.trim().is_empty() {
             return crate::model::event_type_label(&self.event_type);
@@ -468,7 +463,7 @@ impl Act {
         crate::model::event_name(&self.event)
     }
 
-    /// Rang de la personne `idx` parmi les personnes principales.
+    /// Rank of person `idx` among the principal people.
     pub fn nth_principal(&self, idx: usize) -> usize {
         self.participants[..idx.min(self.participants.len())].iter().filter(|p| p.role == ActRole::Principal).count()
     }
@@ -478,13 +473,13 @@ impl Act {
         self.participants.iter().filter(|p| p.role == ActRole::Principal).count()
     }
 
-    /// Libellé du rôle de la personne `idx`.
+    /// Label of the role of person `idx`.
     pub fn role_label(&self, idx: usize) -> Cow<'static, str> {
         let p = &self.participants[idx];
         p.role.label(&self.event, self.is_family(), self.nth_principal(idx))
     }
 
-    /// Champs à saisir pour la personne `idx`.
+    /// Fields to enter for person `idx`.
     pub fn fields_of(&self, idx: usize) -> Vec<PersonField> {
         let p = &self.participants[idx];
         let mut f = p.role.fields(&self.event, self.is_family(), self.nth_principal(idx)).to_vec();
@@ -494,12 +489,12 @@ impl Act {
         f
     }
 
-    /// Sexe imposé pour la personne `idx`.
+    /// Sex required for person `idx`.
     pub fn imposed_sex(&self, idx: usize) -> Option<&'static str> {
         self.participants[idx].role.sex(self.is_family(), self.nth_principal(idx))
     }
 
-    /// Libellé court d'une personne principale (« l'époux », « Paul MARCHAND »).
+    /// Short label of a principal person (“the groom”, “Paul MARCHAND”).
     pub fn principal_name(&self, nth: usize) -> String {
         if self.is_family() {
             return if nth == 0 { t!("act.the_husband").into() } else { t!("act.the_wife").into() };
@@ -513,13 +508,13 @@ impl Act {
             .unwrap_or_else(|| t!("act.person_n", n = nth + 1).into_owned())
     }
 
-    /// Année de l'événement, si la date en contient une.
+    /// Year of the event, if the date has one.
     pub fn year(&self) -> Option<i32> {
         crate::Date::parse(&self.date).year()
     }
 
-    /// Prépare l'acte suivant du même registre : même événement, lieu et image ;
-    /// le premier nombre de la référence est incrémenté (« Acte n° 27 » → « Acte n° 28 »).
+    /// Prepares the next record of the same register: same event, place and image; the first number
+    /// of the reference is incremented (“Record no. 27” → “Record no. 28”).
     pub fn next(&self) -> Self {
         let mut e = Act::new(&self.source, &self.event);
         e.event_type = self.event_type.clone();
@@ -533,7 +528,7 @@ impl Act {
         e
     }
 
-    /// Titre d'une source propre à cet acte : « Acte de naissance de Rémi GUYOT ».
+    /// Title of a source specific to this record: “Birth record of Paul MARCHAND”.
     pub fn auto_title(&self) -> String {
         let names: Vec<String> = self
             .participants
@@ -542,7 +537,7 @@ impl Act {
             .map(|p| p.display_name())
             .collect();
         let what = self.event_label().to_lowercase();
-        // « Acte d'inhumation », « Acte de naissance ».
+        // “Burial record”, “Birth record”.
         let elided = what.starts_with(|c: char| "aeéèêiouyh".contains(c));
         let title = match (names.is_empty(), elided) {
             (true, true) => t!("act.auto_title.elided", what = what),
@@ -553,7 +548,7 @@ impl Act {
         capitalize(&title)
     }
 
-    /// Libellé de l'acte dans la liste de sa source : « Naissance · Louise MARCHAND ».
+    /// Label of the record in its source's list: “Birth · Louise MARCHAND”.
     pub fn title(&self) -> String {
         let names: Vec<String> = self
             .participants
@@ -565,14 +560,14 @@ impl Act {
         if names.is_empty() { what } else { format!("{what} · {}", join_and(&names)) }
     }
 
-    /// Référence et date, pour la liste des actes : « Acte n° 27 · 3 février 1914 ».
+    /// Reference and date, for the list of records: “Record no. 27 · 3 February 1914”.
     pub fn subtitle(&self) -> String {
         let date = if self.date.trim().is_empty() { &self.record_date } else { &self.date };
         let date = if date.trim().is_empty() { String::new() } else { crate::Date::parse(date).display() };
         [self.page.trim().to_string(), date].into_iter().filter(|s| !s.is_empty()).collect::<Vec<_>>().join(" · ")
     }
 
-    /// Résumé lisible de l'acte, pour amorcer la transcription.
+    /// Readable summary of the record, to start the transcription.
     pub fn auto_text(&self) -> String {
         let mut lines = vec![format!(
             "{}{}{}",
@@ -609,7 +604,7 @@ impl Act {
         lines.join("\n")
     }
 
-    /// Vérifie l'acte avant écriture.
+    /// Checks the record before writing it.
     pub fn validate(&self, ged: &Gedcom) -> Result<(), String> {
         if ged.get(&self.source).is_none_or(|n| n.tag != "SOUR") {
             return Err(t!("act.error.no_source").into());
@@ -661,7 +656,7 @@ impl Act {
                     }
                     true
                 }
-                // Ligne vide : ignorée.
+                // Empty line: ignored.
                 PersonChoice::Create if p.is_blank() => false,
                 PersonChoice::Create => {
                     if p.get(Surname).is_empty() && p.get(Given).is_empty() {
@@ -687,8 +682,8 @@ impl Act {
         Ok(())
     }
 
-    /// Valeurs effectives : un enfant sans nom prend celui de son père, un père sans
-    /// nom celui de l'enfant.
+    /// Effective values: a child without a surname takes their father's, a father without a surname
+    /// takes the child's.
     fn effective(&self) -> Vec<Participant> {
         let mut ps = self.participants.clone();
         let nth: Vec<usize> = (0..ps.len()).map(|i| self.nth_principal(i)).collect();
@@ -721,8 +716,8 @@ impl Act {
         ps
     }
 
-    /// GEDCOM qui serait écrit, sans toucher au document : texte des enregistrements
-    /// créés ou modifiés.
+    /// GEDCOM that would be written, without touching the document: text of the records created or
+    /// modified.
     pub fn preview(&self, ged: &Gedcom) -> Result<String, String> {
         let mut copy = ged.clone();
         let res = self.save(&mut copy)?;
@@ -738,8 +733,8 @@ impl Act {
         Ok(out)
     }
 
-    /// Écrit l'acte dans le document. Un acte rouvert remplace son ancienne version.
-    /// Rien n'est modifié en cas d'erreur.
+    /// Writes the record into the document. A reopened record replaces its old version. Nothing is
+    /// changed on error.
     pub fn save(&self, ged: &mut Gedcom) -> Result<ActResult, String> {
         self.validate(ged)?;
         let mut copy = ged.clone();
@@ -765,7 +760,7 @@ impl Act {
         let family = self.is_family();
         w.res.source = source.clone();
 
-        // 1. Source : titre automatique d'une source toute neuve, contenu (`DATA` / `EVEN` + période).
+        // 1. Source: automatic title of a brand new source, contents (`DATA` / `EVEN` + period).
         let src = w.ged.get_mut(&source).unwrap();
         if src.child_val("TITL").is_none_or(|t| t.trim().is_empty() || is_new_source_title(t.trim())) {
             let title = self.auto_title();
@@ -790,7 +785,7 @@ impl Act {
                     .join(", ");
                 let node = w.ged.get_mut(&x).unwrap();
                 node.children.retain(|c| c.tag != "FILE");
-                // Une page par fichier, dans l'ordre ; le titre sur la première.
+                // One page per file, in order; the title on the first one.
                 for (i, path) in paths.iter().map(|p| p.trim()).filter(|p| !p.is_empty()).enumerate() {
                     let mut file = Node::with_value("FILE", path).push(Node::with_value("FORM", crate::mime_for(path)));
                     if i == 0 {
@@ -801,7 +796,7 @@ impl Act {
                         None => node.insert_child(file),
                     }
                 }
-                // Un acte est un document manuscrit (`FORM` / `MEDI MANUSCRIPT`).
+                // A record is a handwritten document (`FORM` / `MEDI MANUSCRIPT`).
                 crate::kinds::set_medium(node, "MANUSCRIPT");
                 w.mark_created(&x);
                 Some(x)
@@ -818,7 +813,7 @@ impl Act {
         }
         w.res.media = media.clone();
 
-        // 3. Personnes : lier ou créer.
+        // 3. People: link or create.
         let people = self.effective();
         let nth: Vec<usize> = (0..people.len()).map(|i| self.nth_principal(i)).collect();
         let mut ids: Vec<Option<String>> = Vec::new();
@@ -828,7 +823,7 @@ impl Act {
                 PersonChoice::Mention => None,
                 PersonChoice::Create if p.is_blank() => None,
                 PersonChoice::Link(x) => {
-                    // Complète le sexe s'il était inconnu.
+                    // Fills in the sex if it was unknown.
                     if matches!(sex.as_str(), "M" | "F")
                         && let Some(n) = w.ged.get_mut(x)
                         && n.child_val("SEX").is_none_or(|s| s == "U")
@@ -863,7 +858,7 @@ impl Act {
                 .and_then(|(_, (_, id))| id.clone())
         };
 
-        // 4. Liens familiaux déduits des rôles.
+        // 4. Family links inferred from the roles.
         let mut parents: Vec<(String, Option<String>, Option<String>)> = Vec::new();
         for (p, id) in people.iter().zip(&ids) {
             let Some(id) = id else { continue };
@@ -898,7 +893,7 @@ impl Act {
             self.link_household(&mut w, &people, &ids, &nth);
         }
 
-        // 5. Événement et citations.
+        // 5. Event and citations.
         let year = self.year();
         let fam = if family {
             let spouses: Vec<String> = people
@@ -913,8 +908,8 @@ impl Act {
         };
         let note = self.citation_note(&people, &nth);
 
-        // Événement principal : sur la famille, ou sur chaque personne principale.
-        // On retient où il se trouve pour y attacher les témoins (ASSO).
+        // Main event: on the family, or on each principal person. Remember where it is to attach
+        // the witnesses (ASSO).
         let mut main_event: Option<(String, usize)> = None;
         if let Some(fam) = &fam {
             let mut ev = self.event_node(None);
@@ -955,13 +950,13 @@ impl Act {
                 }
                 first_principal = false;
             } else {
-                // Citation au niveau de l'individu, avec son rôle dans l'événement.
+                // Citation at the individual's level, with their role in the event.
                 let cite = self.citation(media.as_deref(), role.clone(), false);
                 if !w.has_citation(x, &cite) {
                     let node = w.ged.get_mut(x).unwrap();
                     let before = node.children.len();
                     merge_citation(&mut node.children, cite);
-                    // Nouvelle citation : on la range avant CREA/CHAN.
+                    // New citation: placed before CREA/CHAN.
                     if node.children.len() > before {
                         let c = node.children.pop().unwrap();
                         node.insert_child(c);
@@ -970,7 +965,7 @@ impl Act {
                 }
             }
 
-            // Faits déduits : profession, domicile, naissance estimée.
+            // Inferred facts: occupation, residence, estimated birth.
             let occu = p.get(Occupation);
             if !occu.is_empty() {
                 let mut n = Node::with_value("OCCU", occu);
@@ -1012,7 +1007,7 @@ impl Act {
             }
         }
 
-        // 6. Témoins, parrains, déclarants… associés à l'événement principal.
+        // 6. Witnesses, godparents, informants… associated with the main event.
         if let Some((holder, idx)) = main_event {
             for (i, (p, id)) in people.iter().zip(&ids).enumerate() {
                 let Some(x) = id else { continue };
@@ -1038,7 +1033,7 @@ impl Act {
         Ok(res)
     }
 
-    /// Rôle GEDCOM et précision écrits dans la citation d'une personne.
+    /// GEDCOM role and detail written in a person's citation.
     fn citation_role(
         &self,
         p: &Participant,
@@ -1063,14 +1058,15 @@ impl Act {
         }
         let role = match p.role.gedcom(&self.event, family, nth) {
             Some(r) => r.to_string(),
-            // Personne principale sans rôle standard : `OTHER` seulement pour porter son lien déclaré.
+            // Principal person without a standard role: `OTHER` only to carry their declared
+            // relationship.
             None if !phrase.is_empty() => "OTHER".to_string(),
             None => return None,
         };
         Some((role, (!phrase.is_empty()).then(|| phrase.join(", "))))
     }
 
-    /// Note de la citation principale : personnes mentionnées, puis la note de l'acte.
+    /// Note of the main citation: mentioned people, then the record's note.
     fn citation_note(&self, people: &[Participant], nth: &[usize]) -> String {
         let family = self.is_family();
         let mut parts: Vec<String> = people
@@ -1094,18 +1090,18 @@ impl Act {
         parts.join("; ")
     }
 
-    /// `DATE` (+ `PHRASE`) de l'événement.
+    /// `DATE` (+ `PHRASE`) of the event.
     fn date_node(&self) -> Option<Node> {
         crate::date::date_node(&self.date, &self.date_phrase)
     }
 
-    /// Date de la citation (`DATA.DATE`) : date de rédaction, sinon date de l'événement.
+    /// Date of the citation (`DATA.DATE`): date written, otherwise date of the event.
     fn citation_date(&self) -> Option<Node> {
         let own = !self.record_date.trim().is_empty() || !self.record_date_phrase.trim().is_empty();
         if own { crate::date::date_node(&self.record_date, &self.record_date_phrase) } else { self.date_node() }
     }
 
-    /// Nœud de l'événement de l'acte (sans citation).
+    /// Node of the record's event (without citation).
     fn event_node(&self, age: Option<String>) -> Node {
         let mut ev = Node::new(&self.event);
         if !self.event_type.trim().is_empty() {
@@ -1123,8 +1119,8 @@ impl Act {
         ev
     }
 
-    /// Citation de la source. `full` ajoute la transcription (on ne l'écrit qu'une
-    /// fois, sur l'événement principal).
+    /// Citation of the source. `full` adds the transcription (written only once, on the main
+    /// event).
     fn citation(&self, media: Option<&str>, role: Option<(String, Option<String>)>, full: bool) -> Node {
         let mut c = Node::with_value("SOUR", format!("@{}@", self.source));
         if !self.page.trim().is_empty() {
@@ -1162,8 +1158,8 @@ impl Act {
         c
     }
 
-    /// Ménage (recensement…) : conjoint et enfants de la première personne principale,
-    /// d'après le « lien déclaré » des suivantes.
+    /// Household (census…): spouse and children of the first principal person, from the “declared
+    /// relationship” of the next ones.
     fn link_household(&self, w: &mut Writer, people: &[Participant], ids: &[Option<String>], nth: &[usize]) {
         let principals: Vec<(&Participant, String, usize)> = people
             .iter()
@@ -1202,7 +1198,8 @@ impl Act {
     }
 }
 
-/// Incrémente le premier nombre d'une référence (« Acte n° 27, vue 12 » → « Acte n° 28, vue 12 »).
+/// Increments the first number of a reference (“Record no. 27, image 12” → “Record no. 28, image
+/// 12”).
 pub fn increment_first_number(s: &str) -> String {
     let Some(start) = s.find(|c: char| c.is_ascii_digit()) else { return s.to_string() };
     let end = s[start..].find(|c: char| !c.is_ascii_digit()).map_or(s.len(), |e| start + e);
@@ -1215,7 +1212,7 @@ pub fn increment_first_number(s: &str) -> String {
     }
 }
 
-/// Âge en années à partir d'une saisie libre (« 32 ans », « 32 », « 6 mois » → 0).
+/// Age in years from free input (“32 ans”, “32”, “6 mois” → 0).
 pub fn parse_age_years(s: &str) -> Option<i32> {
     let s = sort_key(s.trim());
     if s.is_empty() {
@@ -1236,7 +1233,7 @@ pub fn parse_age_years(s: &str) -> Option<i32> {
     }
 }
 
-/// Âge au format GEDCOM 7 (`32y`, `6m`, `12d`).
+/// Age in GEDCOM 7 format (`32y`, `6m`, `12d`).
 pub fn gedcom_age(s: &str) -> Option<String> {
     let k = sort_key(s.trim());
     let digits: String = k.chars().take_while(|c| c.is_ascii_digit()).collect();
@@ -1250,7 +1247,7 @@ pub fn gedcom_age(s: &str) -> Option<String> {
     })
 }
 
-/// Âge GEDCOM (`32y`, `6m`) en français (« 32 ans », « 6 mois »).
+/// GEDCOM age (`32y`, `6m`) in French (“32 ans”, “6 mois”).
 fn age_from_gedcom(s: &str) -> String {
     let s = s.trim();
     let mut out = Vec::new();
@@ -1281,17 +1278,17 @@ fn age_text(s: &str) -> String {
     }
 }
 
-/// « Témoin : Paul MARCHAND » (« Witness: Paul MARCHAND »).
+/// “Témoin : Paul MARCHAND” (“Witness: Paul MARCHAND”).
 fn labelled(label: &str, value: &str) -> String {
     t!("act.labelled", label = label, value = value).into_owned()
 }
 
-/// Sépare « Témoin : Paul MARCHAND » ou « Witness: Paul MARCHAND ».
+/// Splits “Témoin : Paul MARCHAND” or “Witness: Paul MARCHAND”.
 fn split_labelled(s: &str) -> Option<(&str, &str)> {
     s.split_once(" : ").or_else(|| s.split_once(": "))
 }
 
-/// « Paul et Marie » (« Paul and Marie »).
+/// “Paul et Marie” (“Paul and Marie”).
 fn join_and(names: &[String]) -> String {
     names.join(&t!("act.and"))
 }
@@ -1302,7 +1299,7 @@ fn capitalize(s: &str) -> String {
 }
 
 // ----------------------------------------------------------------------
-// Écriture dans le document
+// Writing to the document
 // ----------------------------------------------------------------------
 
 struct Writer<'a> {
@@ -1342,7 +1339,7 @@ impl Writer<'_> {
         }
     }
 
-    /// Famille du couple, créée si besoin.
+    /// The couple's family, created if needed.
     fn ensure_couple(&mut self, a: &str, b: &str) -> String {
         let pa = format!("@{a}@");
         let pb = format!("@{b}@");
@@ -1354,7 +1351,7 @@ impl Writer<'_> {
         if let Some(f) = found.and_then(|f| f.xref.clone()) {
             return f;
         }
-        // Une famille où l'un est seul peut accueillir l'autre.
+        // A family with only one of them can take the other.
         let half = self.ged.records_of(RecordKind::Family).find_map(|f| {
             let h = f.child_val("HUSB");
             let w = f.child_val("WIFE");
@@ -1384,7 +1381,7 @@ impl Writer<'_> {
         fam
     }
 
-    /// Rattache l'enfant à la famille de ses parents (créée ou complétée si besoin).
+    /// Attaches the child to their parents' family (created or completed if needed).
     fn ensure_parents(&mut self, child: &str, father: Option<&str>, mother: Option<&str>) {
         if father.is_none() && mother.is_none() {
             return;
@@ -1418,7 +1415,7 @@ impl Writer<'_> {
             None => match (father, mother) {
                 (Some(f), Some(m)) => self.ensure_couple(f, m),
                 (Some(p), None) | (None, Some(p)) if self.single_family(p).is_some() => {
-                    // Un seul parent cité, qui n'a qu'une famille : l'enfant en fait partie.
+                    // Only one parent named, who has only one family: the child belongs to it.
                     self.single_family(p).unwrap()
                 }
                 (Some(p), None) | (None, Some(p)) => {
@@ -1436,7 +1433,7 @@ impl Writer<'_> {
         let ptr = format!("@{child}@");
         let node = self.ged.get_mut(&fam).unwrap();
         if !node.children.iter().any(|c| c.tag == "CHIL" && c.val() == ptr) {
-            // Les enfants vont après les époux et les enfants déjà présents.
+            // Children go after the spouses and the children already there.
             let at = node
                 .children
                 .iter()
@@ -1449,15 +1446,15 @@ impl Writer<'_> {
         self.link(child, "FAMC", &fam);
     }
 
-    /// Unique famille où l'individu est conjoint.
+    /// The only family where the individual is a spouse.
     fn single_family(&self, x: &str) -> Option<String> {
         let fams = self.ged.individual(x)?.fams();
         (fams.len() == 1).then(|| fams[0].to_string())
     }
 
-    /// Ajoute l'événement de l'acte, ou le fusionne avec un événement existant :
-    /// événement unique (naissance, décès…) aux dates compatibles, ou événement du
-    /// même type encore vide (sans date ni source). Renvoie son index.
+    /// Adds the record's event, or merges it with an existing event: a unique event (birth, death…)
+    /// with compatible dates, or an event of the same type that is still empty (no date or source).
+    /// Returns its index.
     fn add_event(&mut self, x: &str, ev: Node) -> usize {
         let unique = matches!(ev.tag.as_str(), "BIRT" | "CHR" | "BAPM" | "DEAT" | "BURI" | "CREM");
         let node = self.ged.get_mut(x).unwrap();
@@ -1515,7 +1512,7 @@ impl Writer<'_> {
         idx
     }
 
-    /// Ajoute un fait (profession, domicile), sauf s'il existe déjà avec la même valeur et la même date.
+    /// Adds a fact (occupation, residence), unless it already exists with the same value and date.
     fn add_fact(&mut self, x: &str, fact: Node) {
         let node = self.ged.get_mut(x).unwrap();
         let same = node.children.iter_mut().find(|c| {
@@ -1545,8 +1542,8 @@ impl Writer<'_> {
     }
 }
 
-/// Ajoute une citation, ou complète une citation existante de la même source
-/// (sans référence, ou avec la même) plutôt que de la dupliquer.
+/// Adds a citation, or completes an existing citation of the same source (without a reference, or
+/// with the same one) rather than duplicating it.
 fn merge_citation(children: &mut Vec<Node>, cite: Node) {
     let page = cite.child_val("PAGE").map(str::to_string);
     let same = children.iter_mut().find(|c| {
@@ -1566,7 +1563,7 @@ fn merge_citation(children: &mut Vec<Node>, cite: Node) {
                     .iter()
                     .any(|e| e.tag == sub.tag && (sub.tag != "OBJE" && sub.tag != "NOTE" || *e == sub))
                 {
-                    // PAGE en tête, comme l'écrivent les autres logiciels.
+                    // PAGE first, as other software writes it.
                     if sub.tag == "PAGE" {
                         existing.children.insert(0, sub);
                     } else {
@@ -1579,7 +1576,7 @@ fn merge_citation(children: &mut Vec<Node>, cite: Node) {
     }
 }
 
-/// Une date existante (`ABT 1850`, `BEF 1900`…) est-elle compatible avec la nouvelle ?
+/// Is an existing date (`ABT 1850`, `BEF 1900`…) compatible with the new one?
 fn compatible_dates(old: Option<&str>, new: Option<&str>) -> bool {
     match (old, new) {
         (None, _) | (_, None) => true,
@@ -1588,21 +1585,21 @@ fn compatible_dates(old: Option<&str>, new: Option<&str>) -> bool {
     }
 }
 
-/// Date exacte (commence par un jour ou une année) plutôt qu'approximative (`ABT`, `EST`…).
+/// Exact date (starts with a day or a year) rather than approximate (`ABT`, `EST`…).
 fn starts_with_day_or_year(d: &str) -> bool {
     d.trim().chars().next().is_some_and(|c| c.is_ascii_digit())
 }
 
 // ----------------------------------------------------------------------
-// Lecture des actes d'une source
+// Reading a source's records
 // ----------------------------------------------------------------------
 
-/// La citation désigne-t-elle cette source ?
+/// Does the citation point to this source?
 fn cites(n: &Node, ptr: &str) -> bool {
     n.tag == "SOUR" && n.val() == ptr
 }
 
-/// Clé de l'acte auquel appartient une citation.
+/// Key of the record a citation belongs to.
 pub(crate) fn key_of(cite: &Node) -> ActKey {
     ActKey {
         page: cite.child_val("PAGE").unwrap_or("").trim().to_string(),
@@ -1610,15 +1607,15 @@ pub(crate) fn key_of(cite: &Node) -> ActKey {
     }
 }
 
-/// Une citation d'une source dans un enregistrement : au niveau de l'enregistrement
-/// (`event` vide) ou d'un de ses événements / faits.
+/// A citation of a source in a record: at the record's level (`event` empty) or on one of its
+/// events / facts.
 struct Hit<'a> {
     record: &'a Node,
     event: Option<&'a Node>,
     cite: &'a Node,
 }
 
-/// Citations (niveaux 1 et 2) des individus et familles qui désignent la source.
+/// Citations (levels 1 and 2) of the individuals and families that point to the source.
 fn hits<'a>(ged: &'a Gedcom, source: &str) -> Vec<Hit<'a>> {
     let ptr = format!("@{source}@");
     let mut out = Vec::new();
@@ -1636,14 +1633,14 @@ fn hits<'a>(ged: &'a Gedcom, source: &str) -> Vec<Hit<'a>> {
     out
 }
 
-/// Rôle (`ROLE`) et précision (`PHRASE`) d'une citation.
+/// Role (`ROLE`) and detail (`PHRASE`) of a citation.
 fn cite_role(cite: &Node) -> (&str, &str) {
     let role = cite.child("EVEN").and_then(|e| e.child("ROLE"));
     (role.map(|r| r.val()).unwrap_or(""), role.and_then(|r| r.child_val("PHRASE")).unwrap_or(""))
 }
 
-/// Retire de la précision la partie déduite du rôle (« Parrain », « Père de l'époux »),
-/// pour ne garder que le lien déclaré.
+/// Removes from the detail the part inferred from the role (“Godfather”, “Father of the groom”), to
+/// keep only the declared relationship.
 fn kinship_from_phrase(role: ActRole, phrase: &str) -> String {
     phrase
         .split(", ")
@@ -1660,7 +1657,7 @@ fn kinship_from_phrase(role: ActRole, phrase: &str) -> String {
         .join(", ")
 }
 
-/// Sépare « Prénoms NOM » (nom en majuscules à la fin).
+/// Splits “Given names SURNAME” (surname in capitals at the end).
 fn split_name(name: &str) -> (String, String) {
     let words: Vec<&str> = name.split_whitespace().collect();
     let upper = |w: &str| w.chars().any(char::is_alphabetic) && !w.chars().any(char::is_lowercase);
@@ -1669,8 +1666,7 @@ fn split_name(name: &str) -> (String, String) {
 }
 
 impl Gedcom {
-    /// Actes d'une source, reconstitués à partir des citations qui la désignent,
-    /// dans l'ordre chronologique.
+    /// Records of a source, rebuilt from the citations that point to it, in chronological order.
     pub fn acts(&self, source: &str) -> Vec<Act> {
         let all = hits(self, source);
         let mut keys: Vec<ActKey> = Vec::new();
@@ -1696,7 +1692,7 @@ impl Gedcom {
         acts
     }
 
-    /// Acte de la source identifié par sa clé.
+    /// Record of the source identified by its key.
     pub fn act(&self, source: &str, key: &ActKey) -> Option<Act> {
         let all = hits(self, source);
         let group: Vec<&Hit> = all.iter().filter(|h| key_of(h.cite) == *key).collect();
@@ -1704,7 +1700,7 @@ impl Gedcom {
     }
 
     fn read_act(&self, source: &str, key: ActKey, group: &[&Hit]) -> Act {
-        // Événement : celui que désignent les citations, sinon celui qui les contient.
+        // Event: the one the citations point to, otherwise the one that contains them.
         let event = group
             .iter()
             .find_map(|h| h.cite.child_val("EVEN").filter(|e| !e.is_empty()))
@@ -1732,7 +1728,7 @@ impl Gedcom {
             }
             act.place = e.child_val("PLAC").unwrap_or("").to_string();
         }
-        // Données de la citation : la citation principale d'abord.
+        // Citation data: the main citation first.
         let ordered: Vec<&&Hit> = main.iter().copied().chain(group.iter().filter(|h| !is_main(h))).collect();
         if let Some(d) = ordered.iter().find_map(|h| h.cite.child("DATA").and_then(|d| d.child("DATE"))) {
             let (v, p) = (d.val().to_string(), d.child_val("PHRASE").unwrap_or("").to_string());
@@ -1767,7 +1763,7 @@ impl Gedcom {
             }
             p
         };
-        // Personnes principales : sur l'événement (ou les époux de la famille).
+        // Principal people: on the event (or the spouses of the family).
         for h in &main {
             let e = h.event.unwrap();
             if h.record.tag == "FAM" {
@@ -1796,7 +1792,7 @@ impl Gedcom {
                 people.push((x.to_string(), p));
             }
         }
-        // Les autres : rôle de la citation, et faits qu'elle prouve.
+        // The others: role from the citation, and the facts it proves.
         for h in group.iter().filter(|h| !is_main(h) && h.record.tag == "INDI") {
             let Some(x) = h.record.xref.as_deref() else { continue };
             let at = match people.iter().position(|(y, _)| y == x) {
@@ -1822,7 +1818,7 @@ impl Gedcom {
                     if let Some(pl) = e.child_val("PLAC") {
                         p.set(Birthplace, pl);
                     }
-                    // Naissance estimée d'après l'âge déclaré.
+                    // Estimated birth from the declared age.
                     if p.get(Age).is_empty()
                         && let Some(est) = e.child_val("DATE").and_then(|d| d.strip_prefix("EST "))
                         && let (Ok(b), Some(y)) = (est.trim().parse::<i32>(), act.year())
@@ -1833,7 +1829,7 @@ impl Gedcom {
                 _ => {}
             }
         }
-        // Père, mère, conjoint de quelle personne principale ?
+        // Father, mother, spouse of which principal person?
         let principals: Vec<String> =
             people.iter().filter(|(_, p)| p.role == ActRole::Principal).map(|(x, _)| x.clone()).collect();
         if principals.len() > 1 {
@@ -1866,7 +1862,7 @@ impl Gedcom {
                 p.of = by_phrase.or(by_links).unwrap_or(0);
             }
         }
-        // Personnes mentionnées : dans la note de la citation principale.
+        // Mentioned people: in the note of the main citation.
         let note_cite = main.first().map(|h| h.cite).or_else(|| group.first().map(|h| h.cite));
         let mut kept_notes: Vec<String> = Vec::new();
         let family = act.is_family();
@@ -1895,23 +1891,22 @@ impl Gedcom {
         }
         act.note = kept_notes.join("; ");
 
-        // Ordre : personnes principales, puis par rôle.
+        // Order: principal people, then by role.
         let mut list: Vec<Participant> = people.into_iter().map(|(_, p)| p).collect();
         list.sort_by_key(|p| (ActRole::ALL.iter().position(|r| *r == p.role).unwrap_or(99), p.of));
         act.participants = list;
         act
     }
 
-    /// Supprime un acte : ses citations et les témoins qu'il associait aux événements.
-    /// Les événements, les faits, les individus et les liens familiaux restent.
-    /// Renvoie les enregistrements modifiés.
+    /// Deletes a record: its citations and the witnesses it associated with events. Events, facts,
+    /// individuals and family links stay. Returns the modified records.
     pub fn remove_act(&mut self, source: &str, key: &ActKey) -> Vec<String> {
         self.unlink_act(source, key, false)
     }
 
-    /// Retire les citations de l'acte. `strip` (modification de l'acte) : ce que l'acte
-    /// était seul à établir est vidé aussi (date, lieu et âge de son événement ; profession,
-    /// domicile, naissance estimée), pour que la nouvelle version le réécrive à la même place.
+    /// Removes the record's citations. `strip` (editing the record): what only this record
+    /// established is emptied too (date, place and age of its event; occupation, residence,
+    /// estimated birth), so that the new version writes it again at the same place.
     fn unlink_act(&mut self, source: &str, key: &ActKey, strip: bool) -> Vec<String> {
         let ptr = format!("@{source}@");
         let act = self.act(source, key);
@@ -1932,7 +1927,7 @@ impl Gedcom {
             (r.tag == "INDI" || r.tag == "FAM")
                 && r.children.iter().any(|c| matches(c) || c.children.iter().any(&matches))
         };
-        // Témoin associé par l'acte : `ASSO` vers une personne de l'acte, avec son seul rôle.
+        // Witness associated by the record: `ASSO` to a person of the record, with only its role.
         let act_asso = |n: &Node| {
             n.tag == "ASSO" && people.iter().any(|p| p == n.val()) && n.children.iter().all(|c| c.tag == "ROLE")
         };
@@ -1951,7 +1946,7 @@ impl Gedcom {
                     continue;
                 }
                 if c.tag == event {
-                    // L'événement de l'acte : la nouvelle version le complète à la même place.
+                    // The record's event: the new version completes it at the same place.
                     c.children.retain(|n| {
                         !(matches!(n.tag.as_str(), "DATE" | "PLAC" | "AGE")
                             || (matches!(n.tag.as_str(), "HUSB" | "WIFE") && n.children.iter().all(|a| a.tag == "AGE")))
@@ -1960,7 +1955,7 @@ impl Gedcom {
                     && c.children.iter().all(|n| matches!(n.tag.as_str(), "DATE" | "PLAC"))
                     && (c.tag != "BIRT" || c.child_val("DATE").is_none_or(|d| d.starts_with("EST ")))
                 {
-                    // Fait déduit par l'acte (profession, domicile, naissance estimée).
+                    // Fact inferred by the record (occupation, residence, estimated birth).
                     drop.push(i);
                 }
             }
@@ -1975,7 +1970,7 @@ impl Gedcom {
         touched
     }
 
-    /// Retire les événements restés vides après la modification d'un acte.
+    /// Removes the events left empty after a record was edited.
     fn drop_empty_events(&mut self, records: &[String]) {
         for x in records {
             let Some(r) = self.get_mut(x) else { continue };
@@ -1990,18 +1985,18 @@ impl Gedcom {
 }
 
 // ----------------------------------------------------------------------
-// Correspondances avec les individus existants
+// Matches with existing individuals
 // ----------------------------------------------------------------------
 
 impl Act {
-    /// Individus existants qui pourraient être la personne citée à l'index `idx`,
-    /// du plus probable au moins probable.
+    /// Existing individuals who could be the person named at index `idx`, most likely first.
     pub fn suggestions(&self, ged: &Gedcom, idx: usize) -> Vec<Suggestion> {
         let Some(p) = self.effective().get(idx).cloned() else { return vec![] };
         let nth = self.nth_principal(idx);
         let surname = sort_key(p.get(Surname));
         let given = sort_key(p.get(Given));
-        // Rien de saisi pour cette personne (le nom hérité ne suffit pas) : liens déduits seulement.
+        // Nothing entered for this person (the inherited surname is not enough): inferred links
+        // only.
         if self.participants.get(idx).is_none_or(|p| p.is_blank()) || (surname.is_empty() && given.is_empty()) {
             return self.context_suggestions(ged, idx);
         }
@@ -2059,7 +2054,7 @@ impl Act {
                         score -= 3.0;
                     }
                 }
-                // Mort avant l'acte (sauf pour l'acte de décès ou d'inhumation lui-même).
+                // Died before the record (except for the death or burial record itself).
                 if let (Some(y), Some(d)) = (year, i.death().and_then(|e| e.date()).and_then(|d| d.year()))
                     && d < y
                     && !(p.role == ActRole::Principal && is_death_like(&self.event))
@@ -2069,7 +2064,7 @@ impl Act {
                 if let Some(b) = i.birth_year()
                     && let Some(y) = year
                 {
-                    // Né après l'acte, ou trop jeune pour être parent / conjoint.
+                    // Born after the record, or too young to be a parent / spouse.
                     let min_age = match p.role {
                         ActRole::Father | ActRole::Mother => 14,
                         ActRole::Spouse => 12,
@@ -2085,7 +2080,7 @@ impl Act {
                     reasons.push(why.clone());
                 }
                 if let Some(b) = i.birth().and_then(|e| e.date()) {
-                    reasons.push(format!("né(e) {}", b.display()));
+                    reasons.push(t!("act.suggestion.born", date = b.display()).into_owned());
                 }
                 (score >= 3.0).then(|| Suggestion {
                     xref: i.xref().to_string(),
@@ -2100,7 +2095,7 @@ impl Act {
         out
     }
 
-    /// Suggestions déduites des personnes déjà liées (père de l'enfant lié, conjoint…).
+    /// Suggestions inferred from the people already linked (father of the linked child, spouse…).
     fn context_suggestions(&self, ged: &Gedcom, idx: usize) -> Vec<Suggestion> {
         let Some(me) = self.participants.get(idx) else { return vec![] };
         let nths: Vec<usize> = (0..self.participants.len()).map(|i| self.nth_principal(i)).collect();
@@ -2139,7 +2134,7 @@ impl Act {
                     let child = ged.record_label(&c);
                     out.extend(p.and_then(|p| mk(p.xref(), t!("act.reason.parent_of", name = child).into_owned())));
                 }
-                // L'autre parent est lié : on propose son conjoint.
+                // The other parent is linked: suggest their spouse.
                 let other = if me.role == ActRole::Father { ActRole::Mother } else { ActRole::Father };
                 for o in linked_where(&|_, p| p.role == other && p.of == of) {
                     spouses_of(&o, &mut out);
@@ -2153,7 +2148,7 @@ impl Act {
             }
             ActRole::Principal => {
                 let mine = nths[idx];
-                // Enfant d'un père ou d'une mère déjà lié(e) ; conjoint de l'autre époux.
+                // Child of a father or mother already linked; spouse of the other spouse.
                 for par in linked_where(&|_, p| matches!(p.role, ActRole::Father | ActRole::Mother) && p.of == mine) {
                     let who = ged.record_label(&par);
                     for (_, kids) in ged.spouses_and_children(&par) {
@@ -2170,7 +2165,7 @@ impl Act {
             }
             _ => {}
         }
-        // Un même individu peut être proposé pour plusieurs raisons : on les regroupe.
+        // The same individual can be suggested for several reasons: group them.
         let mut merged: Vec<Suggestion> = Vec::new();
         for s in out {
             match merged.iter_mut().find(|m| m.xref == s.xref) {

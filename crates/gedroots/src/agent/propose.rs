@@ -1,10 +1,10 @@
-//! Outils d'écriture de l'agent : ils ne font qu'ajouter des propositions à relire.
+//! The agent's writing tools: they only add proposals to review.
 //!
-//! - les paramètres de l'outil `propose_act` deviennent une [`Proposal`] (le modèle
-//!   de la saisie d'acte), contrôlée sur une copie du fichier ;
-//! - le fichier téléchargé par l'agent prend le format des actes déjà joints : la page
-//!   utile d'un PDF devient une image JPEG (rendue en Rust pur, sur toutes les
-//!   plateformes), rangée dans le cache de l'app jusqu'à l'enregistrement.
+//! - the parameters of the `propose_act` tool become a [`Proposal`] (the record entry model),
+//!   checked on a copy of the file;
+//! - the file downloaded by the agent takes the format of the records already attached: the
+//!   relevant page of a PDF becomes a JPEG image (rendered in pure Rust, on every platform), stored
+//!   in the app's cache until it is saved.
 
 use gedcom::proposal::{NewSource, Proposal, SourceChoice};
 use gedcom::{Act, ActRole, Gedcom, MediaChoice, Participant, PersonChoice, PersonField, RecordKind};
@@ -73,15 +73,15 @@ pub struct ProposeParams {
     pub url: Option<String>,
 }
 
-/// Proposition en attente de relecture, dans la fenêtre du fichier.
+/// Proposal waiting for review, in the file's window.
 #[derive(Debug, Clone)]
 pub struct Pending {
     pub proposal: Proposal,
-    /// Fichier téléchargé par l'agent.
+    /// File downloaded by the agent.
     pub original: Option<PathBuf>,
-    /// Page du PDF extraite.
+    /// Extracted page of the PDF.
     pub pdf_page: Option<usize>,
-    /// Image affichée et jointe (celle de l'agent, ou la page extraite du PDF).
+    /// Image displayed and attached (the agent's, or the page extracted from the PDF).
     pub image: Option<PathBuf>,
 }
 
@@ -108,7 +108,7 @@ fn opt(s: &Option<String>) -> &str {
     s.as_deref().map(str::trim).unwrap_or("")
 }
 
-/// Acte et source décrits par l'agent (sans le fichier).
+/// Record and source described by the agent (without the file).
 pub fn to_proposal(p: &ProposeParams) -> Result<Proposal, String> {
     let event = p.event.trim().to_uppercase();
     if event.is_empty() {
@@ -160,7 +160,7 @@ pub fn to_proposal(p: &ProposeParams) -> Result<Proposal, String> {
     Ok(Proposal { source, act, url: opt(&p.url).to_string() })
 }
 
-/// Les actes déjà joints aux sources du fichier sont-ils plutôt des images que des PDF ?
+/// Are the records already attached to the file's sources images rather than PDFs?
 pub fn prefers_images(ged: &Gedcom) -> bool {
     let (mut images, mut pdfs) = (0usize, 0usize);
     for s in ged.records_of(RecordKind::Source) {
@@ -179,8 +179,8 @@ pub fn prefers_images(ged: &Gedcom) -> bool {
     images >= pdfs
 }
 
-/// Fichier de l'acte prêt à joindre : une image, ou un PDF d'une seule page si le
-/// fichier range ses actes en PDF.
+/// File of the record ready to attach: an image, or a single-page PDF if the file keeps its records
+/// as PDFs.
 pub fn prepare_file(path: &Path, page: Option<usize>, images: bool, cache: &Path) -> Result<PathBuf, String> {
     if !path.is_file() {
         return Err(format!("file not found: {}", path.display()));
@@ -212,8 +212,8 @@ pub fn prepare_file(path: &Path, page: Option<usize>, images: bool, cache: &Path
     Ok(out)
 }
 
-/// Rend une page en JPEG, côté le plus long à 3 000 pixels au plus (lisible, sans
-/// dépasser la résolution d'un scan d'archives).
+/// Renders a page as JPEG, longest side at most 3,000 pixels (readable, without exceeding the
+/// resolution of an archive scan).
 fn render_page(pdf: &hayro::hayro_syntax::Pdf, index: usize) -> Result<Vec<u8>, String> {
     use hayro::{PixmapSettings, RenderCache, RenderSettings};
     let page = pdf.pages().get(index).ok_or("missing page")?;
@@ -236,7 +236,7 @@ fn render_page(pdf: &hayro::hayro_syntax::Pdf, index: usize) -> Result<Vec<u8>, 
     Ok(out)
 }
 
-/// Joint le fichier préparé à l'acte proposé.
+/// Attaches the prepared file to the proposed record.
 pub fn attach(p: &mut Proposal, image: Option<&Path>) {
     p.act.media = match image {
         Some(i) => MediaChoice::NewFiles(vec![i.to_string_lossy().into_owned()]),
@@ -244,7 +244,7 @@ pub fn attach(p: &mut Proposal, image: Option<&Path>) {
     };
 }
 
-/// Dossier de cache des pages extraites.
+/// Cache folder of the extracted pages.
 pub fn cache_dir() -> PathBuf {
     dirs::cache_dir().unwrap_or_else(std::env::temp_dir).join("GEDRoots").join("agent")
 }
@@ -289,7 +289,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// PDF de `pages` pages A4, chacune avec un rectangle noir.
+    /// PDF of `pages` A4 pages, each with a black rectangle.
     fn pdf(pages: usize) -> Vec<u8> {
         let mut objs = vec![
             "<< /Type /Catalog /Pages 2 0 R >>".to_string(),
@@ -324,19 +324,19 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let register = dir.join("registre.pdf");
         std::fs::write(&register, pdf(3)).unwrap();
-        // Registre de plusieurs pages : la page de l'acte est demandée.
+        // Register of several pages: the record's page is required.
         assert!(prepare_file(&register, None, true, &dir).unwrap_err().contains("3 pages"));
         assert!(prepare_file(&register, Some(4), true, &dir).is_err());
         let jpeg = prepare_file(&register, Some(2), true, &dir).unwrap();
         assert_eq!(jpeg.file_name().unwrap(), "registre p2.jpg");
         let img = image::open(&jpeg).unwrap().to_rgb8();
         assert!(img.width().max(img.height()) >= 2900, "{}x{}", img.width(), img.height());
-        // Fond blanc, rectangle noir au milieu de la page.
+        // White background, black rectangle in the middle of the page.
         assert!(img.get_pixel(10, 10)[0] > 240);
         let (w, h) = (img.width() as f32, img.height() as f32);
         let inside = img.get_pixel((w * 250. / 595.) as u32, (h * (842. - 500.) / 842.) as u32);
         assert!(inside[0] < 20, "{inside:?}");
-        // PDF d'une page, dans un fichier qui range ses actes en PDF : gardé tel quel.
+        // Single-page PDF, in a file that keeps its records as PDFs: kept as is.
         let single = dir.join("acte.pdf");
         std::fs::write(&single, pdf(1)).unwrap();
         assert_eq!(prepare_file(&single, None, false, &dir).unwrap(), single);

@@ -1,8 +1,8 @@
-//! Liens web (pages d'archives en ligne, fiches, sites…) stockés en GEDCOM 7 standard.
+//! Web links (pages of online archives, profiles, websites…) stored in standard GEDCOM 7.
 //!
-//! GEDCOM 7 n'a pas de balise « URL » générique sur les individus, familles et
-//! sources. La forme standard est un **lien multimédia** vers un enregistrement
-//! `OBJE` dont le `FILE` est une URL (le type `FilePath` accepte les URL) :
+//! GEDCOM 7 has no generic “URL” tag on individuals, families and sources. The standard form is a
+//! **multimedia link** to an `OBJE` record whose `FILE` is a URL (the `FilePath` type accepts
+//! URLs):
 //!
 //! ```text
 //! 0 @S1@ SOUR
@@ -13,32 +13,32 @@
 //! 2 TITL Registre paroissial de Retournac
 //! ```
 //!
-//! Les dépôts (`REPO`) n'acceptent pas de lien multimédia mais ont la balise
-//! standard `WWW` (jusqu'à trois) : c'est elle qu'on utilise pour eux.
+//! Repositories (`REPO`) do not accept a multimedia link but have the standard `WWW` tag (up to
+//! three): that is what is used for them.
 //!
-//! La balise non standard `_URL` (écrite par plusieurs logiciels) est encore
-//! lue, et [`Gedcom::migrate_url_tags`] la convertit (contrôle de l'assistant
-//! d'import, voir [`crate::import`]).
+//! The non-standard `_URL` tag (written by several programs) is still read, and
+//! [`Gedcom::migrate_url_tags`] converts it (a check of the import assistant, see
+//! [`crate::import`]).
 
 use crate::document::{Gedcom, RecordKind};
 use crate::model::Media;
 use crate::node::Node;
 use crate::schema;
 
-/// Balise d'extension historique pour une adresse web.
+/// Historical extension tag for a web address.
 pub const LEGACY_TAG: &str = "_URL";
 
-/// Format (`FILE.FORM`) d'une page web.
+/// Format (`FILE.FORM`) of a web page.
 pub const WEB_FORM: &str = "text/html";
 
-/// Où est stocké un lien web d'un enregistrement.
+/// Where a web link of a record is stored.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WebLinkKind {
-    /// Lien `OBJE` vers un média dont le `FILE` est une URL (forme standard).
+    /// `OBJE` link to a media whose `FILE` is a URL (standard form).
     Media(String),
-    /// `WWW` standard (dépôts) : rang parmi les `WWW` de l'enregistrement.
+    /// Standard `WWW` (repositories): rank among the record's `WWW`s.
     Www(usize),
-    /// `_URL` historique : rang parmi les `_URL` de l'enregistrement.
+    /// Historical `_URL`: rank among the record's `_URL`s.
     Legacy(usize),
 }
 
@@ -50,12 +50,12 @@ pub struct WebLink {
 }
 
 impl WebLink {
-    /// Adresse à ouvrir dans le navigateur (avec `https://` si le fichier l'omet).
+    /// Address to open in the browser (with `https://` if the file leaves it out).
     pub fn href(&self) -> String {
         normalize_url(&self.url).unwrap_or_else(|_| self.url.clone())
     }
 
-    /// Titre, ou à défaut le nom du site (« www.archives43.fr »).
+    /// Title, or failing that the site's name (“www.archives43.fr”).
     pub fn label(&self) -> String {
         self.title.clone().filter(|t| !t.trim().is_empty()).unwrap_or_else(|| host(&self.url).to_string())
     }
@@ -65,13 +65,13 @@ impl WebLink {
     }
 }
 
-/// L'adresse est-elle une URL web (`http://`, `https://`) ?
+/// Is the address a web URL (`http://`, `https://`)?
 pub fn is_web_url(s: &str) -> bool {
     let l = s.trim_start().get(..8).unwrap_or(s).to_ascii_lowercase();
     l.starts_with("http://") || l.starts_with("https://")
 }
 
-/// Nom du site : « https://www.archives43.fr/ark:… » → « www.archives43.fr ».
+/// Name of the site: “https://www.archives43.fr/ark:…” → “www.archives43.fr”.
 pub fn host(url: &str) -> &str {
     let u = url.trim();
     let rest = u.split_once("://").map(|(_, r)| r).unwrap_or(u);
@@ -80,7 +80,7 @@ pub fn host(url: &str) -> &str {
     h.rsplit_once('@').map(|(_, h)| h).unwrap_or(h)
 }
 
-/// Vérifie et complète une adresse saisie : « archives43.fr » → « https://archives43.fr ».
+/// Checks and completes a typed address: “archives43.fr” → “https://archives43.fr”.
 pub fn normalize_url(input: &str) -> Result<String, String> {
     let s = input.trim();
     if s.is_empty() {
@@ -104,7 +104,7 @@ pub fn normalize_url(input: &str) -> Result<String, String> {
 }
 
 impl<'a> Media<'a> {
-    /// URL du média, si son fichier est une page ou ressource web.
+    /// URL of the media, if its file is a web page or resource.
     pub fn web_url(&self) -> Option<&'a str> {
         self.file().filter(|f| is_web_url(f))
     }
@@ -114,18 +114,18 @@ impl<'a> Media<'a> {
     }
 }
 
-/// `_URL` dont la valeur est une adresse web valide (avec ou sans `https://`).
+/// `_URL` whose value is a valid web address (with or without `https://`).
 fn is_convertible(n: &Node) -> bool {
     n.tag == LEGACY_TAG && normalize_url(n.val()).is_ok()
 }
 
-/// Le type d'enregistrement accepte-t-il des liens multimédia (`OBJE`) ?
+/// Does the record type accept multimedia links (`OBJE`)?
 fn accepts_media(tag: &str) -> bool {
     schema::record(tag).is_some_and(|d| d.sub("OBJE").is_some())
 }
 
 impl Gedcom {
-    /// Liens web d'un enregistrement : médias web liés, `WWW`, puis `_URL` historiques.
+    /// Web links of a record: linked web media, `WWW`, then historical `_URL`s.
     pub fn web_links(&self, record: &str) -> Vec<WebLink> {
         let Some(n) = self.get(record) else { return Vec::new() };
         let mut out = Vec::new();
@@ -151,12 +151,12 @@ impl Gedcom {
         out
     }
 
-    /// Peut-on ajouter un lien web à cet enregistrement ?
+    /// Can a web link be added to this record?
     pub fn can_have_web_links(&self, record: &str) -> bool {
         self.get(record).is_some_and(|n| accepts_media(&n.tag) || n.tag == "REPO")
     }
 
-    /// Média web existant pour cette URL, ou nouveau média `FILE <url>` / `FORM text/html`.
+    /// Existing web media for this URL, or a new `FILE <url>` / `FORM text/html` media.
     pub fn web_media_for(&mut self, url: &str, title: &str) -> String {
         if let Some(x) = self.media_by_file(url) {
             let node = self.get_mut(&x).unwrap();
@@ -175,7 +175,7 @@ impl Gedcom {
         x
     }
 
-    /// Ajoute un lien web : lien multimédia (`OBJE`), ou `WWW` pour un dépôt.
+    /// Adds a web link: multimedia link (`OBJE`), or `WWW` for a repository.
     pub fn add_web_link(&mut self, record: &str, url: &str, title: &str) -> Result<(), String> {
         let url = normalize_url(url)?;
         let tag = self.get(record).ok_or_else(|| rust_i18n::t!("error.record_not_found"))?.tag.clone();
@@ -204,7 +204,7 @@ impl Gedcom {
         Ok(())
     }
 
-    /// Modifie un lien web. Un `_URL` historique modifié devient un lien multimédia.
+    /// Edits a web link. An edited historical `_URL` becomes a multimedia link.
     pub fn update_web_link(&mut self, record: &str, kind: &WebLinkKind, url: &str, title: &str) -> Result<(), String> {
         let url = normalize_url(url)?;
         match kind {
@@ -239,7 +239,7 @@ impl Gedcom {
         }
     }
 
-    /// Retire un lien web. Un média web qui n'est plus utilisé nulle part est supprimé.
+    /// Removes a web link. A web media no longer used anywhere is deleted.
     pub fn remove_web_link(&mut self, record: &str, kind: &WebLinkKind) {
         let nth_removed = |n: &mut Node, tag: &str, i: usize| {
             let mut k = 0;
@@ -278,7 +278,7 @@ impl Gedcom {
         }
     }
 
-    /// Nombre de `_URL` que [`Gedcom::migrate_url_tags`] peut convertir.
+    /// Number of `_URL`s that [`Gedcom::migrate_url_tags`] can convert.
     pub fn legacy_url_count(&self) -> usize {
         self.legacy_url_sites()
             .iter()
@@ -292,9 +292,9 @@ impl Gedcom {
             .sum()
     }
 
-    /// Emplacements des `_URL` convertibles : (enregistrement, chemin d'indices jusqu'au parent).
-    /// Convertible = adresse web valide, sous une structure qui permet un lien
-    /// multimédia (`OBJE`) ou, à défaut, une adresse `WWW`.
+    /// Locations of the convertible `_URL`s: (record, path of indices to the parent). Convertible =
+    /// valid web address, under a structure that allows a multimedia link (`OBJE`) or, failing
+    /// that, a `WWW` address.
     fn legacy_url_sites(&self) -> Vec<(String, Vec<usize>)> {
         fn walk(n: &Node, def: &schema::StructDef, path: &mut Vec<usize>, out: &mut Vec<Vec<usize>>) {
             if (def.sub("OBJE").is_some() || def.sub("WWW").is_some()) && n.children.iter().any(is_convertible) {
@@ -318,10 +318,10 @@ impl Gedcom {
         sites
     }
 
-    /// Convertit les `_URL` en GEDCOM 7 standard : lien multimédia (`OBJE` →
-    /// `FILE <url>`, `FORM text/html`) là où il est permis (individus, familles,
-    /// sources, événements, citations…), sinon `WWW` (dépôts). Le titre du média
-    /// reprend celui de la source, quand il y en a un. Renvoie le nombre de liens convertis.
+    /// Converts `_URL`s to standard GEDCOM 7: multimedia link (`OBJE` → `FILE <url>`, `FORM
+    /// text/html`) where it is allowed (individuals, families, sources, events, citations…),
+    /// otherwise `WWW` (repositories). The media's title takes the source's, when there is one.
+    /// Returns the number of links converted.
     pub fn migrate_url_tags(&mut self) -> usize {
         let mut converted = 0;
         for (record, path) in self.legacy_url_sites() {
@@ -336,7 +336,7 @@ impl Gedcom {
                 def
             };
             if def.sub("OBJE").is_none() {
-                // Pas de lien multimédia possible ici : adresse `WWW` standard.
+                // No multimedia link possible here: standard `WWW` address.
                 let mut n = self.get_mut(&record).unwrap();
                 for &i in &path {
                     n = &mut n.children[i];
@@ -368,7 +368,7 @@ impl Gedcom {
             for &i in &path {
                 n = &mut n.children[i];
             }
-            // Le lien prend la place du premier `_URL`, les autres sont retirés.
+            // The link takes the place of the first `_URL`, the others are removed.
             let at = n.children.iter().position(is_convertible).unwrap();
             n.children.retain(|c| !is_convertible(c));
             for (k, m) in medias.iter().enumerate() {
@@ -381,7 +381,7 @@ impl Gedcom {
             r.touch();
         }
         if converted > 0 && self.legacy_url_count() == 0 {
-            // Plus aucun `_URL` : on retire sa déclaration d'extension, s'il y en a une.
+            // No `_URL` left: remove its extension declaration, if there is one.
             let still_used = self.records.iter().any(|r| {
                 let mut used = false;
                 r.walk(&mut |n| used |= n.tag == LEGACY_TAG);

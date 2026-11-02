@@ -1,17 +1,16 @@
-//! Arbre GEDCOM générique et sans perte.
+//! Generic, lossless GEDCOM tree.
 //!
-//! Chaque ligne GEDCOM devient un [`Node`] ; le niveau est implicite (profondeur
-//! dans l'arbre). Rien n'est interprété ni normalisé à ce stade : les balises
-//! inconnues ou propriétaires (`_SOSADABOVILLE`, `_TODO`…) sont conservées
-//! telles quelles, ce qui permet de réécrire le fichier à l'identique.
+//! Each GEDCOM line becomes a [`Node`]; the level is implicit (depth in the tree). Nothing is
+//! interpreted or normalized at this stage: unknown or proprietary tags (`_SOSADABOVILLE`,
+//! `_TODO`…) are kept as they are, which allows writing the file back identically.
 
-/// Une structure GEDCOM : une ligne et ses sous-structures.
+/// A GEDCOM structure: a line and its substructures.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Node {
-    /// Identifiant croisé sans les `@` (ex. `I307`), seulement sur les enregistrements.
+    /// Cross-reference identifier without the `@` (e.g. `I307`), only on records.
     pub xref: Option<String>,
     pub tag: String,
-    /// Valeur brute de la ligne, telle qu'écrite après la balise.
+    /// Raw value of the line, as written after the tag.
     pub value: Option<String>,
     pub children: Vec<Node>,
 }
@@ -35,12 +34,12 @@ impl Node {
         self
     }
 
-    /// Valeur de la ligne, chaîne vide si absente.
+    /// Value of the line, empty string if absent.
     pub fn val(&self) -> &str {
         self.value.as_deref().unwrap_or("")
     }
 
-    /// Si la valeur est un pointeur `@X@`, renvoie `X`.
+    /// If the value is a pointer `@X@`, returns `X`.
     pub fn pointer(&self) -> Option<&str> {
         let v = self.value.as_deref()?;
         if v.len() > 2 && v.starts_with('@') && v.ends_with('@') && !v.starts_with("@@") {
@@ -62,7 +61,7 @@ impl Node {
         self.children.iter().filter(move |c| c.tag == tag)
     }
 
-    /// Valeur d'une sous-structure par chemin, ex. `child_val(&["BIRT", "DATE"])`.
+    /// Value of a substructure by path, e.g. `child_val(&["BIRT", "DATE"])`.
     pub fn path_val(&self, path: &[&str]) -> Option<&str> {
         let mut n = self;
         for tag in path {
@@ -75,8 +74,7 @@ impl Node {
         self.child(tag).and_then(|c| c.value.as_deref())
     }
 
-    /// Texte complet d'une valeur multi-ligne (valeur + `CONT`, et `CONC` des
-    /// fichiers 5.5.1 importés).
+    /// Full text of a multi-line value (value + `CONT`, and `CONC` of imported 5.5.1 files).
     pub fn text(&self) -> String {
         let mut s = self.val().to_string();
         for c in &self.children {
@@ -92,7 +90,7 @@ impl Node {
         s
     }
 
-    /// Remplace la valeur par un texte multi-ligne (découpé en `CONT`).
+    /// Replaces the value with a multi-line text (split into `CONT`).
     pub fn set_text(&mut self, text: &str) {
         self.children.retain(|c| c.tag != "CONT" && c.tag != "CONC");
         let mut lines = text.split('\n');
@@ -101,13 +99,13 @@ impl Node {
         let conts: Vec<Node> = lines
             .map(|l| Node { tag: "CONT".into(), value: (!l.is_empty()).then(|| l.to_string()), ..Default::default() })
             .collect();
-        // Les CONT doivent précéder les autres sous-structures.
+        // CONT must come before the other substructures.
         for (i, c) in conts.into_iter().enumerate() {
             self.children.insert(i, c);
         }
     }
 
-    /// Définit (ou crée, ou supprime si vide) la valeur d'une sous-structure.
+    /// Sets (or creates, or deletes if empty) the value of a substructure.
     pub fn set_child_val(&mut self, tag: &str, value: &str) {
         let value = value.trim();
         if value.is_empty() {
@@ -120,13 +118,13 @@ impl Node {
         }
     }
 
-    /// Ajoute une sous-structure avant les métadonnées de fin (`CREA`, `CHAN`).
+    /// Adds a substructure before the trailing metadata (`CREA`, `CHAN`).
     pub fn insert_child(&mut self, child: Node) {
         let at = self.children.iter().position(|c| c.tag == "CREA" || c.tag == "CHAN").unwrap_or(self.children.len());
         self.children.insert(at, child);
     }
 
-    /// Comme [`Node::set_child_val`] mais pour une valeur multi-ligne.
+    /// Like [`Node::set_child_val`] but for a multi-line value.
     pub fn set_child_text(&mut self, tag: &str, text: &str) {
         if text.trim().is_empty() {
             self.children.retain(|c| c.tag != tag);
@@ -138,7 +136,7 @@ impl Node {
         self.child_mut(tag).unwrap().set_text(text);
     }
 
-    /// Renvoie la sous-structure `tag`, en la créant si besoin.
+    /// Returns the `tag` substructure, creating it if needed.
     pub fn ensure_child(&mut self, tag: &str) -> &mut Node {
         let i = match self.children.iter().position(|c| c.tag == tag) {
             Some(i) => i,
@@ -150,7 +148,7 @@ impl Node {
         &mut self.children[i]
     }
 
-    /// Parcourt l'arbre en profondeur (ce nœud compris).
+    /// Walks the tree depth first (this node included).
     pub fn walk<'a>(&'a self, f: &mut impl FnMut(&'a Node)) {
         f(self);
         for c in &self.children {
@@ -165,12 +163,12 @@ impl Node {
         }
     }
 
-    /// Vrai si ce nœud ou l'un de ses descendants vérifie `f`.
+    /// True if this node or one of its descendants matches `f`.
     pub fn any(&self, f: &impl Fn(&Node) -> bool) -> bool {
         f(self) || self.children.iter().any(|c| c.any(f))
     }
 
-    /// Tous les pointeurs contenus dans ce nœud et ses descendants.
+    /// Every pointer contained in this node and its descendants.
     pub fn pointers(&self) -> Vec<String> {
         let mut out = Vec::new();
         self.walk(&mut |n| {
@@ -182,12 +180,12 @@ impl Node {
     }
 }
 
-/// Date et heure courantes (UTC) au format GEDCOM : (`1 NOV 2026`, `19:02:41`).
+/// Current date and time (UTC) in GEDCOM format: (`1 NOV 2026`, `19:02:41`).
 pub fn now_gedcom() -> (String, String) {
     let secs =
         std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
     let (days, rem) = (secs.div_euclid(86_400), secs.rem_euclid(86_400));
-    // Algorithme « civil_from_days » (H. Hinnant).
+    // “civil_from_days” algorithm (H. Hinnant).
     let z = days + 719_468;
     let era = z.div_euclid(146_097);
     let doe = z - era * 146_097;
@@ -205,7 +203,7 @@ pub fn now_gedcom() -> (String, String) {
 }
 
 impl Node {
-    /// Met à jour la date de dernière modification (`CHAN`), comme le fait Ancestris.
+    /// Updates the last change date (`CHAN`), as Ancestris does.
     pub fn touch(&mut self) {
         let (date, time) = now_gedcom();
         let chan = self.ensure_child("CHAN");

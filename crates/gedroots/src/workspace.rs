@@ -1,5 +1,5 @@
-//! Fenêtre principale : barre d'activité, liste, zone centrale (arbre, fiche,
-//! GEDCOM brut), panneau de détail et barre d'état — d'après la maquette.
+//! Main window: activity bar, list, central area (chart, record, raw GEDCOM), detail panel and
+//! status bar, after the mockup.
 
 use crate::act_editor::{ActEditor, ActEditorEvent};
 use crate::commands::*;
@@ -60,9 +60,8 @@ pub enum View {
 }
 
 impl View {
-    /// Les zones de la barre latérale. Les autres listes (dépôts, notes) et les
-    /// pages (qualité, statistiques) s'ouvrent depuis le menu Affichage, les liens
-    /// des fiches et la recherche.
+    /// The sidebar zones. The other lists (repositories, notes) and the pages (quality, statistics)
+    /// open from the View menu, the links of records and search.
     const SIDEBAR: [View; 4] = [View::Individuals, View::Sources, View::Places, View::Media];
 
     fn label(self) -> SharedString {
@@ -92,12 +91,12 @@ impl View {
         }
     }
 
-    /// Pages sans fiche (Qualité, Statistiques).
+    /// Pages without a record (Quality, Statistics).
     fn page(self) -> Option<View> {
         matches!(self, View::Quality | View::Stats).then_some(self)
     }
 
-    /// Zone de recherche par critères (les autres listes filtrent le texte).
+    /// Zone with search by criteria (the other lists filter the text).
     fn scope(self) -> Option<Scope> {
         Some(match self {
             View::Individuals => Scope::Individuals,
@@ -121,7 +120,7 @@ impl View {
 
     fn for_kind(kind: RecordKind) -> View {
         match kind {
-            // Les unions s'affichent sur la fiche de chaque conjoint.
+            // Unions are shown on each spouse's page.
             RecordKind::Individual | RecordKind::Family => View::Individuals,
             RecordKind::Source => View::Sources,
             RecordKind::Media => View::Media,
@@ -164,7 +163,7 @@ impl CenterTab {
 struct Row {
     key: String,
     title: String,
-    /// Partie mise en gras (nom de famille).
+    /// Part in bold (surname).
     strong: String,
     meta: String,
     dot: Option<Hsla>,
@@ -176,11 +175,11 @@ struct Document {
     path: Option<PathBuf>,
     dirty: bool,
     dirty_before_checkpoint: bool,
-    /// États précédents, pour Annuler (le dernier est le plus récent).
+    /// Previous states, for Undo (the last one is the most recent).
     history: Vec<Gedcom>,
-    /// États annulés, pour Rétablir ; vidés par toute nouvelle modification.
+    /// Undone states, for Redo; cleared by any new change.
     future: Vec<Gedcom>,
-    /// `future` tel qu'avant le dernier point de restauration, rendu s'il est abandonné.
+    /// `future` as it was before the last restore point, given back if it is abandoned.
     future_before_checkpoint: Vec<Gedcom>,
 }
 
@@ -198,87 +197,86 @@ pub struct Workspace {
     map: Entity<MapView>,
     tree_mode: tree::TreeMode,
     tree_gens: u32,
-    /// Barre latérale affichée (Affichage › Masquer ou afficher la barre latérale).
+    /// Sidebar shown (View › Hide or Show the Sidebar).
     sidebar: bool,
-    /// Onglet GEDCOM brut ouvert à la demande (Affichage › GEDCOM brut), refermé
-    /// en changeant de liste.
+    /// Raw GEDCOM tab opened on demand (View › Raw GEDCOM), closed when switching lists.
     raw_open: bool,
-    /// Arbre libre : personne centrale, générations chargées, déplacement.
+    /// Free chart: central person, generations loaded, panning.
     chart: std::cell::RefCell<chart::Chart>,
     picker: Option<relatives::Picker>,
-    /// Fichiers image/PDF du dossier du `.ged`, pour les suggestions de rattachement.
+    /// Image/PDF files of the `.ged` folder, for the attachment suggestions.
     media_files: Rc<Vec<String>>,
-    /// Suppression en attente de confirmation (clé de l'élément).
+    /// Deletion waiting for confirmation (key of the item).
     pending_delete: Option<String>,
-    /// Recherche : types et contexte des médias, recalculés quand le fichier change.
+    /// Search: types and context of the media, recomputed when the file changes.
     media_index: Option<Rc<MediaIndex>>,
-    /// Type choisi dans la barre des types de la zone Médias (`None` : tous).
+    /// Type chosen in the type bar of the Media zone (`None`: all).
     media_type: Option<String>,
-    /// Propositions sous le champ de recherche, avec leur nombre de résultats.
+    /// Suggestions under the search field, with their number of results.
     suggestions: Vec<(gedcom::query::Suggestion, usize)>,
     suggest_sel: usize,
-    /// Propositions refermées (Échap) jusqu'à la prochaine frappe.
+    /// Suggestions closed (Esc) until the next keystroke.
     suggest_closed: bool,
-    /// Le champ de recherche avait le focus au dernier rendu.
+    /// The search field had the focus at the last render.
     search_focused: bool,
-    /// Menu d'un jeton de recherche cliqué (marge des dates, variantes des noms).
+    /// Menu of a clicked search token (date margin, name variants).
     chip_menu: Option<filters::ChipMenu>,
-    /// Recherches enregistrées (`HEAD._GR_FIND`) et leur nombre de résultats.
+    /// Saved searches (`HEAD._GR_FIND`) and their number of results.
     saved: Rc<Vec<(gedcom::saved::SavedSearch, usize)>>,
-    /// Recherche enregistrée en cours de renommage.
+    /// Saved search being renamed.
     saved_rename: Option<saved::SavedRename>,
-    /// Saisie guidée d'un acte en cours (remplace liste, fiche et détail).
+    /// Guided record entry in progress (replaces the list, record and detail).
     act_editor: Option<(Entity<ActEditor>, Subscription)>,
-    /// Actes de la source affichée (relus à chaque rafraîchissement de la fiche).
+    /// Records of the displayed source (read again on each refresh of the page).
     source_acts: Vec<Act>,
     /// Palette de commandes ouverte.
     palette: Option<commands::Palette>,
-    /// Barre de menus dans la fenêtre (Linux, Windows) ; native sous macOS.
+    /// Menu bar in the window (Linux, Windows); native on macOS.
     menu_bar: Option<Entity<AppMenuBar>>,
-    /// Titre de la fenêtre déjà appliqué.
+    /// Window title already applied.
     window_title: String,
-    /// Cadre en cours de tracé sur une photo.
+    /// Frame being drawn on a photo.
     photo_draw: Option<photo::PhotoDraw>,
     photo_bounds: photo::PhotoBounds,
-    /// Personne survolée sur la photo ou dans la liste des liens.
+    /// Person hovered on the photo or in the list of links.
     photo_hover: Option<String>,
-    /// Page affichée d'un média multipage (à partir de 1).
+    /// Displayed page of a multi-page media (from 1).
     media_page: usize,
-    /// Médias sélectionnés ensemble (⌘ / Maj + clic), dans l'ordre, pour les fusionner.
+    /// Media selected together (⌘ / Shift + click), in order, to merge them.
     media_marked: Vec<String>,
-    /// Précédent / Suivant, et dernier élément vu dans chaque liste.
+    /// Back / Forward, and last item viewed in each list.
     history: history::History,
-    /// Boutons « Détacher » dépliés dans le panneau d'un individu.
-    /// Fenêtre d'ajout (événement, proches) ouverte par un « + ».
+    /// “Detach” buttons unfolded in an individual's panel. Add window (event, relatives) opened by
+    /// a “+”.
     add_dialog: Option<add::AddDialog>,
-    /// Fenêtre « Médias » (galerie d'un individu, d'un événement, d'une source).
+    /// “Media” window (gallery of an individual, an event, a source).
     gallery: Option<gallery::Gallery>,
-    /// Page « À relire » : actes proposés par un agent IA, en attente de relecture.
+    /// “To Review” page: records proposed by an AI agent, waiting for review.
     review: review::Review,
-    /// Champ de lieu en cours de saisie dans la fiche.
+    /// Place field being typed in the record page.
     place_focus: Option<EntityId>,
-    /// Lieux réels proposés pendant la saisie d'un lieu.
+    /// Real places suggested while typing a place.
     place_search: places::PlaceSearch,
-    /// Coordonnées des lieux créés, écrites quand le lieu entre dans le fichier.
+    /// Coordinates of created places, written when the place enters the file.
     pending_places: Vec<places::PendingPlace>,
-    /// Fenêtre « Nouveau lieu ».
+    /// “New Place” window.
     new_place: Option<places::NewPlace>,
-    /// « Localiser » sur la fiche d'un lieu.
+    /// “Locate” on a place's page.
     locate: Option<places::Locate>,
     editor_subs: Vec<Subscription>,
-    /// Ligne de la liste visée par le dernier clic droit.
+    /// Row of the list targeted by the last right-click.
     menu_row: Rc<std::cell::RefCell<Option<String>>>,
-    /// Défilement de la liste, pour garder l'élément affiché visible.
+    /// Scrolling of the list, to keep the displayed item visible.
     list_scroll: UniformListScrollHandle,
-    /// Page Qualité : anomalies du fichier.
+    /// Quality page: problems of the file.
     quality: quality::QualityState,
-    /// Lien de parenté affiché dans une fenêtre modale (A, B).
+    /// Relationship shown in a modal window (A, B).
     kinship: Option<(String, String)>,
-    /// Fiche : afficher aussi les événements des proches (Affichage › Événements des proches).
+    /// Record page: also show the relatives' events (View › Relatives' Events).
     show_relative_events: bool,
-    /// Statistiques du fichier (page Statistiques).
+    /// Statistics of the file (Statistics page).
     stats: Option<Rc<gedcom::analysis::stats::Stats>>,
-    /// Versions des fichiers récents et des sites de recherche connues de la barre de menus de la fenêtre.
+    /// Versions of the recent files and search sites known to the window's menu bar.
     recent_gen: (u64, u64),
     _subs: Vec<Subscription>,
 }
@@ -293,9 +291,9 @@ impl Workspace {
         });
         let map = cx.new(|_| MapView::new());
         let map_sub = cx.subscribe_in(&map, window, Self::on_map_event);
-        // Clair / sombre : suit l'apparence du système.
+        // Light / dark: follows the system's appearance.
         let appearance_sub = cx.observe_window_appearance(window, |_, window, cx| theme::sync(window, cx));
-        // Agents IA : ils lisent le fichier de la dernière fenêtre activée.
+        // AI agents: they read the file of the last window activated.
         crate::agent::set_target(cx.entity().downgrade(), cx);
         let activation_sub = cx.observe_window_activation(window, |_, window, cx| {
             if window.is_window_active() {
@@ -371,15 +369,15 @@ impl Workspace {
     }
 
     // ------------------------------------------------------------------
-    // Fichier
+    // File
     // ------------------------------------------------------------------
 
-    /// Ouvre un fichier reçu de l'extérieur (Finder, Dock).
+    /// Opens a file received from outside (Finder, Dock).
     pub fn open_path(&mut self, path: PathBuf, window: &mut Window, cx: &mut Context<Self>) {
         self.load(path, window, cx);
     }
 
-    /// Vrai si le document ouvert a des modifications non enregistrées.
+    /// True if the open document has unsaved changes.
     pub fn has_unsaved_changes(&self) -> bool {
         self.doc.as_ref().is_some_and(|d| d.dirty)
     }
@@ -523,7 +521,7 @@ impl Workspace {
         }
     }
 
-    /// Annule le dernier point de restauration (édition refusée ou sans effet).
+    /// Cancels the last restore point (edit refused or without effect).
     fn drop_checkpoint(&mut self) {
         if let Some(doc) = &mut self.doc {
             doc.history.pop();
@@ -540,14 +538,14 @@ impl Workspace {
     // Navigation
     // ------------------------------------------------------------------
 
-    /// Passe dans une liste, sur le dernier élément vu (ou la racine pour les individus).
+    /// Switches to a list, on the last item viewed (or the root for individuals).
     fn set_view(&mut self, view: View, window: &mut Window, cx: &mut Context<Self>) {
         if self.view != view {
             self.open_location(view, None, window, cx);
         }
     }
 
-    /// Affiche une liste et un élément (`None` : le dernier vu dans cette liste).
+    /// Shows a list and an item (`None`: the last one viewed in this list).
     fn open_location(&mut self, view: View, key: Option<String>, window: &mut Window, cx: &mut Context<Self>) {
         self.new_place = None;
         self.review.open = false;
@@ -590,7 +588,7 @@ impl Workspace {
     fn select(&mut self, key: String, window: &mut Window, cx: &mut Context<Self>) {
         if self.selected.as_deref() != Some(key.as_str()) {
             self.leave_location();
-            // Un acte en cours appartient à la source qu'on quitte.
+            // A record in progress belongs to the source being left.
             self.act_editor = None;
             self.media_page = 1;
         }
@@ -610,11 +608,11 @@ impl Workspace {
         cx.notify();
     }
 
-    /// Ouvre un enregistrement quelconque (lien depuis une fiche).
+    /// Opens any record (link from a record page).
     pub(crate) fn goto(&mut self, xref: String, window: &mut Window, cx: &mut Context<Self>) {
         let Some(g) = self.doc.as_ref().map(|d| &d.ged) else { return };
         let Some(kind) = g.get(&xref).and_then(|n| RecordKind::from_tag(&n.tag)) else { return };
-        // Une union s'ouvre sur la fiche d'un des conjoints (à défaut, d'un enfant).
+        // A union opens on the page of one of the spouses (failing that, of a child).
         let member = g
             .family(&xref)
             .map(|f| [f.husband(), f.wife()].into_iter().flatten().chain(f.children()).next().map(str::to_string));
@@ -630,7 +628,7 @@ impl Workspace {
         self.open_location(View::Places, Some(name), window, cx);
     }
 
-    /// Clic sur un repère, ou coordonnées trouvées / posées sur la carte.
+    /// Click on a marker, or coordinates found / set on the map.
     fn on_map_event(&mut self, _: &Entity<MapView>, ev: &MapEvent, window: &mut Window, cx: &mut Context<Self>) {
         match ev {
             MapEvent::Select(name) => self.select(name.clone(), window, cx),
@@ -652,14 +650,14 @@ impl Workspace {
         }
     }
 
-    /// Revient à l'individu racine, dans l'arbre.
+    /// Goes back to the root individual, in the chart.
     fn goto_root(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(root) = self.doc.as_ref().and_then(|d| d.ged.root()) else { return };
         self.open_location(View::Individuals, Some(root), window, cx);
         self.tab = CenterTab::Tree;
     }
 
-    /// Copie le nom d'un individu, le titre d'un enregistrement ou le nom d'un lieu.
+    /// Copies the name of an individual, the title of a record or the name of a place.
     fn copy_name(&mut self, key: &str, cx: &mut Context<Self>) {
         let Some(doc) = &self.doc else { return };
         let g = &doc.ged;
@@ -699,7 +697,7 @@ impl Workspace {
             _ => Vec::new(),
         };
         let ed = RecordEditor::new(&doc.ged, target, window, cx);
-        // Champs de lieu : suggestions des lieux existants pendant la saisie.
+        // Place fields: suggestions of existing places while typing.
         self.place_focus = None;
         self.editor_subs =
             ed.fields
@@ -713,8 +711,8 @@ impl Workspace {
                 })
                 .collect();
         self.editor = Some(ed);
-        // Les anciens champs disparaissent : on rend le focus à l'espace de travail
-        // pour que les raccourcis clavier restent actifs.
+        // The old fields disappear: give the focus back to the workspace so that keyboard shortcuts
+        // stay active.
         window.focus(&self.focus, cx);
     }
 
@@ -756,7 +754,7 @@ impl Workspace {
         self.selected = None;
         self.editor = None;
         self.rebuild_rows(cx);
-        // On sélectionne l'élément voisin pour enchaîner.
+        // Select the neighbouring item to carry on.
         if let Some(next) = self.rows.get(pos.min(self.rows.len().saturating_sub(1))).map(|r| r.key.clone()) {
             self.select(next, window, cx);
         }
@@ -830,11 +828,11 @@ impl Workspace {
     }
 
     // ------------------------------------------------------------------
-    // Actes d'une source
+    // Records of a source
     // ------------------------------------------------------------------
 
-    /// « Saisir un acte… » : dans la source affichée, sinon après avoir choisi
-    /// (ou créé) la source.
+    /// “Enter a Record…”: in the displayed source, otherwise after choosing (or creating) the
+    /// source.
     pub(super) fn enter_act(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(doc) = &self.doc else { return };
         let source = self
@@ -847,7 +845,8 @@ impl Workspace {
         }
     }
 
-    /// Ouvre un acte de la source dans sa fiche (`key` : acte existant ; sinon un acte vide).
+    /// Opens a record of the source in its page (`key`: existing record; otherwise an empty
+    /// record).
     pub(super) fn open_act(
         &mut self,
         source: String,
@@ -864,7 +863,8 @@ impl Workspace {
         let act = match key.and_then(|k| g.act(&source, &k)) {
             Some(a) => a,
             None => {
-                // Nouvel acte : l'événement que la source contient, sinon celui de son dernier acte.
+                // New record: the event that the source contains, otherwise that of its last
+                // record.
                 let event = g
                     .get(&source)
                     .map(SourceContent::read)
@@ -878,7 +878,7 @@ impl Workspace {
         self.show_act_editor(act, window, cx);
     }
 
-    /// Ouvre la saisie d'acte sur `act`, dans la fiche de sa source affichée.
+    /// Opens record entry on `act`, in the page of its displayed source.
     pub(super) fn show_act_editor(&mut self, act: Act, window: &mut Window, cx: &mut Context<Self>) {
         let Some(doc) = &self.doc else { return };
         let (ged, path) = (doc.ged.clone(), doc.path.clone());
@@ -892,7 +892,7 @@ impl Workspace {
             ActEditorEvent::Save { act, next } => this.save_act(editor.clone(), act, *next, window, cx),
             ActEditorEvent::PlaceInput { input, changed } => this.place_input(input, *changed, cx),
         });
-        // Champs Lieu de l'acte : même menu que partout ailleurs.
+        // Place fields of the record: the same menu as everywhere else.
         let ws = cx.entity().downgrade();
         editor.update(cx, |e, _| {
             e.set_place_menu(Rc::new(move |input, cx| {
@@ -914,7 +914,7 @@ impl Workspace {
         self.checkpoint();
         let Some(doc) = &mut self.doc else { return };
         let base = doc.path.as_ref().and_then(|p| p.parent()).map(std::path::Path::to_path_buf);
-        // Champs de lieu : le libellé affiché redevient la valeur `PLAC` complète.
+        // Place fields: the displayed label becomes the full `PLAC` value again.
         let created: Vec<String> = self.pending_places.iter().map(|p| p.name.clone()).collect();
         let mut act = act.clone();
         act.place = doc.ged.place_value(&act.place, &created);
@@ -929,14 +929,15 @@ impl Workspace {
         let act = &act;
         match act.save(&mut doc.ged) {
             Ok(res) => {
-                // Images de l'acte : copiées (ou déplacées) et nommées selon Réglages du fichier › Médias.
+                // Images of the record: copied (or moved) and named according to File Settings ›
+                // Media.
                 let note = match (&act.media, &res.media) {
                     (gedcom::MediaChoice::NewFiles(_), Some(m)) => {
                         media_files::store_act_media(&mut doc.ged, base.as_deref(), m)
                     }
                     _ => String::new(),
                 };
-                // Lieux créés dans l'acte : leurs coordonnées.
+                // Places created in the record: their coordinates.
                 self.apply_pending_places();
                 let ged = self.doc.as_ref().map(|d| d.ged.clone()).unwrap_or_default();
                 self.set_status(res.summary() + &note, false);
@@ -957,7 +958,7 @@ impl Workspace {
         cx.notify();
     }
 
-    /// Supprime un acte : ses citations (les événements et les personnes restent).
+    /// Deletes a record: its citations (events and people stay).
     pub(super) fn delete_act(&mut self, source: String, key: ActKey, window: &mut Window, cx: &mut Context<Self>) {
         self.mutate(window, cx, |g| {
             let title = g.act(&source, &key).map(|a| a.title()).unwrap_or_default();
@@ -966,7 +967,7 @@ impl Workspace {
         });
     }
 
-    /// Section « Actes » de la fiche d'une source, avec son « + ».
+    /// “Records” section of a source's page, with its “+”.
     fn render_acts(&self, source: &str, cx: &mut Context<Self>) -> AnyElement {
         let s = source.to_string();
         v_flex()
@@ -1011,10 +1012,10 @@ impl Workspace {
     }
 
     // ------------------------------------------------------------------
-    // Liste
+    // List
     // ------------------------------------------------------------------
 
-    /// Le fichier a peut-être changé : relance les contrôles et reconstruit la liste.
+    /// The file may have changed: runs the checks again and rebuilds the list.
     fn rebuild_rows(&mut self, cx: &mut Context<Self>) {
         self.quality.stale = true;
         self.media_index = None;
@@ -1023,7 +1024,7 @@ impl Workspace {
         self.build_rows(cx);
     }
 
-    /// Reconstruit la liste (recherche, filtre ou fichier modifié).
+    /// Rebuilds the list (search, filter or file changed).
     fn build_rows(&mut self, cx: &mut Context<Self>) {
         let q = self.filter.read(cx).value().to_lowercase();
         if self.view == View::Quality {
@@ -1031,7 +1032,7 @@ impl Workspace {
             return;
         }
         if self.view == View::Stats {
-            // Une seule « ligne », jamais affichée : elle sert à l'historique (⌘[).
+            // A single “row”, never shown: it is used for the history (⌘[).
             self.refresh_stats();
             let row = Row {
                 key: "stats".into(),
@@ -1051,9 +1052,9 @@ impl Workspace {
             self.rows = Rc::new(Vec::new());
             return;
         };
-        // Libellés courts des lieux selon le format du fichier (Réglages du fichier › Lieux).
+        // Short labels of places according to the file's format (File Settings › Places).
         gedcom::set_place_layout(&doc.ged.place_form());
-        // Libellés affichés des types d'événements (Réglages du fichier › Événements).
+        // Displayed labels of event types (File Settings › Events).
         gedcom::set_event_labels(doc.ged.event_labels());
         let g = &doc.ged;
         let mut rows: Vec<Row> = match self.view {
@@ -1071,7 +1072,7 @@ impl Workspace {
                             meta: i.years(),
                             dot: i.sosa().and_then(|s| s.parse().ok()).map(theme::lineage),
                             flagged: t > 0 && s < t,
-                            // le lieu sert au filtre
+                            // the place is used by the filter
                         }
                         .with_search(place)
                     })
@@ -1091,7 +1092,7 @@ impl Workspace {
                         dot: None,
                         flagged: s.media_xrefs().is_empty(),
                     }
-                    // Types d'actes et période : « naissance », « 1795 »…
+                    // Record types and period: “birth”, “1795”…
                     .with_search(SourceContent::read(r).summary())
                 })
                 .collect(),
@@ -1176,7 +1177,7 @@ impl Workspace {
             rows.retain(|r| r.flagged);
         }
         if let Some(scope) = self.view.scope() {
-            // Recherche avec critères (born:, place:, type:, in:…), voir gedcom::query.
+            // Search with criteria (born:, place:, type:, in:…), see gedcom::query.
             let query = Self::committed_query(&self.filter.read(cx).value());
             let media_type = self.active_media_type();
             if !query.trim().is_empty() || media_type.is_some() {
@@ -1206,7 +1207,8 @@ impl Workspace {
 }
 
 impl Row {
-    /// Ajoute un texte cherchable sans l'afficher (glissé dans `meta` après un séparateur invisible).
+    /// Adds searchable text without displaying it (slipped into `meta` after an invisible
+    /// separator).
     fn with_search(mut self, extra: String) -> Self {
         if !extra.is_empty() {
             self.meta = format!("{}\u{2063}{}", self.meta, extra);
@@ -1227,12 +1229,12 @@ fn dirs_home() -> PathBuf {
 // Rendu
 // ======================================================================
 
-/// Titre de section avec un bouton (« + ») à droite.
+/// Section title with a button (“+”) on the right.
 fn section_header(title: impl Into<SharedString>, button: impl IntoElement) -> Div {
     h_flex().items_center().justify_between().child(label_caps(title)).child(button)
 }
 
-/// Emplacement en pointillés « + … » pour ajouter une personne.
+/// Dashed “+ …” slot to add a person.
 fn add_slot(id: impl Into<SharedString>, label: impl Into<SharedString>) -> Stateful<Div> {
     h_flex()
         .id(ElementId::Name(id.into()))
@@ -1255,7 +1257,7 @@ fn label_caps(s: impl Into<SharedString>) -> Div {
     div().text_xs().font_weight(FontWeight::SEMIBOLD).text_color(theme::muted()).child(s.into())
 }
 
-/// « 1 284 » : milliers séparés par une espace fine insécable, à la française.
+/// “1 284”: thousands separated by a thin non-breaking space, the French way.
 fn group_thousands(n: usize) -> String {
     let digits = n.to_string();
     let mut out = String::new();
@@ -1280,7 +1282,7 @@ fn icon(name: IconName) -> Icon {
     Icon::new(name).size(px(14.))
 }
 
-/// Portrait de l'individu (premier média image lié), ou ses initiales.
+/// Portrait of the individual (first linked image media), or their initials.
 fn avatar(doc: &Document, i: &Individual<'_>, size: f32, ring: Hsla) -> Div {
     let base = div()
         .size(px(size))
@@ -1293,18 +1295,16 @@ fn avatar(doc: &Document, i: &Individual<'_>, size: f32, ring: Hsla) -> Div {
         .items_center()
         .justify_center();
     let portrait = doc.ged.portrait(i.xref());
-    // Personne située sur une autre page d'un média multipage : cette page-là.
+    // Person placed on another page of a multi-page media: that page.
     let page = |m: &Media| pages::page_path(doc, m, doc.ged.link_page(i.xref(), m.xref()));
-    // Les initiales restent dessous tant que le portrait se charge : la case
-    // n'apparaît jamais vide.
+    // The initials stay underneath while the portrait loads: the box never appears empty.
     let initials: String = [i.given().chars().next(), i.surname().chars().next()].into_iter().flatten().collect();
     let base = base.font_weight(FontWeight::SEMIBOLD).when(size < 32., |d| d.text_xs()).child(initials);
     match portrait.and_then(|m| page(&m)).filter(|p| p.exists()) {
         Some(p) => {
-            // Le recadrage du lien (CROP) cadre le visage sur une photo de groupe.
+            // The link's crop (CROP) frames the face on a group photo.
             let crop = portrait.and_then(|m| doc.ged.link_crop(i.xref(), m.xref()));
-            // Le masque de GPUI est rectangulaire : c'est l'image elle-même qui
-            // s'arrondit, dans l'anneau.
+            // GPUI's mask is rectangular: it is the image itself that is rounded, inside the ring.
             let inner = size - 4.;
             base.relative()
                 .child(photo::linked_img(p, crop, inner, inner, true).rounded_full().absolute().top_0().left_0())
@@ -1314,9 +1314,9 @@ fn avatar(doc: &Document, i: &Individual<'_>, size: f32, ring: Hsla) -> Div {
 }
 
 impl Workspace {
-    /// Barre du haut. Sous macOS elle remplace la barre de titre : les feux tricolores y sont
-    /// posés (voir `main.rs`) et elle sert à déplacer la fenêtre. Le nom du fichier n'apparaît
-    /// qu'ici, centré, suivi d'un point tant qu'il reste des modifications à enregistrer.
+    /// Top bar. On macOS it replaces the title bar: the traffic lights sit in it (see `main.rs`)
+    /// and it is used to move the window. The file name only appears here, centered, followed by a
+    /// dot while there are changes to save.
     fn render_header(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let mac = cfg!(target_os = "macos");
         let title = self.doc.as_ref().map(|d| {
@@ -1360,10 +1360,10 @@ impl Workspace {
                             .child(img("brand/icon-micro.svg").size(px(16.)))
                             .when(!mac, |d| d.child("GEDRoots")),
                     )
-                    // Linux, Windows : menus dans la fenêtre (natifs sous macOS).
+                    // Linux, Windows: menus in the window (native on macOS).
                     .children(self.menu_bar.clone().map(|m| div().h_full().child(m)))
-                    // Flèches : sous macOS après les feux (Finder, Safari) ; ailleurs, collées au
-                    // nom du fichier au centre (VS Code, Zed), les menus occupant la gauche.
+                    // Arrows: on macOS after the traffic lights (Finder, Safari); elsewhere, next
+                    // to the file name in the center (VS Code, Zed), with the menus on the left.
                     .when(mac && self.doc.is_some(), |d| d.child(self.render_history_buttons(cx))),
             )
             .children(title.map(|t| {
@@ -1381,8 +1381,8 @@ impl Workspace {
             ))
     }
 
-    /// Flèches « Précédent / Suivant » : reviennent à l'endroit quitté (un individu
-    /// après avoir ouvert un de ses lieux, par exemple). L'infobulle nomme la destination.
+    /// “Back / Forward” arrows: go back to the place left (an individual after opening one of their
+    /// places, for example). The tooltip names the destination.
     fn render_history_buttons(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let arrow = |back: bool| {
             let dest = self.next_label(back);
@@ -1409,17 +1409,17 @@ impl Workspace {
         h_flex()
             .gap_0p5()
             .items_center()
-            // Un clic sur une flèche ne déplace pas la fenêtre (macOS).
+            // A click on an arrow does not move the window (macOS).
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .child(arrow(true))
             .child(arrow(false))
     }
 
-    /// Barre latérale : les quatre zones, nommées, avec leur effectif. Elle ne
-    /// lance aucune action ; les commandes sont dans les menus.
+    /// Sidebar: the four zones, named, with their count. It launches no action; the commands are in
+    /// the menus.
     fn render_sidebar(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let doc = self.doc.as_ref();
-        // Zone active filtrée : son compteur donne le nombre de résultats.
+        // Active zone filtered: its counter gives the number of results.
         let filtered = self.is_filtered(cx);
         v_flex()
             .w(px(184.))
@@ -1479,7 +1479,7 @@ impl Workspace {
             .child(self.render_search_field(cx))
             .child(self.render_search_notes(cx))
             .when(self.view == View::Media, |d| d.child(self.render_media_types(cx)))
-            // Filtre actif (Affichage › Filtrer la liste) : rappel, cliquable pour le retirer.
+            // Active filter (View › Filter List): reminder, clickable to remove it.
             .when(only && !flag.is_empty(), |d| {
                 d.child(h_flex().px_3().pb_2().child(
                     Button::new("flag").xsmall().primary().icon(IconName::Close).label(flag).on_click(cx.listener(
@@ -1550,7 +1550,8 @@ impl Workspace {
                                             let (key, entity) = (key.clone(), entity.clone());
                                             move |ev: &ClickEvent, window, cx| {
                                                 let key = key.clone();
-                                                // Médias : ⌘ / Ctrl + clic ou Maj + clic pour en sélectionner plusieurs.
+                                                // Media: ⌘ / Ctrl + click or Shift + click to
+                                                // select several.
                                                 let m = ev.modifiers();
                                                 let add = multi && (m.secondary(cx) || m.shift);
                                                 let _ = entity.update(cx, |this, cx| {
@@ -1562,7 +1563,7 @@ impl Workspace {
                                                 });
                                             }
                                         })
-                                        // Clic droit : le menu de la liste (plus bas) vise cette ligne.
+                                        // Right-click: the list's menu (below) targets this row.
                                         .on_mouse_down(MouseButton::Right, move |_, _, _| {
                                             *menu_row.borrow_mut() = Some(key.clone());
                                         })
@@ -1573,11 +1574,11 @@ impl Workspace {
                         .size_full()
                         .text_sm(),
                     )
-                    // Un seul menu pour toute la liste : celui de la ligne visée, ou
-                    // sous les lignes, créer un élément.
+                    // A single menu for the whole list: the targeted row's, or below the rows,
+                    // create an item.
                     .with_menu(self.list_menu(cx)),
             )
-            // Propositions de la recherche, par-dessus la liste.
+            // Search suggestions, over the list.
             .children(self.render_suggestions(cx))
             .children(self.render_chip_menu(cx))
     }
@@ -1589,8 +1590,8 @@ impl Workspace {
         if self.view == View::Stats {
             return self.render_stats(cx);
         }
-        // GEDCOM brut : onglet seulement quand on l'a demandé. Sans autre vue que la
-        // fiche, pas de barre d'onglets.
+        // Raw GEDCOM: a tab only when it was asked for. With no other view than the record, no tab
+        // bar.
         let mut tabs: Vec<CenterTab> = match self.view {
             View::Individuals => vec![CenterTab::Tree, CenterTab::Form],
             View::Places => vec![CenterTab::Map, CenterTab::Form],
@@ -1616,8 +1617,8 @@ impl Workspace {
             .bg(theme::bg())
             .when(strip, |d| {
                 d.child(
-                    // Onglets à la manière de Zed : l'onglet actif prend le fond du contenu et
-                    // s'ouvre sur lui (pas de trait du bas) ; les autres restent sur la barre.
+                    // Tabs in Zed's style: the active tab takes the content's background and opens
+                    // onto it (no bottom line); the others stay on the bar.
                     h_flex()
                         .h(px(32.))
                         .flex_none()
@@ -1644,7 +1645,7 @@ impl Workspace {
                                     }
                                 })
                                 .text_color(if active { theme::text() } else { theme::muted() })
-                                // Infobulle : le raccourci de l'onglet.
+                                // Tooltip: the tab's shortcut.
                                 .tooltip(move |w, cx| {
                                     let tip = Tooltip::new(t.label());
                                     match t {
@@ -1661,7 +1662,7 @@ impl Workspace {
                                     theme::muted()
                                 }))
                                 .child(match t {
-                                    // Vue d'arbre courante, réglable dans Affichage › Arbre.
+                                    // Current chart view, set in View › Chart.
                                     CenterTab::Tree => match self.tree_mode {
                                         tree::TreeMode::Fan => {
                                             let r = self.tree_mode.generations();
@@ -1760,7 +1761,7 @@ impl Workspace {
                             },
                         )))
                         .child(div().flex_1())
-                        // Suppression : Édition › Supprimer l'élément, puis confirmation ici.
+                        // Deletion: Edit › Delete Item, then confirmation here.
                         .when(confirm, |d| {
                             d.child(Button::new("cancel-delete").ghost().small().label(t!("ws.keep")).on_click(
                                 cx.listener(|this, _, _, cx| {
@@ -1793,7 +1794,7 @@ impl Workspace {
         )
     }
 
-    /// Images liées à une source, affichées en grand sous la fiche.
+    /// Images linked to a source, shown large under the record.
     fn record_images(&self, ed: &RecordEditor, cx: &mut Context<Self>) -> Option<AnyElement> {
         let Target::Record { xref, kind } = &ed.target else { return None };
         if *kind != RecordKind::Source {
@@ -1812,7 +1813,7 @@ impl Workspace {
                     let target = m.xref().to_string();
                     let title = m.title();
                     let crop = doc.ged.link_crop(xref, m.xref());
-                    // Zone recadrée : sa page seulement ; sinon toutes les pages, l'une sous l'autre.
+                    // Cropped area: only its page; otherwise every page, one below the other.
                     let shown: Vec<usize> = match crop {
                         Some(_) => vec![doc.ged.link_page(xref, m.xref())],
                         None => (1..=m.page_count().max(1)).collect(),
@@ -1849,13 +1850,12 @@ impl Workspace {
         )
     }
 
-    /// Vignettes des images liées, dans le panneau de détail.
-    /// `add` : « + » à côté du titre (ajouter des photos, lier ou recadrer un média),
-    /// et le titre reste affiché même sans image. Pour un individu, les images de
-    /// ses unions (photo de mariage…) suivent les siennes.
+    /// Thumbnails of the linked images, in the detail panel. `add`: “+” next to the title (add
+    /// photos, link or crop a media), and the title stays visible even without an image. For an
+    /// individual, the images of their unions (wedding photo…) follow their own.
     fn render_gallery(&self, xref: &str, large: bool, add: bool, cx: &mut Context<Self>) -> Option<AnyElement> {
         let doc = self.doc.as_ref()?;
-        // (enregistrement qui porte le lien, image)
+        // (record holding the link, image)
         let mut images: Vec<(String, Media)> =
             doc.ged.images_of(xref).into_iter().map(|m| (xref.to_string(), m)).collect();
         for fam in doc.ged.individual(xref).map(|i| i.fams()).unwrap_or_default() {
@@ -1889,7 +1889,7 @@ impl Workspace {
                 .on_click(cx.listener(move |this, _, w, cx| this.goto(target.clone(), w, cx)));
             let tile = if large { tile.w_full().h(px(220.)) } else { tile.h(px(96.)) };
             let crop = doc.ged.link_crop(owner, m.xref());
-            // Nombre de pages d'un média multipage, en coin.
+            // Number of pages of a multi-page media, in the corner.
             let badge = (page_count > 1).then(|| {
                 div()
                     .absolute()
@@ -1904,7 +1904,7 @@ impl Workspace {
             });
             let tile = match path {
                 Some(p) if crop.is_some() => {
-                    // Zone recadrée du lien : visage sur une photo de groupe, extrait d'un acte…
+                    // Cropped area of the link: face on a group photo, excerpt of a record…
                     let (w, h) = if large { (326., 218.) } else { (104., 94.) };
                     tile.flex().justify_center().child(photo::linked_img(p, crop, w, h, !large))
                 }
@@ -1955,7 +1955,7 @@ impl Workspace {
         )
     }
 
-    /// « + » des images : la fenêtre Médias (voir, lier, importer).
+    /// “+” of the images: the Media window (view, link, import).
     fn add_image_button(&self, xref: &str, cx: &mut Context<Self>) -> AnyElement {
         let owner = xref.to_string();
         add::plus_button("add-image")
@@ -1969,7 +1969,7 @@ impl Workspace {
         let doc = self.doc.as_ref()?;
         let m = Media::new(doc.ged.get(xref)?);
         if let Some(url) = m.web_url() {
-            // Page web : bouton pour l'ouvrir dans le navigateur.
+            // Web page: button to open it in the browser.
             let href = url.to_string();
             return Some(
                 h_flex()
@@ -1993,7 +1993,7 @@ impl Workspace {
             .is_some_and(|f| f.form.is_some_and(|t| t.starts_with("image/")) || mime_for(f.path).starts_with("image/"));
         let el: Option<AnyElement> = match path {
             Some(p) if p.exists() && image => Some(self.render_photo(xref, p, cx)),
-            // Fichier présent mais sans aperçu (PDF…) : rien à signaler.
+            // File present but without a preview (PDF…): nothing to report.
             Some(p) if p.exists() => None,
             Some(_) => {
                 Some(div().text_color(theme::warn()).child(t!("act.file_missing", path = file)).into_any_element())
@@ -2003,7 +2003,7 @@ impl Workspace {
         if strip.is_none() && el.is_none() {
             return None;
         }
-        // Déposer des fichiers sur l'aperçu les ajoute comme pages.
+        // Dropping files on the preview adds them as pages.
         let (media, entity) = (xref.clone(), cx.entity().downgrade());
         Some(
             v_flex()
@@ -2066,8 +2066,8 @@ impl Workspace {
             .border_l_1()
             .border_color(theme::border())
             .text_sm();
-        // Déposer des photos ou documents n'importe où sur le panneau ouvre l'aperçu
-        // d'import de la fenêtre Médias. Sur un média, ils deviennent de nouvelles pages.
+        // Dropping photos or documents anywhere on the panel opens the import preview of the Media
+        // window. On a media, they become new pages.
         let kind = g.get(key).and_then(|n| RecordKind::from_tag(&n.tag));
         let attachable =
             kind.is_some_and(|k| matches!(k, RecordKind::Individual | RecordKind::Source | RecordKind::Media));
@@ -2131,7 +2131,7 @@ impl Workspace {
                     .map(|n| {
                         let mut v: Vec<String> = Vec::new();
                         for p in n.pointers() {
-                            // Les pages web sont dans « Liens web ».
+                            // Web pages are in “Web Links”.
                             if !v.contains(&p) && p != *key && !weblinks::is_web_media(g, &p) {
                                 v.push(p);
                             }
@@ -2148,8 +2148,8 @@ impl Workspace {
                     && !refs.is_empty();
                 let show_refs = !shown_under_photo && !refs.is_empty();
                 let web = self.render_web_links(key, cx);
-                // Rien d'autre que le titre (déjà dans la fiche) : pas de panneau, la
-                // zone centrale prend la place.
+                // Nothing but the title (already in the record): no panel, the central area takes
+                // the room.
                 if gallery.is_none() && outgoing.is_empty() && !show_refs && web.is_none() {
                     return div().into_any_element();
                 }
@@ -2173,7 +2173,7 @@ impl Workspace {
                     .when_some(gallery, |d, el| d.child(el))
                     .when_some(web, |d, el| d.child(el))
                     .when(!outgoing.is_empty(), |d| d.child(self.render_links(t!("ws.links").into(), outgoing, cx)))
-                    // Photo : la liste « Utilisée par » est sous l'image, avec les cadres.
+                    // Photo: the “Used By” list is under the image, with the frames.
                     .when(show_refs, |d| d.child(self.render_links(t!("ws.used_by").into(), refs, cx)))
                     .into_any_element()
             }
@@ -2203,17 +2203,16 @@ impl Workspace {
         )
     }
 
-    /// Section « Événements » d'un individu : les siens et ceux de ses unions
-    /// (mariage, divorce…) dans la même chronologie. Un clic ouvre l'événement
-    /// en modification, clic droit pour les autres actions ; déposer des
-    /// fichiers sur un événement les y rattache.
+    /// “Events” section of an individual: their own and those of their unions (marriage, divorce…)
+    /// in the same timeline. A click opens the event for editing, right-click for the other
+    /// actions; dropping files on an event attaches them to it.
     fn render_events(&self, owner: &str, cx: &mut Context<Self>) -> AnyElement {
         let doc = self.doc.as_ref().unwrap();
         let g = &doc.ged;
         let events: Vec<PersonEvent> = g.person_events(owner);
         let person = g.individual(owner);
-        // Événements des proches pendant la vie de la personne (naissance d'un
-        // enfant, décès d'un parent…), affichés à la demande.
+        // Relatives' events during the person's life (birth of a child, death of a parent…), shown
+        // on demand.
         let relatives: Vec<timeline::Entry> = match person {
             Some(_) => timeline::timeline(g, owner).into_iter().filter(|e| e.kind == EntryKind::Relative).collect(),
             None => Vec::new(),
@@ -2225,7 +2224,7 @@ impl Workspace {
             .map(|pe| {
                 let PersonEvent { owner: ev_owner, index: ix, event: e, family, spouse } = pe;
                 let sort = e.date().map(|d| d.sort_key()).unwrap_or((i32::MAX, 0, 0));
-                // Âge de la personne à la date de l'événement (sauf sa naissance).
+                // Age of the person on the date of the event (except their birth).
                 let age = person
                     .as_ref()
                     .filter(|_| family || e.tag() != "BIRT")
@@ -2238,7 +2237,7 @@ impl Workspace {
                 };
                 let key = format!("{ev_owner}-{ix}");
                 let (o1, o2) = (ev_owner.clone(), ev_owner.clone());
-                // Déposer des fichiers sur l'événement : aperçu d'import de ses médias.
+                // Dropping files on the event: import preview of its media.
                 let (drop_owner, entity) = (ev_owner.clone(), cx.entity().downgrade());
                 let row = v_flex()
                     .id(SharedString::from(format!("ev-{key}")))
@@ -2267,7 +2266,7 @@ impl Workspace {
                                     .gap_2()
                                     .items_center()
                                     .child(div().font_weight(FontWeight::MEDIUM).child(label))
-                                    // Point orange : événement sans source.
+                                    // Orange dot: event without a source.
                                     .when(sources.is_empty(), |d| d.child(dot(theme::warn()))),
                             )
                             .child(
@@ -2278,7 +2277,7 @@ impl Workspace {
                                     .child(mono(e.date().map(|d| d.display()).unwrap_or_default())),
                             ),
                     )
-                    // Événement d'une union : avec qui.
+                    // Event of a union: with whom.
                     .when_some(spouse.filter(|_| family), |d, s| {
                         let target = s.clone();
                         d.child(
@@ -2332,7 +2331,7 @@ impl Workspace {
                 let sort = r.date.as_ref().map(|d| d.sort_key()).unwrap_or((i32::MAX, 0, 0));
                 rows.push((sort, self.render_relative_event(n, r, cx)));
             }
-            // Tri stable : à date égale, l'événement de la personne d'abord.
+            // Stable sort: on the same date, the person's event first.
             rows.sort_by_key(|r| r.0);
         }
         let toggle = (!relatives.is_empty()).then(|| {
@@ -2361,13 +2360,13 @@ impl Workspace {
             .into_any_element()
     }
 
-    /// Affichage › Événements des proches.
+    /// View › Relatives' Events.
     pub(super) fn toggle_relative_events(&mut self, cx: &mut Context<Self>) {
         self.show_relative_events = !self.show_relative_events;
         cx.notify();
     }
 
-    /// Ligne discrète d'un événement d'un proche ; un clic ouvre ce proche.
+    /// Discreet row of a relative's event; a click opens that relative.
     fn render_relative_event(&self, n: usize, r: &timeline::Entry, cx: &mut Context<Self>) -> AnyElement {
         let target = r.related.clone();
         h_flex()
@@ -2397,7 +2396,7 @@ impl Workspace {
             .into_any_element()
     }
 
-    /// Médias d'un événement : vignettes des images, titre des autres documents.
+    /// Media of an event: thumbnails of the images, title of the other documents.
     fn render_event_media(
         &self,
         owner: &str,
@@ -2465,7 +2464,7 @@ impl Workspace {
     }
 
     fn render_individual_card(&self, g: &Gedcom, i: Individual<'_>, cx: &mut Context<Self>) -> impl IntoElement {
-        // Comme la liste « Événements » : ceux des unions comptent aussi.
+        // Like the “Events” list: those of the unions count too.
         let timeline = g.person_events(i.xref());
         let (sourced, total) = (timeline.iter().filter(|e| e.event.is_sourced()).count(), timeline.len());
         let pct = if total == 0 { 0. } else { sourced as f32 / total as f32 };
@@ -2488,7 +2487,7 @@ impl Workspace {
                     .flex_1()
                     .min_w_0()
                     .gap_1()
-                    // Les noms longs passent à la ligne plutôt que d'être coupés.
+                    // Long names wrap rather than being cut.
                     .child(
                         h_flex()
                             .flex_wrap()
@@ -2532,10 +2531,10 @@ impl Workspace {
 
         let events_el = self.render_events(&xref, cx);
 
-        // Famille : parents, conjoints, enfants.
-        // (rôle, proche, lien à défaire au clic droit : (individu, famille, libellé)).
+        // Family: parents, spouses, children. (role, relative, link to undo on right-click:
+        // (individual, family, label)).
         type Unlink = (String, String, SharedString);
-        // Quatrième champ : années d'une union terminée (« 1932–1950 »).
+        // Fourth field: years of an ended union (“1932–1950”).
         let mut family: Vec<(SharedString, String, Unlink, Option<String>)> = Vec::new();
         if let Some(fam) = i.famc().first().and_then(|f| g.family(f)) {
             let link = (xref.clone(), fam.xref().to_string(), t!("ws.detach_parents").into());
@@ -2545,7 +2544,7 @@ impl Workspace {
         for fam in i.fams().into_iter().filter_map(|f| g.family(f)) {
             let f = fam.xref().to_string();
             let spouse = [fam.husband(), fam.wife()].into_iter().flatten().find(|x| *x != xref);
-            // Union terminée (divorce, annulation) : ses années à la place de celles du conjoint.
+            // Ended union (divorce, annulment): its years instead of the spouse's.
             let end = fam.separation().map(|e| {
                 let year = |e: Option<gedcom::Event>| e.and_then(|e| e.date()).and_then(|d| d.year());
                 let end = year(Some(e)).map(|y| y.to_string()).unwrap_or_else(|| "?".into());
@@ -2587,13 +2586,13 @@ impl Workspace {
                     .hover(|d| d.bg(theme::hover()))
                     .child(div().w(px(64.)).flex_none().text_xs().text_color(theme::muted()).child(role))
                     .child(div().flex_1().overflow_hidden().whitespace_nowrap().text_ellipsis().child(p.display_name()))
-                    // Union terminée : ses années plutôt que les dates de vie du conjoint.
+                    // Ended union: its years rather than the spouse's life dates.
                     .child(mono(end.unwrap_or_else(|| p.years())))
                     .on_click(cx.listener(move |this, _, w, cx| this.goto(target.clone(), w, cx)))
                     .with_menu(self.person_menu(&x, MenuFrom::Relative(unlink.0, unlink.1, unlink.2), cx))
             }));
 
-        // Médias et notes de ses unions aussi (rattachés au couple).
+        // Media and notes of their unions too (attached to the couple).
         let unions: Vec<gedcom::Family> = i.fams().into_iter().filter_map(|f| g.family(f)).collect();
         let images: Vec<String> = std::iter::once(xref.as_str())
             .chain(unions.iter().map(|f| f.xref()))
@@ -2665,13 +2664,13 @@ impl Workspace {
             })
     }
 
-    /// Fichiers récents de la page d'accueil : nom et dossier, un clic pour rouvrir.
+    /// Recent files of the welcome page: name and folder, a click to reopen.
     fn render_recents(&self, cx: &mut Context<Self>) -> Option<impl IntoElement> {
         let paths = crate::recent::list();
         if paths.is_empty() {
             return None;
         }
-        // Le dossier est affiché à droite : le nom du fichier suffit à gauche.
+        // The folder is shown on the right: the file name is enough on the left.
         Some(v_flex().w(px(440.)).gap_1().child(div().px_3().child(label_caps(t!("ws.recent")))).children(
             paths.into_iter().enumerate().map(|(i, path)| {
                 let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
@@ -2694,7 +2693,7 @@ impl Workspace {
 
 impl Render for Workspace {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        // Propositions de recherche : visibles tant que le champ a le focus.
+        // Search suggestions: visible while the field has the focus.
         let focused = self.filter.read(cx).focus_handle(cx).is_focused(window);
         if focused && !self.search_focused {
             self.suggest_closed = false;
@@ -2715,11 +2714,11 @@ impl Render for Workspace {
         };
         if title != self.window_title {
             window.set_window_title(&title);
-            // macOS : point dans le bouton de fermeture tant que le fichier n'est pas enregistré.
+            // macOS: dot in the close button while the file is not saved.
             window.set_window_edited(self.doc.as_ref().is_some_and(|d| d.dirty));
             self.window_title = title;
         }
-        // Sites de recherche du fichier de la fenêtre active (Individu › Rechercher sur).
+        // Search sites of the active window's file (Person › Search On).
         if window.is_window_active() || cx.windows().len() == 1 {
             let names = self
                 .doc
@@ -2730,8 +2729,8 @@ impl Render for Workspace {
                 crate::commands::install_menus(cx);
             }
         }
-        // Fichiers récents ou sites de recherche changés (ici ou dans une autre fenêtre) :
-        // la barre de menus les reprend.
+        // Recent files or search sites changed (here or in another window): the menu bar picks them
+        // up.
         let menus_gen = (crate::recent::generation(), crate::commands::search_sites_generation());
         if self.recent_gen != menus_gen {
             self.recent_gen = menus_gen;
@@ -2739,12 +2738,13 @@ impl Render for Workspace {
                 bar.update(cx, |bar, cx| bar.reload(cx));
             }
         }
-        // Les raccourcis (Enregistrer…) passent par ce nœud : on le garde dans la chaîne de focus.
+        // Shortcuts (Save…) go through this node: keep it in the focus chain.
         if window.focused(cx).is_none() {
             window.focus(&self.focus, cx);
         }
         let body: AnyElement = if let (Some(_), Some((editor, _))) = (&self.doc, &self.act_editor) {
-            // Acte ouvert dans la fiche de sa source : il prend la place de la fiche et du panneau.
+            // Record opened in its source's page: it takes the place of the record page and the
+            // panel.
             h_flex()
                 .flex_1()
                 .min_h_0()
@@ -2754,7 +2754,7 @@ impl Render for Workspace {
                 .child(editor.clone())
                 .into_any_element()
         } else if self.doc.is_some() && self.review.open {
-            // Actes proposés par un agent : la page prend la place des listes.
+            // Records proposed by an agent: the page takes the place of the lists.
             h_flex()
                 .flex_1()
                 .min_h_0()
@@ -2783,7 +2783,7 @@ impl Render for Workspace {
             .key_context("Workspace")
             .map(|d| self.bind_actions(d, window, cx))
             .map(|d| self.bind_page_actions(d, cx))
-            // Boutons « précédent / suivant » de la souris.
+            // Mouse “back / forward” buttons.
             .on_mouse_down(
                 MouseButton::Navigate(NavigationDirection::Back),
                 cx.listener(|this, _, w, cx| this.go_back(w, cx)),
@@ -2819,17 +2819,17 @@ impl Render for Workspace {
 }
 
 // ----------------------------------------------------------------------
-// Accès pour les autres fenêtres.
+// Access for the other windows.
 // ----------------------------------------------------------------------
 
 impl Workspace {
-    /// Individu sélectionné dans la fenêtre principale.
+    /// Individual selected in the main window.
     pub(crate) fn selected_individual(&self) -> Option<String> {
         let doc = self.doc.as_ref()?;
         self.selected.clone().filter(|x| doc.ged.individual(x).is_some())
     }
 
-    /// Applique une modification au fichier, avec point d'annulation.
+    /// Applies a change to the file, with an undo point.
     pub(crate) fn edit_ged(
         &mut self,
         f: impl FnOnce(&mut Gedcom) -> bool,

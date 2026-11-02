@@ -1,20 +1,19 @@
-//! Clé phonétique des noms de famille français, pour retrouver les variantes
-//! d'orthographe d'un même nom (Guyot, Guyau, Guillot ; Martin, Martain).
+//! Phonetic key of French surnames, to find the spelling variants of the same name (Guyot, Guyau,
+//! Guillot; Martin, Martain).
 //!
-//! Inspirée de Soundex2 et de Phonex : on ramène les graphies d'un même son à une
-//! seule lettre, on retire les lettres muettes de fin et les doubles. Deux noms sont
-//! des variantes s'ils ont la même clé, ou des clés de 5 lettres et plus qui ne
-//! diffèrent que d'une lettre.
+//! Inspired by Soundex2 and Phonex: the spellings of the same sound are reduced to a single letter,
+//! silent final letters and doubles are removed. Two names are variants if they have the same key,
+//! or keys of 5 letters or more that differ by only one letter.
 
 use crate::model::sort_key;
 
-/// Clé phonétique d'un nom (lettres minuscules, sans accents).
+/// Phonetic key of a name (lowercase letters, without accents).
 pub fn key(name: &str) -> String {
     let mut s: String = sort_key(name).chars().filter(|c| c.is_ascii_alphabetic()).collect();
     if s.is_empty() {
         return s;
     }
-    // Graphies de plusieurs lettres, dans l'ordre (les plus longues d'abord).
+    // Spellings of several letters, in order (the longest first).
     const RULES: &[(&str, &str)] = &[
         ("sch", "ch"),
         ("sh", "ch"),
@@ -56,7 +55,7 @@ pub fn key(name: &str) -> String {
         }
         s = s.replace(from, to);
     }
-    // C et G devant e, i : s et j ; sinon k et g. H muet sauf dans « ch ».
+    // C and G before e, i: s and j; otherwise k and g. Silent H except in “ch”.
     let chars: Vec<char> = s.chars().collect();
     let mut out = String::with_capacity(chars.len());
     for (i, &c) in chars.iter().enumerate() {
@@ -75,8 +74,8 @@ pub fn key(name: &str) -> String {
             _ => out.push(c),
         }
     }
-    // Nasales (« am, an, em, en », « om, on », « im, in, um, un ») devant une consonne ou en fin :
-    // une seule lettre (A, O, I), qui ne compte pas comme une voyelle.
+    // Nasals (“am, an, em, en”, “om, on”, “im, in, um, un”) before a consonant or at the end: a
+    // single letter (A, O, I), which does not count as a vowel.
     let vowel = |c: char| "aeiou".contains(c);
     let chars: Vec<char> = out.chars().collect();
     let mut nasal = String::with_capacity(chars.len());
@@ -108,15 +107,15 @@ pub fn key(name: &str) -> String {
         nasal.push(c);
         i += 1;
     }
-    // Lettres doublées, puis lettres muettes de fin : e, puis s / t / d / x / p, puis e
-    // (Guyotte, Guyots).
+    // Doubled letters, then silent final letters: e, then s / t / d / x / p, then e (Guyotte,
+    // Guyots).
     let mut key = dedup(&nasal);
     for set in ["e", "stdxp", "e"] {
         if key.len() > 2 && key.ends_with(|c: char| set.contains(c)) {
             key.pop();
         }
     }
-    // Le z final se prononce (Martinez) : remplacé seulement après.
+    // The final z is pronounced (Martinez): replaced only afterwards.
     dedup(&key.replace('z', "s"))
 }
 
@@ -130,7 +129,7 @@ fn dedup(s: &str) -> String {
     out
 }
 
-/// Les deux noms se prononcent (à peu près) pareil.
+/// The two names are pronounced (roughly) the same.
 pub fn similar(a: &str, b: &str) -> bool {
     let (a, b) = (key(a), key(b));
     if a.is_empty() || b.is_empty() {
@@ -139,15 +138,15 @@ pub fn similar(a: &str, b: &str) -> bool {
     a == b || (a.len().min(b.len()) >= 5 && one_edit(&a, &b))
 }
 
-/// Les deux mots ne diffèrent que d'une lettre (ajoutée, retirée ou changée).
+/// The two words differ by only one letter (added, removed or changed).
 fn one_edit(a: &str, b: &str) -> bool {
     let (a, b): (Vec<char>, Vec<char>) = (a.chars().collect(), b.chars().collect());
     let (short, long) = if a.len() <= b.len() { (&a, &b) } else { (&b, &a) };
     if long.len() - short.len() > 1 {
         return false;
     }
-    // Seule une voyelle peut changer, apparaître ou disparaître (Garney / Garnier,
-    // Guillaumot / Guillemot), jamais la première lettre ni une consonne.
+    // Only a vowel can change, appear or disappear (Garney / Garnier, Guillaumot / Guillemot),
+    // never the first letter nor a consonant.
     let vowel = |c: char| "aeiou".contains(c);
     let prefix = short.iter().zip(long.iter()).take_while(|(x, y)| x == y).count();
     if prefix == 0 {

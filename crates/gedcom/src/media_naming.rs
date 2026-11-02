@@ -1,12 +1,12 @@
-//! Rangement et nommage des fichiers médias (Réglages du fichier › Médias).
+//! Filing and naming media files (File Settings › Media).
 //!
-//! Le réglage est propre au fichier, donc rangé dans l'en-tête par l'extension
-//! `_GR_MEDIA` (voir docs/extensions.md) : un dossier racine, puis une liste de
-//! dossiers, chacun avec ce qu'il reçoit et son modèle de nom.
+//! The setting belongs to the file, so it is stored in the header with the `_GR_MEDIA` extension
+//! (see docs/extensions.md): a root folder, then a list of folders, each with what it receives and
+//! its name template.
 //!
 //! ```text
-//! 1 _GR_MEDIA Médias
-//! 2 _GR_DIR Actes
+//! 1 _GR_MEDIA Media
+//! 2 _GR_DIR Records
 //! 3 _GR_TYPES BIRT, BAPM, MARR, DEAT
 //! 3 _GR_NAME {sosa:6}_{branch}_{type:1}_{surname}_{given}_{spouse}_{n}
 //! 2 _GR_DIR Portraits
@@ -14,11 +14,10 @@
 //! 3 _GR_NAME {sosa:6}_{surname}_{given}
 //! ```
 //!
-//! Le premier dossier dont les types contiennent celui du média l'emporte ; un
-//! dossier sans types reçoit tout le reste. Le modèle reçoit les données de ce
-//! que le média illustre : l'événement cité (type, date, lieu), la personne
-//! (avec son numéro Sosa-d'Aboville calculé depuis l'individu racine), la source
-//! et la référence (`PAGE`).
+//! The first folder whose types contain the media's type wins; a folder without types receives
+//! everything else. The template receives the data of what the media illustrates: the cited event
+//! (type, date, place), the person (with their Sosa-d'Aboville number computed from the root
+//! individual), the source and the reference (`PAGE`).
 
 use std::collections::{HashMap, HashSet};
 
@@ -29,14 +28,14 @@ use crate::node::Node;
 
 pub const MEDIA_TAG: &str = "_GR_MEDIA";
 pub const MEDIA_URI: &str = extension_uri!("_gr_media");
-/// Sous `_GR_MEDIA` : un dossier.
+/// Under `_GR_MEDIA`: a folder.
 const DIR_TAG: &str = "_GR_DIR";
-/// Sous `_GR_DIR` : ce qu'il reçoit.
+/// Under `_GR_DIR`: what it receives.
 const TYPES_TAG: &str = "_GR_TYPES";
-/// Sous `_GR_DIR` : modèle de nom des fichiers.
+/// Under `_GR_DIR`: name template of the files.
 const NAME_TAG: &str = "_GR_NAME";
 
-/// Variables proposées par le panneau, dans l'ordre.
+/// Variables offered by the panel, in order.
 pub const MEDIA_TOKENS: &[&str] = &[
     "type",
     "type:1",
@@ -55,20 +54,20 @@ pub const MEDIA_TOKENS: &[&str] = &[
     "n",
 ];
 
-/// Clé de tri d'une date (année, mois, jour).
+/// Sort key of a date (year, month, day).
 type DateKey = (i32, u8, u8);
 
-/// Attributs (profession, résidence…) : ils citent souvent un acte qui ne les concerne pas au premier chef.
+/// Attributes (occupation, residence…): they often cite a record that is not primarily about them.
 const ATTRIBUTES: &[&str] =
     &["OCCU", "RESI", "EDUC", "RELI", "TITL", "NATI", "CAST", "DSCR", "IDNO", "NCHI", "NMR", "PROP", "SSN", "FACT"];
 
-/// Un sous-dossier des médias : où, pour quoi, sous quel nom.
+/// A media subfolder: where, for what, under which name.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct MediaFolder {
-    /// Sous-dossier du dossier racine (peut être vide).
+    /// Subfolder of the root folder (can be empty).
     pub dir: String,
-    /// Types reçus : balises (`BIRT`), types personnalisés (`TYPE` d'un `EVEN`),
-    /// `INDI` / `FAM` pour un média rattaché directement. Vide : tout le reste.
+    /// Types received: tags (`BIRT`), custom types (`TYPE` of an `EVEN`), `INDI` / `FAM` for a
+    /// media attached directly. Empty: everything else.
     pub types: Vec<String>,
     pub template: String,
 }
@@ -80,7 +79,7 @@ impl MediaFolder {
     }
 }
 
-/// Dossier des médias (relatif au .ged) et ses sous-dossiers.
+/// Media folder (relative to the .ged) and its subfolders.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct MediaNaming {
     pub root: String,
@@ -88,14 +87,14 @@ pub struct MediaNaming {
 }
 
 impl MediaNaming {
-    /// Rien de réglé : GedRoots garde les fichiers là où ils sont.
+    /// Nothing set: GEDRoots keeps the files where they are.
     pub fn is_empty(&self) -> bool {
         self.root.trim().is_empty() && self.folders.is_empty()
     }
 
-    /// Dossier qui reçoit un média de ce contexte : celui qui nomme son type, le
-    /// plus précis (le moins de types) s'il y en a plusieurs, le premier à
-    /// égalité ; à défaut, le premier dossier « tout le reste ».
+    /// Folder that receives a media of this context: the one that names its type, the most specific
+    /// (fewest types) if there are several, the first on a tie; otherwise, the first “everything
+    /// else” folder.
     pub fn folder_for(&self, ctx: &MediaContext) -> Option<&MediaFolder> {
         self.folders
             .iter()
@@ -107,7 +106,7 @@ impl MediaNaming {
     }
 }
 
-/// Libellés des types de [`MediaFolder::types`] pour le panneau, sans doublon.
+/// Labels of the types of [`MediaFolder::types`] for the panel, without duplicates.
 pub fn media_type_labels(types: &[String]) -> String {
     let mut out: Vec<String> = Vec::new();
     for t in types {
@@ -123,41 +122,40 @@ pub fn media_type_labels(types: &[String]) -> String {
     out.join(", ")
 }
 
-/// Numéro Sosa-d'Aboville : ascendant `sosa` et, pour un collatéral, sa place
-/// parmi les enfants (« 2 », « B1 » pour le 1er enfant de la 2e union, « 2.3 »).
+/// Sosa-d'Aboville number: ancestor `sosa` and, for a collateral, their place among the children
+/// (“2”, “B1” for the 1st child of the 2nd union, “2.3”).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Numbering {
     pub sosa: u64,
     pub branch: String,
 }
 
-/// Ce que le média illustre, pour remplir le modèle.
+/// What the media illustrates, to fill in the template.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct MediaContext {
-    /// Clé de rangement : balise de l'événement (`BIRT`), `TYPE` d'un `EVEN`,
-    /// `INDI` / `FAM` pour un rattachement direct, vide sinon.
+    /// Filing key: tag of the event (`BIRT`), `TYPE` of an `EVEN`, `INDI` / `FAM` for a direct
+    /// attachment, empty otherwise.
     pub event: String,
-    /// « Naissance », « Mariage », ou le `TYPE` d'un `EVEN`.
+    /// “Birth”, “Marriage”, or the `TYPE` of an `EVEN`.
     pub kind: String,
     /// Date GEDCOM brute (`14 MAR 1912`).
     pub date: String,
     pub place: String,
     pub surname: String,
-    /// Prénoms (tous).
+    /// Given names (all of them).
     pub given: String,
-    /// Nom de l'épouse, pour un événement de couple.
+    /// Surname of the wife, for a couple's event.
     pub spouse: String,
     pub number: Option<Numbering>,
     pub source: String,
     pub page: String,
-    /// Titre du média.
+    /// Title of the media.
     pub title: String,
 }
 
 impl MediaContext {
-    /// Valeur d'une variable, avec ses options : `{sosa:6}` complète un nombre
-    /// par des zéros, `{type:1}` garde les premières lettres, `{surname:simple}`
-    /// retire accents, espaces et apostrophes.
+    /// Value of a variable, with its options: `{sosa:6}` pads a number with zeros, `{type:1}` keeps
+    /// the first letters, `{surname:simple}` removes accents, spaces and apostrophes.
     fn value(&self, token: &str) -> String {
         let mut opts = token.split(':').map(str::trim);
         let name = opts.next().unwrap_or("");
@@ -205,7 +203,7 @@ impl MediaContext {
     }
 }
 
-/// Sans accents, espaces ni apostrophes : « EL KAIM » → « ELKAIM », « Médioni » → « Medioni ».
+/// Without accents, spaces or apostrophes: “EL KAIM” → “ELKAIM”, “Médioni” → “Medioni”.
 fn simplify(v: &str) -> String {
     let mut out = String::new();
     for c in v.chars() {
@@ -243,7 +241,7 @@ fn simplify(v: &str) -> String {
     out
 }
 
-/// Caractères interdits dans un nom de fichier (Windows compris).
+/// Characters forbidden in a file name (Windows included).
 fn clean(v: &str) -> String {
     v.chars().map(|c| if matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|') { '-' } else { c }).collect()
 }
@@ -288,9 +286,8 @@ fn pieces(template: &str) -> Vec<Piece<'_>> {
     out
 }
 
-/// Remplace les `{variable}` du modèle (`n` : numéro de page). Un séparateur
-/// (`_`, ` - `…) entre deux variables disparaît avec une variable vide ; `/` crée
-/// des sous-dossiers.
+/// Replaces the template's `{variable}`s (`n`: page number). A separator (`_`, ` - `…) between two
+/// variables disappears with an empty variable; `/` creates subfolders.
 fn fill_template(template: &str, ctx: &MediaContext, page: Option<usize>) -> String {
     let mut segments: Vec<String> = vec![String::new()];
     let mut pending: Option<&str> = None;
@@ -333,11 +330,10 @@ fn fill_template(template: &str, ctx: &MediaContext, page: Option<usize>) -> Str
         .join("/")
 }
 
-/// Chemin (relatif au .ged) d'un fichier selon le réglage : dossier racine,
-/// dossier du type de média, modèle, numéro de page pour un média à plusieurs
-/// fichiers (`{n}`, sinon « p2 » en fin de nom), extension d'origine.
-/// Sans dossier pour ce média, le chemin d'origine est gardé ; si le modèle
-/// ne donne rien, le nom d'origine est gardé dans le dossier.
+/// Path (relative to the .ged) of a file according to the setting: root folder, folder of the media
+/// type, template, page number for a media with several files (`{n}`, otherwise “p2” at the end of
+/// the name), original extension. Without a folder for this media, the original path is kept; if
+/// the template gives nothing, the original name is kept in the folder.
 pub fn media_path(naming: &MediaNaming, ctx: &MediaContext, original: &str, page: Option<usize>) -> String {
     let Some(folder) = naming.folder_for(ctx) else { return original.to_string() };
     let file = original.rsplit(['/', '\\']).next().unwrap_or(original);
@@ -364,10 +360,10 @@ pub fn media_path(naming: &MediaNaming, ctx: &MediaContext, original: &str, page
         .join("/")
 }
 
-/// Une citation qui désigne un média : (force, enregistrement, événement, citation).
+/// A citation that designates a media: (strength, record, event, citation).
 type Found<'a> = (u8, &'a Node, &'a Node, &'a Node);
 
-/// Liens des médias, relevés en un parcours (voir [`Gedcom::media_contexts`]).
+/// Links of the media, collected in one pass (see [`Gedcom::media_contexts`]).
 #[derive(Default)]
 struct MediaLinks<'a> {
     found: HashMap<String, Vec<Found<'a>>>,
@@ -394,7 +390,7 @@ impl Gedcom {
         }
     }
 
-    /// Remplace un type reçu par les sous-dossiers (type d'événement renommé).
+    /// Replaces a received type in the subfolders (renamed event type).
     pub(crate) fn rename_media_type(&mut self, old: &str, new: &str) {
         let mut m = self.media_naming();
         let mut changed = false;
@@ -416,7 +412,7 @@ impl Gedcom {
         }
     }
 
-    /// Enregistre le réglage. Renvoie `false` si rien n'a changé.
+    /// Saves the setting. Returns `false` if nothing changed.
     pub fn set_media_naming(&mut self, m: &MediaNaming) -> bool {
         let m = MediaNaming {
             root: m.root.trim().trim_matches('/').to_string(),
@@ -461,9 +457,9 @@ impl Gedcom {
         true
     }
 
-    /// Numéros Sosa-d'Aboville calculés depuis l'individu racine : les ascendants
-    /// (2k le père, 2k+1 la mère), puis leurs autres descendants, numérotés par
-    /// ordre de naissance à partir de l'ascendant le plus proche (le père d'abord).
+    /// Sosa-d'Aboville numbers computed from the root individual: the ancestors (2k the father,
+    /// 2k+1 the mother), then their other descendants, numbered in birth order from the closest
+    /// ancestor (the father first).
     pub fn sosa_numbers(&self) -> HashMap<String, Numbering> {
         let mut out: HashMap<String, Numbering> = HashMap::new();
         let Some(root) = self.root() else { return out };
@@ -488,13 +484,13 @@ impl Gedcom {
         }
         ancestors.sort_by_key(|(_, k)| *k);
         let mut done: HashSet<String> = HashSet::new();
-        // (personne, ascendant, branche) : descendants à numéroter, en largeur.
+        // (person, ancestor, branch): descendants to number, breadth first.
         let mut todo: std::collections::VecDeque<(String, u64, String)> =
             ancestors.into_iter().map(|(x, k)| (x, k, String::new())).collect();
         while let Some((x, k, branch)) = todo.pop_front() {
             let Some(ind) = self.individual(&x) else { continue };
             let mut fams: Vec<&str> = ind.fams();
-            // Unions dans l'ordre des mariages, les non datées d'abord (comme Ancestris).
+            // Unions in marriage order, undated ones first (like Ancestris).
             let married = |f: &str| {
                 self.family(f)
                     .and_then(|f| f.events().into_iter().find(|e| e.node.tag == "MARR"))
@@ -517,7 +513,7 @@ impl Gedcom {
                         (i, c, d.filter(|d| d.year().is_some()).map(|d| d.sort_key()))
                     })
                     .collect();
-                // Ordre de naissance, les enfants sans date d'abord (comme Ancestris).
+                // Birth order, children without a date first (like Ancestris).
                 kids.sort_by_key(|(i, _, d)| (*d, *i));
                 for (rank, (_, c, _)) in kids.iter().enumerate() {
                     if out.contains_key(*c) {
@@ -539,15 +535,15 @@ impl Gedcom {
         out
     }
 
-    /// Ce que le média illustre : l'événement dont une citation porte le média,
-    /// sinon qui cite une source qui le porte (de préférence l'événement que la
-    /// source décrit, puis celui que son titre nomme, plutôt qu'un attribut) ;
-    /// puis la source qui le porte ; puis la personne ou la famille liée.
+    /// What the media illustrates: the event whose citation holds the media, otherwise the one that
+    /// cites a source holding it (preferably the event the source describes, then the one its title
+    /// names, rather than an attribute); then the source holding it; then the linked person or
+    /// family.
     pub fn media_context(&self, media: &str) -> MediaContext {
         self.media_context_with(media, &self.sosa_numbers(), Some(&self.media_naming()))
     }
 
-    /// [`Self::media_context`] avec des numéros déjà calculés (plusieurs médias).
+    /// [`Self::media_context`] with numbers already computed (several media).
     pub fn media_context_with(
         &self,
         media: &str,
@@ -558,7 +554,7 @@ impl Gedcom {
         self.resolve_media_context(media, &links, numbers, naming)
     }
 
-    /// Contexte de tous les médias en un seul parcours du fichier.
+    /// Context of every media in a single pass over the file.
     pub fn media_contexts(
         &self,
         numbers: &HashMap<String, Numbering>,
@@ -573,8 +569,8 @@ impl Gedcom {
             .collect()
     }
 
-    /// Citations, sources porteuses et rattachements directs des médias (de
-    /// `only`, ou de tous), dans l'ordre du fichier.
+    /// Citations, holding sources and direct attachments of the media (of `only`, or of all), in
+    /// file order.
     fn media_citations(&self, only: Option<&str>) -> MediaLinks<'_> {
         let wanted = |m: &str| only.is_none_or(|o| o == m);
         let media_of = |n: &Node| -> Vec<String> {
@@ -597,7 +593,8 @@ impl Gedcom {
                 links.direct.entry(m).or_insert(&**r);
             }
             for e in r.children.iter().filter(|e| event_label(&e.tag).is_some()) {
-                // Média lié à l'événement lui-même (faire-part, acte joint sans source).
+                // Media linked to the event itself (announcement, record attached without a
+                // source).
                 for m in media_of(e) {
                     links.found.entry(m).or_default().push((0, &**r, e, e));
                 }
@@ -606,7 +603,7 @@ impl Gedcom {
                     for m in &on_citation {
                         links.found.entry(m.clone()).or_default().push((0, &**r, e, c));
                     }
-                    // Média porté par la source citée.
+                    // Media held by the cited source.
                     let Some(s) = c.pointer().and_then(|x| self.get(x)) else { continue };
                     let carried = media_of(s);
                     if carried.iter().all(|m| on_citation.contains(m)) {
@@ -660,16 +657,15 @@ impl Gedcom {
             }
             _ => {}
         };
-        // 1. Citation d'un événement, la plus probante d'abord.
+        // 1. Citation of an event, the strongest first.
         let mut found: Vec<Found<'_>> = links.found.get(media).cloned().unwrap_or_default();
-        // À score égal, le type d'événement le plus cité l'emporte (un registre
-        // matricule cité par trois événements militaires et par le décès).
+        // With an equal score, the most cited event type wins (a military register cited by three
+        // military events and by the death).
         let key =
             |e: &Node| if e.tag == "EVEN" { e.child_val("TYPE").unwrap_or("EVEN").to_string() } else { e.tag.clone() };
-        // Parmi les citations les plus probantes, l'événement que le premier dossier
-        // concerné reçoit (un matricule cité par le décès et par le service militaire
-        // va dans « Matricules » si ce dossier passe avant « Actes »), puis le type
-        // le plus cité.
+        // Among the strongest citations, the event that the first relevant folder receives (a
+        // military register cited by the death and by the military service goes into “Military” if
+        // that folder comes before “Records”), then the most cited type.
         let tier = found.iter().map(|(s, ..)| *s).min();
         found.retain(|(s, ..)| Some(*s) == tier);
         if let Some(naming) = naming
@@ -695,8 +691,8 @@ impl Gedcom {
             ctx.page = cit.child_val("PAGE").unwrap_or("").to_string();
             return ctx;
         }
-        // 2. Source qui porte le média : son contenu (`DATA.EVEN`) quand il désigne un
-        //    seul type d'acte, une date précise plutôt qu'une période.
+        // 2. Source holding the media: its contents (`DATA.EVEN`) when they designate a single
+        //    record type, a precise date rather than a period.
         if let Some(s) = links.carriers.get(media).and_then(|c| c.first()) {
             let content = crate::kinds::SourceContent::read(s);
             if let [t] = content.events.as_slice() {
@@ -709,7 +705,7 @@ impl Gedcom {
             ctx.place = content.place;
             ctx.source = s.child_val("TITL").unwrap_or("").to_string();
         }
-        // 3. Personne ou famille liée directement (portrait, photo de famille).
+        // 3. Person or family linked directly (portrait, family photo).
         if let Some(r) = links.direct.get(media) {
             person(r, &mut ctx);
             if ctx.event.is_empty() {
@@ -719,8 +715,8 @@ impl Gedcom {
         ctx
     }
 
-    /// Chemins proposés pour les fichiers d'un média (un par `FILE`, liens web exclus) :
-    /// `(position du FILE, chemin actuel, nouveau chemin)`.
+    /// Paths suggested for the files of a media (one per `FILE`, web links excluded): `(position of
+    /// the FILE, current path, new path)`.
     pub fn media_renames(&self, media: &str) -> Vec<(usize, String, String)> {
         let naming = self.media_naming();
         let Some(m) = self.get(media) else { return Vec::new() };
@@ -735,8 +731,8 @@ impl Gedcom {
             .collect()
     }
 
-    /// Remplace le chemin du `FILE` n° `index` d'un média, s'il vaut encore `old`
-    /// (sans toucher à la date de modification). Renvoie `true` s'il a changé.
+    /// Replaces the path of `FILE` number `index` of a media, if it is still `old` (without
+    /// touching the change date). Returns `true` if it changed.
     pub fn replace_media_file(&mut self, media: &str, index: usize, old: &str, path: &str) -> bool {
         let matches =
             |g: &Gedcom| g.get(media).and_then(|m| m.children_with("FILE").nth(index)).is_some_and(|f| f.val() == old);
@@ -826,7 +822,8 @@ mod tests {
         assert_eq!(num("I1").as_deref(), Some("1-"));
         assert_eq!(num("I2").as_deref(), Some("2-"));
         assert_eq!(num("I3").as_deref(), Some("3-"));
-        // Frère né avant Jean (rang 1, Jean compte dans le rang) ; demi-sœur de la 2e union.
+        // Brother born before Jean (rank 1, Jean counts in the rank); half-sister from the 2nd
+        // union.
         assert_eq!(num("I4").as_deref(), Some("2-1"));
         assert_eq!(num("I5").as_deref(), Some("2-B1"));
     }
@@ -841,15 +838,15 @@ mod tests {
             ("BIRT", "Birth", "GUYOT", "État civil de Troyes", "Acte n° 12")
         );
         assert_eq!(g.media_context("M2").event, "INDI");
-        // Matricule cité par une profession, un service militaire et le décès : à score égal,
-        // le premier dossier concerné l'emporte.
+        // Military register cited by an occupation, a military service and the death: with an equal
+        // score, the first relevant folder wins.
         assert_eq!(g.media_context("M3").event, "DEAT");
         g.set_media_naming(&naming(
             "",
             vec![folder("Matricules", &["Service militaire"], ""), folder("Actes", &[], "")],
         ));
         assert_eq!(g.media_context("M3").event, "Service militaire");
-        // Acte de mariage : le couple, numéro du mari, nom de l'épouse.
+        // Marriage record: the couple, the husband's number, the wife's surname.
         let c = g.media_context("M4");
         assert_eq!((c.event.as_str(), c.surname.as_str(), c.spouse.as_str()), ("MARR", "GUYOT", "DE LA RUE"));
         assert_eq!(c.number.map(|n| n.sosa), Some(2));
@@ -874,13 +871,13 @@ mod tests {
         assert_eq!(g.media_renames("M2")[0].2, "Médias/Portraits/000001_GUYOT_Jean.png");
         assert_eq!(g.media_renames("M4")[0].2, "Médias/Actes/000002_M_GUYOT_DELARUE.jpg");
         assert_eq!(g.media_renames("M3")[0].2, "Médias/Actes/000002_1_D_GUYOT_Pierre.jpg");
-        // Pas de séparateur orphelin, pages « p2 » sans {n}, sans dossier : chemin inchangé.
+        // No orphan separator, “p2” pages without {n}, no folder: path unchanged.
         let ctx = MediaContext { kind: "Naissance".into(), surname: "GUYOT".into(), ..Default::default() };
         let n = naming("", vec![folder("", &["BIRT"], "{type}/{date} {surname} {given} - {page}")]);
         let birth = MediaContext { event: "BIRT".into(), ..ctx.clone() };
         assert_eq!(media_path(&n, &birth, "a/b.JPG", Some(2)), "Naissance/GUYOT p2.jpg");
         assert_eq!(media_path(&n, &ctx, "a/b.JPG", None), "a/b.JPG");
-        // Caractères interdits remplacés.
+        // Forbidden characters replaced.
         let ctx = MediaContext { source: "AD 10 : 4E/123".into(), ..Default::default() };
         assert_eq!(
             media_path(&naming("", vec![folder("", &[], "{source}")]), &ctx, "a.pdf", None),

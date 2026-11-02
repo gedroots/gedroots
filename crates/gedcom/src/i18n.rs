@@ -77,9 +77,9 @@ mod tests {
         assert!(!catalog.is_empty());
         for (key, texts) in &catalog {
             for lang in LANGUAGES {
-                let Some(text) = texts.get(lang) else { panic!("« {key} » has no {lang} text") };
-                assert!(!text.trim().is_empty(), "« {key} » is empty in {lang}");
-                assert_eq!(placeholders(text), placeholders(&texts["en"]), "« {key} »: placeholders differ in {lang}");
+                let Some(text) = texts.get(lang) else { panic!("`{key}` has no {lang} text") };
+                assert!(!text.trim().is_empty(), "`{key}` is empty in {lang}");
+                assert_eq!(placeholders(text), placeholders(&texts["en"]), "`{key}`: placeholders differ in {lang}");
             }
         }
     }
@@ -106,7 +106,7 @@ mod tests {
                         if name == "word" {
                             let args = rest.split(')').next().unwrap();
                             for key in args.split('"').skip(1).step_by(2) {
-                                assert!(catalog.contains_key(key), "{}: « {key} » is not in locales/", path.display());
+                                assert!(catalog.contains_key(key), "{}: `{key}` is not in locales/", path.display());
                                 used.insert(key.to_string());
                             }
                             continue;
@@ -116,7 +116,7 @@ mod tests {
                             let key = rest.split('"').nth(1).unwrap();
                             for s in ["m", "f", "u"] {
                                 let key = format!("{key}.{s}");
-                                assert!(catalog.contains_key(&key), "{}: « {key} » is not in locales/", path.display());
+                                assert!(catalog.contains_key(&key), "{}: `{key}` is not in locales/", path.display());
                                 used.insert(key);
                             }
                             continue;
@@ -129,7 +129,7 @@ mod tests {
                             _ => continue, // another macro, such as `format!`
                         };
                         for key in keys {
-                            assert!(catalog.contains_key(&key), "{}: « {key} » is not in locales/", path.display());
+                            assert!(catalog.contains_key(&key), "{}: `{key}` is not in locales/", path.display());
                             used.insert(key);
                         }
                     }
@@ -138,7 +138,7 @@ mod tests {
         }
         for key in catalog.keys() {
             let dynamic = DYNAMIC.iter().any(|prefix| key.starts_with(prefix));
-            assert!(dynamic || used.contains(key), "« {key} » is in locales/ but no longer used");
+            assert!(dynamic || used.contains(key), "`{key}` is in locales/ but no longer used");
         }
     }
 }
