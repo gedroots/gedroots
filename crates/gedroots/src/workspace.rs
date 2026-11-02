@@ -1359,10 +1359,13 @@ impl Workspace {
                                                 .text_ellipsis()
                                                 .when(!r.strong.is_empty(), |d| {
                                                     d.child(
-                                                        div().font_weight(FontWeight::SEMIBOLD).child(r.strong.clone()),
+                                                        div()
+                                                            .flex_none()
+                                                            .font_weight(FontWeight::SEMIBOLD)
+                                                            .child(r.strong.clone()),
                                                     )
                                                 })
-                                                .child(r.title.clone()),
+                                                .child(div().min_w_0().truncate().child(r.title.clone())),
                                         )
                                         .child(
                                             mono(r.meta_display().to_string())
@@ -2327,13 +2330,16 @@ impl Workspace {
             .child(
                 v_flex()
                     .flex_1()
+                    .min_w_0()
                     .gap_1()
+                    // Les noms longs passent à la ligne plutôt que d'être coupés.
                     .child(
                         h_flex()
-                            .gap_1()
+                            .flex_wrap()
+                            .gap_x_1()
                             .text_xl()
                             .child(div().font_weight(FontWeight::SEMIBOLD).child(i.surname()))
-                            .child(i.given()),
+                            .child(div().min_w_0().max_w_full().child(i.given())),
                     )
                     .child(div().text_color(theme::muted()).child(format!(
                         "{} · {}{}",
@@ -2570,8 +2576,7 @@ impl Render for Workspace {
             .bg(theme::bg())
             .text_color(theme::text())
             .text_sm()
-            // macOS : menus natifs, et le nom du fichier est dans le titre de la fenêtre.
-            .when(self.menu_bar.is_some(), |d| d.child(self.render_header()))
+            .child(self.render_header())
             .child(body)
             .children(self.render_picker(cx))
             .children(self.render_add_dialog(cx))
