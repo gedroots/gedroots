@@ -58,6 +58,7 @@ impl Workspace {
             return d;
         }
         let d = on!(d, cx, SaveFile, |this, w, cx| this.save_file(&SaveFile, w, cx));
+        let d = on!(d, cx, OpenFileSettings, |this, w, cx| this.open_settings(w, cx));
         let d = on!(d, cx, SaveFileAs, |this, w, cx| this.save_file_as(w, cx));
         let d = on!(d, cx, OpenAnalyses, |this, w, cx| this.open_analyses(&OpenAnalyses, w, cx));
         let d = on!(d, cx, EnterRecord, |this, w, cx| this.open_entry(&EnterRecord, w, cx));
