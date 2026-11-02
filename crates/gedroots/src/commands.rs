@@ -23,9 +23,7 @@ actions!(
         OpenFileSettings,
         SaveFile,
         SaveFileAs,
-        ExportGedzip,
-        ExportGedcom551,
-        ExportGeneanet,
+        ExportFile,
         ConnectAgent,
         ReviewProposals,
         AcceptProposal,
@@ -419,14 +417,7 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
         a(t!("cmd.save"), SaveFile),
         a(t!("cmd.save_as"), SaveFileAs),
         Sep,
-        Sub(
-            t!("menu.export").into(),
-            vec![
-                a(t!("cmd.export_gedzip"), ExportGedzip),
-                a(t!("cmd.export_gedcom551"), ExportGedcom551),
-                a(t!("cmd.export_geneanet"), ExportGeneanet),
-            ],
-        ),
+        a(t!("cmd.export"), ExportFile),
         Sep,
         a(t!("cmd.connect_agent"), ConnectAgent),
     ]);
@@ -730,7 +721,7 @@ mod tests {
         assert!(entries.iter().any(|e| e.path == "Person › Search On › Geneanet"));
         assert!(entries.iter().any(|e| e.path == "Person › Add Relative › Father"));
         assert!(entries.iter().any(|e| e.path == "Source › Enter Record"));
-        assert!(entries.iter().any(|e| e.path == "File › Export › GEDCOM for Geneanet"));
+        assert!(entries.iter().any(|e| e.path == "File › Export"));
         for (i, e) in entries.iter().enumerate() {
             assert!(
                 !entries[i + 1..].iter().any(|o| o.action.partial_eq(e.action.as_ref())),

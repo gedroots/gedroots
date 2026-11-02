@@ -280,6 +280,7 @@ dependencies = [
  "futures-channel",
  "futures-util",
  "getrandom 0.4.3",
+ "raw-window-handle",
  "serde",
  "serde_repr",
  "wayland-backend",
@@ -1979,11 +1980,13 @@ dependencies = [
 
 [[package]]
 name = "gedroots"
-version = "2026.11.0"
+version = "2026.11.1"
 dependencies = [
+ "ashpd",
  "async-channel",
  "axum",
  "base64 0.22.1",
+ "block2 0.6.2",
  "dirs 6.0.0",
  "gedcom",
  "gpui-kit",
@@ -1994,6 +1997,7 @@ dependencies = [
  "objc2 0.6.5",
  "objc2-app-kit 0.3.2",
  "objc2-foundation 0.3.2",
+ "raw-window-handle",
  "rmcp",
  "rust-i18n",
  "schemars",
@@ -2005,7 +2009,9 @@ dependencies = [
  "tokio",
  "tokio-util",
  "ureq 2.12.1",
+ "url",
  "velopack",
+ "windows 0.62.2",
  "winresource",
  "zip 9.2.2",
 ]

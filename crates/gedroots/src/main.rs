@@ -17,6 +17,7 @@ mod map;
 mod recent;
 mod report;
 mod sample;
+mod save_dialog;
 mod theme;
 mod updates;
 mod viewer;
