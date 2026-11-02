@@ -262,6 +262,20 @@ impl RecordEditor {
                         field!("Auteur", "", f.author);
                         field!("Publication", "", f.publication);
                         field!("Cote", "", f.call_number);
+                        // Contenu (`DATA` / `EVEN`) : types d'actes et période.
+                        let content = SourceContent::read(node);
+                        field!("Actes", "Naissances, mariages, décès", content.events_label());
+                        fields.push(Field {
+                            label: "Période".into(),
+                            state: FieldState::Date(cx.new(|cx| {
+                                DateField::new(&content.period, "", window, cx).with_placeholder(
+                                    "de 1793 à 1802",
+                                    window,
+                                    cx,
+                                )
+                            })),
+                            place: false,
+                        });
                         let state = picker(ged, RecordKind::Repository, &f.repository, window, cx);
                         pickers.push(Picker { label: "Dépôt", placeholder: "Choisir un dépôt…", state });
                         long_text = Some(("Texte de la source", textarea(window, cx, &f.text)));
@@ -276,6 +290,8 @@ impl RecordEditor {
                         // Le format (FORM) se déduit du fichier : pas de champ.
                         field!("Titre", "", f.title);
                         field!("Fichier", "Actes/acte.jpg", f.file);
+                        let medi = choice(MEDIUMS, medium(node).unwrap_or(""), window, cx);
+                        fields.push(Field { label: "Support".into(), state: FieldState::Choice(medi), place: false });
                     }
                     RecordKind::SharedNote => {
                         long_text = Some(("Texte", textarea(window, cx, &node.text())));
@@ -363,15 +379,31 @@ impl RecordEditor {
                         marriage: self.event(0, cx)?,
                     }
                     .apply(node),
-                    RecordKind::Source => SourceForm {
-                        title: v[0].clone(),
-                        author: v[1].clone(),
-                        publication: v[2].clone(),
-                        repository: self.picked(0, cx),
-                        call_number: v[3].clone(),
-                        text: note,
+                    RecordKind::Source => {
+                        let before = SourceContent::read(node);
+                        let events = if v[4].trim() == before.events_label() {
+                            before.events.clone()
+                        } else {
+                            parse_event_list(&v[4])?
+                        };
+                        let period = match &self.fields[5].state {
+                            FieldState::Date(e) => e.read(cx).value(cx)?.0,
+                            other => other.value(cx),
+                        };
+                        let content = SourceContent { events, period, place: before.place.clone() };
+                        SourceForm {
+                            title: v[0].clone(),
+                            author: v[1].clone(),
+                            publication: v[2].clone(),
+                            repository: self.picked(0, cx),
+                            call_number: v[3].clone(),
+                            text: note,
+                        }
+                        .apply(node);
+                        if content != before {
+                            content.apply(node);
+                        }
                     }
-                    .apply(node),
                     RecordKind::Repository => RepositoryForm { name: v[0].clone(), www: v[1].clone() }.apply(node),
                     RecordKind::Media => {
                         let before = MediaForm::read(node);
@@ -381,7 +413,10 @@ impl RecordEditor {
                         } else {
                             before.form
                         };
-                        MediaForm { file, form, title: v[0].clone() }.apply(node)
+                        MediaForm { file, form, title: v[0].clone() }.apply(node);
+                        if medium(node).unwrap_or("") != v[2] {
+                            set_medium(node, &v[2]);
+                        }
                     }
                     RecordKind::SharedNote => node.set_text(&note),
                     RecordKind::Submitter => node.set_child_val("NAME", &v[0]),

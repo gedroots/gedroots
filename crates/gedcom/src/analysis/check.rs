@@ -97,6 +97,8 @@ pub fn code_label(code: &str) -> &'static str {
         "broken_link" => "Lien vers un enregistrement absent",
         "missing_backlink" => "Lien familial à sens unique",
         "unsourced" => "Événement sans source",
+        "role_sex_mismatch" => "Rôle incohérent avec le sexe",
+        "outside_source_period" => "Acte hors de la période de sa source",
         _ => "Anomalie",
     }
 }
@@ -401,6 +403,59 @@ pub fn check(g: &Gedcom, t: &Thresholds) -> Vec<Issue> {
         }
     }
 
+    // Citations : rôle et sexe, période déclarée par la source (`DATA` / `EVEN` / `DATE`).
+    for r in g.records_of(RecordKind::Individual).chain(g.records_of(RecordKind::Family)) {
+        let Some(x) = r.xref.as_deref() else { continue };
+        let sex = (r.tag == "INDI").then(|| Individual::new(r).sex().to_string());
+        for e in &r.children {
+            for c in e.children_with("SOUR") {
+                let cited_ev = c.child("EVEN");
+                if let (Some(sex), Some(role)) = (&sex, cited_ev.and_then(|ev| ev.child_val("ROLE"))) {
+                    let wrong = match role {
+                        "FATH" | "HUSB" => sex == "F",
+                        "MOTH" | "WIFE" => sex == "M",
+                        _ => false,
+                    };
+                    if wrong {
+                        let src = c.pointer().unwrap_or("");
+                        push(
+                            Severity::Warning,
+                            "role_sex_mismatch",
+                            x,
+                            vec![src.to_string()],
+                            format!(
+                                "{} : rôle {} dans « {} » mais de sexe {}",
+                                name(x),
+                                role_fr(role),
+                                name(src),
+                                if sex == "F" { "féminin" } else { "masculin" }
+                            ),
+                        );
+                    }
+                }
+                let Some(src) = c.pointer().and_then(|p| g.get(p)) else { continue };
+                let tag = cited_ev.map(|ev| ev.val()).filter(|v| !v.is_empty()).unwrap_or(&e.tag);
+                let Some(date) = c.path_val(&["DATA", "DATE"]).or_else(|| e.child_val("DATE")) else { continue };
+                if let Some(period) = crate::kinds::outside_period(src, tag, date) {
+                    let sx = src.xref.as_deref().unwrap_or("");
+                    push(
+                        Severity::Warning,
+                        "outside_source_period",
+                        x,
+                        vec![sx.to_string()],
+                        format!(
+                            "{} : acte daté {} dans « {} », qui couvre {}",
+                            name(x),
+                            crate::date::Date::parse(date).to_french(),
+                            name(sx),
+                            crate::date::Date::parse(period).to_french()
+                        ),
+                    );
+                }
+            }
+        }
+    }
+
     // Boucles dans l'ascendance.
     for x in lives.keys() {
         if is_own_ancestor(g, x) {
@@ -417,6 +472,16 @@ pub fn check(g: &Gedcom, t: &Thresholds) -> Vec<Issue> {
     issues.sort_by(|a, b| (a.severity, a.code, &a.message).cmp(&(b.severity, b.code, &b.message)));
     issues.dedup();
     issues
+}
+
+fn role_fr(role: &str) -> &'static str {
+    match role {
+        "FATH" => "père",
+        "MOTH" => "mère",
+        "HUSB" => "époux",
+        "WIFE" => "épouse",
+        _ => "",
+    }
 }
 
 fn is_own_ancestor(g: &Gedcom, x: &str) -> bool {

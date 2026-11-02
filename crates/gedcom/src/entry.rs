@@ -422,6 +422,14 @@ impl Entry {
         };
         w.ged.declare_extensions();
         w.res.source = source.clone();
+        // Contenu de la source (`DATA` / `EVEN` + période) : type de l'acte et année.
+        let own = !self.record_date.trim().is_empty();
+        let when = if own { crate::date::date_node(&self.record_date, "") } else { self.date_node() }
+            .map(|d| d.val().to_string())
+            .unwrap_or_default();
+        if crate::kinds::record_in_source(w.ged.get_mut(&source).unwrap(), &t.event, &when) {
+            w.touch(&source);
+        }
 
         // 2. Média.
         let media = match &self.media {
@@ -439,6 +447,8 @@ impl Entry {
                 file.value = Some(path.trim().to_string());
                 file.set_child_val("FORM", media_type(path));
                 file.set_child_val("TITL", &title);
+                // Un acte est un document manuscrit (`FORM` / `MEDI MANUSCRIPT`).
+                crate::kinds::set_medium(node, "MANUSCRIPT");
                 w.mark_created(&x);
                 Some(x)
             }

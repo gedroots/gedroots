@@ -384,14 +384,26 @@ fn family_menu(ws: Ws, x: String, from: From) -> MenuBuilder {
 /// Sources, médias, dépôts, notes.
 fn other_menu(ws: Ws, x: String, kind: RecordKind, from: From) -> MenuBuilder {
     Rc::new(move |menu, _, cx| {
-        let Some((photo, marked)) = read(&ws, cx, |this, _| {
+        let Some((photo, marked, portrait_of)) = read(&ws, cx, |this, g| {
             // Médias sélectionnés ensemble (⌘ / Maj + clic) dont celui-ci : on peut les fusionner.
             let marked = if this.media_marked.len() >= 2 && this.media_marked.contains(&x) {
                 this.media_marked.clone()
             } else {
                 vec![]
             };
-            (this.photo_file(&x).is_some(), marked)
+            // Photo (ou image sans support) d'un individu dont elle n'est pas déjà le portrait.
+            let portrait_of = match &from {
+                From::Attached(owner)
+                    if g.get(owner).is_some_and(|n| n.tag == "INDI")
+                        && g.portrait(owner).is_none_or(|p| p.xref() != x)
+                        && g.get(&x)
+                            .is_some_and(|m| Media::new(m).is_image() && medium(m).is_none_or(|v| v == "PHOTO")) =>
+                {
+                    Some(owner.clone())
+                }
+                _ => None,
+            };
+            (this.photo_file(&x).is_some(), marked, portrait_of)
         }) else {
             return menu;
         };
@@ -431,6 +443,16 @@ fn other_menu(ws: Ws, x: String, kind: RecordKind, from: From) -> MenuBuilder {
                         }))
                     })
                     .item(act(&ws, "Ajouter des pages…", move |this, w, cx| this.choose_pages(x7.clone(), w, cx)))
+            })
+            .when_some(portrait_of, |m, owner| {
+                let media = x.clone();
+                m.separator().item(act(&ws, "Définir comme portrait", move |this, w, cx| {
+                    let (owner, media) = (owner.clone(), media.clone());
+                    this.mutate(w, cx, move |g| {
+                        g.set_portrait(&owner, &media);
+                        Ok((format!("Portrait de {} défini", g.record_label(&owner)), None))
+                    })
+                }))
             })
             .when_some(
                 match &from {
