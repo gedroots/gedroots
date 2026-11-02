@@ -4,34 +4,37 @@
 //! `clé:valeur`, par exemple :
 //!
 //! ```text
-//! guyot né:1800-1850 lieu:troyes sexe:f sans:source
+//! guyot born:1800-1850 place:troyes sex:f without:source
 //! ```
 //!
 //! | Critère | Effet |
 //! | --- | --- |
 //! | texte libre | chaque mot doit apparaître dans un nom (prénoms, nom, noms alternatifs), sans tenir compte des accents ni de la casse |
-//! | `né:1850`, `né:1800-1850`, `né:<1800`, `né:>1900`, `né:1850±5` | année de naissance (ou baptême) ; `±` : à quelques années près |
-//! | `mort:…` / `décès:…` | année de décès (ou inhumation) |
-//! | `vécu:1870` | en vie cette année-là (d'après naissance/décès connus) |
-//! | `lieu:troyes` | un événement de la personne a eu lieu à cet endroit |
-//! | `prof:meunier` | profession (`OCCU`) |
-//! | `nom:guyot` | nom de famille, variantes d'orthographe comprises (Guyau, Guillot) ; `nom:=guyot` : orthographe exacte |
-//! | `conjoints:@I1@`, `enfants:@I1@`, `parents:@I1@`, `fratrie:@I1@` | proches d'une personne |
-//! | `ascendants:@I1@`, `descendants:@I1@` | ascendance ou descendance complète d'une personne |
-//! | `sexe:h` / `sexe:f` / `sexe:?` | sexe (h/m = homme, f = femme, ? = inconnu) |
-//! | `sans:source`, `sans:parents`, `sans:date`, `sans:famille`, `sans:média` | ce qui manque |
-//! | `sans:mariage` | a une union sans mariage (`MARR`) |
-//! | `avec:média`, `avec:note`, `avec:source`, `avec:mariage` | ce qui est présent |
+//! | `born:1850`, `born:1800-1850`, `born:<1800`, `born:>1900`, `born:1850±5` | année de naissance (ou baptême) ; `±` : à quelques années près |
+//! | `died:…` | année de décès (ou inhumation) |
+//! | `alive:1870` | en vie cette année-là (d'après naissance/décès connus) |
+//! | `place:troyes` | un événement de la personne a eu lieu à cet endroit |
+//! | `occupation:meunier` | profession (`OCCU`) |
+//! | `name:guyot` | nom de famille, variantes d'orthographe comprises (Guyau, Guillot) ; `name:=guyot` : orthographe exacte |
+//! | `spouses:@I1@`, `children:@I1@`, `parents:@I1@`, `siblings:@I1@` | proches d'une personne |
+//! | `ancestors:@I1@`, `descendants:@I1@` | ascendance ou descendance complète d'une personne |
+//! | `sex:m` / `sex:f` / `sex:u` | sexe (m = homme, f = femme, u = inconnu) |
+//! | `without:source`, `without:parents`, `without:date`, `without:spouse`, `without:media` | ce qui manque |
+//! | `without:marriage` | a une union sans mariage (`MARR`) |
+//! | `with:media`, `with:note`, `with:source`, `with:marriage` | ce qui est présent |
 //! | `sosa`, `sosa:1-63` | porte un numéro Sosa (ascendant de la personne racine) |
 //! | `id:I00012` ou `@I00012@` | identifiant GEDCOM (recherche avancée) |
 //!
-//! Les clés acceptent aussi leur forme sans accent (`ne:`, `deces:`, `media`).
+//! Les mots-clés sont en anglais quelle que soit la langue de l'interface ; seuls leurs
+//! libellés sont traduits. Les recherches enregistrées en français par les versions
+//! précédentes sont converties à la lecture ([`crate::keywords`]).
 
 use std::cell::OnceCell;
 use std::collections::HashSet;
 
 use crate::document::Gedcom;
 use crate::model::{Individual, sort_key};
+use rust_i18n::t;
 
 /// Intervalle d'années (bornes incluses).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -67,7 +70,7 @@ impl YearRange {
     }
 }
 
-/// Ce qui doit manquer (`sans:`) ou être présent (`avec:`).
+/// Ce qui doit manquer (`without:`) ou être présent (`with:`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Feature {
     Source,
@@ -76,7 +79,7 @@ pub enum Feature {
     Family,
     Media,
     Note,
-    /// Mariage d'une union. `sans:mariage` : une union au moins n'a pas de mariage
+    /// Mariage d'une union. `without:marriage` : une union au moins n'a pas de mariage
     /// (une personne sans union ne compte pas).
     Marriage,
 }
@@ -87,10 +90,10 @@ impl Feature {
             "source" => Feature::Source,
             "parent" => Feature::Parents,
             "date" => Feature::Date,
-            "famille" | "conjoint" => Feature::Family,
+            "spouse" | "family" => Feature::Family,
             "media" | "photo" | "image" => Feature::Media,
             "note" => Feature::Note,
-            "mariage" => Feature::Marriage,
+            "marriage" => Feature::Marriage,
             _ => return None,
         })
     }
@@ -114,7 +117,7 @@ impl Feature {
         }
     }
 
-    /// Ce qui manque, pour `sans:`.
+    /// Ce qui manque, pour `without:`.
     fn missing(self, g: &Gedcom, i: &Individual) -> bool {
         match self {
             Feature::Marriage => i.fams().iter().any(|f| g.family(f).is_some_and(|f| f.marriage().is_none())),
@@ -140,11 +143,11 @@ impl Kin {
 
     pub(crate) fn parse(key: &str) -> Option<Self> {
         Some(match key {
-            "conjoint" | "conjoints" | "epoux" => Kin::Spouses,
-            "enfant" | "enfants" => Kin::Children,
+            "spouse" | "spouses" => Kin::Spouses,
+            "child" | "children" => Kin::Children,
             "parent" | "parents" => Kin::Parents,
-            "fratrie" | "frere" | "freres" | "soeur" | "soeurs" => Kin::Siblings,
-            "ascendant" | "ascendants" | "ancetres" => Kin::Ancestors,
+            "sibling" | "siblings" => Kin::Siblings,
+            "ancestor" | "ancestors" => Kin::Ancestors,
             "descendant" | "descendants" => Kin::Descendants,
             _ => return None,
         })
@@ -153,25 +156,26 @@ impl Kin {
     /// Clé du critère.
     pub fn key(self) -> &'static str {
         match self {
-            Kin::Spouses => "conjoints",
-            Kin::Children => "enfants",
+            Kin::Spouses => "spouses",
+            Kin::Children => "children",
             Kin::Parents => "parents",
-            Kin::Siblings => "fratrie",
-            Kin::Ancestors => "ascendants",
+            Kin::Siblings => "siblings",
+            Kin::Ancestors => "ancestors",
             Kin::Descendants => "descendants",
         }
     }
 
-    /// « Ascendants de » : suivi du nom de la personne.
-    pub fn label(self) -> &'static str {
+    /// « Ascendants de Jean GUYOT ».
+    pub fn label(self, name: &str) -> String {
         match self {
-            Kin::Spouses => "Conjoints de",
-            Kin::Children => "Enfants de",
-            Kin::Parents => "Parents de",
-            Kin::Siblings => "Frères et sœurs de",
-            Kin::Ancestors => "Ascendants de",
-            Kin::Descendants => "Descendants de",
+            Kin::Spouses => t!("search.kin.spouses", name = name),
+            Kin::Children => t!("search.kin.children", name = name),
+            Kin::Parents => t!("search.kin.parents", name = name),
+            Kin::Siblings => t!("search.kin.siblings", name = name),
+            Kin::Ancestors => t!("search.kin.ancestors", name = name),
+            Kin::Descendants => t!("search.kin.descendants", name = name),
         }
+        .into_owned()
     }
 }
 
@@ -245,9 +249,9 @@ pub struct IndividualQuery {
     pub alive_in: Option<i32>,
     pub place: Option<String>,
     pub occupation: Option<String>,
-    /// Nom de famille (`nom:`), normalisé.
+    /// Nom de famille (`name:`), normalisé.
     pub surname: Option<String>,
-    /// `nom:=…` : sans les variantes d'orthographe.
+    /// `name:=…` : sans les variantes d'orthographe.
     pub surname_exact: bool,
     /// Proches d'une personne (`ascendants:@I1@`).
     pub kin: Vec<(Kin, String)>,
@@ -281,35 +285,35 @@ impl IndividualQuery {
             };
             let val = crate::query::unquote(val);
             let ok = match sort_key(key).as_str() {
-                "ne" | "nee" | "naissance" | "n" => YearRange::parse(val).map(|r| out.born = Some(r)).is_some(),
-                "mort" | "morte" | "deces" | "d" => YearRange::parse(val).map(|r| out.died = Some(r)).is_some(),
-                "vecu" | "vivant" | "en" => val.parse().map(|y| out.alive_in = Some(y)).is_ok(),
-                "lieu" | "a" => {
+                "born" | "b" => YearRange::parse(val).map(|r| out.born = Some(r)).is_some(),
+                "died" | "d" => YearRange::parse(val).map(|r| out.died = Some(r)).is_some(),
+                "alive" => val.parse().map(|y| out.alive_in = Some(y)).is_ok(),
+                "place" => {
                     out.place = Some(sort_key(val));
                     !val.is_empty()
                 }
-                "nom" => {
+                "name" => {
                     let exact = val.strip_prefix('=');
                     out.surname_exact = exact.is_some();
                     let v = exact.unwrap_or(val).trim();
                     out.surname = Some(sort_key(v));
                     !v.is_empty()
                 }
-                "prof" | "profession" | "metier" => {
+                "occupation" => {
                     out.occupation = Some(sort_key(val));
                     !val.is_empty()
                 }
-                "sexe" | "sex" => {
+                "sex" => {
                     out.sex = match sort_key(val).as_str() {
-                        "h" | "m" | "homme" => Some('M'),
-                        "f" | "femme" => Some('F'),
-                        "?" | "u" | "inconnu" => Some('U'),
+                        "m" | "male" => Some('M'),
+                        "f" | "female" => Some('F'),
+                        "u" | "?" | "unknown" => Some('U'),
                         _ => None,
                     };
                     out.sex.is_some()
                 }
-                "sans" => Feature::parse(val).map(|f| out.without.push(f)).is_some(),
-                "avec" => Feature::parse(val).map(|f| out.with.push(f)).is_some(),
+                "without" => Feature::parse(val).map(|f| out.without.push(f)).is_some(),
+                "with" => Feature::parse(val).map(|f| out.with.push(f)).is_some(),
                 "sosa" => {
                     let r = YearRange::parse(val);
                     out.sosa = r.map(|r| {
@@ -430,16 +434,17 @@ impl IndividualQuery {
 /// Bascule un critère dans une requête texte (pour les boutons de filtre rapide) :
 /// l'ajoute s'il est absent, le retire sinon. Les critères de même clé sont remplacés.
 pub fn toggle_token(query: &str, token: &str) -> String {
-    let key = token.split_once(':').map(|(k, _)| k);
+    let key = |t: &str| t.split_once(':').map(|(k, _)| sort_key(k));
+    let sex = key(token).is_some_and(|k| k == "sex");
     let mut present = false;
     let mut kept: Vec<&str> = Vec::new();
     for t in query.split_whitespace() {
-        if t.eq_ignore_ascii_case(token) {
+        if sort_key(t) == sort_key(token) {
             present = true;
             continue;
         }
-        // Un seul critère `sexe:` à la fois.
-        if key == Some("sexe") && t.to_lowercase().starts_with("sexe:") {
+        // Un seul critère `sex:` à la fois.
+        if sex && key(t).is_some_and(|k| k == "sex") {
             continue;
         }
         kept.push(t);
@@ -456,7 +461,7 @@ pub fn toggle_token(query: &str, token: &str) -> String {
 
 /// Indique si la requête contient déjà ce critère.
 pub fn has_token(query: &str, token: &str) -> bool {
-    query.split_whitespace().any(|t| t.eq_ignore_ascii_case(token))
+    query.split_whitespace().any(|t| sort_key(t) == sort_key(token))
 }
 
 impl Gedcom {

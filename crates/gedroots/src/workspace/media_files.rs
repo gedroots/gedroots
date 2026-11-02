@@ -314,10 +314,10 @@ mod tests {
         assert!(note.contains("2 files named"), "{note}");
 
         let files: Vec<String> = g.get(&m).unwrap().children_with("FILE").map(|f| f.val().to_string()).collect();
-        assert_eq!(files, ["Actes/N_MARCHAND_Louise p1.jpg", "Actes/N_MARCHAND_Louise p2.pdf", "partagé.jpg"]);
-        assert!(base.join("Actes/N_MARCHAND_Louise p1.jpg").is_file());
+        assert_eq!(files, ["Actes/B_MARCHAND_Louise p1.jpg", "Actes/B_MARCHAND_Louise p2.pdf", "partagé.jpg"]);
+        assert!(base.join("Actes/B_MARCHAND_Louise p1.jpg").is_file());
         assert!(outside.is_file(), "un fichier venu d'ailleurs est copié, pas déplacé");
-        assert!(base.join("Actes/N_MARCHAND_Louise p2.pdf").is_file());
+        assert!(base.join("Actes/B_MARCHAND_Louise p2.pdf").is_file());
         assert!(!base.join("scan.pdf").exists(), "un fichier du dossier est déplacé");
         assert!(base.join("partagé.jpg").is_file());
         assert_eq!(g.get(&other).unwrap().child("FILE").unwrap().val(), "partagé.jpg");

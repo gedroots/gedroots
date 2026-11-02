@@ -71,16 +71,7 @@ pub fn relation(rel: gedcom::Relation) -> gpui_kit::SharedString {
 
 /// Name of a kind of record, e.g. “Source”.
 pub fn record_kind(kind: gedcom::RecordKind) -> std::borrow::Cow<'static, str> {
-    use gedcom::RecordKind as K;
-    match kind {
-        K::Individual => rust_i18n::t!("kind.individual"),
-        K::Family => rust_i18n::t!("kind.family"),
-        K::Source => rust_i18n::t!("kind.source"),
-        K::Repository => rust_i18n::t!("kind.repository"),
-        K::Media => rust_i18n::t!("kind.media"),
-        K::SharedNote => rust_i18n::t!("kind.shared_note"),
-        K::Submitter => rust_i18n::t!("kind.submitter"),
-    }
+    kind.label()
 }
 
 /// The current interface language, e.g. `"fr"`.

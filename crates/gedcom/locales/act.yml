@@ -1,0 +1,215 @@
+_version: 2
+# Records entered in a source (crates/gedcom/src/act.rs).
+act.field.surname:
+  en: "Surname"
+  fr: "Nom"
+act.field.given:
+  en: "Given Names"
+  fr: "Prénoms"
+act.field.sex:
+  en: "Sex"
+  fr: "Sexe"
+act.field.age:
+  en: "Stated Age"
+  fr: "Âge déclaré"
+act.field.occupation:
+  en: "Occupation"
+  fr: "Profession"
+act.field.residence:
+  en: "Residence"
+  fr: "Domicile"
+act.field.birthplace:
+  en: "Born in"
+  fr: "Né(e) à"
+act.field.kinship:
+  en: "Stated Relationship"
+  fr: "Lien déclaré"
+act.field.note:
+  en: "Details"
+  fr: "Précisions"
+act.role.husband:
+  en: "Husband"
+  fr: "Époux"
+act.role.wife:
+  en: "Wife"
+  fr: "Épouse"
+act.role.child:
+  en: "Child"
+  fr: "Enfant"
+act.role.deceased:
+  en: "Deceased"
+  fr: "Défunt(e)"
+act.role.head:
+  en: "Head of Household"
+  fr: "Chef de ménage"
+act.role.household:
+  en: "Household Member"
+  fr: "Membre du ménage"
+act.role.person:
+  en: "Person"
+  fr: "Personne"
+act.role.father:
+  en: "Father"
+  fr: "Père"
+act.role.mother:
+  en: "Mother"
+  fr: "Mère"
+act.role.spouse:
+  en: "Spouse"
+  fr: "Conjoint"
+act.role.witness:
+  en: "Witness"
+  fr: "Témoin"
+act.role.godfather:
+  en: "Godfather"
+  fr: "Parrain"
+act.role.godmother:
+  en: "Godmother"
+  fr: "Marraine"
+act.role.declarant:
+  en: "Informant"
+  fr: "Déclarant"
+act.role.officiator:
+  en: "Officiant"
+  fr: "Officiant"
+act.role.clergy:
+  en: "Clergy"
+  fr: "Ecclésiastique"
+act.role.neighbor:
+  en: "Neighbor"
+  fr: "Voisin"
+act.role.friend:
+  en: "Friend"
+  fr: "Ami"
+act.role.other:
+  en: "Other"
+  fr: "Autre"
+act.role_of:
+  en: "%{role} of %{name}"
+  fr: "%{role} de %{name}"
+act.the_husband:
+  en: "the husband"
+  fr: "l'époux"
+act.the_wife:
+  en: "the wife"
+  fr: "l'épouse"
+act.person_n:
+  en: "person %{n}"
+  fr: "la personne %{n}"
+act.summary.linked.one:
+  en: "Record saved: %{n} person"
+  fr: "Acte enregistré : %{n} personne"
+act.summary.linked.other:
+  en: "Record saved: %{n} people"
+  fr: "Acte enregistré : %{n} personnes"
+act.summary.created.one:
+  en: ", %{n} of them new"
+  fr: " dont %{n} créée"
+act.summary.created.other:
+  en: ", %{n} of them new"
+  fr: " dont %{n} créées"
+act.summary.families.one:
+  en: ", %{n} family created"
+  fr: ", %{n} famille créée"
+act.summary.families.other:
+  en: ", %{n} families created"
+  fr: ", %{n} familles créées"
+act.auto_title.plain:
+  en: "%{what} record"
+  fr: "Acte de %{what}"
+act.auto_title.elided:
+  en: "%{what} record"
+  fr: "Acte d'%{what}"
+act.auto_title.plain_of:
+  en: "%{what} record of %{names}"
+  fr: "Acte de %{what} de %{names}"
+act.auto_title.elided_of:
+  en: "%{what} record of %{names}"
+  fr: "Acte d'%{what} de %{names}"
+act.record:
+  en: "Record"
+  fr: "Acte"
+act.and:
+  en: " and "
+  fr: " et "
+act.text.on_date:
+  en: " on %{date}"
+  fr: " le %{date}"
+act.text.in_place:
+  en: " in %{place}"
+  fr: " à %{place}"
+act.text.residing:
+  en: ", residing in %{place}"
+  fr: ", domicilié(e) à %{place}"
+act.text.born_in:
+  en: ", born in %{place}"
+  fr: ", né(e) à %{place}"
+act.labelled:
+  en: "%{label}: %{value}"
+  fr: "%{label} : %{value}"
+act.age.years.one:
+  en: "%{n} year"
+  fr: "%{n} an"
+act.age.years.other:
+  en: "%{n} years"
+  fr: "%{n} ans"
+act.age.months.one:
+  en: "%{n} month"
+  fr: "%{n} mois"
+act.age.months.other:
+  en: "%{n} months"
+  fr: "%{n} mois"
+act.age.weeks.one:
+  en: "%{n} week"
+  fr: "%{n} semaine"
+act.age.weeks.other:
+  en: "%{n} weeks"
+  fr: "%{n} semaines"
+act.age.days.one:
+  en: "%{n} day"
+  fr: "%{n} jour"
+act.age.days.other:
+  en: "%{n} days"
+  fr: "%{n} jours"
+act.error.no_source:
+  en: "the record's source no longer exists"
+  fr: "la source de l'acte n'existe plus"
+act.error.no_event:
+  en: "choose the record's event"
+  fr: "choisissez l'événement de l'acte"
+act.error.no_event_type:
+  en: "specify the event type"
+  fr: "précisez le type d'événement"
+act.error.no_media:
+  en: "the chosen media no longer exists"
+  fr: "le média choisi n'existe plus"
+act.error.date_unknown:
+  en: "date not recognized: “%{text}”"
+  fr: "date non reconnue : « %{text} »"
+act.error.record_date_unknown:
+  en: "record date not recognized: “%{text}”"
+  fr: "date de l'acte non reconnue : « %{text} »"
+act.error.date_impossible:
+  en: "impossible date: %{error}"
+  fr: "date impossible : %{error}"
+act.error.record_date_impossible:
+  en: "impossible record date: %{error}"
+  fr: "date de l'acte impossible : %{error}"
+act.error.principal_missing:
+  en: "%{role}: main person not found"
+  fr: "%{role} : personne principale introuvable"
+act.error.person_missing:
+  en: "%{role}: person not found"
+  fr: "%{role} : individu introuvable"
+act.error.no_name:
+  en: "%{role}: enter at least a surname or a given name"
+  fr: "%{role} : indiquez au moins un nom ou un prénom"
+act.error.principal_mention:
+  en: "%{role}: the main person must be linked or created"
+  fr: "%{role} : la personne principale doit être liée ou créée"
+act.error.no_principal:
+  en: "enter at least the record's main person"
+  fr: "renseignez au moins la personne principale de l'acte"
+act.error.both_spouses:
+  en: "a family event needs both spouses"
+  fr: "un événement familial demande les deux époux"

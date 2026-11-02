@@ -7,46 +7,65 @@
 use crate::date::Date;
 use crate::document::Gedcom;
 use crate::node::Node;
+use rust_i18n::t;
+use std::borrow::Cow;
 
-/// Balises d'événements et d'attributs individuels/familiaux, avec leur libellé.
-pub const EVENT_TAGS: &[(&str, &str)] = &[
-    ("BIRT", "Naissance"),
-    ("CHR", "Baptême"),
-    ("BAPM", "Baptême"),
-    ("DEAT", "Décès"),
-    ("BURI", "Inhumation"),
-    ("CREM", "Crémation"),
-    ("ADOP", "Adoption"),
-    ("CONF", "Confirmation"),
-    ("FCOM", "Première communion"),
-    ("NATU", "Naturalisation"),
-    ("EMIG", "Émigration"),
-    ("IMMI", "Immigration"),
-    ("CENS", "Recensement"),
-    ("PROB", "Succession"),
-    ("WILL", "Testament"),
-    ("GRAD", "Diplôme"),
-    ("RETI", "Retraite"),
-    ("RESI", "Résidence"),
-    ("OCCU", "Profession"),
-    ("EDUC", "Études"),
-    ("RELI", "Religion"),
-    ("TITL", "Titre"),
-    ("NATI", "Nationalité"),
-    ("FACT", "Fait"),
-    ("EVEN", "Événement"),
-    ("MARR", "Mariage"),
-    ("MARB", "Publication des bans"),
-    ("MARC", "Contrat de mariage"),
-    ("MARL", "Licence de mariage"),
-    ("ENGA", "Fiançailles"),
-    ("DIV", "Divorce"),
-    ("DIVF", "Dépôt de divorce"),
-    ("ANUL", "Annulation"),
+/// Tags of individual and family events and attributes, in display order.
+pub const EVENT_TAGS: &[&str] = &[
+    "BIRT", "CHR", "BAPM", "DEAT", "BURI", "CREM", "ADOP", "CONF", "FCOM", "NATU", "EMIG", "IMMI", "CENS", "PROB",
+    "WILL", "GRAD", "RETI", "RESI", "OCCU", "EDUC", "RELI", "TITL", "NATI", "FACT", "EVEN", "MARR", "MARB", "MARC",
+    "MARL", "ENGA", "DIV", "DIVF", "ANUL",
 ];
 
-pub fn event_label(tag: &str) -> Option<&'static str> {
-    EVENT_TAGS.iter().find(|(t, _)| *t == tag).map(|(_, l)| *l)
+/// Name of an event or attribute (“Birth”), `None` if `tag` is not one.
+pub fn event_label(tag: &str) -> Option<Cow<'static, str>> {
+    Some(match tag {
+        "BIRT" => t!("event.BIRT"),
+        "CHR" => t!("event.CHR"),
+        "BAPM" => t!("event.BAPM"),
+        "DEAT" => t!("event.DEAT"),
+        "BURI" => t!("event.BURI"),
+        "CREM" => t!("event.CREM"),
+        "ADOP" => t!("event.ADOP"),
+        "CONF" => t!("event.CONF"),
+        "FCOM" => t!("event.FCOM"),
+        "NATU" => t!("event.NATU"),
+        "EMIG" => t!("event.EMIG"),
+        "IMMI" => t!("event.IMMI"),
+        "CENS" => t!("event.CENS"),
+        "PROB" => t!("event.PROB"),
+        "WILL" => t!("event.WILL"),
+        "GRAD" => t!("event.GRAD"),
+        "RETI" => t!("event.RETI"),
+        "RESI" => t!("event.RESI"),
+        "OCCU" => t!("event.OCCU"),
+        "EDUC" => t!("event.EDUC"),
+        "RELI" => t!("event.RELI"),
+        "TITL" => t!("event.TITL"),
+        "NATI" => t!("event.NATI"),
+        "FACT" => t!("event.FACT"),
+        "EVEN" => t!("event.EVEN"),
+        "MARR" => t!("event.MARR"),
+        "MARB" => t!("event.MARB"),
+        "MARC" => t!("event.MARC"),
+        "MARL" => t!("event.MARL"),
+        "ENGA" => t!("event.ENGA"),
+        "DIV" => t!("event.DIV"),
+        "DIVF" => t!("event.DIVF"),
+        "ANUL" => t!("event.ANUL"),
+        _ => return None,
+    })
+}
+
+/// Names of an event in every language, to read what people type whatever the interface
+/// language (“births”, « naissances »).
+pub fn event_labels_everywhere(tag: &str) -> Vec<Cow<'static, str>> {
+    crate::i18n::LANGUAGES.iter().filter_map(|lang| crate::i18n::lookup_in(&format!("event.{tag}"), lang)).collect()
+}
+
+/// Name of an event or attribute, or the tag itself if it is not one.
+pub fn event_name(tag: &str) -> String {
+    event_label(tag).map(Cow::into_owned).unwrap_or_else(|| tag.to_string())
 }
 
 /// Libellés affichés des types d'événements personnalisés du fichier ouvert (`TYPE` → libellé).
@@ -83,11 +102,10 @@ impl<'a> Event<'a> {
     }
 
     pub fn label(&self) -> String {
-        let base = event_label(&self.node.tag).unwrap_or(&self.node.tag);
         match (self.node.tag.as_str(), self.node.child_val("TYPE")) {
             ("EVEN", Some(t)) => event_type_label(t),
             ("FACT", Some(t)) => t.to_string(),
-            _ => base.to_string(),
+            _ => event_name(&self.node.tag),
         }
     }
 
@@ -166,7 +184,7 @@ impl<'a> Individual<'a> {
     pub fn display_name(&self) -> String {
         let (g, s) = (self.given(), self.surname());
         match (g.is_empty(), s.is_empty()) {
-            (true, true) => "(sans nom)".into(),
+            (true, true) => t!("record.no_name").into(),
             (true, false) => s,
             (false, true) => g,
             _ => format!("{g} {s}"),
@@ -177,12 +195,12 @@ impl<'a> Individual<'a> {
         self.node.child_val("SEX").unwrap_or("U")
     }
 
-    pub fn sex_label(&self) -> &'static str {
+    pub fn sex_label(&self) -> Cow<'static, str> {
         match self.sex() {
-            "M" => "Homme",
-            "F" => "Femme",
-            "X" => "Autre",
-            _ => "Inconnu",
+            "M" => t!("sex.male"),
+            "F" => t!("sex.female"),
+            "X" => t!("sex.other"),
+            _ => t!("sex.unknown"),
         }
     }
 
@@ -311,7 +329,7 @@ impl<'a> Source<'a> {
         self.node.xref.as_deref().unwrap_or("")
     }
     pub fn title(&self) -> String {
-        self.node.child("TITL").map(|n| n.text()).unwrap_or_else(|| "(sans titre)".into())
+        self.node.child("TITL").map(|n| n.text()).unwrap_or_else(|| t!("record.no_title").into())
     }
     pub fn author(&self) -> Option<String> {
         self.node.child("AUTH").map(|n| n.text())
@@ -343,8 +361,8 @@ impl<'a> Repository<'a> {
     pub fn new(node: &'a Node) -> Self {
         Self { node }
     }
-    pub fn name(&self) -> &'a str {
-        self.node.child_val("NAME").unwrap_or("(sans nom)")
+    pub fn name(&self) -> Cow<'a, str> {
+        self.node.child_val("NAME").map(Cow::Borrowed).unwrap_or_else(|| t!("record.no_name"))
     }
     pub fn www(&self) -> Option<&'a str> {
         self.node.child_val("WWW")
@@ -379,7 +397,7 @@ impl<'a> Media<'a> {
             .map(str::to_string)
             .or_else(|| self.web_url().map(|u| crate::weblink::host(u).to_string()))
             .or_else(|| self.file().map(|f| f.rsplit('/').next().unwrap_or(f).to_string()))
-            .unwrap_or_else(|| "(sans titre)".into())
+            .unwrap_or_else(|| t!("record.no_title").into())
     }
     pub fn is_image(&self) -> bool {
         // Une image en ligne n'a pas de fichier local à afficher.
@@ -694,7 +712,7 @@ impl Gedcom {
 
     /// Libellé court d'un enregistrement quelconque, pour les listes et les liens.
     pub fn record_label(&self, xref: &str) -> String {
-        let Some(n) = self.get(xref) else { return "(introuvable)".to_string() };
+        let Some(n) = self.get(xref) else { return t!("record.missing").into() };
         match n.tag.as_str() {
             "INDI" => Individual::new(n).display_name(),
             "FAM" => {
@@ -703,7 +721,7 @@ impl Gedcom {
                 match (name(f.husband()), name(f.wife())) {
                     (Some(h), Some(w)) => format!("{h} & {w}"),
                     (Some(a), None) | (None, Some(a)) => a,
-                    _ => "(famille vide)".into(),
+                    _ => t!("record.empty_family").into(),
                 }
             }
             "SOUR" => Source::new(n).title(),

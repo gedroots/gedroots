@@ -57,8 +57,14 @@ const FAMILY: &str = "0 HEAD
 0 TRLR
 ";
 
+/// Ces tests vérifient les textes écrits par l'app en français, la langue des fichiers d'exemple.
+fn french() {
+    rust_i18n::set_locale("fr");
+}
+
 #[test]
 fn consistency_check_on_sample() {
+    french();
     let g = Gedcom::parse(SAMPLE).unwrap();
     let issues = check::check(&g, &check::Thresholds::default());
     // Émile (né en 1796) aurait eu 115 ans à la naissance de Paul (1912).
@@ -70,6 +76,7 @@ fn consistency_check_on_sample() {
 
 #[test]
 fn ignored_issue_disappears_and_extension_is_declared() {
+    french();
     let mut g = Gedcom::parse(SAMPLE).unwrap();
     assert!(g.ignore_issue("I00001", "father_too_old"));
     assert!(!g.ignore_issue("I00001", "father_too_old"));
@@ -85,6 +92,7 @@ fn ignored_issue_disappears_and_extension_is_declared() {
 
 #[test]
 fn detects_impossible_dates() {
+    french();
     let ged = "0 HEAD\n1 GEDC\n2 VERS 7.0\n0 @I1@ INDI\n1 BIRT\n2 DATE 1900\n1 DEAT\n2 DATE 1890\n1 FAMC @X@\n0 TRLR\n";
     let g = Gedcom::parse(ged).unwrap();
     let codes: Vec<&str> = check::check(&g, &Default::default()).iter().map(|i| i.code).collect();
@@ -94,6 +102,7 @@ fn detects_impossible_dates() {
 
 #[test]
 fn relationships() {
+    french();
     let g = Gedcom::parse(FAMILY).unwrap();
     let rel = |a: &str, b: &str| kinship::relationship(&g, a, b).map(|k| k.label);
     assert_eq!(rel("A1", "B1").as_deref(), Some("cousine germaine"));
@@ -116,6 +125,7 @@ fn relationships() {
 
 #[test]
 fn timeline_with_ages() {
+    french();
     let g = Gedcom::parse(FAMILY).unwrap();
     let t = timeline::timeline(&g, "GP");
     let birth = t.iter().find(|e| e.label.contains("petit-fils")).expect("naissance du petit-fils");
@@ -128,6 +138,7 @@ fn timeline_with_ages() {
 
 #[test]
 fn statistics() {
+    french();
     let g = Gedcom::parse(FAMILY).unwrap();
     let s = stats::stats(&g, Some("A1"));
     assert_eq!(s.individuals, 8);

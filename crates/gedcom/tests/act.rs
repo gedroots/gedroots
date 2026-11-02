@@ -2,6 +2,11 @@ use gedcom::*;
 
 const SAMPLE: &str = include_str!("fixtures/exemple.ged");
 
+/// Ces tests vérifient les textes écrits par l'app en français, la langue des fichiers d'exemple.
+fn french() {
+    rust_i18n::set_locale("fr");
+}
+
 fn person(role: ActRole, surname: &str, given: &str) -> Participant {
     Participant::new(role).with(PersonField::Surname, surname).with(PersonField::Given, given)
 }
@@ -13,6 +18,7 @@ fn new_source(g: &mut Gedcom) -> String {
 
 #[test]
 fn birth_act_links_existing_and_creates_new() {
+    french();
     let mut g = Gedcom::parse(SAMPLE).unwrap();
     let mut e = Act::new("S00001", "BIRT");
     e.date = "3 FEB 1914".into();
@@ -93,6 +99,7 @@ fn birth_act_links_existing_and_creates_new() {
 
 #[test]
 fn source_lists_its_acts_from_citations() {
+    french();
     let mut g = Gedcom::parse(SAMPLE).unwrap();
     // La citation existante de Paul (« Acte n° 112, vue 37 ») est déjà un acte.
     let acts = g.acts("S00001");
@@ -145,6 +152,7 @@ fn source_lists_its_acts_from_citations() {
 
 #[test]
 fn reopened_act_is_replaced_not_duplicated() {
+    french();
     let mut g = Gedcom::parse(SAMPLE).unwrap();
     let s = new_source(&mut g);
     let mut e = Act::new(&s, "DEAT");
@@ -193,6 +201,7 @@ fn reopened_act_is_replaced_not_duplicated() {
 
 #[test]
 fn removing_an_act_keeps_other_data() {
+    french();
     let mut g = Gedcom::parse(SAMPLE).unwrap();
     // Supprimer l'acte de Paul retire la citation, pas la naissance.
     let key = g.acts("S00001")[0].original.clone().unwrap();
@@ -208,6 +217,7 @@ fn removing_an_act_keeps_other_data() {
 
 #[test]
 fn marriage_creates_family_and_parents() {
+    french();
     let mut g = Gedcom::parse(SAMPLE).unwrap();
     let s = new_source(&mut g);
     let mut e = Act::new(&s, "MARR");
@@ -273,6 +283,7 @@ fn marriage_creates_family_and_parents() {
 
 #[test]
 fn census_builds_household() {
+    french();
     let mut g = Gedcom::parse(SAMPLE).unwrap();
     let mut e = Act::new("S00001", "CENS");
     e.date = "1921".into();
@@ -306,6 +317,7 @@ fn census_builds_household() {
 
 #[test]
 fn any_event_and_custom_types() {
+    french();
     let mut g = Gedcom::parse(SAMPLE).unwrap();
     let s = new_source(&mut g);
     let mut e = Act::new(&s, "EVEN");
@@ -322,6 +334,7 @@ fn any_event_and_custom_types() {
 
 #[test]
 fn single_parent_joins_their_only_family() {
+    french();
     let mut g = Gedcom::parse(SAMPLE).unwrap();
     let mut e = Act::new("S00001", "BIRT");
     e.date = "1915".into();
@@ -335,6 +348,7 @@ fn single_parent_joins_their_only_family() {
 
 #[test]
 fn existing_citation_is_completed_not_duplicated() {
+    french();
     let mut g = Gedcom::parse(SAMPLE).unwrap();
     // Paul a déjà une naissance citant S00001 (« Acte n° 112, vue 37 ») : on la complète.
     let mut e = Act::new("S00001", "BIRT");
@@ -350,6 +364,7 @@ fn existing_citation_is_completed_not_duplicated() {
 
 #[test]
 fn validation_errors() {
+    french();
     let g = Gedcom::parse(SAMPLE).unwrap();
     let e = Act::new("S00001", "BIRT");
     assert!(e.validate(&g).is_err(), "acte vide");
@@ -371,6 +386,7 @@ fn validation_errors() {
 
 #[test]
 fn next_act_increments_reference() {
+    french();
     let mut e = Act::new("S00001", "BIRT");
     e.page = "Acte n° 112, vue 37".into();
     e.place = "Saint-Lô".into();
@@ -384,6 +400,7 @@ fn next_act_increments_reference() {
 
 #[test]
 fn ages() {
+    french();
     assert_eq!(act::gedcom_age("32 ans").as_deref(), Some("32y"));
     assert_eq!(act::gedcom_age("6 mois").as_deref(), Some("6m"));
     assert_eq!(act::parse_age_years("6 mois"), Some(0));
@@ -393,6 +410,7 @@ fn ages() {
 
 #[test]
 fn legacy_templates_are_cleaned_by_import() {
+    french();
     let text = SAMPLE
         .replace("1 SCHMA\n", "1 SCHMA\n2 TAG _GR_TPL https://x#_gr_tpl\n2 TAG _GR_FLD https://x#_gr_fld\n")
         .replace(
@@ -420,6 +438,7 @@ fn legacy_templates_are_cleaned_by_import() {
 
 #[test]
 fn act_with_several_files_makes_one_paged_media_named_by_template() {
+    french();
     let mut g = Gedcom::parse(SAMPLE).unwrap();
     g.set_media_naming(&MediaNaming {
         root: "Médias".into(),

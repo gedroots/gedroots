@@ -491,7 +491,7 @@ impl Workspace {
                                             if n > 1 {
                                                 t!("picker.pages", n = n).into_owned()
                                             } else {
-                                                t!("kind.media").into_owned()
+                                                gedcom::RecordKind::Media.label().into_owned()
                                             }
                                         }
                                         None => {

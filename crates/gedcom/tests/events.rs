@@ -34,8 +34,14 @@ fn idx(g: &Gedcom, tag: &str) -> usize {
     g.events_of("I1").iter().find(|(_, e)| e.tag() == tag).unwrap().0
 }
 
+/// Ces tests vérifient les textes écrits par l'app en français, la langue des fichiers d'exemple.
+fn french() {
+    rust_i18n::set_locale("fr");
+}
+
 #[test]
 fn read_event_fields() {
+    french();
     let g = Gedcom::parse(GED).unwrap();
     let ev = g.read_event("I1", idx(&g, "BIRT")).unwrap();
     assert_eq!(ev.tag, "BIRT");
@@ -50,6 +56,7 @@ fn read_event_fields() {
 
 #[test]
 fn update_keeps_other_substructures() {
+    french();
     let mut g = Gedcom::parse(GED).unwrap();
     let i = idx(&g, "BIRT");
     let mut ev = g.read_event("I1", i).unwrap();
@@ -65,6 +72,7 @@ fn update_keeps_other_substructures() {
 
 #[test]
 fn update_place_and_source() {
+    french();
     let mut g = Gedcom::parse(GED).unwrap();
     let i = idx(&g, "BIRT");
     let mut ev = g.read_event("I1", i).unwrap();
@@ -90,6 +98,7 @@ fn update_place_and_source() {
 
 #[test]
 fn change_type_and_detail() {
+    french();
     let mut g = Gedcom::parse(GED).unwrap();
     // Profession → événement libre : la précision passe dans TYPE.
     let i = idx(&g, "OCCU");
@@ -120,6 +129,7 @@ fn change_type_and_detail() {
 
 #[test]
 fn delete_event() {
+    french();
     let mut g = Gedcom::parse(GED).unwrap();
     let before = g.events_of("I1").len();
     let label = g.delete_event("I1", idx(&g, "OCCU")).unwrap();
@@ -163,6 +173,7 @@ const COUPLE: &str = "0 HEAD
 
 #[test]
 fn person_events_merge_unions_chronologically() {
+    french();
     let g = Gedcom::parse(COUPLE).unwrap();
     let ev = g.person_events("I1");
     let seq: Vec<(&str, &str, bool)> = ev.iter().map(|e| (e.owner.as_str(), e.event.tag(), e.family)).collect();
@@ -187,6 +198,7 @@ fn person_events_merge_unions_chronologically() {
 
 #[test]
 fn media_on_family_event() {
+    french();
     let mut g = Gedcom::parse(COUPLE).unwrap();
     let marr = g.events_of("F1").iter().find(|(_, e)| e.tag() == "MARR").unwrap().0;
     g.attach_media_to_event("F1", marr, "M1").unwrap();
@@ -211,6 +223,7 @@ fn media_on_family_event() {
 
 #[test]
 fn deleting_media_strips_event_links() {
+    french();
     let mut g = Gedcom::parse(COUPLE).unwrap();
     let marr = g.events_of("F1").iter().find(|(_, e)| e.tag() == "MARR").unwrap().0;
     g.attach_media_to_event("F1", marr, "M1").unwrap();

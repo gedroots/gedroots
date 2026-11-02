@@ -136,7 +136,7 @@ impl ActEditor {
         let mut options: Vec<(String, String)> = INDIVIDUAL_ACT_EVENTS
             .iter()
             .chain(gedcom::act::FAMILY_ACT_EVENTS.iter().filter(|t| **t != "MARS"))
-            .map(|t| (t.to_string(), event_label(t).unwrap_or(t).to_string()))
+            .map(|t| (t.to_string(), event_name(t)))
             .collect();
         for t in &custom {
             let fam = if t.family { "FAM:" } else { "" };

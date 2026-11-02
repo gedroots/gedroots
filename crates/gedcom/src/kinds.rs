@@ -11,31 +11,54 @@
 
 use crate::date::Date;
 use crate::document::Gedcom;
-use crate::model::event_label;
 use crate::model::sort_key;
 use crate::node::Node;
 use crate::relations::mime_for;
+use rust_i18n::t;
+use std::borrow::Cow;
 
-/// Valeurs de `MEDI` (GEDCOM 7) et leur libellé, dans l'ordre de la liste « Support ».
-pub const MEDIUMS: &[(&str, &str)] = &[
-    ("PHOTO", "Photo"),
-    ("MANUSCRIPT", "Manuscrit, acte"),
-    ("BOOK", "Livre"),
-    ("NEWSPAPER", "Journal"),
-    ("MAGAZINE", "Revue"),
-    ("TOMBSTONE", "Pierre tombale"),
-    ("MAP", "Carte géographique"),
-    ("CARD", "Carte postale, fiche"),
-    ("FILM", "Microfilm"),
-    ("FICHE", "Microfiche"),
-    ("ELECTRONIC", "Document numérique"),
-    ("AUDIO", "Enregistrement sonore"),
-    ("VIDEO", "Vidéo"),
-    ("OTHER", "Autre"),
+/// Values of `MEDI` (GEDCOM 7), in the order of the “Medium” list.
+pub const MEDIUMS: &[&str] = &[
+    "PHOTO",
+    "MANUSCRIPT",
+    "BOOK",
+    "NEWSPAPER",
+    "MAGAZINE",
+    "TOMBSTONE",
+    "MAP",
+    "CARD",
+    "FILM",
+    "FICHE",
+    "ELECTRONIC",
+    "AUDIO",
+    "VIDEO",
+    "OTHER",
 ];
 
-pub fn medium_label(medi: &str) -> Option<&'static str> {
-    MEDIUMS.iter().find(|(m, _)| *m == medi).map(|(_, l)| *l)
+/// Name of a `MEDI` value (“Photo”).
+pub fn medium_label(medi: &str) -> Option<Cow<'static, str>> {
+    Some(match medi {
+        "PHOTO" => t!("medium.PHOTO"),
+        "MANUSCRIPT" => t!("medium.MANUSCRIPT"),
+        "BOOK" => t!("medium.BOOK"),
+        "NEWSPAPER" => t!("medium.NEWSPAPER"),
+        "MAGAZINE" => t!("medium.MAGAZINE"),
+        "TOMBSTONE" => t!("medium.TOMBSTONE"),
+        "MAP" => t!("medium.MAP"),
+        "CARD" => t!("medium.CARD"),
+        "FILM" => t!("medium.FILM"),
+        "FICHE" => t!("medium.FICHE"),
+        "ELECTRONIC" => t!("medium.ELECTRONIC"),
+        "AUDIO" => t!("medium.AUDIO"),
+        "VIDEO" => t!("medium.VIDEO"),
+        "OTHER" => t!("medium.OTHER"),
+        _ => return None,
+    })
+}
+
+/// The `MEDI` values with their names, for a list.
+pub fn mediums() -> Vec<(&'static str, Cow<'static, str>)> {
+    MEDIUMS.iter().filter_map(|m| Some((*m, medium_label(m)?))).collect()
 }
 
 /// Support d'un média (`MEDI` de son premier fichier).
@@ -136,7 +159,7 @@ impl SourceContent {
 
     /// Types d'actes en français : « Naissance, décès ».
     pub fn events_label(&self) -> String {
-        let labels: Vec<String> = self.events.iter().map(|t| event_label(t).unwrap_or(t).to_string()).collect();
+        let labels: Vec<String> = self.events.iter().map(|t| crate::model::event_name(t)).collect();
         let s = labels.join(", ");
         let mut c = s.chars();
         match c.next() {
@@ -152,7 +175,7 @@ impl SourceContent {
             parts.push(self.events_label());
         }
         if !self.period.trim().is_empty() {
-            parts.push(Date::parse(&self.period).to_french());
+            parts.push(Date::parse(&self.period).display());
         }
         if !self.place.trim().is_empty() {
             parts.push(self.place.split(',').next().unwrap_or("").trim().to_string());
@@ -165,8 +188,8 @@ fn split_list(v: &str) -> Vec<String> {
     v.split(',').map(|s| s.trim().to_uppercase()).filter(|s| !s.is_empty()).collect()
 }
 
-/// Lit une liste de types d'actes saisie en français (« naissances, décès »,
-/// « BIRT, DEAT »). Renvoie l'élément non compris en cas d'erreur.
+/// Lit une liste de types d'actes saisie en français ou en anglais (« naissances, décès »,
+/// “births, deaths”, « BIRT, DEAT »). Renvoie l'élément non compris en cas d'erreur.
 pub fn parse_event_list(text: &str) -> Result<Vec<String>, String> {
     let allowed = data_event_tags();
     let mut out: Vec<String> = Vec::new();
@@ -177,21 +200,26 @@ pub fn parse_event_list(text: &str) -> Result<Vec<String>, String> {
         } else {
             let k = sort_key(item);
             let k = k.trim_end_matches('s');
-            let k = k.strip_prefix("acte de ").or_else(|| k.strip_prefix("actes de ")).unwrap_or(k);
+            let k = ["acte de ", "actes de ", "record of ", "records of "]
+                .iter()
+                .find_map(|p| k.strip_prefix(p))
+                .unwrap_or(k);
             // « Baptême » désigne BAPM dans les modèles d'actes (CHR vient avant dans la liste).
-            if k == "bapteme" {
+            if matches!(k, "bapteme" | "baptism") {
                 Some("BAPM".to_string())
             } else {
                 allowed
                     .iter()
-                    .find(|t| event_label(t).is_some_and(|l| sort_key(l).trim_end_matches('s') == k))
+                    .find(|t| {
+                        crate::model::event_labels_everywhere(t).iter().any(|l| sort_key(l).trim_end_matches('s') == k)
+                    })
                     .map(|t| t.to_string())
             }
         };
         match tag {
             Some(t) if !out.contains(&t) => out.push(t),
             Some(_) => {}
-            None => return Err(format!("type d'acte inconnu : « {item} »")),
+            None => return Err(rust_i18n::t!("kinds.unknown_event", item = item).into()),
         }
     }
     Ok(out)
@@ -359,6 +387,7 @@ mod tests {
         assert_eq!(parse_event_list("actes de mariage; baptême").unwrap(), vec!["MARR", "BAPM"]);
         assert_eq!(parse_event_list("BIRT, birt").unwrap(), vec!["BIRT"]);
         assert_eq!(parse_event_list("recensement").unwrap(), vec!["CENS"]);
+        assert_eq!(parse_event_list("Births, deaths; census").unwrap(), vec!["BIRT", "DEAT", "CENS"]);
         assert!(parse_event_list("naissances, gâteaux").is_err());
     }
 
@@ -373,7 +402,7 @@ mod tests {
         assert_eq!(s.path_val(&["DATA", "EVEN"]), Some("BIRT, DEAT"));
         assert_eq!(s.path_val(&["DATA", "EVEN", "DATE"]), Some("FROM 1795 TO 1802"));
         let c = SourceContent::read(&s);
-        assert_eq!(c.events_label(), "Naissance, décès");
+        assert_eq!(c.events_label(), "Birth, death");
         assert!(!record_in_source(&mut s, "NOPE", "1800"));
     }
 

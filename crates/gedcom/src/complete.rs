@@ -17,6 +17,8 @@
 use crate::document::{Gedcom, RecordKind};
 use crate::model::{Individual, sort_key};
 use crate::schema::{self, Card, Payload, StructDef};
+use rust_i18n::t;
+use std::borrow::Cow;
 use std::ops::Range;
 
 /// Nombre maximal de suggestions renvoyées pour les listes longues
@@ -259,9 +261,9 @@ fn tag_items(parent: &StructDef, query: &str, present: &[&str], level: usize, wi
             continue;
         }
         let def = sub.def();
-        let label_fr = schema::label_fr(sub.tag, def);
+        let label = schema::label(sub.tag, def);
         let prefix = sub.tag.starts_with(&q_upper);
-        if !prefix && !label_matches(label_fr, query) {
+        if !prefix && !label_matches(&label, query) {
             continue;
         }
         // Les balises obligatoires manquantes d'abord, puis les correspondances
@@ -284,15 +286,15 @@ fn tag_items(parent: &StructDef, query: &str, present: &[&str], level: usize, wi
             insert.push(' ');
         }
         let card = match sub.card {
-            Card::Required | Card::AtLeastOne => " · obligatoire",
-            _ => "",
+            Card::Required | Card::AtLeastOne => t!("complete.required"),
+            _ => Cow::Borrowed(""),
         };
         items.push((
             rank,
             Suggestion {
                 label: sub.tag.to_string(),
                 insert,
-                detail: format!("{label_fr}{card}"),
+                detail: format!("{label}{card}"),
                 matched: if prefix { q_upper.len() } else { 0 },
                 kind: SuggestionKind::Tag,
             },
@@ -302,53 +304,27 @@ fn tag_items(parent: &StructDef, query: &str, present: &[&str], level: usize, wi
     items.into_iter().map(|(_, s)| s).collect()
 }
 
-const DATE_KEYWORDS: &[(&str, &str)] = &[
-    ("ABT", "environ"),
-    ("CAL", "calculée"),
-    ("EST", "estimée"),
-    ("BEF", "avant"),
-    ("AFT", "après"),
-    ("BET", "entre… (BET … AND …)"),
-    ("AND", "… et"),
-    ("FROM", "depuis (FROM … TO …)"),
-    ("TO", "jusqu'à"),
-    ("GREGORIAN", "calendrier grégorien"),
-    ("JULIAN", "calendrier julien"),
-    ("FRENCH_R", "calendrier républicain"),
-    ("HEBREW", "calendrier hébraïque"),
-    ("BCE", "avant notre ère"),
+const DATE_KEYWORDS: &[&str] = &[
+    "ABT",
+    "CAL",
+    "EST",
+    "BEF",
+    "AFT",
+    "BET",
+    "AND",
+    "FROM",
+    "TO",
+    "GREGORIAN",
+    "JULIAN",
+    "FRENCH_R",
+    "HEBREW",
+    "BCE",
 ];
 
-const MONTHS: &[(&str, &str)] = &[
-    ("JAN", "janvier"),
-    ("FEB", "février"),
-    ("MAR", "mars"),
-    ("APR", "avril"),
-    ("MAY", "mai"),
-    ("JUN", "juin"),
-    ("JUL", "juillet"),
-    ("AUG", "août"),
-    ("SEP", "septembre"),
-    ("OCT", "octobre"),
-    ("NOV", "novembre"),
-    ("DEC", "décembre"),
-];
+const MONTHS: &[&str] = &["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
 
-const MONTHS_FRENCH_R: &[(&str, &str)] = &[
-    ("VEND", "vendémiaire"),
-    ("BRUM", "brumaire"),
-    ("FRIM", "frimaire"),
-    ("NIVO", "nivôse"),
-    ("PLUV", "pluviôse"),
-    ("VENT", "ventôse"),
-    ("GERM", "germinal"),
-    ("FLOR", "floréal"),
-    ("PRAI", "prairial"),
-    ("MESS", "messidor"),
-    ("THER", "thermidor"),
-    ("FRUC", "fructidor"),
-    ("COMP", "jours complémentaires"),
-];
+const MONTHS_FRENCH_R: &[&str] =
+    &["VEND", "BRUM", "FRIM", "NIVO", "PLUV", "VENT", "GERM", "FLOR", "PRAI", "MESS", "THER", "FRUC", "COMP"];
 
 const MEDIA_TYPES: &[(&str, &str)] = &[
     ("image/jpeg", "JPEG"),
@@ -357,24 +333,27 @@ const MEDIA_TYPES: &[(&str, &str)] = &[
     ("image/gif", "GIF"),
     ("image/webp", "WebP"),
     ("application/pdf", "PDF"),
-    ("text/plain", "texte"),
+    ("text/plain", ""),
     ("text/html", "HTML"),
     ("audio/mpeg", "MP3"),
     ("video/mp4", "MP4"),
 ];
 
-/// Langues proposées pour `LANG` (code BCP 47, libellé).
-pub const LANGUAGES: &[(&str, &str)] = &[
-    ("fr", "français"),
-    ("en", "anglais"),
-    ("de", "allemand"),
-    ("it", "italien"),
-    ("es", "espagnol"),
-    ("la", "latin"),
-    ("oc", "occitan"),
-    ("br", "breton"),
-    ("nl", "néerlandais"),
-];
+/// Codes of the languages offered for `LANG` (BCP 47).
+const LANGUAGE_CODES: &[&str] = &["fr", "en", "de", "it", "es", "la", "oc", "br", "nl"];
+
+/// Languages offered for `LANG`: (BCP 47 code, name in the interface language).
+pub fn languages() -> Vec<(&'static str, Cow<'static, str>)> {
+    LANGUAGE_CODES
+        .iter()
+        .map(|c| (*c, crate::i18n::lookup(&format!("language.{c}")).unwrap_or(Cow::Borrowed(c))))
+        .collect()
+}
+
+/// Detail of a date keyword (`ABT` → “about”) or month (`MAR` → “March”).
+fn date_word(prefix: &str, code: &str) -> Cow<'static, str> {
+    crate::i18n::lookup(&format!("{prefix}.{code}")).unwrap_or_default()
+}
 
 fn keyword(label: &str, detail: &str, query: &str, kind: SuggestionKind) -> Option<Suggestion> {
     let q = upper_ascii(query);
@@ -423,7 +402,7 @@ fn value_items(
                 items.push(Suggestion {
                     label: "@VOID@".into(),
                     insert: "@VOID@".into(),
-                    detail: "pointeur vide".into(),
+                    detail: t!("complete.void").into(),
                     matched: value.len(),
                     kind: SuggestionKind::Keyword,
                 });
@@ -434,21 +413,22 @@ fn value_items(
             let (start, q) = if list { (word_start, word.trim_start()) } else { (value_start, value) };
             let items = values
                 .iter()
-                .filter_map(|v| keyword(v, schema::enum_label_fr(v).unwrap_or(""), q, SuggestionKind::Value))
+                .filter_map(|v| keyword(v, &schema::enum_label(v).unwrap_or_default(), q, SuggestionKind::Value))
                 .collect();
             let end = if list { word_end } else { value_end };
             (start..end, items)
         }
         Payload::YOrEmpty => (
             value_start..value_end,
-            keyword("Y", "a eu lieu (sans date ni lieu)", value, SuggestionKind::Value).into_iter().collect(),
+            keyword("Y", &t!("complete.happened"), value, SuggestionKind::Value).into_iter().collect(),
         ),
         Payload::Date => {
             if word.chars().next().is_some_and(|c| c.is_ascii_digit()) {
                 return None;
             }
             let upper = upper_ascii(value);
-            let months = if upper.contains("FRENCH_R") { MONTHS_FRENCH_R } else { MONTHS };
+            let (months, prefix) =
+                if upper.contains("FRENCH_R") { (MONTHS_FRENCH_R, "month") } else { (MONTHS, "month_name") };
             // Les mois ne viennent qu'après un jour ou en début de date simple.
             let after_day = value[..word_start - value_start]
                 .trim_end()
@@ -457,22 +437,36 @@ fn value_items(
                 .is_some_and(|w| w.parse::<u8>().is_ok());
             let mut items: Vec<Suggestion> = Vec::new();
             if after_day {
-                items.extend(months.iter().filter_map(|(m, l)| keyword(m, l, word, SuggestionKind::Value)));
+                items.extend(
+                    months.iter().filter_map(|m| keyword(m, &date_word(prefix, m), word, SuggestionKind::Value)),
+                );
             } else {
-                items.extend(DATE_KEYWORDS.iter().filter_map(|(k, l)| keyword(k, l, word, SuggestionKind::Keyword)));
+                items.extend(
+                    DATE_KEYWORDS
+                        .iter()
+                        .filter_map(|k| keyword(k, &date_word("date_keyword", k), word, SuggestionKind::Keyword)),
+                );
                 if !word.is_empty() {
-                    items.extend(months.iter().filter_map(|(m, l)| keyword(m, l, word, SuggestionKind::Value)));
+                    items.extend(
+                        months.iter().filter_map(|m| keyword(m, &date_word(prefix, m), word, SuggestionKind::Value)),
+                    );
                 }
             }
             (word_start..word_end, items)
         }
         Payload::MediaType => (
             value_start..value_end,
-            MEDIA_TYPES.iter().filter_map(|(m, l)| keyword(m, l, value, SuggestionKind::Value)).collect(),
+            MEDIA_TYPES
+                .iter()
+                .filter_map(|(m, l)| {
+                    let l = if l.is_empty() { t!("complete.plain_text") } else { Cow::Borrowed(*l) };
+                    keyword(m, &l, value, SuggestionKind::Value)
+                })
+                .collect(),
         ),
         Payload::Language => (
             value_start..value_end,
-            LANGUAGES.iter().filter_map(|(m, l)| keyword(m, l, value, SuggestionKind::Value)).collect(),
+            languages().iter().filter_map(|(m, l)| keyword(m, l, value, SuggestionKind::Value)).collect(),
         ),
         Payload::Text if tag == "PLAC" => {
             let q = sort_key(value);
@@ -529,11 +523,11 @@ mod tests {
     }
 
     #[test]
-    fn recherche_par_libelle_francais() {
-        let c = at("0 @I1@ INDI\n1 nais|").unwrap();
-        assert!(labels(&c).contains(&"BIRT"));
-        let c = at("0 @I1@ INDI\n1 deces|").unwrap();
-        assert!(labels(&c).contains(&"DEAT"));
+    fn recherche_par_libelle() {
+        let c = at("0 @I1@ INDI\n1 christening|").unwrap();
+        assert!(labels(&c).contains(&"CHR"));
+        let c = at("0 @I1@ INDI\n1 burial|").unwrap();
+        assert!(labels(&c).contains(&"BURI"));
     }
 
     #[test]

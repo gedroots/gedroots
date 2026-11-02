@@ -26,6 +26,11 @@
 //! - [`date`] : dates GEDCOM (y compris calendrier républicain) affichées en français ;
 //! - [`act`] : actes d'une source (saisie, lecture depuis les citations, modification).
 
+rust_i18n::i18n!("locales", fallback = "en");
+
+#[macro_use]
+pub mod i18n;
+
 pub mod act;
 pub mod analysis;
 pub mod complete;
@@ -39,6 +44,7 @@ pub mod gedcom551;
 pub mod gedzip;
 pub mod geo;
 pub mod import;
+pub mod keywords;
 pub mod kinds;
 pub mod media_links;
 pub mod media_naming;
@@ -64,7 +70,7 @@ pub use custom::{EventType, Jurisdiction, PlaceRewrite};
 pub use date::{Calendar, Date, DateKind, Parsed as DateInput, SimpleDate, parse_input as parse_date_input};
 pub use document::{Gedcom, RecordKind};
 pub use events::PersonEvent;
-pub use kinds::{MEDIUMS, SourceContent, medium, medium_label, parse_event_list, set_medium};
+pub use kinds::{MEDIUMS, SourceContent, medium, medium_label, mediums, parse_event_list, set_medium};
 pub use media_links::{GalleryGroup, GalleryTarget, MediaHost};
 pub use media_naming::{
     MEDIA_TOKENS, MediaContext, MediaFolder, MediaNaming, Numbering, media_path, media_type_labels,
@@ -74,7 +80,7 @@ pub use multipage::{MediaFile, PAGE_TAG, page_of_link, strip_page_suffix};
 pub use node::Node;
 pub use parse::{ParseError, node_from_string, node_to_string};
 pub use pedigree::{DescNode, DescUnion};
-pub use query::{MediaIndex, OTHER_TYPE, RecordQuery, Scope, chip_label, chips, criterion};
+pub use query::{Group, MediaIndex, RecordQuery, Scope, chip_label, chips, criterion, other_type, web_type};
 pub use relations::{FAMILY_EVENTS, INDIVIDUAL_EVENTS, NewEvent, Relation, is_media_file, mime_for, title_from_file};
 pub use search::{IndividualQuery, Kin, has_token, toggle_token};
 pub use settings::{FileInfo, FileSettings, IgnoredIssue};

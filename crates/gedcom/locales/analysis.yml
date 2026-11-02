@@ -1,0 +1,32 @@
+_version: 2
+# Ages, timelines, consistency checks and relationships (crates/gedcom/src/analysis/).
+age.newborn:
+  en: newborn
+  fr: nouveau-né
+age.days.one:
+  en: "%{n} day"
+  fr: "%{n} jour"
+age.days.other:
+  en: "%{n} days"
+  fr: "%{n} jours"
+age.months.one:
+  en: "%{n} month"
+  fr: "%{n} mois"
+age.months.other:
+  en: "%{n} months"
+  fr: "%{n} mois"
+age.years.one:
+  en: "%{n} year"
+  fr: "%{n} an"
+age.years.other:
+  en: "%{n} years"
+  fr: "%{n} ans"
+age.before_birth:
+  en: before birth
+  fr: avant la naissance
+age.over:
+  en: "over %{age}"
+  fr: "plus de %{age}"
+age.under:
+  en: "under %{age}"
+  fr: "moins de %{age}"

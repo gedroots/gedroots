@@ -19,16 +19,6 @@ pub enum Relation {
 impl Relation {
     pub const ALL: [Relation; 5] =
         [Relation::Father, Relation::Mother, Relation::Spouse, Relation::Child, Relation::Sibling];
-
-    pub fn label_fr(self) -> &'static str {
-        match self {
-            Relation::Father => "Père",
-            Relation::Mother => "Mère",
-            Relation::Spouse => "Conjoint",
-            Relation::Child => "Enfant",
-            Relation::Sibling => "Frère ou sœur",
-        }
-    }
 }
 
 fn ptr(x: &str) -> String {

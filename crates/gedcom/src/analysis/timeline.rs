@@ -59,7 +59,7 @@ pub fn timeline(g: &Gedcom, xref: &str) -> Vec<Entry> {
             }
         }
         let age = match (&birth, &span) {
-            (Some(b), Some(s)) if kind != EntryKind::Own || node.tag != "BIRT" => Age::between(b, s).to_french(),
+            (Some(b), Some(s)) if kind != EntryKind::Own || node.tag != "BIRT" => Age::between(b, s).display(),
             _ => None,
         };
         out.push(Entry {
@@ -152,5 +152,5 @@ pub fn timeline(g: &Gedcom, xref: &str) -> Vec<Entry> {
 /// Âge de la personne à une date GEDCOM donnée.
 pub fn age_at(ind: &Individual<'_>, date: &str) -> Option<String> {
     let b = ind.birth().and_then(|e| e.date_raw().and_then(Span::parse))?;
-    Age::between(&b, &Span::parse(date)?).to_french()
+    Age::between(&b, &Span::parse(date)?).display()
 }

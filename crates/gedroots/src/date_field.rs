@@ -155,7 +155,7 @@ impl DateField {
             Ok(Parsed { date: None, .. }) => (t!("date_field.text_only").into(), theme::warn()),
             Ok(p) => {
                 let d = p.date.as_ref()?;
-                let shown = d.to_french();
+                let shown = d.display();
                 let same = sort_key(&p.to_input_text()).replace([' ', '.'], "") == sort_key(t).replace([' ', '.'], "");
                 if same && shown == d.to_input_text() && p.phrase.is_empty() {
                     return None;

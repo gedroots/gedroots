@@ -2,7 +2,7 @@
 //!
 //! Une requête reste du texte : des mots libres et des critères `clé:valeur`.
 //! Une valeur qui contient des espaces s'écrit entre guillemets
-//! (`lieu:"Bar-sur-Aube"`, `dépôt:"AD de l'Aube"`). Dans l'interface, chaque
+//! (`place:"Bar-sur-Aube"`, `repository:"AD de l'Aube"`). Dans l'interface, chaque
 //! critère complet devient un jeton : [`chip_label`] donne son libellé et
 //! [`Gedcom::suggest`] propose les critères et les valeurs du fichier.
 //!
@@ -11,12 +11,13 @@
 //!
 //! | Zone | Critères |
 //! | --- | --- |
-//! | Sources | `type:naissance` (type d'acte), `dépôt:…`, `sans:média`, `avec:média`, `sans:citation` |
-//! | Lieux | `dans:aube` (juridiction), `sans:coordonnées`, `avec:coordonnées` |
-//! | Médias | `événement:naissance`, `pour:marchand` (personne liée), `format:image\|pdf\|web`, `support:photo` (`MEDI`), `sans:lien` |
+//! | Sources | `type:naissance` (type d'acte), `repository:…`, `without:media`, `with:media`, `without:citation` |
+//! | Lieux | `in:aube` (juridiction), `without:coordinates`, `with:coordinates` |
+//! | Médias | `event:naissance`, `person:marchand` (personne liée), `format:image\|pdf\|web`, `medium:photo` (`MEDI`), `without:link` |
 //!
 //! Partout : `id:…` (identifiant GEDCOM, jamais suggéré) et les mots libres
-//! (titre, nom, fichier…).
+//! (titre, nom, fichier…). Les mots-clés sont en anglais ; les libellés des jetons et
+//! des propositions sont dans la langue de l'interface.
 //!
 //! Les médias sont aussi classés par **type** ([`MediaIndex::types`]) : les
 //! sous-dossiers déclarés dans Réglages du fichier › Médias, sinon le support
@@ -27,9 +28,11 @@ use std::ops::Range;
 
 use crate::document::{Gedcom, RecordKind};
 use crate::kinds::{SourceContent, medium, medium_label};
-use crate::model::{Individual, Media, Place, Repository, Source, event_label, sort_key};
+use crate::model::{Individual, Media, Place, Repository, Source, event_labels_everywhere, sort_key};
 use crate::node::Node;
 use crate::search::{IndividualQuery, Kin, YearRange};
+use rust_i18n::t;
+use std::borrow::Cow;
 
 /// Zone où l'on cherche.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -95,7 +98,7 @@ enum Crit {
     /// Source : type d'acte (balise ou libellé, normalisé).
     ActType(String),
     Repository(String),
-    /// Source / média : `avec:` (true) ou `sans:` (false) média.
+    /// Source / média : `with:` (true) ou `without:` (false) média.
     HasMedia(bool),
     /// Source citée, média rattaché.
     Linked(bool),
@@ -120,23 +123,22 @@ impl Format {
         Some(match sort_key(v).trim_end_matches('s') {
             "image" | "photo" | "jpg" | "png" => Format::Image,
             "pdf" => Format::Pdf,
-            "web" | "lien" | "url" => Format::Web,
+            "web" | "link" | "url" => Format::Web,
             _ => return None,
         })
     }
-    fn label(self) -> &'static str {
+    fn label(self) -> Cow<'static, str> {
         match self {
-            Format::Image => "Images",
-            Format::Pdf => "PDF",
-            Format::Web => "Liens web",
+            Format::Image => t!("search.chip.images"),
+            Format::Pdf => Cow::Borrowed("PDF"),
+            Format::Web => t!("search.chip.web_links"),
         }
     }
 }
 
 fn present(v: &str, wanted: &[&str]) -> bool {
     let v = sort_key(v);
-    let v = v.trim_end_matches('s');
-    wanted.contains(&v)
+    wanted.contains(&v.trim_end_matches('s'))
 }
 
 fn parse_crit(scope: Scope, key: &str, val: &str) -> Option<Crit> {
@@ -145,27 +147,27 @@ fn parse_crit(scope: Scope, key: &str, val: &str) -> Option<Crit> {
     }
     let nonempty = |v: &str| (!v.is_empty()).then(|| sort_key(v));
     match (scope, key) {
-        (Scope::Sources, "type" | "acte") => nonempty(val).map(Crit::ActType),
-        (Scope::Sources, "depot" | "archive" | "archives") => nonempty(val).map(Crit::Repository),
-        (Scope::Sources, "sans" | "avec") => {
-            let on = key == "avec";
+        (Scope::Sources, "type") => nonempty(val).map(Crit::ActType),
+        (Scope::Sources, "repository" | "repo") => nonempty(val).map(Crit::Repository),
+        (Scope::Sources, "without" | "with") => {
+            let on = key == "with";
             if present(val, &["media", "image", "photo"]) {
                 Some(Crit::HasMedia(on))
-            } else if present(val, &["citation", "cite"]) {
+            } else if present(val, &["citation", "cited"]) {
                 Some(Crit::Linked(on))
             } else {
                 None
             }
         }
-        (Scope::Places, "dans" | "en") => nonempty(val).map(Crit::Within),
-        (Scope::Places, "sans" | "avec") => {
-            present(val, &["coordonnee", "coord", "gp"]).then(|| Crit::HasCoordinates(key == "avec"))
+        (Scope::Places, "in") => nonempty(val).map(Crit::Within),
+        (Scope::Places, "without" | "with") => {
+            present(val, &["coordinate", "gp"]).then(|| Crit::HasCoordinates(key == "with"))
         }
-        (Scope::Media, "evenement" | "acte" | "fait") => nonempty(val).map(Crit::Event),
-        (Scope::Media, "pour" | "personne" | "nom") => nonempty(val).map(Crit::Person),
+        (Scope::Media, "event") => nonempty(val).map(Crit::Event),
+        (Scope::Media, "person") => nonempty(val).map(Crit::Person),
         (Scope::Media, "format") => Format::parse(val).map(Crit::Format),
-        (Scope::Media, "support" | "medi") => nonempty(val).map(Crit::Medium),
-        (Scope::Media, "sans" | "avec") => present(val, &["lien", "rattachement"]).then(|| Crit::Linked(key == "avec")),
+        (Scope::Media, "medium") => nonempty(val).map(Crit::Medium),
+        (Scope::Media, "without" | "with") => present(val, &["link"]).then(|| Crit::Linked(key == "with")),
         _ => None,
     }
 }
@@ -176,7 +178,7 @@ pub struct RecordQuery {
     /// Mots libres, normalisés.
     pub words: Vec<String>,
     crits: Vec<Crit>,
-    /// Critères mal formés (`sans:truc`), pour les signaler.
+    /// Critères mal formés (`without:foo`), pour les signaler.
     pub unknown: Vec<String>,
 }
 
@@ -218,11 +220,9 @@ impl RecordQuery {
 fn is_key(scope: Scope, key: &str) -> bool {
     let keys: &[&str] = match scope {
         Scope::Individuals => &[],
-        Scope::Sources => &["type", "acte", "depot", "archive", "archives", "sans", "avec"],
-        Scope::Places => &["dans", "en", "sans", "avec"],
-        Scope::Media => {
-            &["evenement", "acte", "fait", "pour", "personne", "nom", "format", "support", "medi", "sans", "avec"]
-        }
+        Scope::Sources => &["type", "repository", "repo", "without", "with"],
+        Scope::Places => &["in", "without", "with"],
+        Scope::Media => &["event", "person", "format", "medium", "without", "with"],
     };
     key == "id" || keys.contains(&key)
 }
@@ -249,8 +249,15 @@ pub struct MediaIndex {
     pub media: HashMap<String, MediaInfo>,
 }
 
-pub const OTHER_TYPE: &str = "Autres";
-pub const WEB_TYPE: &str = "Liens web";
+/// Type of the media that fit no other (“Others”).
+pub fn other_type() -> String {
+    t!("search.type.other").into()
+}
+
+/// Type of web links.
+pub fn web_type() -> String {
+    t!("search.chip.web_links").into()
+}
 
 impl MediaIndex {
     /// Type d'un média (libellé).
@@ -384,16 +391,15 @@ impl Gedcom {
                     kind_of.insert(r.xref.clone().unwrap_or_default(), d);
                 }
             } else {
-                let labels: Vec<Option<&'static str>> =
-                    medias.iter().map(|r| medium(r).and_then(medium_label)).collect();
+                let labels: Vec<Option<String>> =
+                    medias.iter().map(|r| medium(r).and_then(medium_label).map(Cow::into_owned)).collect();
                 types = crate::kinds::MEDIUMS
                     .iter()
-                    .map(|(_, l)| *l)
-                    .filter(|l| labels.contains(&Some(*l)))
-                    .map(str::to_string)
+                    .filter_map(|m| medium_label(m).map(Cow::into_owned))
+                    .filter(|l| labels.contains(&Some(l.clone())))
                     .collect();
                 for (r, l) in medias.iter().zip(labels) {
-                    kind_of.insert(r.xref.clone().unwrap_or_default(), l.map(str::to_string));
+                    kind_of.insert(r.xref.clone().unwrap_or_default(), l);
                 }
             }
         }
@@ -401,11 +407,11 @@ impl Gedcom {
         for r in &medias {
             let x = r.xref.clone().unwrap_or_default();
             if Media::new(r).web_url().is_some() && kind_of.get(&x).cloned().flatten().is_none() {
-                if !types.is_empty() && !types.iter().any(|t| t == WEB_TYPE) {
-                    types.push(WEB_TYPE.to_string());
+                if !types.is_empty() && !types.contains(&web_type()) {
+                    types.push(web_type());
                 }
                 if !types.is_empty() {
-                    kind_of.insert(x, Some(WEB_TYPE.to_string()));
+                    kind_of.insert(x, Some(web_type()));
                 }
             }
         }
@@ -445,7 +451,7 @@ impl Gedcom {
             }
         }
         if other && n > 0 {
-            types.push(OTHER_TYPE.to_string());
+            types.push(other_type());
         }
         index.types = types;
         index
@@ -525,12 +531,13 @@ impl Gedcom {
         }
         q.crits.iter().all(|c| match c {
             Crit::ActType(t) => content.events.iter().any(|e| {
-                sort_key(e) == *t || event_label(e).is_some_and(|l| sort_key(l).starts_with(t.trim_end_matches('s')))
+                sort_key(e) == *t
+                    || event_labels_everywhere(e).iter().any(|l| sort_key(l).starts_with(t.trim_end_matches('s')))
             }),
             Crit::Repository(name) => s
                 .repository()
                 .and_then(|x| self.get(x))
-                .is_some_and(|n| sort_key(Repository::new(n).name()).contains(name.as_str())),
+                .is_some_and(|n| sort_key(&Repository::new(n).name()).contains(name.as_str())),
             Crit::HasMedia(on) => s.media_xrefs().is_empty() != *on,
             Crit::Linked(on) => pointers.is_some_and(|p| p.contains(s.xref())) == *on,
             _ => true,
@@ -563,7 +570,7 @@ fn media_matches(q: &RecordQuery, r: &Node, info: Option<&MediaInfo>) -> bool {
         }
         if let Some(l) = medium(r).and_then(medium_label) {
             hay.push(' ');
-            hay.push_str(l);
+            hay.push_str(&l);
         }
         if !q.words_in(&hay) {
             return false;
@@ -574,8 +581,13 @@ fn media_matches(q: &RecordQuery, r: &Node, info: Option<&MediaInfo>) -> bool {
         Crit::Person(p) => info.is_some_and(|i| p.split_whitespace().all(|w| i.people.contains(w))),
         Crit::Format(f) => info.is_some_and(|i| i.format == Some(*f)),
         Crit::Linked(on) => info.is_some_and(|i| i.linked == *on),
-        Crit::Medium(v) => medium(r)
-            .is_some_and(|m| sort_key(m) == *v || medium_label(m).is_some_and(|l| sort_key(l).starts_with(v.as_str()))),
+        Crit::Medium(v) => medium(r).is_some_and(|m| {
+            sort_key(m) == *v
+                || crate::i18n::LANGUAGES.iter().any(|lang| {
+                    crate::i18n::lookup_in(&format!("medium.{m}"), lang)
+                        .is_some_and(|l| sort_key(&l).starts_with(v.as_str()))
+                })
+        }),
         _ => true,
     })
 }
@@ -596,13 +608,13 @@ fn capitalize(s: &str) -> String {
 fn years_label(r: &str) -> String {
     let r = r.trim();
     if let Some(y) = r.strip_prefix('<') {
-        format!("avant {y}")
+        t!("search.years.before", year = y).into()
     } else if let Some(y) = r.strip_prefix('>') {
-        format!("après {y}")
+        t!("search.years.after", year = y).into()
     } else if let Some((y, m)) = r.split_once(['±', '~']) {
-        format!("vers {} (± {} ans)", y.trim(), m.trim())
+        t!("search.years.about", year = y.trim(), margin = m.trim()).into()
     } else if r.chars().all(|c| c.is_ascii_digit()) {
-        format!("en {r}")
+        t!("search.years.in", year = r).into()
     } else {
         r.replace('-', "–")
     }
@@ -627,22 +639,22 @@ pub fn chip_label(scope: Scope, word: &str, g: Option<&Gedcom>) -> Option<String
             return None;
         }
         return Some(match k.as_str() {
-            "ne" | "nee" | "naissance" | "n" => format!("Né {}", years_label(v)),
-            "mort" | "morte" | "deces" | "d" => format!("Mort {}", years_label(v)),
-            "vecu" | "vivant" | "en" => format!("Vivant en {v}"),
-            "lieu" | "a" => format!("Lieu {v}"),
-            "prof" | "profession" | "metier" => format!("Profession {v}"),
-            "nom" => match v.strip_prefix('=') {
-                Some(v) => format!("Nom exact {}", v.trim()),
-                None => format!("Nom {v}"),
+            "born" | "b" => t!("search.chip.born", years = years_label(v)).into(),
+            "died" | "d" => t!("search.chip.died", years = years_label(v)).into(),
+            "alive" => t!("search.chip.lived", year = v).into(),
+            "place" => t!("search.chip.place", place = v).into(),
+            "occupation" => t!("search.chip.occupation", occupation = v).into(),
+            "name" => match v.strip_prefix('=') {
+                Some(v) => t!("search.chip.exact_name", name = v.trim()).into(),
+                None => t!("search.chip.name", name = v).into(),
             },
-            "sexe" | "sex" => match q.sex {
-                Some('M') => "Hommes".into(),
-                Some('F') => "Femmes".into(),
-                _ => "Sexe inconnu".into(),
+            "sex" => match q.sex {
+                Some('M') => t!("search.chip.men").into(),
+                Some('F') => t!("search.chip.women").into(),
+                _ => t!("search.chip.unknown_sex").into(),
             },
-            "sans" => feature_label("Sans", v),
-            "avec" => feature_label("Avec", v),
+            "without" => feature_label(false, v),
+            "with" => feature_label(true, v),
             "sosa" => format!("Sosa {}", years_label(v)),
             "id" => format!("ID {v}"),
             k => {
@@ -651,7 +663,7 @@ pub fn chip_label(scope: Scope, word: &str, g: Option<&Gedcom>) -> Option<String
                     Some(g) => g.individual(x)?.display_name(),
                     None => x.to_string(),
                 };
-                format!("{} {name}", kin.label())
+                kin.label(&name)
             }
         });
     }
@@ -659,37 +671,45 @@ pub fn chip_label(scope: Scope, word: &str, g: Option<&Gedcom>) -> Option<String
     let c = parse_crit(scope, &k, v)?;
     Some(match c {
         Crit::Id(x) => format!("ID {x}"),
-        Crit::ActType(_) => format!("Actes de {}", v.to_lowercase()),
-        Crit::Repository(_) => format!("Dépôt {v}"),
-        Crit::HasMedia(true) => "Avec média".into(),
-        Crit::HasMedia(false) => "Sans média".into(),
-        Crit::Linked(true) if scope == Scope::Sources => "Citée".into(),
-        Crit::Linked(false) if scope == Scope::Sources => "Non citée".into(),
-        Crit::Linked(true) => "Rattaché".into(),
-        Crit::Linked(false) => "Non rattaché".into(),
-        Crit::Within(_) => format!("Dans {v}"),
-        Crit::HasCoordinates(true) => "Avec coordonnées".into(),
-        Crit::HasCoordinates(false) => "Sans coordonnées".into(),
-        Crit::Event(_) => format!("Événement {}", capitalize(v)),
-        Crit::Person(_) => format!("Lié à {v}"),
+        Crit::ActType(_) => t!("search.chip.act_type", kind = v.to_lowercase()).into(),
+        Crit::Repository(_) => t!("search.chip.repository", name = v).into(),
+        Crit::HasMedia(true) => t!("search.chip.with_media").into(),
+        Crit::HasMedia(false) => t!("search.chip.without_media").into(),
+        Crit::Linked(true) if scope == Scope::Sources => t!("search.chip.cited").into(),
+        Crit::Linked(false) if scope == Scope::Sources => t!("search.chip.not_cited").into(),
+        Crit::Linked(true) => t!("search.chip.attached").into(),
+        Crit::Linked(false) => t!("search.chip.not_attached").into(),
+        Crit::Within(_) => t!("search.chip.within", place = v).into(),
+        Crit::HasCoordinates(true) => t!("search.chip.with_coordinates").into(),
+        Crit::HasCoordinates(false) => t!("search.chip.without_coordinates").into(),
+        Crit::Event(_) => t!("search.chip.event", event = capitalize(v)).into(),
+        Crit::Person(_) => t!("search.chip.person", name = v).into(),
         Crit::Format(f) => f.label().into(),
-        Crit::Medium(_) => format!("Support {}", v.to_lowercase()),
+        Crit::Medium(_) => t!("search.chip.medium", medium = v.to_lowercase()).into(),
     })
 }
 
-fn feature_label(prefix: &str, v: &str) -> String {
+fn feature_label(with: bool, v: &str) -> String {
     let v = sort_key(v);
-    let what = match v.trim_end_matches('s') {
-        "source" => "source",
-        "parent" => "parents",
-        "date" => "date",
-        "famille" | "conjoint" => "conjoint",
-        "media" | "photo" | "image" => "média",
-        "note" => "note",
-        "mariage" => return if prefix == "Sans" { "Union sans mariage".into() } else { "Mariés".into() },
-        other => return format!("{prefix} {other}"),
+    let text = match (v.trim_end_matches('s'), with) {
+        ("source", true) => t!("search.chip.with_source"),
+        ("source", false) => t!("search.chip.without_source"),
+        ("parent", true) => t!("search.chip.with_parents"),
+        ("parent", false) => t!("search.chip.without_parents"),
+        ("date", true) => t!("search.chip.with_date"),
+        ("date", false) => t!("search.chip.without_date"),
+        ("spouse" | "family", true) => t!("search.chip.with_spouse"),
+        ("spouse" | "family", false) => t!("search.chip.without_spouse"),
+        ("media" | "photo" | "image", true) => t!("search.chip.with_media"),
+        ("media" | "photo" | "image", false) => t!("search.chip.without_media"),
+        ("note", true) => t!("search.chip.with_note"),
+        ("note", false) => t!("search.chip.without_note"),
+        ("marriage", true) => t!("search.chip.married"),
+        ("marriage", false) => t!("search.chip.union_without_marriage"),
+        (other, true) => t!("search.chip.with", what = other),
+        (other, false) => t!("search.chip.without", what = other),
     };
-    format!("{prefix} {what}")
+    text.into()
 }
 
 /// Critères complets d'une requête : (plage, texte, libellé du jeton). Le dernier
@@ -708,8 +728,8 @@ pub fn chips(scope: Scope, q: &str, g: Option<&Gedcom>) -> Vec<(Range<usize>, St
 /// Une proposition sous le champ de recherche.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Suggestion {
-    /// Groupe affiché (« Lieu », « Nom », « Critères »…).
-    pub group: &'static str,
+    /// Group the suggestion is listed under.
+    pub group: Group,
     pub label: String,
     /// Critère à insérer à la place du mot en cours.
     pub insert: String,
@@ -718,36 +738,80 @@ pub struct Suggestion {
     pub consumes: usize,
 }
 
-fn sugg(group: &'static str, label: impl Into<String>, insert: impl Into<String>) -> Suggestion {
+/// Group of a [`Suggestion`] (« Lieu », « Nom », « Critères »…).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Group {
+    Family,
+    Dates,
+    Place,
+    Name,
+    Occupation,
+    ActType,
+    Repository,
+    Jurisdiction,
+    Event,
+    Person,
+    Medium,
+    Criteria,
+}
+
+impl Group {
+    /// Heading shown above the group, in the interface language.
+    pub fn label(self) -> Cow<'static, str> {
+        match self {
+            Group::Family => t!("search.group.family"),
+            Group::Dates => t!("search.group.dates"),
+            Group::Place => t!("search.group.place"),
+            Group::Name => t!("search.group.name"),
+            Group::Occupation => t!("search.group.occupation"),
+            Group::ActType => t!("search.group.act_type"),
+            Group::Repository => t!("search.group.repository"),
+            Group::Jurisdiction => t!("search.group.jurisdiction"),
+            Group::Event => t!("search.group.event"),
+            Group::Person => t!("search.group.person"),
+            Group::Medium => t!("search.group.medium"),
+            Group::Criteria => t!("search.group.criteria"),
+        }
+    }
+}
+
+fn sugg(group: Group, label: impl Into<String>, insert: impl Into<String>) -> Suggestion {
     Suggestion { group, label: label.into(), insert: insert.into(), consumes: 1 }
 }
 
 /// Critères sans valeur proposés dans chaque zone.
 fn fixed(scope: Scope) -> Vec<Suggestion> {
-    let list: &[(&str, &str)] = match scope {
-        Scope::Individuals => &[
-            ("Sosa", "sosa"),
-            ("Hommes", "sexe:h"),
-            ("Femmes", "sexe:f"),
-            ("Sans source", "sans:source"),
-            ("Sans parents", "sans:parents"),
-            ("Sans date", "sans:date"),
-            ("Sans conjoint", "sans:famille"),
-            ("Union sans mariage", "sans:mariage"),
-            ("Avec média", "avec:média"),
-            ("Sans média", "sans:média"),
-            ("Avec note", "avec:note"),
+    let list: Vec<(Cow<'static, str>, &str)> = match scope {
+        Scope::Individuals => vec![
+            (t!("search.fixed.sosa"), "sosa"),
+            (t!("search.chip.men"), "sex:m"),
+            (t!("search.chip.women"), "sex:f"),
+            (t!("search.chip.without_source"), "without:source"),
+            (t!("search.chip.without_parents"), "without:parents"),
+            (t!("search.chip.without_date"), "without:date"),
+            (t!("search.chip.without_spouse"), "without:spouse"),
+            (t!("search.chip.union_without_marriage"), "without:marriage"),
+            (t!("search.chip.with_media"), "with:media"),
+            (t!("search.chip.without_media"), "without:media"),
+            (t!("search.chip.with_note"), "with:note"),
         ],
-        Scope::Sources => &[("Sans média", "sans:média"), ("Avec média", "avec:média"), ("Non citée", "sans:citation")],
-        Scope::Places => &[("Sans coordonnées", "sans:coordonnées"), ("Avec coordonnées", "avec:coordonnées")],
-        Scope::Media => &[
-            ("Images", "format:image"),
-            ("PDF", "format:pdf"),
-            ("Liens web", "format:web"),
-            ("Non rattaché", "sans:lien"),
+        Scope::Sources => vec![
+            (t!("search.chip.without_media"), "without:media"),
+            (t!("search.chip.with_media"), "with:media"),
+            (t!("search.chip.not_cited"), "without:citation"),
+        ],
+        Scope::Places => vec![
+            (t!("search.chip.without_coordinates"), "without:coordinates"),
+            (t!("search.chip.with_coordinates"), "with:coordinates"),
+        ],
+        Scope::Media => vec![
+            (t!("search.chip.images"), "format:image"),
+            (t!("search.fixed.pdf"), "format:pdf"),
+            (t!("search.chip.web_links"), "format:web"),
+            (t!("search.chip.not_attached"), "without:link"),
         ],
     };
-    list.iter().map(|(l, t)| sugg("Critères", *l, *t)).collect()
+    list.into_iter().map(|(l, t)| sugg(Group::Criteria, l, t)).collect()
 }
 
 /// Ajoute `(valeur → nombre)` en gardant les plus fréquentes.
@@ -784,14 +848,14 @@ impl Gedcom {
         if scope == Scope::Individuals && !p.is_empty() && YearRange::parse(&p).is_some() {
             let year = p.chars().all(|c| c.is_ascii_digit());
             let label = years_label(&p);
-            out.push(sugg("Dates", format!("Né {label}"), format!("né:{p}")));
+            out.push(sugg(Group::Dates, t!("search.suggest.born", years = label), format!("born:{p}")));
             if year {
-                out.push(sugg("Dates", format!("Né vers {p}"), format!("né:{p}±5")));
+                out.push(sugg(Group::Dates, t!("search.suggest.born_about", year = p), format!("born:{p}±5")));
             }
-            out.push(sugg("Dates", format!("Mort {label}"), format!("mort:{p}")));
+            out.push(sugg(Group::Dates, t!("search.suggest.died", years = label), format!("died:{p}")));
             if year {
-                out.push(sugg("Dates", format!("Mort vers {p}"), format!("mort:{p}±5")));
-                out.push(sugg("Dates", format!("Vivant en {p}"), format!("vécu:{p}")));
+                out.push(sugg(Group::Dates, t!("search.suggest.died_about", year = p), format!("died:{p}±5")));
+                out.push(sugg(Group::Dates, t!("search.suggest.alive_in", year = p), format!("alive:{p}")));
             }
             return out;
         }
@@ -813,12 +877,12 @@ impl Gedcom {
                 for i in &found {
                     for k in kins {
                         family.push(Suggestion {
-                            group: "Famille",
+                            group: Group::Family,
                             // Les années ne servent qu'à départager deux personnes.
                             label: if found.len() == 1 {
-                                format!("{} {}", k.label(), i.display_name())
+                                k.label(&i.display_name())
                             } else {
-                                format!("{} {}", k.label(), person_label(i))
+                                k.label(&person_label(i))
                             },
                             insert: format!("{}:@{}@", k.key(), i.xref()),
                             consumes: previous.len() + 1,
@@ -839,7 +903,7 @@ impl Gedcom {
                         }
                     }
                     for v in top(places, 3) {
-                        out.push(sugg("Lieu", v.clone(), criterion("lieu", &v)));
+                        out.push(sugg(Group::Place, v.clone(), criterion("place", &v)));
                     }
                     let mut names: HashMap<String, usize> = HashMap::new();
                     let mut jobs: HashMap<String, usize> = HashMap::new();
@@ -856,17 +920,17 @@ impl Gedcom {
                         }
                     }
                     for v in top(names, 3) {
-                        out.push(sugg("Nom", v.clone(), criterion("nom", &v)));
+                        out.push(sugg(Group::Name, v.clone(), criterion("name", &v)));
                     }
                     for v in top(jobs, 2) {
-                        out.push(sugg("Profession", v.clone(), criterion("prof", &v)));
+                        out.push(sugg(Group::Occupation, v.clone(), criterion("occupation", &v)));
                     }
                 }
                 Scope::Sources => {
                     let mut kinds: HashMap<String, usize> = HashMap::new();
                     for r in self.records_of(RecordKind::Source) {
                         for e in SourceContent::read(r).events {
-                            let l = event_label(&e).unwrap_or(&e).to_string();
+                            let l = crate::model::event_name(&e);
                             if matches_word(&l, &p) {
                                 *kinds.entry(l).or_default() += 1;
                             }
@@ -874,7 +938,11 @@ impl Gedcom {
                     }
                     for v in top(kinds, 3) {
                         let lower = v.to_lowercase();
-                        out.push(sugg("Type d'acte", format!("Actes de {lower}"), criterion("type", &lower)));
+                        out.push(sugg(
+                            Group::ActType,
+                            t!("search.suggest.acts_of", kind = lower),
+                            criterion("type", &lower),
+                        ));
                     }
                     let mut repos: HashMap<String, usize> = HashMap::new();
                     for r in self.records_of(RecordKind::Repository) {
@@ -884,7 +952,7 @@ impl Gedcom {
                         }
                     }
                     for v in top(repos, 3) {
-                        out.push(sugg("Dépôt", v.clone(), criterion("dépôt", &v)));
+                        out.push(sugg(Group::Repository, v.clone(), criterion("repository", &v)));
                     }
                 }
                 Scope::Places => {
@@ -897,7 +965,7 @@ impl Gedcom {
                         }
                     }
                     for v in top(within, 4) {
-                        out.push(sugg("Juridiction", v.clone(), criterion("dans", &v)));
+                        out.push(sugg(Group::Jurisdiction, v.clone(), criterion("in", &v)));
                     }
                 }
                 Scope::Media => {
@@ -909,7 +977,7 @@ impl Gedcom {
                             }
                         }
                         for v in top(events, 3) {
-                            out.push(sugg("Événement", v.clone(), criterion("événement", &v.to_lowercase())));
+                            out.push(sugg(Group::Event, v.clone(), criterion("event", &v.to_lowercase())));
                         }
                     }
                     let mut names: HashMap<String, usize> = HashMap::new();
@@ -920,28 +988,28 @@ impl Gedcom {
                         }
                     }
                     for v in top(names, 3) {
-                        out.push(sugg("Personne", v.clone(), criterion("pour", &v)));
+                        out.push(sugg(Group::Person, v.clone(), criterion("person", &v)));
                     }
                     // Support GEDCOM (`MEDI`) : premier mot du libellé (« manuscrit », « photo »).
                     let mut mediums: HashMap<String, usize> = HashMap::new();
                     for r in self.records_of(RecordKind::Media) {
                         if let Some(l) = medium(r).and_then(medium_label)
-                            && matches_word(l, &p)
+                            && matches_word(&l, &p)
                         {
                             *mediums.entry(l.to_string()).or_default() += 1;
                         }
                     }
                     for v in top(mediums, 3) {
                         let key = v.split([',', ' ']).next().unwrap_or(&v).to_lowercase();
-                        out.push(sugg("Support", v.clone(), criterion("support", &key)));
+                        out.push(sugg(Group::Medium, v.clone(), criterion("medium", &key)));
                     }
                 }
             }
         }
         // Les groupes dont une valeur commence par le mot tapé passent devant
         // (« guy » : le nom GUYOT avant le lieu Villeneuve-la-Guyard).
-        let starts = |g: &str| out.iter().any(|s| s.group == g && sort_key(&s.label).starts_with(&p));
-        let mut groups: Vec<&'static str> = Vec::new();
+        let starts = |g: &Group| out.iter().any(|s| s.group == *g && sort_key(&s.label).starts_with(&p));
+        let mut groups: Vec<Group> = Vec::new();
         for s in &out {
             if !groups.contains(&s.group) {
                 groups.push(s.group);
@@ -982,21 +1050,21 @@ mod tests {
 
     #[test]
     fn words_keep_quoted_values() {
-        let w: Vec<&str> = words(r#"guyot lieu:"Bar sur Aube"  sans:source"#).into_iter().map(|(_, w)| w).collect();
-        assert_eq!(w, ["guyot", r#"lieu:"Bar sur Aube""#, "sans:source"]);
+        let w: Vec<&str> = words(r#"guyot place:"Bar sur Aube"  without:source"#).into_iter().map(|(_, w)| w).collect();
+        assert_eq!(w, ["guyot", r#"place:"Bar sur Aube""#, "without:source"]);
         assert_eq!(unquote(r#""Bar sur Aube""#), "Bar sur Aube");
-        assert_eq!(criterion("lieu", "Bar sur Aube"), r#"lieu:"Bar sur Aube""#);
-        assert_eq!(criterion("lieu", "Troyes"), "lieu:Troyes");
+        assert_eq!(criterion("place", "Bar sur Aube"), r#"place:"Bar sur Aube""#);
+        assert_eq!(criterion("place", "Troyes"), "place:Troyes");
     }
 
     #[test]
     fn chips_only_for_finished_criteria() {
-        let c = chips(Scope::Individuals, "né:1800-1850 sans:source guyot lieu:tro", None);
+        let c = chips(Scope::Individuals, "born:1800-1850 without:source guyot place:tro", None);
         let labels: Vec<&str> = c.iter().map(|c| c.2.as_str()).collect();
-        assert_eq!(labels, ["Né 1800–1850", "Sans source"]);
-        let c = chips(Scope::Individuals, "lieu:troyes ", None);
-        assert_eq!(c[0].2, "Lieu troyes");
-        assert!(chips(Scope::Individuals, "sans:truc ", None).is_empty());
+        assert_eq!(labels, ["Born 1800–1850", "Without Sources"]);
+        let c = chips(Scope::Individuals, "place:troyes ", None);
+        assert_eq!(c[0].2, "Place troyes");
+        assert!(chips(Scope::Individuals, "without:truc ", None).is_empty());
         assert_eq!(chips(Scope::Media, "format:pdf ", None)[0].2, "PDF");
         assert!(chips(Scope::Places, "format:pdf ", None).is_empty());
     }
@@ -1011,18 +1079,18 @@ mod tests {
         };
         assert_eq!(s("type:naissance"), ["S1"]);
         assert_eq!(s("type:recensement"), ["S2"]);
-        assert_eq!(s(r#"dépôt:"AD de la Manche""#), ["S1"]);
-        assert_eq!(s("sans:média"), ["S2"]);
-        assert_eq!(s("sans:citation"), ["S2"]);
+        assert_eq!(s(r#"repository:"AD de la Manche""#), ["S1"]);
+        assert_eq!(s("without:media"), ["S2"]);
+        assert_eq!(s("without:citation"), ["S2"]);
         assert_eq!(s("registre"), ["S1"]);
     }
 
     #[test]
     fn places_by_jurisdiction_and_coordinates() {
         let g = ged();
-        assert_eq!(g.search(Scope::Places, "dans:manche", None, None).len(), 1);
-        assert!(g.search(Scope::Places, "dans:saint", None, None).is_empty());
-        assert_eq!(g.search(Scope::Places, "sans:coordonnées", None, None).len(), 1);
+        assert_eq!(g.search(Scope::Places, "in:manche", None, None).len(), 1);
+        assert!(g.search(Scope::Places, "in:saint", None, None).is_empty());
+        assert_eq!(g.search(Scope::Places, "without:coordinates", None, None).len(), 1);
     }
 
     #[test]
@@ -1030,24 +1098,24 @@ mod tests {
         let g = ged();
         let index = g.media_index();
         // Pas de sous-dossiers réglés : les dossiers des fichiers, les plus remplis d'abord.
-        assert_eq!(index.types, ["Actes", "divers", "Portraits", WEB_TYPE]);
-        assert_eq!(index.type_of("M4"), Some(WEB_TYPE));
+        assert_eq!(index.types, ["Actes", "divers", "Portraits", &web_type()]);
+        assert_eq!(index.type_of("M4"), Some(web_type().as_str()));
         assert_eq!(index.type_of("M2"), Some("Portraits"));
         let actes = g.search(Scope::Media, "", Some(&index), Some("Actes"));
         assert_eq!(actes.len(), 1);
         // Fichiers tous à la racine : le support GEDCOM, puis « Autres ».
         let flat = Gedcom::parse(&GED.replace("Actes/", "").replace("Portraits/", "").replace("divers/", "")).unwrap();
         let index = flat.media_index();
-        assert_eq!(index.types, ["Photo", WEB_TYPE, OTHER_TYPE]);
+        assert_eq!(index.types, ["Photo", &web_type(), &other_type()]);
         assert_eq!(index.type_of("M2"), Some("Photo"));
-        assert_eq!(index.type_of("M3"), Some(OTHER_TYPE));
+        assert_eq!(index.type_of("M3"), Some(other_type().as_str()));
         assert_eq!(g.search(Scope::Media, "format:pdf", Some(&index), None).len(), 1);
-        assert_eq!(g.search(Scope::Media, "sans:lien", Some(&index), None).len(), 2);
-        assert_eq!(g.search(Scope::Media, "pour:marchand", Some(&index), None).len(), 2);
-        assert_eq!(g.search(Scope::Media, "événement:naissance", Some(&index), None).len(), 1);
-        assert_eq!(g.search(Scope::Media, "support:photo", Some(&index), None).len(), 1);
-        assert_eq!(chip_label(Scope::Media, "support:photo", None).as_deref(), Some("Support photo"));
-        assert!(g.suggest(Scope::Media, &[], "pho", Some(&index)).iter().any(|s| s.insert == "support:photo"));
+        assert_eq!(g.search(Scope::Media, "without:link", Some(&index), None).len(), 2);
+        assert_eq!(g.search(Scope::Media, "person:marchand", Some(&index), None).len(), 2);
+        assert_eq!(g.search(Scope::Media, "event:birth", Some(&index), None).len(), 1);
+        assert_eq!(g.search(Scope::Media, "medium:photo", Some(&index), None).len(), 1);
+        assert_eq!(chip_label(Scope::Media, "medium:photo", None).as_deref(), Some("Medium photo"));
+        assert!(g.suggest(Scope::Media, &[], "pho", Some(&index)).iter().any(|s| s.insert == "medium:photo"));
     }
 
     #[test]
@@ -1062,25 +1130,25 @@ mod tests {
         };
         g.set_media_naming(&naming);
         let index = g.media_index();
-        assert_eq!(index.types, ["Actes", "Portraits", WEB_TYPE, OTHER_TYPE]);
+        assert_eq!(index.types, ["Actes", "Portraits", &web_type(), &other_type()]);
         assert_eq!(index.type_of("M1"), Some("Actes"));
         assert_eq!(index.type_of("M2"), Some("Portraits"));
-        assert_eq!(index.type_of("M3"), Some(OTHER_TYPE));
+        assert_eq!(index.type_of("M3"), Some(other_type().as_str()));
     }
 
     #[test]
     fn suggestions_come_from_the_file() {
         let g = ged();
         let s = g.suggest(Scope::Individuals, &[], "sai", None);
-        assert!(s.iter().any(|s| s.group == "Lieu" && s.insert == "lieu:Saint-Lô"));
+        assert!(s.iter().any(|s| s.group == Group::Place && s.insert == "place:Saint-Lô"));
         let s = g.suggest(Scope::Individuals, &[], "march", None);
-        assert_eq!(s[0].insert, "nom:MARCHAND");
+        assert_eq!(s[0].insert, "name:MARCHAND");
         let s = g.suggest(Scope::Individuals, &[], "1850", None);
-        assert_eq!(s[0].insert, "né:1850");
-        let s = g.suggest(Scope::Sources, &[], "nais", None);
-        assert!(s.iter().any(|s| s.insert == "type:naissance"));
+        assert_eq!(s[0].insert, "born:1850");
+        let s = g.suggest(Scope::Sources, &[], "bir", None);
+        assert!(s.iter().any(|s| s.insert == "type:birth"));
         // Champ vide : les critères de la zone.
-        assert!(g.suggest(Scope::Places, &[], "", None).iter().all(|s| s.group == "Critères"));
+        assert!(g.suggest(Scope::Places, &[], "", None).iter().all(|s| s.group == Group::Criteria));
     }
 
     const FAMILY: &str = "0 HEAD\n1 GEDC\n2 VERS 7.0\n\
@@ -1108,37 +1176,37 @@ mod tests {
     #[test]
     fn approximate_years_and_name_variants() {
         let g = family();
-        assert_eq!(ids(&g, "né:1730±5"), ["I3", "I5"]);
-        assert_eq!(ids(&g, "né:1730"), Vec::<String>::new());
-        assert_eq!(chip_label(Scope::Individuals, "né:1730±5", None).as_deref(), Some("Né vers 1730 (± 5 ans)"));
-        assert_eq!(chip_label(Scope::Individuals, "mort:1730", None).as_deref(), Some("Mort en 1730"));
+        assert_eq!(ids(&g, "born:1730±5"), ["I3", "I5"]);
+        assert_eq!(ids(&g, "born:1730"), Vec::<String>::new());
+        assert_eq!(chip_label(Scope::Individuals, "born:1730±5", None).as_deref(), Some("Born about 1730 (± 5 years)"));
+        assert_eq!(chip_label(Scope::Individuals, "died:1730", None).as_deref(), Some("Died in 1730"));
         // Guyot, Guyau, Guillot : un même nom.
-        assert_eq!(ids(&g, "nom:guyot"), ["I0", "I1", "I3", "I4"]);
-        assert_eq!(ids(&g, "nom:=guyot"), ["I1", "I4"]);
-        assert_eq!(chip_label(Scope::Individuals, "nom:=guyot", None).as_deref(), Some("Nom exact guyot"));
+        assert_eq!(ids(&g, "name:guyot"), ["I0", "I1", "I3", "I4"]);
+        assert_eq!(ids(&g, "name:=guyot"), ["I1", "I4"]);
+        assert_eq!(chip_label(Scope::Individuals, "name:=guyot", None).as_deref(), Some("Exact Name guyot"));
     }
 
     #[test]
     fn relatives_of_a_person() {
         let g = family();
-        assert_eq!(ids(&g, "ascendants:@I4@"), ["I0", "I1", "I2", "I3"]);
+        assert_eq!(ids(&g, "ancestors:@I4@"), ["I0", "I1", "I2", "I3"]);
         assert_eq!(ids(&g, "descendants:@I1@"), ["I3", "I4", "I5"]);
-        assert_eq!(ids(&g, "enfants:@I1@"), ["I3", "I5"]);
+        assert_eq!(ids(&g, "children:@I1@"), ["I3", "I5"]);
         assert_eq!(ids(&g, "parents:@I3@"), ["I1", "I2"]);
-        assert_eq!(ids(&g, "conjoints:@I2@"), ["I1"]);
-        assert_eq!(ids(&g, "fratrie:@I3@"), ["I5"]);
-        assert_eq!(ids(&g, "descendants:@I1@ sexe:f"), Vec::<String>::new());
+        assert_eq!(ids(&g, "spouses:@I2@"), ["I1"]);
+        assert_eq!(ids(&g, "siblings:@I3@"), ["I5"]);
+        assert_eq!(ids(&g, "descendants:@I1@ sex:f"), Vec::<String>::new());
         assert_eq!(
-            chip_label(Scope::Individuals, "ascendants:@I4@", Some(&g)).as_deref(),
-            Some("Ascendants de Luc GUYOT")
+            chip_label(Scope::Individuals, "ancestors:@I4@", Some(&g)).as_deref(),
+            Some("Ancestors of Luc GUYOT")
         );
-        assert!(chip_label(Scope::Individuals, "ascendants:@I99@", Some(&g)).is_none());
+        assert!(chip_label(Scope::Individuals, "ancestors:@I99@", Some(&g)).is_none());
         // « luc guy » : une seule personne, ses proches d'abord.
         let s = g.suggest(Scope::Individuals, &["luc"], "guy", None);
-        assert_eq!(s[0].group, "Famille");
+        assert_eq!(s[0].group, Group::Family);
         assert_eq!(s[0].consumes, 2);
-        assert!(s.iter().any(|s| s.insert == "ascendants:@I4@" && s.label == "Ascendants de Luc GUYOT"));
+        assert!(s.iter().any(|s| s.insert == "ancestors:@I4@" && s.label == "Ancestors of Luc GUYOT"));
         let s = g.suggest(Scope::Individuals, &[], "1730", None);
-        assert!(s.iter().any(|s| s.insert == "né:1730±5" && s.label == "Né vers 1730"));
+        assert!(s.iter().any(|s| s.insert == "born:1730±5" && s.label == "Born about 1730"));
     }
 }

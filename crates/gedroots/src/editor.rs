@@ -322,7 +322,9 @@ impl RecordEditor {
                         // Le format (FORM) se déduit du fichier : pas de champ.
                         field!(t!("editor.title"), "", f.title);
                         field!(t!("editor.file"), t!("editor.file_placeholder"), f.file);
-                        let medi = choice(MEDIUMS, medium(node).unwrap_or(""), window, cx);
+                        let mediums = gedcom::mediums();
+                        let options: Vec<(&str, &str)> = mediums.iter().map(|(m, l)| (*m, l.as_ref())).collect();
+                        let medi = choice(&options, medium(node).unwrap_or(""), window, cx);
                         fields.push(Field {
                             label: t!("editor.medium").into(),
                             state: FieldState::Choice(medi),

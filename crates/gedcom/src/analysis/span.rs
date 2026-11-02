@@ -7,6 +7,7 @@
 
 use crate::date::calendar::UNIX_EPOCH_RD;
 use crate::date::{Date, SimpleDate};
+use rust_i18n::t;
 
 /// Marge appliquée aux dates « vers », « estimée » et « calculée ».
 pub const FUZZ_YEARS: i64 = 5;
@@ -106,26 +107,24 @@ impl Age {
         Some((self.min? + self.max?) as f64 / 2. / DAYS_PER_YEAR)
     }
 
-    /// « 34 ans », « ~34 ans », « 3 mois », « plus de 20 ans »…
-    pub fn to_french(&self) -> Option<String> {
+    /// “34 years”, “~34 years”, “3 months”, “over 20 years”…
+    pub fn display(&self) -> Option<String> {
         fn fmt(days: i64) -> String {
-            let days = days.max(0);
+            let days = days.max(0) as usize;
             if days < 31 {
-                return if days <= 1 { "nouveau-né".into() } else { format!("{days} jours") };
+                return if days <= 1 { t!("age.newborn").into() } else { tn!("age.days", days).into() };
             }
             if days < 730 {
-                let m = (days as f64 / 30.44) as i64;
-                return format!("{m} mois");
+                return tn!("age.months", (days as f64 / 30.44) as usize).into();
             }
-            let y = (days as f64 / DAYS_PER_YEAR) as i64;
-            format!("{y} ans")
+            tn!("age.years", (days as f64 / DAYS_PER_YEAR) as usize).into()
         }
         match (self.min, self.max) {
-            (Some(a), Some(b)) if b < 0 => (a < 0).then(|| "avant la naissance".into()),
+            (Some(a), Some(b)) if b < 0 => (a < 0).then(|| t!("age.before_birth").into()),
             (Some(a), Some(b)) if b - a <= 31 => Some(fmt(a)),
             (Some(a), Some(b)) => Some(format!("~{}", fmt((a.max(0) + b) / 2))),
-            (Some(a), None) if a > 0 => Some(format!("plus de {}", fmt(a))),
-            (None, Some(b)) if b > 0 => Some(format!("moins de {}", fmt(b))),
+            (Some(a), None) if a > 0 => Some(t!("age.over", age = fmt(a)).into()),
+            (None, Some(b)) if b > 0 => Some(t!("age.under", age = fmt(b)).into()),
             _ => None,
         }
     }
@@ -161,10 +160,10 @@ mod tests {
     #[test]
     fn ages() {
         let b = Span::parse("14 MAR 1912").unwrap();
-        let age = |d: &str| Age::between(&b, &Span::parse(d).unwrap()).to_french().unwrap();
-        assert_eq!(age("2 JUN 1940"), "28 ans");
-        assert_eq!(age("1987"), "~75 ans");
-        assert_eq!(age("JUN 1912"), "2 mois");
-        assert_eq!(age("AFT 1950"), "plus de 37 ans");
+        let age = |d: &str| Age::between(&b, &Span::parse(d).unwrap()).display().unwrap();
+        assert_eq!(age("2 JUN 1940"), "28 years");
+        assert_eq!(age("1987"), "~75 years");
+        assert_eq!(age("JUN 1912"), "2 months");
+        assert_eq!(age("AFT 1950"), "over 37 years");
     }
 }

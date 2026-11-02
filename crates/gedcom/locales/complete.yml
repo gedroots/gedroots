@@ -1,0 +1,119 @@
+_version: 2
+# GEDCOM text completion (crates/gedcom/src/complete.rs).
+complete.required:
+  en: " · required"
+  fr: " · obligatoire"
+complete.void:
+  en: "void pointer"
+  fr: "pointeur vide"
+complete.happened:
+  en: "happened (no date or place)"
+  fr: "a eu lieu (sans date ni lieu)"
+complete.plain_text:
+  en: "text"
+  fr: "texte"
+date_keyword.ABT:
+  en: "about"
+  fr: "environ"
+date_keyword.CAL:
+  en: "calculated"
+  fr: "calculée"
+date_keyword.EST:
+  en: "estimated"
+  fr: "estimée"
+date_keyword.BEF:
+  en: "before"
+  fr: "avant"
+date_keyword.AFT:
+  en: "after"
+  fr: "après"
+date_keyword.BET:
+  en: "between… (BET … AND …)"
+  fr: "entre… (BET … AND …)"
+date_keyword.AND:
+  en: "… and"
+  fr: "… et"
+date_keyword.FROM:
+  en: "from (FROM … TO …)"
+  fr: "depuis (FROM … TO …)"
+date_keyword.TO:
+  en: "to"
+  fr: "jusqu'à"
+date_keyword.GREGORIAN:
+  en: "Gregorian calendar"
+  fr: "calendrier grégorien"
+date_keyword.JULIAN:
+  en: "Julian calendar"
+  fr: "calendrier julien"
+date_keyword.FRENCH_R:
+  en: "French Republican calendar"
+  fr: "calendrier républicain"
+date_keyword.HEBREW:
+  en: "Hebrew calendar"
+  fr: "calendrier hébraïque"
+date_keyword.BCE:
+  en: "before the Common Era"
+  fr: "avant notre ère"
+month_name.JAN:
+  en: "January"
+  fr: "janvier"
+month_name.FEB:
+  en: "February"
+  fr: "février"
+month_name.MAR:
+  en: "March"
+  fr: "mars"
+month_name.APR:
+  en: "April"
+  fr: "avril"
+month_name.MAY:
+  en: "May"
+  fr: "mai"
+month_name.JUN:
+  en: "June"
+  fr: "juin"
+month_name.JUL:
+  en: "July"
+  fr: "juillet"
+month_name.AUG:
+  en: "August"
+  fr: "août"
+month_name.SEP:
+  en: "September"
+  fr: "septembre"
+month_name.OCT:
+  en: "October"
+  fr: "octobre"
+month_name.NOV:
+  en: "November"
+  fr: "novembre"
+month_name.DEC:
+  en: "December"
+  fr: "décembre"
+language.fr:
+  en: "French"
+  fr: "français"
+language.en:
+  en: "English"
+  fr: "anglais"
+language.de:
+  en: "German"
+  fr: "allemand"
+language.it:
+  en: "Italian"
+  fr: "italien"
+language.es:
+  en: "Spanish"
+  fr: "espagnol"
+language.la:
+  en: "Latin"
+  fr: "latin"
+language.oc:
+  en: "Occitan"
+  fr: "occitan"
+language.br:
+  en: "Breton"
+  fr: "breton"
+language.nl:
+  en: "Dutch"
+  fr: "néerlandais"

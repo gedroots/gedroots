@@ -336,7 +336,8 @@ Renommer la recherche**) et se supprime de la même façon.
 - **Sous-structures** :
   - `_GR_ZONE <zone>` (obligatoire) : `INDI`, `SOUR`, `PLAC` ou `OBJE` ;
   - `_GR_QUERY <requête>` : critères et mots, dans la syntaxe du champ de recherche
-    (`né:1850±5 sexe:h`, `ascendants:@I1@`) ;
+    (`born:1850±5 sex:m`, `ancestors:@I1@`). Les mots-clés sont en anglais ; ceux des
+    versions précédentes, en français (`né:1850±5 sexe:h`), sont convertis à la lecture ;
   - `_GR_TYPE <type>` : type de média choisi dans la zone Médias (sous-dossier des
     réglages ou du fichier).
 
@@ -349,10 +350,10 @@ Renommer la recherche**) et se supprime de la même façon.
 2 TAG _GR_TYPE https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_find
 1 _GR_FIND Nés vers 1850
 2 _GR_ZONE INDI
-2 _GR_QUERY né:1850±5
+2 _GR_QUERY born:1850±5
 1 _GR_FIND Actes non rattachés
 2 _GR_ZONE OBJE
-2 _GR_QUERY sans:lien
+2 _GR_QUERY without:link
 2 _GR_TYPE Actes
 ```
 

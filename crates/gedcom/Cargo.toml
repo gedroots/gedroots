@@ -5,3 +5,4 @@ edition = "2024"
 description = "Lecture/écriture GEDCOM 7 sans perte et vues typées pour GEDRoots"
 
 [dependencies]
+rust-i18n = "4.2.4"

@@ -1,0 +1,125 @@
+_version: 2
+# Records and events (crates/gedcom/src/model.rs).
+event.BIRT:
+  en: Birth
+  fr: Naissance
+event.CHR:
+  en: Christening
+  fr: Baptême
+event.BAPM:
+  en: Baptism
+  fr: Baptême
+event.DEAT:
+  en: Death
+  fr: Décès
+event.BURI:
+  en: Burial
+  fr: Inhumation
+event.CREM:
+  en: Cremation
+  fr: Crémation
+event.ADOP:
+  en: Adoption
+  fr: Adoption
+event.CONF:
+  en: Confirmation
+  fr: Confirmation
+event.FCOM:
+  en: First Communion
+  fr: Première communion
+event.NATU:
+  en: Naturalization
+  fr: Naturalisation
+event.EMIG:
+  en: Emigration
+  fr: Émigration
+event.IMMI:
+  en: Immigration
+  fr: Immigration
+event.CENS:
+  en: Census
+  fr: Recensement
+event.PROB:
+  en: Probate
+  fr: Succession
+event.WILL:
+  en: Will
+  fr: Testament
+event.GRAD:
+  en: Graduation
+  fr: Diplôme
+event.RETI:
+  en: Retirement
+  fr: Retraite
+event.RESI:
+  en: Residence
+  fr: Résidence
+event.OCCU:
+  en: Occupation
+  fr: Profession
+event.EDUC:
+  en: Education
+  fr: Études
+event.RELI:
+  en: Religion
+  fr: Religion
+event.TITL:
+  en: Title
+  fr: Titre
+event.NATI:
+  en: Nationality
+  fr: Nationalité
+event.FACT:
+  en: Fact
+  fr: Fait
+event.EVEN:
+  en: Event
+  fr: Événement
+event.MARR:
+  en: Marriage
+  fr: Mariage
+event.MARB:
+  en: Marriage Banns
+  fr: Publication des bans
+event.MARC:
+  en: Marriage Contract
+  fr: Contrat de mariage
+event.MARL:
+  en: Marriage License
+  fr: Licence de mariage
+event.ENGA:
+  en: Engagement
+  fr: Fiançailles
+event.DIV:
+  en: Divorce
+  fr: Divorce
+event.DIVF:
+  en: Divorce Filing
+  fr: Dépôt de divorce
+event.ANUL:
+  en: Annulment
+  fr: Annulation
+record.no_name:
+  en: (no name)
+  fr: (sans nom)
+sex.male:
+  en: Man
+  fr: Homme
+sex.female:
+  en: Woman
+  fr: Femme
+sex.other:
+  en: Other
+  fr: Autre
+sex.unknown:
+  en: Unknown
+  fr: Inconnu
+record.no_title:
+  en: (untitled)
+  fr: (sans titre)
+record.missing:
+  en: (not found)
+  fr: (introuvable)
+record.empty_family:
+  en: (empty family)
+  fr: (famille vide)

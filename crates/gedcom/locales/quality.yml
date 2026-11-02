@@ -1,0 +1,173 @@
+_version: 2
+# Data quality page (crates/gedcom/src/quality.rs).
+quality.group.fix:
+  en: "To Fix"
+  fr: "À corriger"
+quality.group.complete:
+  en: "To Complete"
+  fr: "À compléter"
+quality.category.dates:
+  en: "Dates and Ages"
+  fr: "Dates et âges"
+quality.category.family:
+  en: "Family Links"
+  fr: "Liens familiaux"
+quality.category.structure:
+  en: "GEDCOM Structure"
+  fr: "Structure GEDCOM"
+quality.category.empty:
+  en: "Empty or Isolated Items"
+  fr: "Éléments vides ou isolés"
+quality.category.media:
+  en: "Media"
+  fr: "Médias"
+quality.category.places:
+  en: "Places"
+  fr: "Lieux"
+quality.category.coords:
+  en: "Places Without Coordinates"
+  fr: "Lieux sans coordonnées"
+quality.category.sources:
+  en: "Events Without Sources"
+  fr: "Événements sans source"
+quality.category.files:
+  en: "Files to Attach"
+  fr: "Fichiers à rattacher"
+quality.fix.delete:
+  en: "Delete"
+  fr: "Supprimer"
+quality.fix.delete_empty_facts:
+  en: "Delete Empty Events"
+  fr: "Supprimer les événements vides"
+quality.fix.delete_empty_notes:
+  en: "Delete Empty Notes"
+  fr: "Supprimer les notes vides"
+quality.fix.delete_empty_families:
+  en: "Delete Empty Families"
+  fr: "Supprimer les familles vides"
+quality.fix.restore_link:
+  en: "Restore Link"
+  fr: "Rétablir le lien"
+quality.fix.restore_links:
+  en: "Restore All Links"
+  fr: "Rétablir tous les liens"
+quality.fix.remove_link:
+  en: "Remove Link"
+  fr: "Retirer le lien"
+quality.fix.remove_links:
+  en: "Remove All Broken Links"
+  fr: "Retirer tous les liens cassés"
+quality.fix.fix_path:
+  en: "Fix Path"
+  fr: "Corriger le chemin"
+quality.fix.fix_paths:
+  en: "Fix All Paths"
+  fr: "Corriger tous les chemins"
+quality.fix.infer_format:
+  en: "Infer Format"
+  fr: "Déduire le format"
+quality.fix.infer_formats:
+  en: "Infer All Formats"
+  fr: "Déduire tous les formats"
+quality.fix.merge:
+  en: "Merge"
+  fr: "Fusionner"
+quality.fix.merge_all:
+  en: "Merge All"
+  fr: "Tout fusionner"
+quality.fix.create_media:
+  en: "Create Media"
+  fr: "Créer le média"
+quality.fix.create_all_media:
+  en: "Create All Media"
+  fr: "Créer tous les médias"
+quality.fix.harmonize:
+  en: "Harmonize"
+  fr: "Harmoniser"
+quality.tag_not_allowed:
+  en: "%{who}: tag %{tag} not allowed in “%{here}”"
+  fr: "%{who} : balise %{tag} non permise dans « %{here} »"
+quality.bad_value:
+  en: "%{who}: %{what} — %{problem}"
+  fr: "%{who} : %{what} — %{problem}"
+quality.missing_required:
+  en: "%{who}: “%{here}” without %{what} (%{tag})"
+  fr: "%{who} : « %{here} » sans %{what} (%{tag})"
+quality.too_many:
+  en: "%{who}: %{what} (%{tag}) %{n} times in “%{here}”, only one allowed"
+  fr: "%{who} : %{n} fois %{what} (%{tag}) dans « %{here} », une seule permise"
+quality.record:
+  en: "record"
+  fr: "enregistrement"
+quality.wrong_pointer:
+  en: "points to a %{kind} instead of a %{want}"
+  fr: "pointe vers un(e) %{kind} au lieu d'un(e) %{want}"
+quality.not_a_pointer:
+  en: "“%{value}” should be a link to a record"
+  fr: "« %{value} » devrait être un lien vers un enregistrement"
+quality.unknown_value:
+  en: "unknown value “%{value}”"
+  fr: "valeur « %{value} » inconnue"
+quality.unreadable_date:
+  en: "unreadable date “%{date}”"
+  fr: "date illisible « %{date} »"
+quality.invalid_date:
+  en: "date “%{date}”: %{error}"
+  fr: "date « %{date} » : %{error}"
+quality.not_y:
+  en: "“%{value}” instead of Y or nothing"
+  fr: "« %{value} » au lieu de Y ou rien"
+quality.empty_shared_note:
+  en: "Empty shared note"
+  fr: "Note partagée vide"
+quality.empty_fact:
+  en: "%{who}: %{event} without any data"
+  fr: "%{who} : %{event} sans aucune donnée"
+quality.empty_note:
+  en: "%{who}: empty note"
+  fr: "%{who} : note vide"
+quality.empty_family:
+  en: "Family without any member"
+  fr: "Famille sans aucun membre"
+quality.unused_record:
+  en: "%{kind} “%{name}” used nowhere"
+  fr: "%{kind} « %{name} » utilisé(e) nulle part"
+quality.no_link_to_root:
+  en: "%{who} has no link to the root person"
+  fr: "%{who} n'a aucun lien avec l'individu racine"
+quality.separate_tree.one:
+  en: "%{who} and %{n} other person form a separate tree"
+  fr: "%{who} et %{n} autre forment un arbre séparé"
+quality.separate_tree.other:
+  en: "%{who} and %{n} other people form a separate tree"
+  fr: "%{who} et %{n} autres forment un arbre séparé"
+quality.missing_form:
+  en: "%{who}: file format not given"
+  fr: "%{who} : format du fichier non indiqué"
+quality.moved_file:
+  en: "%{who}: found in %{found}"
+  fr: "%{who} : retrouvé dans %{found}"
+quality.missing_file:
+  en: "%{who}: %{file}"
+  fr: "%{who} : %{file}"
+quality.duplicate_media:
+  en: "“%{a}” and “%{b}” point to the same file"
+  fr: "« %{a} » et « %{b} » désignent le même fichier"
+quality.bad_coords:
+  en: "%{place}: unreadable coordinates (%{lat} %{long})"
+  fr: "%{place} : coordonnées illisibles (%{lat} %{long})"
+quality.uses.one:
+  en: "%{n} use"
+  fr: "%{n} fois"
+quality.uses.other:
+  en: "%{n} uses"
+  fr: "%{n} fois"
+quality.place_variant:
+  en: "“%{a}” (%{a_uses}) seems to be “%{b}” (%{b_uses})"
+  fr: "« %{a} » (%{a_uses}) semble être « %{b} » (%{b_uses})"
+quality.place_hierarchy.one:
+  en: "%{parent}: “%{from}” (%{n} use) instead of “%{to}”"
+  fr: "%{parent} : « %{from} » (%{n} fois) au lieu de « %{to} »"
+quality.place_hierarchy.other:
+  en: "%{parent}: “%{from}” (%{n} uses) instead of “%{to}”"
+  fr: "%{parent} : « %{from} » (%{n} fois) au lieu de « %{to} »"

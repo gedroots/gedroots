@@ -21,6 +21,8 @@ use crate::node::Node;
 use crate::relations::mime_for;
 use crate::schema::{self, Payload, StructDef};
 use crate::weblink::is_web_url;
+use rust_i18n::t;
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet, VecDeque};
 
 /// Les deux blocs de la page.
@@ -33,10 +35,10 @@ pub enum Group {
 }
 
 impl Group {
-    pub fn label(self) -> &'static str {
+    pub fn label(self) -> Cow<'static, str> {
         match self {
-            Group::Fix => "À corriger",
-            Group::Complete => "À compléter",
+            Group::Fix => t!("quality.group.fix"),
+            Group::Complete => t!("quality.group.complete"),
         }
     }
 }
@@ -68,17 +70,17 @@ impl Category {
         Category::Coords,
     ];
 
-    pub fn label(self) -> &'static str {
+    pub fn label(self) -> Cow<'static, str> {
         match self {
-            Category::Dates => "Dates et âges",
-            Category::Family => "Liens familiaux",
-            Category::Structure => "Structure GEDCOM",
-            Category::Empty => "Éléments vides ou isolés",
-            Category::Media => "Médias",
-            Category::Places => "Lieux",
-            Category::Coords => "Lieux sans coordonnées",
-            Category::Sources => "Événements sans source",
-            Category::Files => "Fichiers à rattacher",
+            Category::Dates => t!("quality.category.dates"),
+            Category::Family => t!("quality.category.family"),
+            Category::Structure => t!("quality.category.structure"),
+            Category::Empty => t!("quality.category.empty"),
+            Category::Media => t!("quality.category.media"),
+            Category::Places => t!("quality.category.places"),
+            Category::Coords => t!("quality.category.coords"),
+            Category::Sources => t!("quality.category.sources"),
+            Category::Files => t!("quality.category.files"),
         }
     }
 
@@ -129,30 +131,34 @@ pub fn category(code: &str) -> Category {
 }
 
 /// Correction automatique d'une anomalie.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Fix {
     /// Libellé du bouton (« Supprimer »).
-    pub label: &'static str,
+    pub label: Cow<'static, str>,
     /// Applicable à toute la liste d'un coup (« Tout supprimer »).
-    pub batch: Option<&'static str>,
+    pub batch: Option<Cow<'static, str>>,
 }
 
 /// Correction proposée pour un code, s'il y en a une de sûre.
 pub fn fix_of(code: &str) -> Option<Fix> {
     Some(match code {
-        "empty_fact" => Fix { label: "Supprimer", batch: Some("Supprimer les événements vides") },
-        "empty_note" => Fix { label: "Supprimer", batch: Some("Supprimer les notes vides") },
-        "empty_family" => Fix { label: "Supprimer", batch: Some("Supprimer les familles vides") },
-        "unused_record" => Fix { label: "Supprimer", batch: None },
-        "missing_backlink" => Fix { label: "Rétablir le lien", batch: Some("Rétablir tous les liens") },
-        "broken_link" => Fix { label: "Retirer le lien", batch: Some("Retirer tous les liens cassés") },
-        "moved_file" => Fix { label: "Corriger le chemin", batch: Some("Corriger tous les chemins") },
-        "missing_form" => Fix { label: "Déduire le format", batch: Some("Déduire tous les formats") },
-        "duplicate_media" => Fix { label: "Fusionner", batch: Some("Tout fusionner") },
-        "unattached_file" => Fix { label: "Créer le média", batch: Some("Créer tous les médias") },
+        "empty_fact" => Fix { label: t!("quality.fix.delete"), batch: Some(t!("quality.fix.delete_empty_facts")) },
+        "empty_note" => Fix { label: t!("quality.fix.delete"), batch: Some(t!("quality.fix.delete_empty_notes")) },
+        "empty_family" => Fix { label: t!("quality.fix.delete"), batch: Some(t!("quality.fix.delete_empty_families")) },
+        "unused_record" => Fix { label: t!("quality.fix.delete"), batch: None },
+        "missing_backlink" => {
+            Fix { label: t!("quality.fix.restore_link"), batch: Some(t!("quality.fix.restore_links")) }
+        }
+        "broken_link" => Fix { label: t!("quality.fix.remove_link"), batch: Some(t!("quality.fix.remove_links")) },
+        "moved_file" => Fix { label: t!("quality.fix.fix_path"), batch: Some(t!("quality.fix.fix_paths")) },
+        "missing_form" => Fix { label: t!("quality.fix.infer_format"), batch: Some(t!("quality.fix.infer_formats")) },
+        "duplicate_media" => Fix { label: t!("quality.fix.merge"), batch: Some(t!("quality.fix.merge_all")) },
+        "unattached_file" => {
+            Fix { label: t!("quality.fix.create_media"), batch: Some(t!("quality.fix.create_all_media")) }
+        }
         // Deux lieux du même nom peuvent être distincts : à vérifier un par un.
-        "place_variant" => Fix { label: "Fusionner", batch: None },
-        "place_hierarchy" => Fix { label: "Harmoniser", batch: None },
+        "place_variant" => Fix { label: t!("quality.fix.merge"), batch: None },
+        "place_hierarchy" => Fix { label: t!("quality.fix.harmonize"), batch: None },
         _ => return None,
     })
 }
@@ -217,7 +223,7 @@ fn structure(g: &Gedcom, out: &mut Vec<Issue>) {
 }
 
 fn validate(g: &Gedcom, x: &str, who: &str, node: &Node, def: &StructDef, path: &mut Vec<usize>, out: &mut Vec<Issue>) {
-    let here = schema::label_fr(&node.tag, def);
+    let here = schema::label(&node.tag, def);
     for (i, c) in node.children.iter().enumerate() {
         // Extensions (`_XXX`) : libres, on ne descend pas dedans. CONT est une ligne
         // de suite, pas une structure.
@@ -231,19 +237,19 @@ fn validate(g: &Gedcom, x: &str, who: &str, node: &Node, def: &StructDef, path: 
                 "tag_not_allowed",
                 x,
                 path.clone(),
-                format!("{who} : balise {} non permise dans « {here} »", c.tag),
+                t!("quality.tag_not_allowed", who = who, tag = c.tag, here = here).into(),
             )),
             Some(sub) => {
                 let d = sub.def();
                 if let Some(problem) = payload_problem(g, c, d.payload) {
-                    let what = schema::label_fr(&c.tag, d);
+                    let what = schema::label(&c.tag, d);
                     let code = if problem.0 { "wrong_pointer" } else { "invalid_value" };
                     out.push(issue(
                         Severity::Warning,
                         code,
                         x,
                         path.clone(),
-                        format!("{who} : {what} — {}", problem.1),
+                        t!("quality.bad_value", who = who, what = what, problem = problem.1).into(),
                     ));
                 }
                 validate(g, x, who, c, d, path, out);
@@ -253,7 +259,7 @@ fn validate(g: &Gedcom, x: &str, who: &str, node: &Node, def: &StructDef, path: 
     }
     for sub in def.subs {
         let n = node.children.iter().filter(|c| c.tag == sub.tag).count();
-        let what = schema::label_fr(sub.tag, sub.def());
+        let what = schema::label(sub.tag, sub.def());
         // `FILE` sans `FORM` : signalé (et corrigé) par `missing_form`.
         if n == 0 && sub.card.required() && !(sub.tag == "FORM" && node.tag == "FILE") {
             out.push(issue(
@@ -261,7 +267,7 @@ fn validate(g: &Gedcom, x: &str, who: &str, node: &Node, def: &StructDef, path: 
                 "missing_required",
                 x,
                 path.clone(),
-                format!("{who} : « {here} » sans {what} ({})", sub.tag),
+                t!("quality.missing_required", who = who, here = here, what = what, tag = sub.tag).into(),
             ));
         } else if n > 1 && sub.card.single() {
             out.push(issue(
@@ -269,7 +275,7 @@ fn validate(g: &Gedcom, x: &str, who: &str, node: &Node, def: &StructDef, path: 
                 "too_many",
                 x,
                 path.clone(),
-                format!("{who} : {n} fois {what} ({}) dans « {here} », une seule permise", sub.tag),
+                t!("quality.too_many", who = who, n = n, what = what, tag = sub.tag, here = here).into(),
             ));
         }
     }
@@ -286,12 +292,13 @@ fn payload_problem(g: &Gedcom, n: &Node, payload: Payload) -> Option<(bool, Stri
             Some(p) => {
                 let target = g.get(p)?;
                 (target.tag != tag).then(|| {
-                    let kind = RecordKind::from_tag(&target.tag).map(|k| k.label_fr()).unwrap_or("enregistrement");
-                    let want = RecordKind::from_tag(tag).map(|k| k.label_fr()).unwrap_or(tag);
-                    (true, format!("pointe vers un(e) {} au lieu d'un(e) {}", kind.to_lowercase(), want.to_lowercase()))
+                    let kind = RecordKind::from_tag(&target.tag).map(|k| k.label()).unwrap_or(t!("quality.record"));
+                    let want = RecordKind::from_tag(tag).map(|k| k.label()).unwrap_or(Cow::Borrowed(tag));
+                    let (kind, want) = (kind.to_lowercase(), want.to_lowercase());
+                    (true, t!("quality.wrong_pointer", kind = kind, want = want).into())
                 })
             }
-            None => Some((false, format!("« {v} » devrait être un lien vers un enregistrement"))),
+            None => Some((false, t!("quality.not_a_pointer", value = v).into())),
         },
         Payload::Enum { list, values } => {
             if v.is_empty() {
@@ -299,18 +306,18 @@ fn payload_problem(g: &Gedcom, n: &Node, payload: Payload) -> Option<(bool, Stri
             }
             let items: Vec<&str> = if list { v.split(',').map(str::trim).collect() } else { vec![v] };
             let bad: Vec<&str> = items.into_iter().filter(|i| !i.starts_with('_') && !values.contains(i)).collect();
-            (!bad.is_empty()).then(|| (false, format!("valeur « {} » inconnue", bad.join(", "))))
+            (!bad.is_empty()).then(|| (false, t!("quality.unknown_value", value = bad.join(", ")).into()))
         }
         Payload::Date => {
             if v.is_empty() {
                 return None;
             }
             match Date::parse(v) {
-                Date::Other(_) => Some((false, format!("date illisible « {v} »"))),
-                d => d.validate().err().map(|e| (false, format!("date « {v} » : {e}"))),
+                Date::Other(_) => Some((false, t!("quality.unreadable_date", date = v).into())),
+                d => d.validate().err().map(|e| (false, t!("quality.invalid_date", date = v, error = e).into())),
             }
         }
-        Payload::YOrEmpty => (!v.is_empty() && v != "Y").then(|| (false, format!("« {v} » au lieu de Y ou rien"))),
+        Payload::YOrEmpty => (!v.is_empty() && v != "Y").then(|| (false, t!("quality.not_y", value = v).into())),
         _ => None,
     }
 }
@@ -328,7 +335,7 @@ fn empty(g: &Gedcom, out: &mut Vec<Issue>) {
         let Some(x) = r.xref.as_deref() else { continue };
         if r.tag == "SNOTE" {
             if r.text().trim().is_empty() {
-                out.push(issue(Severity::Warning, "empty_note", x, vec![], "Note partagée vide".into()));
+                out.push(issue(Severity::Warning, "empty_note", x, vec![], t!("quality.empty_shared_note").into()));
             }
             continue;
         }
@@ -344,7 +351,7 @@ fn empty(g: &Gedcom, out: &mut Vec<Issue>) {
                     "empty_fact",
                     x,
                     vec![i],
-                    format!("{who} : {label} sans aucune donnée"),
+                    t!("quality.empty_fact", who = who, event = label).into(),
                 ));
             }
         }
@@ -358,7 +365,13 @@ fn empty_notes(x: &str, who: &str, node: &Node, path: &mut Vec<usize>, out: &mut
     for (i, c) in node.children.iter().enumerate() {
         path.push(i);
         if c.tag == "NOTE" && note_is_empty(c) {
-            out.push(issue(Severity::Warning, "empty_note", x, path.clone(), format!("{who} : note vide")));
+            out.push(issue(
+                Severity::Warning,
+                "empty_note",
+                x,
+                path.clone(),
+                t!("quality.empty_note", who = who).into(),
+            ));
         } else if !c.tag.starts_with('_') {
             empty_notes(x, who, c, path, out);
         }
@@ -389,7 +402,7 @@ fn unused(g: &Gedcom, out: &mut Vec<Issue>) {
             "FAM" => {
                 let members = r.children.iter().filter(|c| matches!(c.tag.as_str(), "HUSB" | "WIFE" | "CHIL"));
                 if members.filter(|c| c.pointer().is_some_and(|p| g.get(p).is_some())).count() == 0 {
-                    out.push(issue(Severity::Warning, "empty_family", x, vec![], "Famille sans aucun membre".into()));
+                    out.push(issue(Severity::Warning, "empty_family", x, vec![], t!("quality.empty_family").into()));
                 }
             }
             "OBJE" | "SOUR" | "REPO" | "SNOTE" if !cited.contains(x) => {
@@ -397,13 +410,13 @@ fn unused(g: &Gedcom, out: &mut Vec<Issue>) {
                 if r.tag == "SNOTE" && r.text().trim().is_empty() {
                     continue;
                 }
-                let kind = RecordKind::from_tag(&r.tag).map(|k| k.label_fr()).unwrap_or("");
+                let kind = RecordKind::from_tag(&r.tag).map(|k| k.label()).unwrap_or_default();
                 out.push(issue(
                     Severity::Info,
                     "unused_record",
                     x,
                     vec![],
-                    format!("{kind} « {} » utilisé(e) nulle part", g.record_label(x)),
+                    t!("quality.unused_record", kind = kind, name = g.record_label(x)).into(),
                 ));
             }
             _ => {}
@@ -462,8 +475,8 @@ fn unused(g: &Gedcom, out: &mut Vec<Issue>) {
         let others = component(g, &edges, x, &mut seen).saturating_sub(1);
         let who = g.record_label(x);
         let message = match others {
-            0 => format!("{who} n'a aucun lien avec l'individu racine"),
-            n => format!("{who} et {n} autre{} forment un arbre séparé", if n > 1 { "s" } else { "" }),
+            0 => t!("quality.no_link_to_root", who = who).into(),
+            n => tn!("quality.separate_tree", n, who = who).into(),
         };
         out.push(issue(Severity::Info, "disconnected", x, vec![], message));
     }
@@ -508,7 +521,7 @@ fn media(g: &Gedcom, files: Option<&Files>, out: &mut Vec<Issue>) {
                     "missing_form",
                     x,
                     vec![i],
-                    format!("{who} : format du fichier non indiqué"),
+                    t!("quality.missing_form", who = who).into(),
                 ));
             }
             let Some(files) = files.filter(|_| !is_web_url(v)) else { continue };
@@ -519,12 +532,23 @@ fn media(g: &Gedcom, files: Option<&Files>, out: &mut Vec<Issue>) {
                 Some([found]) => {
                     // Le fichier retrouvé n'est pas « à rattacher » : la correction du chemin s'en charge.
                     referenced.insert(found.to_string());
-                    let mut i =
-                        issue(Severity::Warning, "moved_file", x, vec![i], format!("{who} : retrouvé dans {found}"));
+                    let mut i = issue(
+                        Severity::Warning,
+                        "moved_file",
+                        x,
+                        vec![i],
+                        t!("quality.moved_file", who = who, found = found).into(),
+                    );
                     i.related = vec![found.to_string()];
                     out.push(i);
                 }
-                _ => out.push(issue(Severity::Error, "missing_file", x, vec![i], format!("{who} : {v}"))),
+                _ => out.push(issue(
+                    Severity::Error,
+                    "missing_file",
+                    x,
+                    vec![i],
+                    t!("quality.missing_file", who = who, file = v).into(),
+                )),
             }
         }
         if paths.is_empty() {
@@ -537,7 +561,7 @@ fn media(g: &Gedcom, files: Option<&Files>, out: &mut Vec<Issue>) {
                     "duplicate_media",
                     x,
                     vec![],
-                    format!("« {who} » et « {} » désignent le même fichier", g.record_label(first)),
+                    t!("quality.duplicate_media", a = who, b = g.record_label(first)).into(),
                 );
                 i.related = vec![first.to_string()];
                 out.push(i);
@@ -607,12 +631,13 @@ fn places(g: &Gedcom, out: &mut Vec<Issue>) {
                 "bad_coords",
                 Severity::Warning,
                 &[&p.name],
-                format!(
-                    "{} : coordonnées illisibles ({} {})",
-                    p.name,
-                    p.latitude.as_deref().unwrap_or("?"),
-                    p.longitude.as_deref().unwrap_or("?")
-                ),
+                t!(
+                    "quality.bad_coords",
+                    place = p.name,
+                    lat = p.latitude.as_deref().unwrap_or("?"),
+                    long = p.longitude.as_deref().unwrap_or("?")
+                )
+                .into(),
             )),
             _ => {}
         }
@@ -650,12 +675,12 @@ fn places(g: &Gedcom, out: &mut Vec<Issue>) {
     for (i, t) in target.iter().enumerate() {
         let Some(t) = *t else { continue };
         let (a, b) = (&all[i], &all[t]);
-        let n = |p: &Place| format!("{} fois", p.uses);
+        let n = |p: &Place| tn!("quality.uses", p.uses);
         out.push(place_issue(
             "place_variant",
             Severity::Warning,
             &[&a.name, &b.name],
-            format!("« {} » ({}) semble être « {} » ({})", a.name, n(a), b.name, n(b)),
+            t!("quality.place_variant", a = a.name, a_uses = n(a), b = b.name, b_uses = n(b)).into(),
         ));
     }
 }
@@ -704,7 +729,7 @@ fn hierarchy(all: &[Place], out: &mut Vec<Issue>) {
                 "place_hierarchy",
                 Severity::Warning,
                 &[&parent, from, to],
-                format!("{parent} : « {from} » ({n} fois) au lieu de « {to} »"),
+                tn!("quality.place_hierarchy", *n, parent = parent, from = from, to = to).into(),
             );
             i.path = vec![key.0];
             out.push(i);

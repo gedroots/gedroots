@@ -49,13 +49,15 @@ et suit le [design system GEDRoots](design.md) (fonds neutres et touches de viol
   dans Individu › Rechercher ses ascendants / descendants). Un clic sur un jeton règle la marge
   des années (exactement, ± 2, ± 5, ± 10 ans) ou les variantes d'orthographe d'un nom (Guyot,
   Guyau, Guillot ; clé phonétique française, `phonetic.rs`), et permet de le retirer.
-  Critères des individus : `né:1800-1850`, `né:1850±5`, `mort:<1900`, `vécu:1870`,
-  `lieu:troyes`, `nom:guyot` (variantes comprises ; `nom:=guyot` : exact), `prof:meunier`,
-  `sexe:f`, `ascendants:@I1@`, `descendants:@I1@`, `conjoints:@I1@`, `enfants:@I1@`,
-  `parents:@I1@`, `fratrie:@I1@`, `sans:source`, `sans:parents`, `sans:mariage`,
-  `avec:média`, `sosa:1-63`… ; des sources : `type:naissance`, `dépôt:…`, `sans:média`,
-  `sans:citation` ; des lieux : `dans:aube`, `sans:coordonnées` ; des médias :
-  `événement:naissance`, `pour:guyot`, `format:pdf`, `support:photo` (`MEDI`), `sans:lien`. Une valeur avec des espaces
+  Les mots-clés des critères sont en anglais, quelle que soit la langue de l'interface (seuls
+  leurs libellés sont traduits). Critères des individus : `born:1800-1850`, `born:1850±5`,
+  `died:<1900`, `alive:1870`, `place:troyes`, `name:guyot` (variantes comprises ;
+  `name:=guyot` : exact), `occupation:meunier`, `sex:f`, `ancestors:@I1@`, `descendants:@I1@`,
+  `spouses:@I1@`, `children:@I1@`, `parents:@I1@`, `siblings:@I1@`, `without:source`,
+  `without:parents`, `without:marriage`, `with:media`, `sosa:1-63`… ; des sources :
+  `type:naissance`, `repository:…`, `without:media`, `without:citation` ; des lieux :
+  `in:aube`, `without:coordinates` ; des médias : `event:naissance`, `person:guyot`,
+  `format:pdf`, `medium:photo` (`MEDI`), `without:link`. Une valeur avec des espaces
   s'écrit entre guillemets. Dans la zone Médias, une ligne de types (Tous · Actes ·
   Portraits…) reprend les sous-dossiers des réglages, sinon les dossiers des fichiers, sinon
   le support GEDCOM (`MEDI`) ; les liens web ont leur type.
