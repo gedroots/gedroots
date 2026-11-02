@@ -17,6 +17,11 @@ n'écrivent jamais de couleur, de rayon ni de police en dur, elles passent par s
   petits « + » des en-têtes de section et les emplacements pointillés de l'arbre.
 - **Pas de texte explicatif** : un titre par élément ; les exemples de format vont dans le
   placeholder des champs ; les sections vides sont masquées.
+- **Une seule barre en haut** : sous macOS, la barre de titre est fondue dans celle de l'app
+  (feux tricolores à gauche, déplacement de la fenêtre). Le nom du fichier n'y figure qu'une
+  fois, centré, suivi de « • » tant qu'il n'est pas enregistré. Pas de barre d'état : les
+  messages s'affichent à droite de la barre du haut.
+- **Infobulles** sur tout bouton sans libellé, avec le raccourci quand il existe.
 - **Jamais la couleur seule** : lignées, états et sélections ont aussi une forme (point,
   contour, icône, texte). Les couleurs restent lisibles par les daltoniens.
 
