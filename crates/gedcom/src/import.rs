@@ -6,15 +6,13 @@
 //! ajouter un, il suffit d'une entrée dans [`CHECKS`].
 
 use crate::document::Gedcom;
+use rust_i18n::t;
+use std::borrow::Cow;
 
 /// Un contrôle d'import.
 pub struct Check {
     /// Identifiant stable (`"url"`).
     pub id: &'static str,
-    /// Libellé court, au singulier et au pluriel (« lien `_URL` », « liens `_URL` »).
-    pub what: (&'static str, &'static str),
-    /// Ce que devient la donnée une fois normalisée.
-    pub into: &'static str,
     /// Nombre d'éléments concernés dans le fichier.
     count: fn(&Gedcom) -> usize,
     /// Applique la conversion, renvoie le nombre d'éléments convertis.
@@ -23,34 +21,10 @@ pub struct Check {
 
 /// Les contrôles, dans l'ordre où l'assistant les présente.
 pub static CHECKS: &[Check] = &[
-    Check {
-        id: "url",
-        what: ("lien _URL", "liens _URL"),
-        into: "liens multimédia GEDCOM 7",
-        count: Gedcom::legacy_url_count,
-        fix: Gedcom::migrate_url_tags,
-    },
-    Check {
-        id: "prim",
-        what: ("photo principale _PRIM", "photos principales _PRIM"),
-        into: "premier média de la fiche",
-        count: Gedcom::prim_count,
-        fix: Gedcom::migrate_prim_tags,
-    },
-    Check {
-        id: "events",
-        what: ("événement à balise d'extension (_MILT…)", "événements à balise d'extension (_MILT…)"),
-        into: "événements EVEN + TYPE",
-        count: Gedcom::extension_event_count,
-        fix: Gedcom::migrate_extension_events,
-    },
-    Check {
-        id: "templates",
-        what: ("reste de l'ancienne saisie guidée", "restes de l'ancienne saisie guidée"),
-        into: "actes en GEDCOM 7 standard, sans modèles",
-        count: Gedcom::legacy_template_count,
-        fix: Gedcom::migrate_legacy_templates,
-    },
+    Check { id: "url", count: Gedcom::legacy_url_count, fix: Gedcom::migrate_url_tags },
+    Check { id: "prim", count: Gedcom::prim_count, fix: Gedcom::migrate_prim_tags },
+    Check { id: "events", count: Gedcom::extension_event_count, fix: Gedcom::migrate_extension_events },
+    Check { id: "templates", count: Gedcom::legacy_template_count, fix: Gedcom::migrate_legacy_templates },
 ];
 
 /// Ce qu'un contrôle a trouvé.
@@ -60,7 +34,17 @@ pub struct Finding {
     pub count: usize,
     /// « 213 liens _URL »
     pub label: String,
-    pub into: &'static str,
+    pub into: Cow<'static, str>,
+}
+
+/// « 213 liens _URL » et ce qu'ils deviennent, pour le contrôle `id`.
+fn texts(id: &str, count: usize) -> (Cow<'static, str>, Cow<'static, str>) {
+    match id {
+        "url" => (tn!("import.url", count), t!("import.url_into")),
+        "prim" => (tn!("import.prim", count), t!("import.prim_into")),
+        "events" => (tn!("import.events", count), t!("import.events_into")),
+        _ => (tn!("import.templates", count), t!("import.templates_into")),
+    }
 }
 
 /// Contrôles qui trouvent quelque chose à normaliser dans ce fichier.
@@ -69,11 +53,9 @@ pub fn analyze(g: &Gedcom) -> Vec<Finding> {
         .iter()
         .filter_map(|c| {
             let count = (c.count)(g);
-            (count > 0).then(|| Finding {
-                id: c.id,
-                count,
-                label: format!("{count} {}", if count == 1 { c.what.0 } else { c.what.1 }),
-                into: c.into,
+            (count > 0).then(|| {
+                let (label, into) = texts(c.id, count);
+                Finding { id: c.id, count, label: label.into_owned(), into }
             })
         })
         .collect()

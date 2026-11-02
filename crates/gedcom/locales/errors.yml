@@ -1,0 +1,185 @@
+_version: 2
+# Error messages and other texts of the library (crates/gedcom/src).
+error.act_not_found:
+  en: "record not found"
+  fr: "acte introuvable"
+error.address_not_found:
+  en: "address not found"
+  fr: "adresse introuvable"
+error.already_child:
+  en: "this person is already a child of the family"
+  fr: "cette personne est déjà un enfant de la famille"
+error.already_couple:
+  en: "these two people are already a couple"
+  fr: "ces deux personnes forment déjà un couple"
+error.ancestor_of_family:
+  en: "this person is an ancestor of the family"
+  fr: "cette personne est un ascendant de la famille"
+error.event_not_found:
+  en: "event not found"
+  fr: "événement introuvable"
+error.event_type_needed:
+  en: "specify the event type"
+  fr: "précisez le type de l'événement"
+error.family_has_father:
+  en: "the family already has a father"
+  fr: "la famille a déjà un père"
+error.family_has_mother:
+  en: "the family already has a mother"
+  fr: "la famille a déjà une mère"
+error.family_has_parents:
+  en: "the family already has two parents"
+  fr: "la famille a déjà deux parents"
+error.family_not_found:
+  en: "family not found"
+  fr: "famille introuvable"
+error.has_father:
+  en: "this person already has a father"
+  fr: "cette personne a déjà un père"
+error.has_mother:
+  en: "this person already has a mother"
+  fr: "cette personne a déjà une mère"
+error.keep_xref:
+  en: "the record must keep an @…@ identifier"
+  fr: "l'enregistrement doit garder un identifiant @…@"
+error.link_self:
+  en: "a person cannot be linked to themselves"
+  fr: "on ne peut pas lier une personne à elle-même"
+error.man_not_mother:
+  en: "%{name} is a man: he cannot be the mother"
+  fr: "%{name} est un homme : il ne peut pas être la mère"
+error.media_not_found:
+  en: "media not found"
+  fr: "média introuvable"
+error.media_one_page:
+  en: "a media keeps at least one page"
+  fr: "un média garde au moins une page"
+error.media_owner:
+  en: "media can only be attached to a person, a family or a source"
+  fr: "on ne peut rattacher un média qu'à une personne, une famille ou une source"
+error.merge_two:
+  en: "choose at least two media to merge"
+  fr: "choisissez au moins deux médias à fusionner"
+error.page_not_found:
+  en: "page not found"
+  fr: "page introuvable"
+error.parent_own_child:
+  en: "a parent cannot be their own child"
+  fr: "un parent ne peut pas être son propre enfant"
+error.parse.incomplete_line:
+  en: "incomplete line: “%{line}”"
+  fr: "ligne incomplète : « %{line} »"
+error.parse.invalid_level:
+  en: "invalid level: “%{level}”"
+  fr: "niveau invalide : « %{level} »"
+error.parse.invalid_tag:
+  en: "invalid tag: “%{tag}”"
+  fr: "balise invalide : « %{tag} »"
+error.parse.invalid_xref:
+  en: "invalid identifier: “%{xref}”"
+  fr: "identifiant invalide : « %{xref} »"
+error.parse.no_header:
+  en: "HEAD header missing"
+  fr: "en-tête HEAD manquant"
+error.parse.no_record:
+  en: "no record"
+  fr: "aucun enregistrement"
+error.parse.one_record:
+  en: "a single level 0 record is expected"
+  fr: "un seul enregistrement de niveau 0 est attendu"
+error.parse.unexpected_level:
+  en: "unexpected level %{level} (highest expected level: %{max})"
+  fr: "niveau %{level} inattendu (niveau maximal attendu : %{max})"
+error.parse.xref_without_tag:
+  en: "identifier without a tag"
+  fr: "identifiant sans balise"
+error.person_not_found:
+  en: "person not found"
+  fr: "personne introuvable"
+error.record_not_found:
+  en: "record not found"
+  fr: "enregistrement introuvable"
+error.single_page:
+  en: "this media has only one page"
+  fr: "ce média n'a qu'une page"
+error.source_not_found:
+  en: "source not found"
+  fr: "source introuvable"
+error.unknown_event_type:
+  en: "unknown event type"
+  fr: "type d'événement inconnu"
+error.web.empty:
+  en: "Enter a web address"
+  fr: "Saisissez une adresse web"
+error.web.invalid:
+  en: "Invalid web address"
+  fr: "Adresse web invalide"
+error.web.not_allowed:
+  en: "This kind of item cannot have a web link"
+  fr: "Ce type d'élément ne peut pas porter de lien web"
+error.web.repository_max:
+  en: "A repository has at most three web addresses"
+  fr: "Un dépôt a au plus trois adresses web"
+error.web.scheme:
+  en: "Only http:// and https:// addresses are accepted"
+  fr: "Seules les adresses http:// et https:// sont acceptées"
+error.web.space:
+  en: "The address must not contain spaces"
+  fr: "L'adresse ne doit pas contenir d'espace"
+error.web_no_pages:
+  en: "a web link cannot have pages"
+  fr: "un lien web ne peut pas avoir de pages"
+error.woman_not_father:
+  en: "%{name} is a woman: she cannot be the father"
+  fr: "%{name} est une femme : elle ne peut pas être le père"
+error.xref_used:
+  en: "the identifier %{xref} is already used"
+  fr: "l'identifiant %{xref} est déjà utilisé"
+import.events.one:
+  en: "%{n} event with an extension tag (_MILT…)"
+  fr: "%{n} événement à balise d'extension (_MILT…)"
+import.events.other:
+  en: "%{n} events with an extension tag (_MILT…)"
+  fr: "%{n} événements à balise d'extension (_MILT…)"
+import.events_into:
+  en: "EVEN + TYPE events"
+  fr: "événements EVEN + TYPE"
+import.prim.one:
+  en: "%{n} _PRIM main photo"
+  fr: "%{n} photo principale _PRIM"
+import.prim.other:
+  en: "%{n} _PRIM main photos"
+  fr: "%{n} photos principales _PRIM"
+import.prim_into:
+  en: "first media of the record"
+  fr: "premier média de la fiche"
+import.templates.one:
+  en: "%{n} leftover from the old guided entry"
+  fr: "%{n} reste de l'ancienne saisie guidée"
+import.templates.other:
+  en: "%{n} leftovers from the old guided entry"
+  fr: "%{n} restes de l'ancienne saisie guidée"
+import.templates_into:
+  en: "standard GEDCOM 7 records, without templates"
+  fr: "actes en GEDCOM 7 standard, sans modèles"
+import.url.one:
+  en: "%{n} _URL link"
+  fr: "%{n} lien _URL"
+import.url.other:
+  en: "%{n} _URL links"
+  fr: "%{n} liens _URL"
+import.url_into:
+  en: "GEDCOM 7 multimedia links"
+  fr: "liens multimédia GEDCOM 7"
+media_links.portraits:
+  en: "Portraits and Photos"
+  fr: "Portraits et photos"
+media_links.union_photos:
+  en: "Photos of the Union"
+  fr: "Photos de l'union"
+media_links.whole_register:
+  en: "Whole Register"
+  fr: "Registre entier"
+error.not_utf8:
+  en: "the file is not UTF-8 (GEDCOM 7 requires UTF-8)"
+  fr: "le fichier n'est pas en UTF-8 (GEDCOM 7 exige UTF-8)"

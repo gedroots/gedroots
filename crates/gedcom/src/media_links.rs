@@ -244,7 +244,7 @@ impl Gedcom {
             return vec![GalleryGroup { title: String::new(), subtitle: String::new(), host: Some(host), items }];
         }
         let mut groups = vec![GalleryGroup {
-            title: "Registre entier".into(),
+            title: rust_i18n::t!("media_links.whole_register").into(),
             subtitle: String::new(),
             host: Some(host.clone()),
             items: self.loose_source_media(source).into_iter().map(|m| (m, host.clone())).collect(),
@@ -273,7 +273,11 @@ impl Gedcom {
             .map(|m| (m, host.clone()))
             .collect();
         let mut groups = vec![GalleryGroup {
-            title: if n.tag == "INDI" { "Portraits et photos".into() } else { "Photos de l'union".into() },
+            title: if n.tag == "INDI" {
+                rust_i18n::t!("media_links.portraits").into()
+            } else {
+                rust_i18n::t!("media_links.union_photos").into()
+            },
             subtitle: String::new(),
             host: Some(host),
             items: own,
@@ -364,7 +368,10 @@ impl Gedcom {
                 let Some(n) = self.get(x) else { return Vec::new() };
                 match n.tag.as_str() {
                     "SOUR" if self.is_register(x) => {
-                        let mut out = vec![("Registre entier".to_string(), MediaHost::Record(x.clone()))];
+                        let mut out = vec![(
+                            rust_i18n::t!("media_links.whole_register").into_owned(),
+                            MediaHost::Record(x.clone()),
+                        )];
                         for act in self.acts(x) {
                             let key = act.original.clone().unwrap_or_default();
                             out.push((act.title(), MediaHost::Act { source: x.clone(), key }));
@@ -408,7 +415,7 @@ impl Gedcom {
     /// Lie un média là où l'indique `host` (sans doublon).
     pub fn link_media(&mut self, host: &MediaHost, media: &str) -> Result<(), String> {
         if self.get(media).is_none_or(|m| m.tag != "OBJE") {
-            return Err("média introuvable".into());
+            return Err(rust_i18n::t!("error.media_not_found").into());
         }
         match host {
             MediaHost::Record(x) => self.attach_media(x, media),
@@ -441,7 +448,7 @@ impl Gedcom {
                     }
                 }
                 if !found {
-                    return Err("acte introuvable".into());
+                    return Err(rust_i18n::t!("error.act_not_found").into());
                 }
                 // Comme la saisie d'acte : la source porte aussi l'image.
                 self.attach_media(source, media)
@@ -524,7 +531,7 @@ mod tests {
         let host = MediaHost::Act { source: "S1".into(), key: key("Acte n° 15") };
         g.link_media(&host, "M5").unwrap();
         let groups = g.gallery(&GalleryTarget::Record("S1".into()));
-        assert_eq!(groups[0].title, "Registre entier");
+        assert_eq!(groups[0].title, "Whole Register");
         assert_eq!(groups[0].items, vec![("M2".to_string(), MediaHost::Record("S1".into()))]);
         let act15 = groups.iter().find(|gr| gr.subtitle.contains("15") || gr.title.contains("15"));
         assert!(act15.is_some_and(|gr| gr.items == vec![("M5".to_string(), host.clone())]));

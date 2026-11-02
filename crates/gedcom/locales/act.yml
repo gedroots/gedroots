@@ -213,3 +213,12 @@ act.error.no_principal:
 act.error.both_spouses:
   en: "a family event needs both spouses"
   fr: "un événement familial demande les deux époux"
+act.reason.spouse_of:
+  en: "spouse of %{name}"
+  fr: "conjoint de %{name}"
+act.reason.parent_of:
+  en: "parent of %{name}"
+  fr: "parent de %{name}"
+act.reason.child_of:
+  en: "child of %{name}"
+  fr: "enfant de %{name}"

@@ -289,32 +289,53 @@ impl Gedcom {
 }
 
 /// Balises d'extension d'événements connues (Legacy, RootsMagic, Family Tree Maker,
-/// Ancestry, Heredis…) et le `TYPE` qu'elles deviennent.
+/// Ancestry, Heredis…) et le `TYPE` qu'elles deviennent (voir [`extension_type`]).
 const EXTENSION_EVENTS: &[(&str, &str)] = &[
-    ("_MILT", "Service militaire"),
-    ("_MILI", "Service militaire"),
-    ("_MIL", "Service militaire"),
-    ("_MILITARY", "Service militaire"),
-    ("_MILITARY_SERVICE", "Service militaire"),
-    ("_MDCL", "Informations médicales"),
-    ("_MEDICAL", "Informations médicales"),
-    ("_DEG", "Diplôme"),
-    ("_DEGREE", "Diplôme"),
-    ("_ELEC", "Élection"),
-    ("_EMPLOY", "Emploi"),
-    ("_EXCM", "Excommunication"),
-    ("_FUN", "Funérailles"),
-    ("_FUNERAL", "Funérailles"),
-    ("_ORDI", "Ordination"),
-    ("_ORDN", "Ordination"),
-    ("_CIRC", "Circoncision"),
-    ("_DEST", "Destination"),
-    ("_SEPR", "Séparation"),
-    ("_SEPARATED", "Séparation"),
-    ("_HOSP", "Hospitalisation"),
-    ("_ARRI", "Arrivée"),
-    ("_DEPA", "Départ"),
+    ("_MILT", "military"),
+    ("_MILI", "military"),
+    ("_MIL", "military"),
+    ("_MILITARY", "military"),
+    ("_MILITARY_SERVICE", "military"),
+    ("_MDCL", "medical"),
+    ("_MEDICAL", "medical"),
+    ("_DEG", "degree"),
+    ("_DEGREE", "degree"),
+    ("_ELEC", "election"),
+    ("_EMPLOY", "employment"),
+    ("_EXCM", "excommunication"),
+    ("_FUN", "funeral"),
+    ("_FUNERAL", "funeral"),
+    ("_ORDI", "ordination"),
+    ("_ORDN", "ordination"),
+    ("_CIRC", "circumcision"),
+    ("_DEST", "destination"),
+    ("_SEPR", "separation"),
+    ("_SEPARATED", "separation"),
+    ("_HOSP", "hospitalization"),
+    ("_ARRI", "arrival"),
+    ("_DEPA", "departure"),
 ];
+
+/// `TYPE` donné à un événement d'extension, dans la langue de l'interface.
+fn extension_type(code: &str) -> std::borrow::Cow<'static, str> {
+    match code {
+        "military" => rust_i18n::t!("custom.event.military"),
+        "medical" => rust_i18n::t!("custom.event.medical"),
+        "degree" => rust_i18n::t!("custom.event.degree"),
+        "election" => rust_i18n::t!("custom.event.election"),
+        "employment" => rust_i18n::t!("custom.event.employment"),
+        "excommunication" => rust_i18n::t!("custom.event.excommunication"),
+        "funeral" => rust_i18n::t!("custom.event.funeral"),
+        "ordination" => rust_i18n::t!("custom.event.ordination"),
+        "circumcision" => rust_i18n::t!("custom.event.circumcision"),
+        "destination" => rust_i18n::t!("custom.event.destination"),
+        "separation" => rust_i18n::t!("custom.event.separation"),
+        "hospitalization" => rust_i18n::t!("custom.event.hospitalization"),
+        "arrival" => rust_i18n::t!("custom.event.arrival"),
+        "departure" => rust_i18n::t!("custom.event.departure"),
+        _ => std::borrow::Cow::Borrowed(""),
+    }
+}
 
 /// Balises d'extension qui ne sont jamais des événements, même datées.
 const NOT_EVENTS: &[&str] = &["_TODO", "_LINT", "_UID", "_PRIM", "_URL", "_PHOTO", "_VALID", "_UPD", "_SOSADABOVILLE"];
@@ -325,8 +346,8 @@ fn extension_event_type(n: &Node) -> Option<String> {
     if !n.tag.starts_with('_') || n.tag.starts_with("_GR_") || NOT_EVENTS.contains(&n.tag.as_str()) {
         return None;
     }
-    if let Some((_, ty)) = EXTENSION_EVENTS.iter().find(|(t, _)| *t == n.tag) {
-        return Some(ty.to_string());
+    if let Some((_, code)) = EXTENSION_EVENTS.iter().find(|(t, _)| *t == n.tag) {
+        return Some(extension_type(code).into_owned());
     }
     let dated = n.children.iter().any(|c| c.tag == "DATE" || c.tag == "PLAC");
     dated.then(|| n.tag.trim_start_matches('_').replace('_', " ").to_lowercase())
@@ -451,10 +472,10 @@ mod tests {
         assert_eq!(g.extension_event_count(), 3);
         assert_eq!(g.migrate_extension_events(), 3);
         let out = g.to_gedcom_string();
-        assert!(out.contains("1 EVEN\n2 TYPE Service militaire\n2 DATE 1914\n2 NOTE Infanterie\n"), "{out}");
+        assert!(out.contains("1 EVEN\n2 TYPE Military Service\n2 DATE 1914\n2 NOTE Infanterie\n"), "{out}");
         assert!(out.contains("1 EVEN\n2 TYPE hobby\n2 PLAC Paris\n"), "{out}");
         assert!(out.contains("1 _TODO Chercher\n") && out.contains("1 _FOO bar\n"));
-        assert!(out.contains("0 @F1@ FAM\n1 EVEN\n2 TYPE Séparation\n"), "{out}");
+        assert!(out.contains("0 @F1@ FAM\n1 EVEN\n2 TYPE Separation\n"), "{out}");
         assert_eq!(g.extension_event_count(), 0);
     }
 }
