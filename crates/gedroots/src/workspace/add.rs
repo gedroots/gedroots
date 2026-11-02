@@ -333,19 +333,15 @@ impl Workspace {
 
     fn event_body(&self, d: &EventDialog, cx: &mut Context<Self>) -> AnyElement {
         let tag = d.kind.read(cx).selected_value().cloned().unwrap_or_default();
-        let had_detail = self.doc.as_ref().is_some_and(|doc| {
-            d.editing.and_then(|ix| doc.ged.read_event(&d.owner, ix)).is_some_and(|e| !e.detail.trim().is_empty())
-        });
         let detail_label = match tag.trim_start_matches("FAM:") {
             t if t.starts_with("EVEN:") => None,
             "OCCU" => Some("Profession"),
             "EDUC" => Some("Établissement ou diplôme"),
             "EVEN" => Some("Type d'événement"),
             "RESI" | "" => None,
-            // `TYPE` d'un événement standard (« Naissance » : « à domicile ») : rare, seulement
-            // quand l'événement modifié en a déjà un.
-            _ if !had_detail => None,
-            _ => Some("Précision"),
+            // Le `TYPE` d'un événement standard ne se saisit pas ici (éditeur GEDCOM) ;
+            // celui d'un événement modifié est gardé tel quel.
+            _ => None,
         };
         let field = |label: &'static str, el: AnyElement| v_flex().gap_1().min_w_0().child(label_caps(label)).child(el);
         v_flex()
