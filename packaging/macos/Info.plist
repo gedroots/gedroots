@@ -7,7 +7,7 @@
 	<key>CFBundleDisplayName</key>
 	<string>GEDRoots</string>
 	<key>CFBundleIdentifier</key>
-	<string>io.github.antoninguyot.gedroots</string>
+	<string>io.github.gedroots.gedroots</string>
 	<key>CFBundleExecutable</key>
 	<string>gedroots</string>
 	<key>CFBundleIconFile</key>

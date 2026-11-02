@@ -6,7 +6,7 @@ a colour, radius or font, they go through its tokens.
 
 | Light | Dark |
 |---|---|
-| ![Light theme](docs/capture-theme-clair.png) | ![Dark theme](docs/capture-theme-sombre.png) |
+| ![Light theme](docs/screenshot-theme-light.png) | ![Dark theme](docs/screenshot-theme-dark.png) |
 
 This document gathers the design system (tokens, typography, icons) and the interface rules
 taken from the [Apple HIG](https://developer.apple.com/design/human-interface-guidelines),

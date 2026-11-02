@@ -23,8 +23,6 @@ const MIN_ZOOM: u8 = 2;
 const MAX_ZOOM: u8 = 18;
 const MAX_INFLIGHT: usize = 6;
 const DEFAULT_TILES: &str = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
-const USER_AGENT: &str =
-    concat!("GEDRoots/", env!("CARGO_PKG_VERSION"), " (+https://github.com/antoninguyot/gedroots)");
 
 /// Ce que la carte demande à l'espace de travail.
 pub enum MapEvent {
@@ -80,7 +78,7 @@ impl EventEmitter<MapEvent> for MapView {}
 impl MapView {
     pub fn new() -> Self {
         let agent = ureq::AgentBuilder::new()
-            .user_agent(USER_AGENT)
+            .user_agent(crate::gazetteer::USER_AGENT)
             .timeout(Duration::from_secs(15))
             .try_proxy_from_env(true)
             .build();

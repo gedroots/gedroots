@@ -3,7 +3,7 @@
 use gedcom::*;
 use std::sync::Arc;
 
-const SAMPLE: &str = include_str!("fixtures/exemple.ged");
+const SAMPLE: &str = include_str!("fixtures/example.ged");
 
 fn shared(a: &Gedcom, b: &Gedcom) -> usize {
     a.records.iter().zip(&b.records).filter(|(x, y)| Arc::ptr_eq(x, y)).count()

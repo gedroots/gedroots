@@ -8,8 +8,8 @@ use std::sync::OnceLock;
 use std::time::Duration;
 
 const DEFAULT_GEOCODER: &str = "https://photon.komoot.io/api/";
-const USER_AGENT: &str =
-    concat!("GEDRoots/", env!("CARGO_PKG_VERSION"), " (+https://github.com/antoninguyot/gedroots)");
+/// Sent to the geocoding and map tile services, which ask for a way to identify the app.
+pub const USER_AGENT: &str = concat!("GEDRoots/", env!("CARGO_PKG_VERSION"), " (+", env!("CARGO_PKG_REPOSITORY"), ")");
 
 /// Pause de saisie avant de chercher.
 pub const TYPING_PAUSE: Duration = Duration::from_millis(450);

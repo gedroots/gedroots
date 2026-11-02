@@ -1,13 +1,13 @@
 #!/bin/sh
-# Construit GEDRoots.app (et, avec --dmg, une image disque) à partir des sources.
+# Builds GEDRoots.app (and, with --dmg, a disk image) from the sources.
 #
 #   packaging/macos/bundle.sh             # → <target>/release/GEDRoots.app
-#   packaging/macos/bundle.sh --install   # … puis copie dans /Applications
-#   packaging/macos/bundle.sh --dmg       # … et <target>/release/GEDRoots.dmg
+#   packaging/macos/bundle.sh --install   # … then copies it to /Applications
+#   packaging/macos/bundle.sh --dmg       # … and <target>/release/GEDRoots.dmg
 #
-# Normalement lancé par `mise run bundle` / `mise run install`, qui fournit la toolchain du
-# projet ; CARGO permet sinon de choisir la commande cargo.
-# Le dossier de compilation suit CARGO_TARGET_DIR / .cargo/config comme `cargo build`.
+# Normally run by `mise run bundle` / `mise run install`, which provide the project's
+# toolchain; otherwise CARGO chooses the cargo command.
+# The build folder follows CARGO_TARGET_DIR / .cargo/config like `cargo build`.
 set -eu
 
 cd "$(dirname "$0")/../.."
@@ -18,7 +18,7 @@ for arg in "$@"; do
 	case "$arg" in
 	--install) INSTALL=1 ;;
 	--dmg) DMG=1 ;;
-	*) echo "option inconnue : $arg" >&2; exit 2 ;;
+	*) echo "unknown option: $arg" >&2; exit 2 ;;
 	esac
 done
 
@@ -34,10 +34,10 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$OUT/gedroots" "$APP/Contents/MacOS/gedroots"
 sed "s/@VERSION@/$VERSION/g" packaging/macos/Info.plist > "$APP/Contents/Info.plist"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
-# Traductions des textes de l'Info.plist (nom du type de fichier…).
+# Translations of the Info.plist strings (file type name…).
 cp -R packaging/macos/*.lproj "$APP/Contents/Resources/"
 
-# Icône : toutes les tailles attendues par macOS, à partir de l'image 1024 px.
+# Icon: every size macOS expects, from the 1024 px image.
 ICONSET=$(mktemp -d)/GEDRoots.iconset
 mkdir -p "$ICONSET"
 for s in 16 32 128 256 512; do
@@ -48,14 +48,14 @@ done
 iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/GEDRoots.icns"
 rm -rf "$(dirname "$ICONSET")"
 
-# Signature « ad hoc » (sans compte développeur) : suffisante pour lancer l'app sur ce Mac.
+# “Ad hoc” signature (no developer account): enough to run the app on this Mac.
 codesign --force --sign - "$APP"
 echo "→ $APP"
 
 if [ "$INSTALL" = 1 ]; then
 	rm -rf /Applications/GEDRoots.app
 	cp -R "$APP" /Applications/
-	# Le Finder et le Dock relisent l'icône et les types de fichiers gérés.
+	# The Finder and the Dock read the icon and the supported file types again.
 	/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f /Applications/GEDRoots.app || true
 	echo "→ /Applications/GEDRoots.app"
 fi

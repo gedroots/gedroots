@@ -1,6 +1,6 @@
 use gedcom::*;
 
-const SAMPLE: &str = include_str!("fixtures/exemple.ged");
+const SAMPLE: &str = include_str!("fixtures/example.ged");
 
 #[test]
 fn roundtrip_is_byte_identical() {

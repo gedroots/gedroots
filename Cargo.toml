@@ -2,8 +2,14 @@
 resolver = "2"
 members = ["crates/gedcom", "crates/gedroots"]
 
-# Compilation de développement plus rapide : moins d'infos de débogage à lier,
-# et dépendances (GPUI…) optimisées une fois pour toutes pour une app fluide.
+# Shared metadata. `repository` also builds the extension URIs (`HEAD.SCHMA`) and the
+# User-Agent sent to the map and geocoding services.
+[workspace.package]
+repository = "https://github.com/gedroots/gedroots"
+license = "MIT OR Apache-2.0"
+
+# Faster development builds: less debug info to link, and dependencies (GPUI…)
+# optimized once and for all so the app stays smooth.
 [profile.dev]
 debug = "line-tables-only"
 

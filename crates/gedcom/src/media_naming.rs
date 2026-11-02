@@ -28,7 +28,7 @@ use crate::model::{Event, Family, Individual, event_label, short_place};
 use crate::node::Node;
 
 pub const MEDIA_TAG: &str = "_GR_MEDIA";
-pub const MEDIA_URI: &str = "https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_media";
+pub const MEDIA_URI: &str = extension_uri!("_gr_media");
 /// Sous `_GR_MEDIA` : un dossier.
 const DIR_TAG: &str = "_GR_DIR";
 /// Sous `_GR_DIR` : ce qu'il reçoit.

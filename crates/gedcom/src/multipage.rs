@@ -37,7 +37,7 @@ use crate::relations::mime_for;
 
 /// Balise de la page visée par un lien `OBJE`.
 pub const PAGE_TAG: &str = "_GR_FILE";
-pub const PAGE_URI: &str = "https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_file";
+pub const PAGE_URI: &str = extension_uri!("_gr_file");
 
 /// Un fichier (une page) d'un média.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

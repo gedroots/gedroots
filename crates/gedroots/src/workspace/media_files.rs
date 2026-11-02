@@ -272,7 +272,7 @@ mod tests {
                 (g, s)
             }
             Err(_) => {
-                (Gedcom::parse(include_str!("../../../gedcom/tests/fixtures/exemple.ged")).unwrap(), "S00001".into())
+                (Gedcom::parse(include_str!("../../../gedcom/tests/fixtures/example.ged")).unwrap(), "S00001".into())
             }
         }
     }

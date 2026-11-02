@@ -313,4 +313,4 @@ impl Gedcom {
 
 /// Balise de l'individu racine (dans `HEAD`).
 pub const ROOT_TAG: &str = "_GR_ROOT";
-pub const ROOT_URI: &str = "https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_root";
+pub const ROOT_URI: &str = extension_uri!("_gr_root");

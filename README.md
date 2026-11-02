@@ -9,7 +9,7 @@ the [GEDRoots design system](design.md) (neutral backgrounds with touches of vio
 typeface, light or dark following the system). It is written in English and translated into
 French (see [docs/localization.md](docs/localization.md)).
 
-![Pedigree chart](docs/capture-arbre.png)
+![Pedigree chart](docs/screenshot-chart.png)
 
 ## Features
 
@@ -46,18 +46,18 @@ French (see [docs/localization.md](docs/localization.md)).
   (places, names, occupations, record types, repositories…) show their number of results (↑ ↓
   ↵, Esc). The zone's counter in the sidebar gives the number of results. Type ordinary words:
   “1850” suggests “Born in 1850”, “Born about 1850” (± 5 years), “Died about 1850”, “Alive in
-  1850”; a given name and a surname (“lucien guyot”) suggest their ancestors, descendants,
+  1850”; a given name and a surname (“jean martin”) suggest their ancestors, descendants,
   spouses, children, parents and siblings (also in Person › Search Ancestors / Descendants).
   Clicking a token sets the year margin (exactly, ± 2, ± 5, ± 10 years) or the spelling variants
   of a name (Guyot, Guyau, Guillot; French phonetic key, `phonetic.rs`), and removes it.
   Criteria keywords are in English whatever the interface language (only their labels are
   translated). Criteria for people: `born:1800-1850`, `born:1850±5`, `died:<1900`,
-  `alive:1870`, `place:troyes`, `name:guyot` (variants included; `name:=guyot`: exact),
+  `alive:1870`, `place:troyes`, `name:martin` (variants included; `name:=martin`: exact),
   `occupation:miller`, `sex:f`, `ancestors:@I1@`, `descendants:@I1@`, `spouses:@I1@`,
   `children:@I1@`, `parents:@I1@`, `siblings:@I1@`, `without:source`, `without:parents`,
   `without:marriage`, `with:media`, `sosa:1-63`…; for sources: `type:birth`,
   `repository:…`, `without:media`, `without:citation`; for places: `in:aube`,
-  `without:coordinates`; for media: `event:birth`, `person:guyot`, `format:pdf`,
+  `without:coordinates`; for media: `event:birth`, `person:martin`, `format:pdf`,
   `medium:photo` (`MEDI`), `without:link`. A value with spaces is written in quotes. In the
   Media zone, a row of types (All · Records · Portraits…) follows the subfolders of the
   settings, otherwise the folders of the files, otherwise the GEDCOM medium (`MEDI`); web links
@@ -100,7 +100,7 @@ French (see [docs/localization.md](docs/localization.md)).
   `W1.11437`) and can be undone like any change. Tiles are cached on disk: in “Offline” mode,
   nothing goes out to the Internet.
 
-![Place map](docs/capture-carte.png)
+![Place map](docs/screenshot-map.png)
 
 - **Media / photos**: portraits of people, images of sources (scanned records) in the record
   and the detail panel, paths relative to the `.ged` file.
@@ -162,7 +162,7 @@ French (see [docs/localization.md](docs/localization.md)).
   right-click, or Media › Merge with Another Media…). Every link is rewritten; a person framed
   on page 2 keeps their frame (extension [`_GR_FILE`](docs/extensions.md#_gr_file)).
 
-![People identified in a photo](docs/capture-photo.png)
+![People identified in a photo](docs/screenshot-photo-people.png)
 - **Root person**: stored in the file itself (extension `_GR_ROOT`, see
   [docs/extensions.md](docs/extensions.md)), never in a sidecar file.
 - GEDCOM identifiers do not appear in the interface: links are chosen by name (spouse,
@@ -223,13 +223,13 @@ French (see [docs/localization.md](docs/localization.md)).
 - **Lossless** saving: a file read and written back is identical to the byte (proprietary tags
   `_SOSADABOVILLE`, `_TODO`… included). A `.ged.bak` copy is kept on each save.
 
-![Fan chart](docs/capture-eventail.png)
+![Fan chart](docs/screenshot-fan-chart.png)
 
-![Link an existing person](docs/capture-lier.png)
+![Link an existing person](docs/screenshot-link-person.png)
 
-![Visual editor](docs/capture-fiche.png)
+![Visual editor](docs/screenshot-editor.png)
 
-![Record in the source's page](docs/capture-saisie.png)
+![Record in the source's page](docs/screenshot-record-entry.png)
 
 ## Development environment
 
@@ -332,5 +332,11 @@ mise exec -- cargo run -p gedcom --example analyse -- ~/Genealogie/tree.ged
 GEDROOTS_TEST_GED=~/Genealogie/tree.ged mise run test real_file -- --nocapture
 ```
 
-The sample file `crates/gedcom/tests/fixtures/exemple.ged` is fictional. Personal `.ged` files
+The sample file `crates/gedcom/tests/fixtures/example.ged` is fictional. Personal `.ged` files
 are ignored by git.
+
+## License
+
+GEDRoots is dual-licensed under the [MIT License](LICENSE-MIT) or the
+[Apache License 2.0](LICENSE-APACHE), at your option. The Inter typeface is under the
+[SIL Open Font License](crates/gedroots/assets/fonts/OFL.txt).

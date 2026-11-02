@@ -50,7 +50,7 @@ pub struct EventType {
 
 /// Déclaration d'un type d'événement (dans `HEAD`).
 pub const EVENT_TYPE_TAG: &str = "_GR_EVEN";
-pub const EVENT_TYPE_URI: &str = "https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_even";
+pub const EVENT_TYPE_URI: &str = extension_uri!("_gr_even");
 /// Sous `_GR_EVEN` : type réservé aux familles (`FAM`).
 const RECORD_TAG: &str = "_GR_REC";
 /// Sous `_GR_EVEN` : libellé affiché, quand il diffère du `TYPE`.

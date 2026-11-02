@@ -21,7 +21,7 @@ use crate::node::Node;
 pub const WEB_TAG: &str = "_GR_WEB";
 /// Sous `_GR_WEB` : modèle d'URL.
 const URL_TAG: &str = "_GR_URL";
-pub const WEB_URI: &str = "https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_web";
+pub const WEB_URI: &str = extension_uri!("_gr_web");
 
 /// Variables proposées par le panneau, dans l'ordre.
 pub const WEB_TOKENS: &[&str] = &[

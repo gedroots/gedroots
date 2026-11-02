@@ -1,6 +1,6 @@
 use gedcom::*;
 
-const SAMPLE: &str = include_str!("fixtures/exemple.ged");
+const SAMPLE: &str = include_str!("fixtures/example.ged");
 
 /// Ces tests vérifient les textes écrits par l'app en français, la langue des fichiers d'exemple.
 fn french() {

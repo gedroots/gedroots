@@ -2,7 +2,9 @@
 name = "gedcom"
 version = "0.1.0"
 edition = "2024"
-description = "Lecture/écriture GEDCOM 7 sans perte et vues typées pour GEDRoots"
+description = "Lossless GEDCOM 7 reading/writing and typed views for GEDRoots"
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
 rust-i18n = "4.2.4"
@@ -10,5 +12,5 @@ serde = { version = "1", features = ["derive"], optional = true }
 schemars = { version = "1", optional = true }
 
 [features]
-# Sérialisation des données de recherche (serveur MCP de l'app).
+# Serialization of research data (the app's MCP server).
 serde = ["dep:serde", "dep:schemars"]

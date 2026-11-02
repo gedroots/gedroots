@@ -1,6 +1,6 @@
 use gedcom::*;
 
-const SAMPLE: &str = include_str!("fixtures/exemple.ged");
+const SAMPLE: &str = include_str!("fixtures/example.ged");
 
 fn names(g: &Gedcom, q: &str) -> Vec<String> {
     let mut v: Vec<String> = g.search_individuals(q).iter().map(|x| g.individual(x).unwrap().given()).collect();

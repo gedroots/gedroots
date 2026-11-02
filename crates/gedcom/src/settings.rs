@@ -198,13 +198,13 @@ impl Gedcom {
 mod tests {
     use super::*;
 
-    const HEAD: &str = "0 HEAD\n1 GEDC\n2 VERS 7.0.13\n1 SOUR ANCESTRIS\n2 VERS 13\n2 NAME Ancestris\n2 CORP Ancestris\n1 DATE 1 NOV 2026\n2 TIME 10:00:00\n1 SUBM @B1@\n1 SCHMA\n2 TAG _GR_IGNORE https://x\n0 @B1@ SUBM\n1 NAME Antonin\n0 @I1@ INDI\n1 NAME Jean /GUYOT/\n1 _GR_IGNORE too_old\n0 TRLR\n";
+    const HEAD: &str = "0 HEAD\n1 GEDC\n2 VERS 7.0.13\n1 SOUR ANCESTRIS\n2 VERS 13\n2 NAME Ancestris\n2 CORP Ancestris\n1 DATE 1 NOV 2026\n2 TIME 10:00:00\n1 SUBM @B1@\n1 SCHMA\n2 TAG _GR_IGNORE https://x\n0 @B1@ SUBM\n1 NAME Jeanne\n0 @I1@ INDI\n1 NAME Jean /GUYOT/\n1 _GR_IGNORE too_old\n0 TRLR\n";
 
     #[test]
     fn reads_settings_and_info() {
         let g = Gedcom::parse(HEAD).unwrap();
         let s = g.file_settings();
-        assert_eq!(s.author, "Antonin");
+        assert_eq!(s.author, "Jeanne");
         assert_eq!(s.language, "");
         let i = g.file_info();
         assert_eq!(i.version, "7.0.13");
@@ -217,19 +217,19 @@ mod tests {
     fn writes_standard_header() {
         let mut g = Gedcom::parse(HEAD).unwrap();
         let s = FileSettings {
-            author: "Antonin Guyot".into(),
+            author: "Jeanne Martin".into(),
             email: "a@example.org".into(),
             copyright: "© 2026".into(),
-            description: "Famille Guyot\nBranche paternelle".into(),
+            description: "Famille Martin\nBranche paternelle".into(),
             language: "fr".into(),
         };
         assert!(g.set_file_settings(&s));
         assert!(!g.set_file_settings(&s));
         let out = g.to_gedcom_string();
         assert!(out.contains("1 COPR © 2026\n"));
-        assert!(out.contains("1 NOTE Famille Guyot\n2 CONT Branche paternelle\n"));
+        assert!(out.contains("1 NOTE Famille Martin\n2 CONT Branche paternelle\n"));
         assert!(out.contains("1 LANG fr\n"));
-        assert!(out.contains("0 @B1@ SUBM\n1 NAME Antonin Guyot\n1 EMAIL a@example.org\n"));
+        assert!(out.contains("0 @B1@ SUBM\n1 NAME Jeanne Martin\n1 EMAIL a@example.org\n"));
         assert_eq!(Gedcom::parse(&out).unwrap().file_settings(), s);
     }
 
