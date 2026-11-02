@@ -63,7 +63,7 @@ impl Workspace {
         }
         let sample = doc.is_some_and(|d| d.sample);
         let d = if sample { d } else { on!(d, cx, SaveFile, |this, w, cx| this.save_file(&SaveFile, w, cx)) };
-        let d = on!(d, cx, TakeTour, |this, w, cx| this.start_tour(w, cx));
+        let d = on!(d, cx, TakeTour, |this, w, cx| this.open_tour_chooser(cx));
         let d = on!(d, cx, OpenFileSettings, |this, w, cx| this.open_settings(w, cx));
         let d = on!(d, cx, ReviewProposals, |this, w, cx| this.open_review(cx));
         let d = on!(d, cx, AcceptProposal, |this, w, cx| this.accept_proposal(w, cx));
@@ -426,7 +426,7 @@ impl Workspace {
             .collect();
         let state = cx.new(|cx| CommandState::new(window, cx));
         state.update(cx, |s, cx| s.focus(window, cx));
-        self.tour_did(super::tour::Advance::Palette, window, cx);
+        self.tour_did(super::tour::Advance::Palette, cx);
         self.palette = Some(Palette { state, items });
         cx.notify();
     }

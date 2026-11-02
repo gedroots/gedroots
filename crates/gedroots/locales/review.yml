@@ -20,6 +20,9 @@ review:
   by_agent:
     en: proposed by an AI agent
     fr: proposé par un agent IA
+  demo:
+    en: "Demo: prepared for the tour, no agent involved"
+    fr: "Démo : préparée pour la visite, aucun agent n’a tourné"
   sosa:
     en: "Sosa %{n}"
     fr: "Sosa %{n}"

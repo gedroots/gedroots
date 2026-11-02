@@ -47,7 +47,7 @@ mod report;
 mod review;
 mod saved;
 mod settings;
-mod tour;
+pub(crate) mod tour;
 mod tree;
 mod weblinks;
 
@@ -323,6 +323,10 @@ pub struct Workspace {
     kinship: Option<(String, String)>,
     /// Guided tour in progress.
     tour: Option<tour::Tour>,
+    /// Chapters of the tour offered (Help › Take the Tour).
+    tour_chooser: bool,
+    /// The step's action was done: the tour moves on at the next frame.
+    tour_pending: bool,
     /// Event shown read-only (click in a timeline).
     event_detail: Option<event_detail::EventDetail>,
     /// The record's fields are being edited (Edit › Edit Record); otherwise it is shown as text.
@@ -400,6 +404,8 @@ impl Workspace {
             quality: quality::QualityState { stale: true, ..Default::default() },
             kinship: None,
             tour: None,
+            tour_chooser: false,
+            tour_pending: false,
             event_detail: None,
             editing: false,
             show_relative_events: false,
@@ -493,7 +499,7 @@ impl Workspace {
     }
 
     /// Shows the sample tree (in a window of its own, see `main.rs`).
-    pub(crate) fn open_sample(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn open_sample(&mut self, offer_tour: bool, window: &mut Window, cx: &mut Context<Self>) {
         match crate::sample::open() {
             Ok((ged, path)) => {
                 self.set_document(ged, Some(path), false, window, cx);
@@ -501,7 +507,9 @@ impl Workspace {
                     d.sample = true;
                 }
                 self.tab = CenterTab::Tree;
-                self.offer_tour(window, cx);
+                if offer_tour {
+                    self.offer_tour(window, cx);
+                }
             }
             Err(e) => self.set_error("ws.open_failed", t!("ws.open_failed", path = t!("sample.title"), error = e)),
         }
@@ -1031,6 +1039,7 @@ impl Workspace {
                 self.apply_pending_places();
                 let ged = self.doc.as_ref().map(|d| d.ged.clone()).unwrap_or_default();
                 self.set_status(res.summary() + &note, false);
+                self.tour_did(tour::Advance::SaveAct, cx);
                 self.rebuild_rows(cx);
                 self.refresh_editor(window, cx);
                 if next {
@@ -2992,6 +3001,7 @@ impl Workspace {
 
 impl Render for Workspace {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.check_tour(window, cx);
         // Search suggestions: visible while the field has the focus.
         let focused = self.filter.read(cx).focus_handle(cx).is_focused(window);
         if focused && !self.search_focused {
@@ -3085,6 +3095,10 @@ impl Render for Workspace {
             )
             .on_key_down(cx.listener(|this, ev: &KeyDownEvent, w, cx| {
                 if ev.keystroke.key == "escape" {
+                    if this.tour_chooser {
+                        this.tour_chooser = false;
+                        return cx.notify();
+                    }
                     if this.tour.is_some() {
                         return this.end_tour(cx);
                     }

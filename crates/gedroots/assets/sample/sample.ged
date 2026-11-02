@@ -38,9 +38,6 @@
 2 GIVN Émile
 2 SURN MARCHAND
 1 SEX M
-1 BIRT
-2 DATE FRENCH_R 30 GERM 4
-2 PLAC Agneaux, Manche, Normandie, France
 1 OCCU Weaver
 1 DEAT
 2 DATE 7 JAN 1862
@@ -185,4 +182,19 @@
 1 MARR
 2 DATE 30 APR 1882
 2 PLAC Caen, Calvados, Normandie, France
+0 @R1@ REPO
+1 NAME Archives départementales de la Manche
+0 @S1@ SOUR
+1 TITL Births register, Agneaux, year IV
+1 DATA
+2 EVEN BIRT
+3 DATE FROM FRENCH_R 1 VEND 4 TO FRENCH_R 5 COMP 4
+3 PLAC Agneaux, Manche, Normandie, France
+1 REPO @R1@
+2 CALN 5 MI 1 R 12
+1 OBJE @O1@
+0 @O1@ OBJE
+1 FILE Records/birth-emile-marchand.jpg
+2 FORM image/jpeg
+1 TITL Births register, Agneaux, year IV, view 2
 0 TRLR

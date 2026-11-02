@@ -88,8 +88,8 @@ tour:
     en: Press this shortcut to search every command. The tour is in the Help menu.
     fr: Ce raccourci recherche parmi toutes les commandes. La visite se rouvre depuis le menu Aide.
   progress:
-    en: "%{n} of %{total}"
-    fr: "%{n} sur %{total}"
+    en: "%{chapter} · %{n} of %{total}"
+    fr: "%{chapter} · %{n} sur %{total}"
   skip:
     en: Skip
     fr: Passer
@@ -102,6 +102,102 @@ tour:
   leave:
     en: Leave the Tour
     fr: Quitter la visite
+  title:
+    en: Take the Tour
+    fr: Visite guidée
+  later:
+    en: Later
+    fr: Plus tard
+  start:
+    en: Start the Tour
+    fr: Commencer la visite
+  minutes:
+    en: "%{n} min"
+    fr: "%{n} min"
+  in_sample:
+    en: In the sample tree
+    fr: Dans l’arbre d’exemple
+  essentials:
+    en: The Essentials
+    fr: L’essentiel
+  essentials_summary:
+    en: Find your way, grow the tree, reach every command
+    fr: Se repérer, faire pousser l’arbre, retrouver toutes les commandes
+  sources:
+    en: Enter From Sources
+    fr: Saisir à partir des sources
+  sources_summary:
+    en: One record, all its people, the source cited for each
+    fr: Un acte, toutes ses personnes, la source citée pour chacune
+  agents:
+    en: AI Agents
+    fr: Les agents IA
+  agents_summary:
+    en: An agent looks for records and proposes; you review
+    fr: Un agent cherche les actes et propose, vous relisez
+  register_title:
+    en: Start From the Record
+    fr: Partez de l’acte
+  register_body:
+    en: This is a register of births. Instead of filling in each person, you enter what one record says, once.
+    fr: Voici un registre des naissances. Au lieu de remplir chaque fiche, vous saisissez une fois ce que dit un acte.
+  record_title:
+    en: One Record, All Its People
+    fr: Un acte, toutes ses personnes
+  record_body:
+    en: The image is on one side. On the other, the event and each person the record names.
+    fr: L’image d’un côté. De l’autre, l’événement et chaque personne que l’acte nomme.
+  link_title:
+    en: Link Who Is Already There
+    fr: Liez qui existe déjà
+  link_body:
+    en: Jacques is already in the tree. Click “Link to Jacques MARCHAND” under the father, so the record becomes his source too, without a duplicate.
+    fr: "Jacques est déjà dans l’arbre. Cliquez « Lier à Jacques MARCHAND » sous le père : l’acte devient aussi sa source, sans doublon."
+  save_title:
+    en: Save the Record
+    fr: Enregistrez l’acte
+  save_body:
+    en: Save writes Émile’s birth and cites the record for Émile, Jacques and Marie.
+    fr: Enregistrer écrit la naissance d’Émile et cite l’acte pour Émile, Jacques et Marie.
+  cited_title:
+    en: One Record, One Source, Three People
+    fr: Un acte, une source, trois personnes
+  cited_body:
+    en: Émile’s birth is sourced, and his parents cite the same record. The witness is only mentioned in it.
+    fr: La naissance d’Émile est sourcée, et ses parents citent le même acte. Le témoin y est seulement mentionné.
+  proposal_title:
+    en: A Proposal Arrives
+    fr: Une proposition arrive
+  proposal_body:
+    en: An AI agent connected to GEDRoots found a record. It never writes to your file; its proposal waits in To Review. Open it.
+    fr: "Un agent IA connecté à GEDRoots a trouvé un acte. Il n’écrit jamais dans votre fichier : sa proposition attend dans À relire. Ouvrez-la."
+  compare_title:
+    en: The Record Next to Your Tree
+    fr: L’acte face à votre arbre
+  compare_body:
+    en: The record’s image on one side; on the other, what the tree says and what the agent proposes, line by line.
+    fr: L’image de l’acte d’un côté ; de l’autre, ce que dit l’arbre et ce que propose l’agent, ligne par ligne.
+  lines_title:
+    en: Each Line Says What Will Happen
+    fr: Chaque ligne dit ce qui va se passer
+  lines_body:
+    en: A person is created, linked to the tree or only mentioned. Uncheck anyone you want to leave out.
+    fr: Une personne est créée, liée à l’arbre ou seulement mentionnée. Décochez qui vous voulez écarter.
+  decide_title:
+    en: You Have the Last Word
+    fr: Vous avez le dernier mot
+  decide_body:
+    en: Save to the tree, or reject. Nothing was written until now.
+    fr: Enregistrez dans l’arbre, ou rejetez. Rien n’a été écrit jusqu’ici.
+  connect_title:
+    en: Connect Your Own Agent
+    fr: Connectez votre agent
+  connect_body:
+    en: File › Connect an AI Agent… shows how to connect the AI app you already use.
+    fr: Fichier › Connecter un agent IA… montre comment brancher l’application d’IA que vous utilisez déjà.
+  demo_failed:
+    en: "The demo could not be prepared: %{error}"
+    fr: "La démo n’a pas pu être préparée : %{error}"
 sample:
   title:
     en: Sample Tree
