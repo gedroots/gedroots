@@ -3,6 +3,7 @@
 use crate::node::Node;
 use crate::parse::{self, ParseError, TextFormat};
 use std::collections::HashMap;
+use std::sync::Arc;
 
 /// Types d'enregistrements de niveau 0 gérés par GEDCOM 7.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -72,8 +73,10 @@ impl RecordKind {
 #[derive(Debug, Clone, Default)]
 pub struct Gedcom {
     pub header: Node,
-    /// Enregistrements dans l'ordre du fichier (hors `HEAD` et `TRLR`).
-    pub records: Vec<Node>,
+    /// Enregistrements dans l'ordre du fichier (hors `HEAD` et `TRLR`). Partagés
+    /// entre les copies (historique d'annulation) : une modification ne copie que
+    /// l'enregistrement modifié (`Arc::make_mut`).
+    pub records: Vec<Arc<Node>>,
     pub format: TextFormat,
     index: HashMap<String, usize>,
 }
@@ -98,7 +101,7 @@ impl Gedcom {
             match n.tag.as_str() {
                 "HEAD" if header.is_none() => header = Some(n),
                 "TRLR" => {}
-                _ => records.push(n),
+                _ => records.push(Arc::new(n)),
             }
         }
         let header = header.ok_or(ParseError { line: 1, message: "en-tête HEAD manquant".into() })?;
@@ -114,7 +117,7 @@ impl Gedcom {
             s.push('\u{feff}');
         }
         parse::write_nodes(std::slice::from_ref(&self.header), 0, nl, &mut s);
-        parse::write_nodes(&self.records, 0, nl, &mut s);
+        parse::write_nodes(self.records.iter().map(|r| &**r), 0, nl, &mut s);
         s.push_str("0 TRLR");
         if self.format.final_newline {
             s.push_str(nl);
@@ -145,16 +148,22 @@ impl Gedcom {
     }
 
     pub fn get(&self, xref: &str) -> Option<&Node> {
-        self.index.get(xref).map(|&i| &self.records[i])
+        self.index.get(xref).map(|&i| &*self.records[i])
     }
 
     pub fn get_mut(&mut self, xref: &str) -> Option<&mut Node> {
         let i = *self.index.get(xref)?;
-        Some(&mut self.records[i])
+        Some(Arc::make_mut(&mut self.records[i]))
     }
 
     pub fn records_of(&self, kind: RecordKind) -> impl Iterator<Item = &Node> {
-        self.records.iter().filter(move |r| r.tag == kind.tag())
+        self.records.iter().map(|r| &**r).filter(move |r| r.tag == kind.tag())
+    }
+
+    /// Enregistrements à modifier : seuls ceux qui vérifient `touches` sont copiés,
+    /// les autres restent partagés avec l'historique d'annulation.
+    pub fn records_where_mut(&mut self, touches: impl Fn(&Node) -> bool) -> impl Iterator<Item = &mut Node> {
+        self.records.iter_mut().filter(move |r| touches(r)).map(Arc::make_mut)
     }
 
     pub fn count(&self, kind: RecordKind) -> usize {
@@ -205,7 +214,7 @@ impl Gedcom {
         if let Some(chan) = node.child("CHAN").cloned() {
             node.insert_child(Node { tag: "CREA".into(), ..chan });
         }
-        self.records.push(node);
+        self.records.push(Arc::new(node));
         self.reindex();
         xref
     }
@@ -218,7 +227,7 @@ impl Gedcom {
         if new_xref != xref && self.index.contains_key(&new_xref) {
             return Err(format!("l'identifiant @{new_xref}@ est déjà utilisé"));
         }
-        self.records[i] = node;
+        self.records[i] = Arc::new(node);
         if new_xref != xref {
             self.rename_pointers(xref, &new_xref);
         }
@@ -229,7 +238,9 @@ impl Gedcom {
     fn rename_pointers(&mut self, old: &str, new: &str) {
         let old_p = format!("@{old}@");
         let new_p = format!("@{new}@");
-        for r in self.records.iter_mut().chain(std::iter::once(&mut self.header)) {
+        let mentions = |n: &Node| n.any(&|n| n.value.as_deref() == Some(old_p.as_str()));
+        let header = std::iter::once(&mut self.header);
+        for r in self.records.iter_mut().filter(|r| mentions(r)).map(Arc::make_mut).chain(header) {
             r.walk_mut(&mut |n| {
                 if n.value.as_deref() == Some(old_p.as_str()) {
                     n.value = Some(new_p.clone());
@@ -241,7 +252,7 @@ impl Gedcom {
     /// Supprime un enregistrement et toutes les structures qui pointent vers lui.
     pub fn delete(&mut self, xref: &str) -> Option<Node> {
         let i = *self.index.get(xref)?;
-        let removed = self.records.remove(i);
+        let removed = Arc::unwrap_or_clone(self.records.remove(i));
         let p = format!("@{xref}@");
         fn strip(n: &mut Node, p: &str) {
             n.children.retain(|c| c.value.as_deref() != Some(p));
@@ -249,7 +260,7 @@ impl Gedcom {
                 strip(c, p);
             }
         }
-        for r in &mut self.records {
+        for r in self.records_where_mut(|r| r.children.iter().any(|c| c.any(&|n| n.value.as_deref() == Some(&p)))) {
             strip(r, &p);
         }
         strip(&mut self.header, &p);
@@ -259,7 +270,7 @@ impl Gedcom {
 
     /// Enregistrements qui pointent vers `xref` (citations, liens familiaux…).
     pub fn referrers(&self, xref: &str) -> Vec<&Node> {
-        self.records.iter().filter(|r| r.pointers().iter().any(|p| p == xref)).collect()
+        self.records.iter().map(|r| &**r).filter(|r| r.pointers().iter().any(|p| p == xref)).collect()
     }
 
     // ------------------------------------------------------------------

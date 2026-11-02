@@ -466,7 +466,7 @@ impl Gedcom {
     /// Renomme un lieu partout et met à jour ses coordonnées. Renvoie le nombre d'occurrences modifiées.
     pub fn update_place(&mut self, old: &str, new: &str, lat: &str, long: &str) -> usize {
         let mut count = 0;
-        for r in &mut self.records {
+        for r in self.records_where_mut(|r| r.any(&|n| n.tag == "PLAC" && n.val() == old)) {
             r.walk_mut(&mut |n| {
                 if n.tag == "PLAC" && n.val() == old {
                     count += 1;
