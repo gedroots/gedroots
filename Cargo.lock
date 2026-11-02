@@ -1828,6 +1828,7 @@ version = "0.1.0"
 name = "gedroots"
 version = "0.1.0"
 dependencies = [
+ "async-channel",
  "gedcom",
  "gpui-kit",
  "image",
