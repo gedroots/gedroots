@@ -29,7 +29,7 @@ use crate::document::{Gedcom, RecordKind};
 use crate::kinds::{SourceContent, medium, medium_label};
 use crate::model::{Individual, Media, Place, Repository, Source, event_label, sort_key};
 use crate::node::Node;
-use crate::search::{IndividualQuery, YearRange};
+use crate::search::{IndividualQuery, Kin, YearRange};
 
 /// Zone où l'on cherche.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -592,23 +592,34 @@ fn capitalize(s: &str) -> String {
     }
 }
 
+/// « en 1850 », « vers 1850 (± 5 ans) », « 1800–1850 », « avant 1800 ».
 fn years_label(r: &str) -> String {
     let r = r.trim();
     if let Some(y) = r.strip_prefix('<') {
         format!("avant {y}")
     } else if let Some(y) = r.strip_prefix('>') {
         format!("après {y}")
+    } else if let Some((y, m)) = r.split_once(['±', '~']) {
+        format!("vers {} (± {} ans)", y.trim(), m.trim())
+    } else if r.chars().all(|c| c.is_ascii_digit()) {
+        format!("en {r}")
     } else {
         r.replace('-', "–")
     }
 }
 
+/// « Jean GUYOT (1850–1912) », pour les propositions de proches.
+fn person_label(i: &Individual) -> String {
+    let y = i.years();
+    if y.is_empty() { i.display_name() } else { format!("{} ({y})", i.display_name()) }
+}
+
 /// Libellé du jeton d'un critère complet, ou `None` si ce mot n'est pas un critère valide
-/// de la zone (il reste alors du texte).
-pub fn chip_label(scope: Scope, word: &str) -> Option<String> {
+/// de la zone (il reste alors du texte). `g` donne le nom des personnes (`ascendants:@I1@`).
+pub fn chip_label(scope: Scope, word: &str, g: Option<&Gedcom>) -> Option<String> {
     if scope == Scope::Individuals {
         if sort_key(word) == "sosa" {
-            return Some("Ascendants".into());
+            return Some("Sosa".into());
         }
         let (k, v) = split(word)?;
         let q = IndividualQuery::parse(word);
@@ -621,7 +632,10 @@ pub fn chip_label(scope: Scope, word: &str) -> Option<String> {
             "vecu" | "vivant" | "en" => format!("Vivant en {v}"),
             "lieu" | "a" => format!("Lieu {v}"),
             "prof" | "profession" | "metier" => format!("Profession {v}"),
-            "nom" => format!("Nom {v}"),
+            "nom" => match v.strip_prefix('=') {
+                Some(v) => format!("Nom exact {}", v.trim()),
+                None => format!("Nom {v}"),
+            },
             "sexe" | "sex" => match q.sex {
                 Some('M') => "Hommes".into(),
                 Some('F') => "Femmes".into(),
@@ -631,7 +645,14 @@ pub fn chip_label(scope: Scope, word: &str) -> Option<String> {
             "avec" => feature_label("Avec", v),
             "sosa" => format!("Sosa {}", years_label(v)),
             "id" => format!("ID {v}"),
-            _ => return None,
+            k => {
+                let (kin, x) = (Kin::parse(k)?, v.trim_matches('@'));
+                let name = match g {
+                    Some(g) => g.individual(x)?.display_name(),
+                    None => x.to_string(),
+                };
+                format!("{} {name}", kin.label())
+            }
         });
     }
     let (k, v) = split(word)?;
@@ -673,14 +694,14 @@ fn feature_label(prefix: &str, v: &str) -> String {
 
 /// Critères complets d'une requête : (plage, texte, libellé du jeton). Le dernier
 /// mot n'en fait partie que s'il est suivi d'une espace (on est encore en train de le taper).
-pub fn chips(scope: Scope, q: &str) -> Vec<(Range<usize>, String, String)> {
+pub fn chips(scope: Scope, q: &str, g: Option<&Gedcom>) -> Vec<(Range<usize>, String, String)> {
     let ended = q.ends_with(char::is_whitespace);
     let ws = words(q);
     let n = ws.len();
     ws.into_iter()
         .enumerate()
         .filter(|(i, _)| ended || *i + 1 < n)
-        .filter_map(|(_, (r, w))| chip_label(scope, w).map(|l| (r, w.to_string(), l)))
+        .filter_map(|(_, (r, w))| chip_label(scope, w, g).map(|l| (r, w.to_string(), l)))
         .collect()
 }
 
@@ -692,17 +713,20 @@ pub struct Suggestion {
     pub label: String,
     /// Critère à insérer à la place du mot en cours.
     pub insert: String,
+    /// Nombre de mots remplacés, en partant du mot en cours (2 pour « jean guy » →
+    /// `ascendants:@I1@`).
+    pub consumes: usize,
 }
 
 fn sugg(group: &'static str, label: impl Into<String>, insert: impl Into<String>) -> Suggestion {
-    Suggestion { group, label: label.into(), insert: insert.into() }
+    Suggestion { group, label: label.into(), insert: insert.into(), consumes: 1 }
 }
 
 /// Critères sans valeur proposés dans chaque zone.
 fn fixed(scope: Scope) -> Vec<Suggestion> {
     let list: &[(&str, &str)] = match scope {
         Scope::Individuals => &[
-            ("Ascendants", "sosa"),
+            ("Sosa", "sosa"),
             ("Hommes", "sexe:h"),
             ("Femmes", "sexe:f"),
             ("Sans source", "sans:source"),
@@ -740,9 +764,17 @@ fn matches_word(value: &str, partial: &str) -> bool {
 
 impl Gedcom {
     /// Propositions pour le mot en cours `partial` (vide : les critères de la zone).
+    /// `previous` : les mots libres tapés juste avant (« jean » dans « jean guy »),
+    /// pour proposer les proches d'une personne.
     /// Les valeurs viennent du fichier (lieux, noms, professions, types d'actes…).
     /// L'appelant compte les résultats de chacune et écarte celles qui n'en ont pas.
-    pub fn suggest(&self, scope: Scope, partial: &str, media: Option<&MediaIndex>) -> Vec<Suggestion> {
+    pub fn suggest(
+        &self,
+        scope: Scope,
+        previous: &[&str],
+        partial: &str,
+        media: Option<&MediaIndex>,
+    ) -> Vec<Suggestion> {
         let p = sort_key(unquote(partial).trim());
         if p.contains(':') {
             return Vec::new();
@@ -750,13 +782,50 @@ impl Gedcom {
         let mut out: Vec<Suggestion> = Vec::new();
         // Une année ou une période : naissance, décès, en vie.
         if scope == Scope::Individuals && !p.is_empty() && YearRange::parse(&p).is_some() {
+            let year = p.chars().all(|c| c.is_ascii_digit());
             let label = years_label(&p);
             out.push(sugg("Dates", format!("Né {label}"), format!("né:{p}")));
+            if year {
+                out.push(sugg("Dates", format!("Né vers {p}"), format!("né:{p}±5")));
+            }
             out.push(sugg("Dates", format!("Mort {label}"), format!("mort:{p}")));
-            if p.chars().all(|c| c.is_ascii_digit()) {
+            if year {
+                out.push(sugg("Dates", format!("Mort vers {p}"), format!("mort:{p}±5")));
                 out.push(sugg("Dates", format!("Vivant en {p}"), format!("vécu:{p}")));
             }
             return out;
+        }
+        // Les mots tapés désignent une ou deux personnes : leurs proches.
+        let mut family: Vec<Suggestion> = Vec::new();
+        if scope == Scope::Individuals && p.chars().count() >= 2 {
+            let mut text: Vec<&str> = previous.to_vec();
+            text.push(partial);
+            let q = IndividualQuery::parse(&text.join(" "));
+            let found: Vec<Individual> = self
+                .records_of(RecordKind::Individual)
+                .map(Individual::new)
+                .filter(|i| q.matches(self, i))
+                .take(3)
+                .collect();
+            if (1..=2).contains(&found.len()) {
+                let kins: &[Kin] =
+                    if found.len() == 1 { &Kin::ALL } else { &[Kin::Ancestors, Kin::Descendants, Kin::Spouses] };
+                for i in &found {
+                    for k in kins {
+                        family.push(Suggestion {
+                            group: "Famille",
+                            // Les années ne servent qu'à départager deux personnes.
+                            label: if found.len() == 1 {
+                                format!("{} {}", k.label(), i.display_name())
+                            } else {
+                                format!("{} {}", k.label(), person_label(i))
+                            },
+                            insert: format!("{}:@{}@", k.key(), i.xref()),
+                            consumes: previous.len() + 1,
+                        });
+                    }
+                }
+            }
         }
         if p.chars().count() >= 2 {
             match scope {
@@ -880,9 +949,13 @@ impl Gedcom {
         }
         groups.sort_by_key(|g| !starts(g));
         let mut ordered: Vec<Suggestion> = Vec::new();
+        // Plusieurs mots (« jean guyot ») : on cherche sûrement une personne.
+        let (first, last) = if previous.is_empty() { (Vec::new(), family) } else { (family, Vec::new()) };
+        ordered.extend(first);
         for g in groups {
             ordered.extend(out.iter().filter(|s| s.group == g).cloned());
         }
+        ordered.extend(last);
         ordered.extend(fixed(scope).into_iter().filter(|s| p.is_empty() || matches_word(&s.label, &p)));
         ordered
     }
@@ -918,14 +991,14 @@ mod tests {
 
     #[test]
     fn chips_only_for_finished_criteria() {
-        let c = chips(Scope::Individuals, "né:1800-1850 sans:source guyot lieu:tro");
+        let c = chips(Scope::Individuals, "né:1800-1850 sans:source guyot lieu:tro", None);
         let labels: Vec<&str> = c.iter().map(|c| c.2.as_str()).collect();
         assert_eq!(labels, ["Né 1800–1850", "Sans source"]);
-        let c = chips(Scope::Individuals, "lieu:troyes ");
+        let c = chips(Scope::Individuals, "lieu:troyes ", None);
         assert_eq!(c[0].2, "Lieu troyes");
-        assert!(chips(Scope::Individuals, "sans:truc ").is_empty());
-        assert_eq!(chips(Scope::Media, "format:pdf ")[0].2, "PDF");
-        assert!(chips(Scope::Places, "format:pdf ").is_empty());
+        assert!(chips(Scope::Individuals, "sans:truc ", None).is_empty());
+        assert_eq!(chips(Scope::Media, "format:pdf ", None)[0].2, "PDF");
+        assert!(chips(Scope::Places, "format:pdf ", None).is_empty());
     }
 
     #[test]
@@ -973,8 +1046,8 @@ mod tests {
         assert_eq!(g.search(Scope::Media, "pour:marchand", Some(&index), None).len(), 2);
         assert_eq!(g.search(Scope::Media, "événement:naissance", Some(&index), None).len(), 1);
         assert_eq!(g.search(Scope::Media, "support:photo", Some(&index), None).len(), 1);
-        assert_eq!(chip_label(Scope::Media, "support:photo").as_deref(), Some("Support photo"));
-        assert!(g.suggest(Scope::Media, "pho", Some(&index)).iter().any(|s| s.insert == "support:photo"));
+        assert_eq!(chip_label(Scope::Media, "support:photo", None).as_deref(), Some("Support photo"));
+        assert!(g.suggest(Scope::Media, &[], "pho", Some(&index)).iter().any(|s| s.insert == "support:photo"));
     }
 
     #[test]
@@ -998,15 +1071,74 @@ mod tests {
     #[test]
     fn suggestions_come_from_the_file() {
         let g = ged();
-        let s = g.suggest(Scope::Individuals, "sai", None);
+        let s = g.suggest(Scope::Individuals, &[], "sai", None);
         assert!(s.iter().any(|s| s.group == "Lieu" && s.insert == "lieu:Saint-Lô"));
-        let s = g.suggest(Scope::Individuals, "march", None);
+        let s = g.suggest(Scope::Individuals, &[], "march", None);
         assert_eq!(s[0].insert, "nom:MARCHAND");
-        let s = g.suggest(Scope::Individuals, "1850", None);
+        let s = g.suggest(Scope::Individuals, &[], "1850", None);
         assert_eq!(s[0].insert, "né:1850");
-        let s = g.suggest(Scope::Sources, "nais", None);
+        let s = g.suggest(Scope::Sources, &[], "nais", None);
         assert!(s.iter().any(|s| s.insert == "type:naissance"));
         // Champ vide : les critères de la zone.
-        assert!(g.suggest(Scope::Places, "", None).iter().all(|s| s.group == "Critères"));
+        assert!(g.suggest(Scope::Places, &[], "", None).iter().all(|s| s.group == "Critères"));
+    }
+
+    const FAMILY: &str = "0 HEAD\n1 GEDC\n2 VERS 7.0\n\
+        0 @I1@ INDI\n1 NAME Jean /GUYOT/\n1 BIRT\n2 DATE 1700\n1 FAMC @F0@\n1 FAMS @F1@\n\
+        0 @I0@ INDI\n1 NAME Pierre /GUYAU/\n1 FAMS @F0@\n\
+        0 @I2@ INDI\n1 NAME Marie /DUPONT/\n1 FAMS @F1@\n\
+        0 @I3@ INDI\n1 NAME Paul /GUILLOT/\n1 BIRT\n2 DATE 1733\n1 FAMC @F1@\n1 FAMS @F2@\n\
+        0 @I4@ INDI\n1 NAME Luc /GUYOT/\n1 BIRT\n2 DATE 1760\n1 FAMC @F2@\n\
+        0 @I5@ INDI\n1 NAME Anne /MARTIN/\n1 BIRT\n2 DATE 1735\n1 FAMC @F1@\n\
+        0 @F0@ FAM\n1 HUSB @I0@\n1 CHIL @I1@\n\
+        0 @F1@ FAM\n1 HUSB @I1@\n1 WIFE @I2@\n1 CHIL @I3@\n1 CHIL @I5@\n\
+        0 @F2@ FAM\n1 HUSB @I3@\n1 CHIL @I4@\n\
+        0 TRLR\n";
+
+    fn family() -> Gedcom {
+        Gedcom::parse(FAMILY).unwrap()
+    }
+
+    fn ids(g: &Gedcom, q: &str) -> Vec<String> {
+        let mut v: Vec<String> = g.search(Scope::Individuals, q, None, None).into_iter().collect();
+        v.sort();
+        v
+    }
+
+    #[test]
+    fn approximate_years_and_name_variants() {
+        let g = family();
+        assert_eq!(ids(&g, "né:1730±5"), ["I3", "I5"]);
+        assert_eq!(ids(&g, "né:1730"), Vec::<String>::new());
+        assert_eq!(chip_label(Scope::Individuals, "né:1730±5", None).as_deref(), Some("Né vers 1730 (± 5 ans)"));
+        assert_eq!(chip_label(Scope::Individuals, "mort:1730", None).as_deref(), Some("Mort en 1730"));
+        // Guyot, Guyau, Guillot : un même nom.
+        assert_eq!(ids(&g, "nom:guyot"), ["I0", "I1", "I3", "I4"]);
+        assert_eq!(ids(&g, "nom:=guyot"), ["I1", "I4"]);
+        assert_eq!(chip_label(Scope::Individuals, "nom:=guyot", None).as_deref(), Some("Nom exact guyot"));
+    }
+
+    #[test]
+    fn relatives_of_a_person() {
+        let g = family();
+        assert_eq!(ids(&g, "ascendants:@I4@"), ["I0", "I1", "I2", "I3"]);
+        assert_eq!(ids(&g, "descendants:@I1@"), ["I3", "I4", "I5"]);
+        assert_eq!(ids(&g, "enfants:@I1@"), ["I3", "I5"]);
+        assert_eq!(ids(&g, "parents:@I3@"), ["I1", "I2"]);
+        assert_eq!(ids(&g, "conjoints:@I2@"), ["I1"]);
+        assert_eq!(ids(&g, "fratrie:@I3@"), ["I5"]);
+        assert_eq!(ids(&g, "descendants:@I1@ sexe:f"), Vec::<String>::new());
+        assert_eq!(
+            chip_label(Scope::Individuals, "ascendants:@I4@", Some(&g)).as_deref(),
+            Some("Ascendants de Luc GUYOT")
+        );
+        assert!(chip_label(Scope::Individuals, "ascendants:@I99@", Some(&g)).is_none());
+        // « luc guy » : une seule personne, ses proches d'abord.
+        let s = g.suggest(Scope::Individuals, &["luc"], "guy", None);
+        assert_eq!(s[0].group, "Famille");
+        assert_eq!(s[0].consumes, 2);
+        assert!(s.iter().any(|s| s.insert == "ascendants:@I4@" && s.label == "Ascendants de Luc GUYOT"));
+        let s = g.suggest(Scope::Individuals, &[], "1730", None);
+        assert!(s.iter().any(|s| s.insert == "né:1730±5" && s.label == "Né vers 1730"));
     }
 }

@@ -44,6 +44,8 @@ actions!(
         LinkChild,
         LinkSibling,
         GoToRoot,
+        SearchAncestors,
+        SearchDescendants,
         AttachFiles,
         LinkMedia,
         CropMedia,
@@ -313,6 +315,8 @@ fn model_with(recents: &[std::path::PathBuf]) -> Vec<(&'static str, Vec<Item>)> 
             Sep,
             a(label::GO_TO_ROOT, GoToRoot),
             a("Lien de parenté avec…", KinshipWith),
+            a("Rechercher ses ascendants", SearchAncestors),
+            a("Rechercher ses descendants", SearchDescendants),
         ],
     ));
     // Dépôts et notes partagées hors de la barre latérale : on les crée depuis le menu Source.

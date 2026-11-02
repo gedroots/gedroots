@@ -173,6 +173,8 @@ impl Workspace {
                 let d = on!(d, cx, LinkChild, |this, w, cx| this.relative(Relation::Child, true, w, cx));
                 let d = on!(d, cx, LinkSibling, |this, w, cx| this.relative(Relation::Sibling, true, w, cx));
                 let d = on!(d, cx, KinshipWith, |this, w, cx| this.ask_kinship(w, cx));
+                let d = on!(d, cx, SearchAncestors, |this, w, cx| this.search_kin(Kin::Ancestors, w, cx));
+                let d = on!(d, cx, SearchDescendants, |this, w, cx| this.search_kin(Kin::Descendants, w, cx));
                 let d = on!(d, cx, LinkMedia, |this, w, cx| {
                     if let Some(owner) = this.selected.clone() {
                         this.open_picker(PickPurpose::MediaFor { owner, crop: false }, w, cx)
@@ -313,6 +315,16 @@ impl Workspace {
         self.tokenize_search(window, cx);
         self.rebuild_rows(cx);
         cx.notify();
+    }
+
+    /// Recherche les ascendants ou descendants de la personne affichée.
+    fn search_kin(&mut self, kin: Kin, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(x) = self.selected.clone() else { return };
+        if self.view != View::Individuals {
+            self.show_view(View::Individuals, window, cx);
+        }
+        self.set_query(format!("{}:@{x}@ ", kin.key()), window, cx);
+        self.filter.update(cx, |f, cx| f.focus(window, cx));
     }
 
     fn toggle_filter(&mut self, token: &str, window: &mut Window, cx: &mut Context<Self>) {

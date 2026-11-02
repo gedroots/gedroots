@@ -42,6 +42,7 @@ pub mod multipage;
 pub mod node;
 pub mod parse;
 pub mod pedigree;
+pub mod phonetic;
 pub mod quality;
 pub mod query;
 pub mod relations;
@@ -67,7 +68,7 @@ pub use parse::{ParseError, node_from_string, node_to_string};
 pub use pedigree::{DescNode, DescUnion};
 pub use query::{MediaIndex, OTHER_TYPE, RecordQuery, Scope, chip_label, chips, criterion};
 pub use relations::{FAMILY_EVENTS, INDIVIDUAL_EVENTS, NewEvent, Relation, is_media_file, mime_for, title_from_file};
-pub use search::{IndividualQuery, has_token, toggle_token};
+pub use search::{IndividualQuery, Kin, has_token, toggle_token};
 pub use settings::{FileInfo, FileSettings, IgnoredIssue};
 pub use weblink::{WebLink, WebLinkKind, host, is_web_url, normalize_url};
 
