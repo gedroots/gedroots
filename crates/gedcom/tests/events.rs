@@ -230,3 +230,47 @@ fn deleting_media_strips_event_links() {
     g.delete_record("M1");
     assert!(g.event_media("F1", marr).is_empty());
 }
+
+#[test]
+fn edit_event_note() {
+    french();
+    let mut g = Gedcom::parse(GED).unwrap();
+    let i = idx(&g, "BIRT");
+    let mut ev = g.read_event("I1", i).unwrap();
+    assert_eq!(ev.note, "né à la ferme");
+
+    // Multi-line note: written with CONT, read back whole.
+    ev.note = "né à la ferme\ndes Grands Prés".into();
+    g.update_event("I1", i, &ev).unwrap();
+    let n = &g.get("I1").unwrap().children[i];
+    assert_eq!(n.child("NOTE").unwrap().child_val("CONT"), Some("des Grands Prés"));
+    assert_eq!(g.read_event("I1", i).unwrap().note, ev.note);
+
+    // Only the first note is edited; a second one is kept.
+    g.get_mut("I1").unwrap().children[i].children.push(Node::with_value("NOTE", "seconde note"));
+    ev.note.clear();
+    g.update_event("I1", i, &ev).unwrap();
+    let notes: Vec<String> = g.get("I1").unwrap().children[i].children_with("NOTE").map(|n| n.text()).collect();
+    assert_eq!(notes, ["seconde note"]);
+
+    // Note on an event without any detail: no “Y”, and back to “Y” once removed.
+    let d = idx(&g, "DEAT");
+    let mut death = g.read_event("I1", d).unwrap();
+    death.note = "mort à la guerre".into();
+    g.update_event("I1", d, &death).unwrap();
+    assert_eq!(g.get("I1").unwrap().children[d].child_val("NOTE"), Some("mort à la guerre"));
+    death.note.clear();
+    g.update_event("I1", d, &death).unwrap();
+    let n = &g.get("I1").unwrap().children[d];
+    assert!(n.child("NOTE").is_none() && n.value.as_deref() == Some("Y"));
+}
+
+#[test]
+fn add_event_with_note() {
+    french();
+    let mut g = Gedcom::parse(GED).unwrap();
+    let ev = NewEvent { tag: "BURI".into(), note: "caveau familial".into(), ..Default::default() };
+    g.add_event("I2", &ev).unwrap();
+    let n = g.get("I2").unwrap().children.iter().find(|c| c.tag == "BURI").unwrap();
+    assert_eq!((n.value.as_deref(), n.child_val("NOTE")), (None, Some("caveau familial")));
+}

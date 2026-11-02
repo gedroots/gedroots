@@ -192,6 +192,11 @@ impl Gedcom {
         if let Some(s) = ev.source.as_deref().filter(|s| !s.is_empty()) {
             e.children.push(Node::with_value("SOUR", format!("@{}@", s.trim_matches('@'))));
         }
+        if !ev.note.trim().is_empty() {
+            let mut n = Node::new("NOTE");
+            n.set_text(ev.note.trim_end());
+            e.children.push(n);
+        }
         // Event without any detail: “1 DEAT Y” (it happened).
         if !attribute && e.children.is_empty() {
             e.value = Some("Y".into());
@@ -533,6 +538,8 @@ pub struct NewEvent {
     pub date_phrase: String,
     pub place: String,
     pub source: Option<String>,
+    /// Text of the event's first note (`NOTE`); the other notes are kept as they are.
+    pub note: String,
 }
 
 /// Events offered for adding: individual, then family events.
