@@ -44,7 +44,7 @@ impl Workspace {
         let can_undo = doc.is_some_and(|d| !d.history.is_empty());
         let can_redo = doc.is_some_and(|d| !d.future.is_empty());
         let individuals = has_doc && self.view == View::Individuals && self.act_editor.is_none();
-        let attachable = matches!(sel_kind, Some(RecordKind::Individual | RecordKind::Source));
+        let attachable = matches!(sel_kind, Some(RecordKind::Individual | RecordKind::Family | RecordKind::Source));
         let web_linkable = sel.as_ref().is_some_and(|x| g.is_some_and(|g| g.can_have_web_links(x)));
 
         let d = on!(d, cx, OpenFile, |this, w, cx| this.open_file(&OpenFile, w, cx));
@@ -174,17 +174,7 @@ impl Workspace {
                 let d = on!(d, cx, LinkSibling, |this, w, cx| this.relative(Relation::Sibling, true, w, cx));
                 let d = on!(d, cx, KinshipWith, |this, w, cx| this.ask_kinship(w, cx));
                 let d = on!(d, cx, SearchAncestors, |this, w, cx| this.search_kin(Kin::Ancestors, w, cx));
-                let d = on!(d, cx, SearchDescendants, |this, w, cx| this.search_kin(Kin::Descendants, w, cx));
-                let d = on!(d, cx, LinkMedia, |this, w, cx| {
-                    if let Some(owner) = this.selected.clone() {
-                        this.open_picker(PickPurpose::MediaFor { owner, crop: false }, w, cx)
-                    }
-                });
-                on!(d, cx, CropMedia, |this, w, cx| {
-                    if let Some(owner) = this.selected.clone() {
-                        this.open_picker(PickPurpose::MediaFor { owner, crop: true }, w, cx)
-                    }
-                })
+                on!(d, cx, SearchDescendants, |this, w, cx| this.search_kin(Kin::Descendants, w, cx))
             })
             .when(indi.is_some(), |d| {
                 on!(d, cx, AddEvent, |this, w, cx| {
@@ -200,13 +190,7 @@ impl Workspace {
                     }
                 })
             })
-            .when(attachable, |d| {
-                on!(d, cx, AttachFiles, |this, w, cx| {
-                    if let Some(x) = this.selected.clone() {
-                        this.choose_files(x, w, cx)
-                    }
-                })
-            })
+            .when(attachable, |d| on!(d, cx, MediaGallery, |this, w, cx| this.open_gallery_for_selection(w, cx)))
             .when(photo.is_some(), |d| on!(d, cx, TagPerson, |this, w, cx| this.tag_person_on_photo(cx)))
             .when(media.is_some(), |d| {
                 on!(d, cx, AttachMediaTo, |this, w, cx| {

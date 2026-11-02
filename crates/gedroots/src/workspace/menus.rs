@@ -76,7 +76,7 @@ fn read<R>(ws: &Ws, cx: &App, f: impl FnOnce(&Workspace, &Gedcom) -> R) -> Optio
 
 impl Workspace {
     /// Ouvre un enregistrement dans l'onglet voulu.
-    fn open_in(&mut self, xref: String, tab: CenterTab, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn open_in(&mut self, xref: String, tab: CenterTab, window: &mut Window, cx: &mut Context<Self>) {
         self.act_editor = None;
         self.goto(xref, window, cx);
         self.tab = tab;
@@ -138,14 +138,13 @@ impl Workspace {
             }) else {
                 return menu;
             };
-            let (o1, o2, o3, o4) = (owner.clone(), owner.clone(), owner.clone(), owner.clone());
+            let (o1, o2, o3) = (owner.clone(), owner.clone(), owner.clone());
             menu.item(act(&ws, "Modifier l'événement…", move |this, w, cx| {
                 this.open_event_dialog(o1.clone(), Some(ix), w, cx)
             }))
             .separator()
-            .item(act(&ws, label::ATTACH_FILES, move |this, w, cx| this.choose_files_for_event(o3.clone(), ix, w, cx)))
-            .item(act(&ws, "Lier un média existant…", move |this, w, cx| {
-                this.open_picker(PickPurpose::MediaToEvent { owner: o4.clone(), ix }, w, cx)
+            .item(act(&ws, label::MEDIA_GALLERY, move |this, w, cx| {
+                this.open_gallery(GalleryTarget::Event { owner: o3.clone(), ix }, w, cx)
             }))
             .separator()
             .when_some(place, |m, p| {
@@ -322,7 +321,9 @@ pub(super) fn person_menu(ws: Ws, x: String, from: From) -> MenuBuilder {
             })
         })
         .item(act(&ws, label::ADD_EVENT, move |this, w, cx| this.open_event_dialog(x5.clone(), None, w, cx)))
-        .item(act(&ws, label::ATTACH_FILES, move |this, w, cx| this.choose_files(x6.clone(), w, cx)))
+        .item(act(&ws, label::MEDIA_GALLERY, move |this, w, cx| {
+            this.open_gallery(GalleryTarget::Record(x6.clone()), w, cx)
+        }))
         .when_some(
             match &from {
                 From::Relative(indi, fam, label) => Some((indi.clone(), fam.clone(), *label)),
@@ -380,7 +381,9 @@ fn other_menu(ws: Ws, x: String, kind: RecordKind, from: From) -> MenuBuilder {
                         this.goto(x2.clone(), w, cx);
                         this.enter_act(w, cx)
                     }))
-                    .item(act(&ws, label::ATTACH_FILES, move |this, w, cx| this.choose_files(x3.clone(), w, cx)))
+                    .item(act(&ws, label::MEDIA_GALLERY, move |this, w, cx| {
+                        this.open_gallery(GalleryTarget::Record(x3.clone()), w, cx)
+                    }))
             })
             .when(kind == RecordKind::Media, |m| {
                 m.separator()

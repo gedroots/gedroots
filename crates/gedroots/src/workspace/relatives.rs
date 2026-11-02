@@ -16,10 +16,6 @@ pub enum PickPurpose {
     TagPerson { media: String, page: usize, crop: Crop },
     /// Le média choisi est ajouté à la fin de `media`, comme nouvelles pages.
     MergeInto { media: String },
-    /// Le média choisi est lié à l'événement `ix` de `owner`.
-    MediaToEvent { owner: String, ix: usize },
-    /// Le média choisi est lié à `owner` ; `crop` : on y délimite ensuite sa zone.
-    MediaFor { owner: String, crop: bool },
     /// Source où saisir un acte (ou nouvelle source, choix vide).
     ActSource,
     /// Lien de parenté entre `indi` et la personne choisie (rien n'est modifié).
@@ -38,15 +34,6 @@ impl PickPurpose {
             PickPurpose::Kinship { indi } => format!("Lien de parenté de {} avec…", g.record_label(indi)),
             PickPurpose::MergeInto { media } => format!("Ajouter à « {} » les pages du média…", g.record_label(media)),
             PickPurpose::ActSource => "Saisir un acte dans la source…".into(),
-            PickPurpose::MediaFor { owner, crop: false } => format!("Lier un média à {}", g.record_label(owner)),
-            PickPurpose::MediaFor { owner, crop: true } => {
-                format!("Recadrer une image pour {}", g.record_label(owner))
-            }
-            PickPurpose::MediaToEvent { owner, ix } => format!(
-                "Lier un média à « {} » · {}",
-                g.event_title(owner, *ix).unwrap_or_default(),
-                g.record_label(owner)
-            ),
         }
     }
 }
@@ -98,7 +85,11 @@ pub fn scan_media_files(ged_path: Option<&std::path::Path>) -> Vec<String> {
 
 /// Fichiers non encore rattachés dont le nom contient les mots-clés (nom, prénom…),
 /// du plus pertinent au moins pertinent.
-fn suggest_files(files: &[String], referenced: &std::collections::HashSet<String>, keys: &[String]) -> Vec<String> {
+pub(super) fn suggest_files(
+    files: &[String],
+    referenced: &std::collections::HashSet<String>,
+    keys: &[String],
+) -> Vec<String> {
     let Some(first) = keys.first() else { return vec![] };
     let mut scored: Vec<(usize, &String)> = files
         .iter()
@@ -116,7 +107,7 @@ fn suggest_files(files: &[String], referenced: &std::collections::HashSet<String
     scored.into_iter().take(6).map(|(_, f)| f.clone()).collect()
 }
 
-fn keywords(s: &str) -> Vec<String> {
+pub(super) fn keywords(s: &str) -> Vec<String> {
     sort_key(s).split(|c: char| !c.is_alphanumeric()).filter(|w| w.chars().count() >= 3).map(str::to_string).collect()
 }
 
@@ -185,9 +176,7 @@ impl Workspace {
 
     pub(super) fn open_picker(&mut self, purpose: PickPurpose, window: &mut Window, cx: &mut Context<Self>) {
         let hint = match purpose {
-            PickPurpose::MergeInto { .. } | PickPurpose::MediaToEvent { .. } | PickPurpose::MediaFor { .. } => {
-                "Titre ou fichier du média…"
-            }
+            PickPurpose::MergeInto { .. } => "Titre ou fichier du média…",
             PickPurpose::ActSource => "Titre de la source, ou d'une nouvelle source…",
             _ => "Nom, prénom… (critères : né:1850 lieu:troyes)",
         };
@@ -268,36 +257,12 @@ impl Workspace {
             (distance, sort_key(&i.surname()), sort_key(&i.given()))
         });
         let mut out: Vec<String> = Vec::new();
-        let media_search = match &p.purpose {
-            PickPurpose::MergeInto { media } => Some(Some(media.as_str())),
-            PickPurpose::MediaToEvent { .. } | PickPurpose::MediaFor { .. } => Some(None),
-            _ => None,
-        };
-        if let Some(skip) = media_search {
-            // Lier à un enregistrement : pas les pages web, ni les médias déjà liés ;
-            // recadrer : les images seulement (déjà liées ou non).
-            let (linked, only_images): (Vec<&str>, bool) = match &p.purpose {
-                PickPurpose::MediaFor { owner, crop } => (
-                    if *crop {
-                        vec![]
-                    } else {
-                        g.get(owner)
-                            .map(|n| n.children_with("OBJE").filter_map(|o| o.pointer()).collect())
-                            .unwrap_or_default()
-                    },
-                    *crop,
-                ),
-                _ => (vec![], false),
-            };
-            let for_record = matches!(p.purpose, PickPurpose::MediaFor { .. });
+        if let PickPurpose::MergeInto { media } = &p.purpose {
             // Médias, d'après leur titre ou leurs fichiers.
             let words: Vec<String> = text.split_whitespace().map(sort_key).collect();
             for r in g.records_of(RecordKind::Media) {
-                let Some(x) = r.xref.as_deref().filter(|x| Some(*x) != skip) else { continue };
+                let Some(x) = r.xref.as_deref().filter(|x| *x != media) else { continue };
                 let m = Media::new(r);
-                if linked.contains(&x) || (only_images && !m.is_image()) || (for_record && m.web_url().is_some()) {
-                    continue;
-                }
                 let k = sort_key(&format!(
                     "{} {}",
                     m.title(),
@@ -379,10 +344,6 @@ impl Workspace {
             self.open_act(source, None, window, cx);
             return;
         }
-        if let PickPurpose::MediaFor { owner, crop: true } = p.purpose {
-            self.start_crop_for(owner, chosen, window, cx);
-            return;
-        }
         if let PickPurpose::Kinship { indi } = p.purpose {
             self.kinship = Some((indi, chosen));
             cx.notify();
@@ -411,15 +372,6 @@ impl Workspace {
                     g.merge_media(&[media.clone(), chosen])?;
                     Ok((format!("« {who} » ajouté au média ({n} page{})", plural(n)), Some(media)))
                 }
-                PickPurpose::MediaToEvent { owner, ix } => {
-                    g.attach_media_to_event(&owner, ix, &chosen)?;
-                    let what = g.event_title(&owner, ix).unwrap_or_default().to_lowercase();
-                    Ok((format!("« {who} » lié à l'événement {what} de {}", g.record_label(&owner)), None))
-                }
-                PickPurpose::MediaFor { owner, .. } => {
-                    g.attach_media(&owner, &chosen)?;
-                    Ok((format!("« {who} » lié à {}", g.record_label(&owner)), None))
-                }
                 // Traité avant (n'écrit rien par lui-même).
                 PickPurpose::ActSource => Ok((String::new(), None)),
                 PickPurpose::TagPerson { media, page, crop } => {
@@ -445,112 +397,6 @@ impl Workspace {
         }
     }
 
-    /// Crée (ou réutilise) les médias des fichiers et les rattache à `record` (si donné).
-    pub(super) fn attach_files(
-        &mut self,
-        record: Option<String>,
-        files: Vec<String>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        if files.is_empty() {
-            return;
-        }
-        let base = self.ged_dir();
-        self.mutate(window, cx, |g| {
-            let mut created = Vec::new();
-            for f in &files {
-                let m = g.media_for_file(f);
-                if let Some(r) = &record {
-                    g.attach_media(r, &m)?;
-                }
-                created.push(m);
-            }
-            let n = files.len();
-            let mut msg = match &record {
-                Some(r) => format!("{n} fichier{} rattaché{} à {}", plural(n), plural(n), g.record_label(r)),
-                None => format!("{n} média{} créé{}", plural(n), plural(n)),
-            };
-            msg.push_str(&super::media_files::store_new_media(g, base.as_deref(), &created));
-            Ok((msg, None))
-        });
-    }
-
-    /// Crée (ou réutilise) les médias des fichiers et les lie à l'événement `ix` de `owner`.
-    pub(super) fn attach_files_to_event(
-        &mut self,
-        owner: String,
-        ix: usize,
-        files: Vec<String>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        if files.is_empty() {
-            return;
-        }
-        let base = self.ged_dir();
-        self.mutate(window, cx, |g| {
-            let mut created = Vec::new();
-            for f in &files {
-                let m = g.media_for_file(f);
-                g.attach_media_to_event(&owner, ix, &m)?;
-                created.push(m);
-            }
-            let n = files.len();
-            let what = g.event_title(&owner, ix).unwrap_or_default().to_lowercase();
-            let mut msg = format!(
-                "{n} fichier{} rattaché{} à l'événement {what} de {}",
-                plural(n),
-                plural(n),
-                g.record_label(&owner)
-            );
-            msg.push_str(&super::media_files::store_new_media(g, base.as_deref(), &created));
-            Ok((msg, None))
-        });
-    }
-
-    pub(super) fn choose_files_for_event(
-        &mut self,
-        owner: String,
-        ix: usize,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        let rx = cx.prompt_for_paths(PathPromptOptions {
-            files: true,
-            directories: false,
-            multiple: true,
-            prompt: Some("Rattacher".into()),
-        });
-        cx.spawn_in(window, async move |this, cx| {
-            if let Ok(Ok(Some(paths))) = rx.await {
-                let _ = this.update_in(cx, |this, window, cx| {
-                    let files = paths.iter().map(|p| this.file_value(p)).collect();
-                    this.attach_files_to_event(owner, ix, files, window, cx);
-                });
-            }
-        })
-        .detach();
-    }
-
-    pub(super) fn choose_files(&mut self, record: String, window: &mut Window, cx: &mut Context<Self>) {
-        let rx = cx.prompt_for_paths(PathPromptOptions {
-            files: true,
-            directories: false,
-            multiple: true,
-            prompt: Some("Rattacher".into()),
-        });
-        cx.spawn_in(window, async move |this, cx| {
-            if let Ok(Ok(Some(paths))) = rx.await {
-                let _ = this.update_in(cx, |this, window, cx| {
-                    let files = paths.iter().map(|p| this.file_value(p)).collect();
-                    this.attach_files(Some(record), files, window, cx);
-                });
-            }
-        })
-        .detach();
-    }
-
     pub(super) fn rescan_media(&mut self) {
         let path = self.doc.as_ref().and_then(|d| d.path.clone());
         self.media_files = Rc::new(scan_media_files(path.as_deref()));
@@ -559,76 +405,6 @@ impl Workspace {
     // ------------------------------------------------------------------
     // Rendu
     // ------------------------------------------------------------------
-
-    /// Section « Ajouter / lier » du panneau de détail, selon la vue.
-    pub(super) fn render_actions(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
-        let doc = self.doc.as_ref()?;
-        let key = self.selected.clone()?;
-        let g = &doc.ged;
-        let section = || v_flex().p_4().gap_2().border_b_1().border_color(theme::border());
-        let el = match self.view {
-            View::Individuals => {
-                let i = g.individual(&key)?;
-                // Détacher un proche : clic droit sur sa ligne dans « Famille ».
-                let mut media_keys = keywords(&i.surname());
-                media_keys.extend(keywords(&i.given()).into_iter().take(1));
-                if !self.has_suggestions(&media_keys) {
-                    return None;
-                }
-                section().child(self.render_media_drop(&key, media_keys, cx))
-            }
-            View::Sources => {
-                let keys = keywords(&g.record_label(&key));
-                if !self.has_suggestions(&keys) {
-                    return None;
-                }
-                section().child(self.render_media_drop(&key, keys, cx))
-            }
-            _ => return None,
-        };
-        Some(el.into_any_element())
-    }
-
-    fn has_suggestions(&self, keys: &[String]) -> bool {
-        let Some(doc) = &self.doc else { return false };
-        !keys.is_empty() && !suggest_files(&self.media_files, &doc.ged.referenced_files(), keys).is_empty()
-    }
-
-    /// Fichiers du dossier qui semblent correspondre à l'élément. On peut aussi
-    /// déposer des fichiers sur le panneau, ou passer par le menu (Rattacher…).
-    fn render_media_drop(&self, record: &str, keys: Vec<String>, cx: &mut Context<Self>) -> impl IntoElement {
-        let g = &self.doc.as_ref().unwrap().ged;
-        let referenced = g.referenced_files();
-        let suggestions = suggest_files(&self.media_files, &referenced, &keys);
-        v_flex().gap_1().when(!suggestions.is_empty(), |d| {
-            d.child(label_caps("Fichiers suggérés")).children(suggestions.into_iter().map(|f| {
-                let (rec, file) = (record.to_string(), f.clone());
-                h_flex()
-                    .gap_2()
-                    .items_center()
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .overflow_hidden()
-                            .whitespace_nowrap()
-                            .text_ellipsis()
-                            .text_xs()
-                            .child(f.clone()),
-                    )
-                    .child(
-                        Button::new(SharedString::from(format!("suggest-{f}")))
-                            .xsmall()
-                            .ghost()
-                            .icon(IconName::Plus)
-                            .label("Rattacher")
-                            .on_click(cx.listener(move |this, _, w, cx| {
-                                this.attach_files(Some(rec.clone()), vec![file.clone()], w, cx)
-                            })),
-                    )
-            }))
-        })
-    }
 
     /// Fenêtre de choix d'une personne (ou d'un enregistrement), au-dessus de l'interface.
     pub(super) fn render_picker(&self, cx: &mut Context<Self>) -> Option<AnyElement> {

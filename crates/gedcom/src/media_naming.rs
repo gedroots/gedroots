@@ -589,6 +589,10 @@ impl Gedcom {
                 links.direct.entry(m).or_insert(&**r);
             }
             for e in r.children.iter().filter(|e| event_label(&e.tag).is_some()) {
+                // Média lié à l'événement lui-même (faire-part, acte joint sans source).
+                for m in media_of(e) {
+                    links.found.entry(m).or_default().push((0, &**r, e, e));
+                }
                 for c in e.children.iter().filter(|c| c.tag == "SOUR") {
                     let on_citation = media_of(c);
                     for m in &on_citation {
@@ -788,6 +792,15 @@ mod tests {
         assert!(g.set_media_naming(&MediaNaming::default()));
         assert!(g.header.child(MEDIA_TAG).is_none());
         assert!(g.header.child("SCHMA").is_none());
+    }
+
+    #[test]
+    fn media_on_an_event_takes_its_context() {
+        let mut g = Gedcom::parse(G).unwrap();
+        let x = g.media_for_file("faire-part.jpg");
+        g.attach_media_to_event("F2", 2, &x).unwrap();
+        let c = g.media_context(&x);
+        assert_eq!((c.event.as_str(), c.date.as_str(), c.surname.as_str()), ("MARR", "1870", "GUYOT"));
     }
 
     #[test]

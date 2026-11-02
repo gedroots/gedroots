@@ -46,9 +46,7 @@ actions!(
         GoToRoot,
         SearchAncestors,
         SearchDescendants,
-        AttachFiles,
-        LinkMedia,
-        CropMedia,
+        MediaGallery,
         AddEvent,
         // Source
         NewSource,
@@ -137,6 +135,7 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new(shortcut!("shift-n"), NewIndividual, WS),
         KeyBinding::new(shortcut!("f"), FocusSearch, WS),
         KeyBinding::new(shortcut!("e"), EnterRecord, WS),
+        KeyBinding::new(shortcut!("shift-m"), MediaGallery, WS),
         KeyBinding::new(shortcut!("shift-h"), GoToRoot, WS),
         KeyBinding::new(shortcut!("shift-p"), CommandPalette, WS),
         KeyBinding::new(shortcut!(","), OpenFileSettings, WS),
@@ -174,7 +173,7 @@ pub mod label {
     pub const NEW_MEDIA: &str = "Nouveau média";
     pub const NEW_REPOSITORY: &str = "Nouveau dépôt";
     pub const NEW_NOTE: &str = "Nouvelle note";
-    pub const ATTACH_FILES: &str = "Rattacher des fichiers…";
+    pub const MEDIA_GALLERY: &str = "Médias…";
     pub const COPY_ID: &str = "Copier l'ID";
     pub const COPY_NAME: &str = "Copier le nom";
     pub const DELETE: &str = "Supprimer l'élément…";
@@ -274,7 +273,7 @@ fn model_with(recents: &[std::path::PathBuf]) -> Vec<(&'static str, Vec<Item>)> 
             Item::Os("Coller", Box::new(input::Paste), OsAction::Paste),
             Item::Os("Tout sélectionner", Box::new(input::SelectAll), OsAction::SelectAll),
             Sep,
-            a(label::ATTACH_FILES, AttachFiles),
+            a(label::MEDIA_GALLERY, MediaGallery),
             a("Ajouter un lien web…", AddWebLink),
             Sep,
             a(label::COPY_NAME, CopyName),
@@ -310,8 +309,6 @@ fn model_with(recents: &[std::path::PathBuf]) -> Vec<(&'static str, Vec<Item>)> 
                 ],
             ),
             a(label::ADD_EVENT, AddEvent),
-            a("Lier un média existant…", LinkMedia),
-            a("Recadrer un média existant…", CropMedia),
             Sep,
             a(label::GO_TO_ROOT, GoToRoot),
             a("Lien de parenté avec…", KinshipWith),

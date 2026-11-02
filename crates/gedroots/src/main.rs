@@ -54,6 +54,8 @@ gpui_kit::assets::icon_assets!(
         Crop,
         UserPlus,
         Calendar,
+        Upload,
+        Link,
     ]
 );
 

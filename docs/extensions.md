@@ -131,13 +131,15 @@ Options : `{sosa:6}` complète un nombre par des zéros, `{type:1}` garde les pr
 lettres (N, M, D…), `{nom:simple}` retire accents, espaces et apostrophes. Une variable
 vide disparaît avec le séparateur qui la précède.
 
-Les variables sont tirées de l'événement qui cite le média, ou une source qui le porte : de
+Les variables sont tirées de l'événement qui porte le média (`2 OBJE`), le cite, ou cite une
+source qui le porte : de
 préférence celui que la source décrit (`DATA.EVEN`) ou que son titre nomme (« Acte de
 naissance… »), plutôt qu'un attribut (profession, résidence) ; à égalité, celui que le
 premier sous-dossier reçoit. À défaut, de la source qui porte le média, puis de la personne ou
-de la famille liée. Un fichier rattaché depuis l'extérieur du dossier du `.ged` y est copié
-sous ce nom ; **Média › Renommer selon le modèle…** déplace les fichiers d'un média existant
-après confirmation.
+de la famille liée. Un fichier importé par **Édition › Médias…** (⌘⇧M) est déplacé (ou copié,
+au choix) sous ce nom, l'aperçu montrant le nom avant l'import ; un nom déjà pris reçoit
+« (2) », « (3) »… **Média › Renommer selon le modèle…** déplace les fichiers d'un média
+existant après confirmation.
 
 ## `_GR_FILE`
 
