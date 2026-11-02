@@ -637,6 +637,25 @@ mod tests {
     }
 
     #[test]
+    fn custom_event_keeps_its_type() {
+        let g = ged();
+        let mut p = birth(new_source());
+        p.act.event = "EVEN".into();
+        p.act.date = "1822".into();
+        p.act.participants.truncate(1);
+        p.complete(&g);
+        // EVEN without a type is refused, with the reason.
+        assert!(p.check(&g, 2026).is_err());
+        p.act.event_type = "Military service".into();
+        p.check(&g, 2026).unwrap();
+        let mut g2 = g.clone();
+        p.apply(&mut g2).unwrap();
+        let even = g2.get("I2").unwrap().children.iter().find(|c| c.tag == "EVEN").unwrap();
+        assert_eq!(even.child_val("TYPE"), Some("Military service"));
+        assert_eq!(even.child_val("DATE"), Some("1822"));
+    }
+
+    #[test]
     fn act_page_becomes_a_web_link_of_the_source() {
         let g = ged();
         let mut p = birth(new_source());

@@ -53,10 +53,19 @@ pub struct PersonParams {
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct ProposeParams {
-    /// GEDCOM event tag: BIRT, BAPM, CHR, MARR, DEAT, BURI, CENS…
+    /// GEDCOM event tag: BIRT, BAPM, CHR, MARR, DEAT, BURI, CENS… Any other event (military
+    /// service, conscription, emigration…) is EVEN with `event_type`.
     pub event: String,
+    /// Type of the event (GEDCOM TYPE), in the user's words: required with EVEN ("Military
+    /// service", "Conscription"…), optional detail for the other events.
+    pub event_type: Option<String>,
+    /// With EVEN: the event belongs to the couple (first two principals) instead of one person.
+    #[serde(default)]
+    pub family_event: bool,
     /// Date of the event in GEDCOM 7 format ("4 APR 1802", "FRENCH_R 14 GERM 10", "ABT 1850").
     pub date: Option<String>,
+    /// Date the act was written, when it differs from the event (e.g. a burial registered later).
+    pub record_date: Option<String>,
     /// Place of the event, as named in the tree when it exists there.
     pub place: Option<String>,
     pub source: SourceParams,
@@ -125,7 +134,10 @@ pub fn to_proposal(p: &ProposeParams) -> Result<Proposal, String> {
         return Err("give the event tag (BIRT, MARR, DEAT…)".into());
     }
     let mut act = Act::new("", &event);
+    act.event_type = opt(&p.event_type).to_string();
+    act.family_even = event == "EVEN" && p.family_event;
     act.date = opt(&p.date).to_string();
+    act.record_date = opt(&p.record_date).to_string();
     act.place = opt(&p.place).to_string();
     act.page = opt(&p.page).to_string();
     act.transcription = opt(&p.transcription).to_string();
@@ -305,6 +317,15 @@ mod tests {
             serde_json::from_value(serde_json::json!({"event": "BIRT", "source": {}, "people": [{"role": "uncle"}]}))
                 .unwrap();
         assert!(to_proposal(&bad).unwrap_err().contains("uncle"));
+        let milt: ProposeParams = serde_json::from_value(serde_json::json!({
+            "event": "even", "event_type": "Military service", "date": "1871", "record_date": "12 MAR 1872",
+            "source": {}, "people": [{"role": "principal", "id": "I2"}]
+        }))
+        .unwrap();
+        let prop = to_proposal(&milt).unwrap();
+        assert_eq!((prop.act.event.as_str(), prop.act.event_type.as_str()), ("EVEN", "Military service"));
+        assert_eq!(prop.act.record_date, "12 MAR 1872");
+        assert!(!prop.act.family_even);
     }
 
     #[test]
