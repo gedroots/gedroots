@@ -97,7 +97,6 @@ actions!(
         ToggleIgnoredIssues,
         ToggleRelativeEvents,
         ShowTree,
-        ShowForm,
         ShowRaw,
         TreeChart,
         TreeFan,
@@ -205,7 +204,6 @@ pub fn bind_keys(cx: &mut App) {
         // Like Finder and Mail: ⌃⌘S (Ctrl+Alt+S elsewhere).
         KeyBinding::new(if cfg!(target_os = "macos") { "ctrl-cmd-s" } else { "ctrl-alt-s" }, ToggleSidebar, WS),
         KeyBinding::new(shortcut!("alt-1"), ShowTree, WS),
-        KeyBinding::new(shortcut!("alt-2"), ShowForm, WS),
         KeyBinding::new(shortcut!("alt-3"), ShowRaw, WS),
         KeyBinding::new(shortcut!("="), MoreGenerations, WS),
         KeyBinding::new(shortcut!("-"), FewerGenerations, WS),
@@ -546,7 +544,6 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
             a(t!("cmd.stats"), ShowStats),
             Sep,
             a(t!("cmd.show_tree"), ShowTree),
-            a(t!("cmd.show_form"), ShowForm),
             a(t!("cmd.show_raw"), ShowRaw),
             Sep,
             a(t!("cmd.toggle_sidebar"), ToggleSidebar),

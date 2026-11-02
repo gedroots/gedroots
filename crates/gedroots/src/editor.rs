@@ -137,8 +137,6 @@ pub struct Picker {
     pub label: SharedString,
     pub placeholder: SharedString,
     pub state: Entity<PickerState>,
-    /// Saved linked record, shown as a link when reading.
-    pub shown: Option<String>,
 }
 
 fn picks(ged: &Gedcom, kind: RecordKind) -> Vec<Pick> {
@@ -332,8 +330,6 @@ impl RecordEditor {
                             label: t!("editor.repository").into(),
                             placeholder: t!("editor.choose_repository").into(),
                             state,
-                            shown: Some(f.repository.trim().trim_matches('@').to_string())
-                                .filter(|x| ged.get(x).is_some()),
                         });
                         long_text = Some((t!("editor.source_text").into(), textarea(window, cx, &f.text)));
                     }
