@@ -56,8 +56,9 @@ et suit la maquette « Lignée » (thème sombre, barre d'activité, liste, arbr
 - **Lieux** : index de tous les `PLAC` du fichier, renommage global et coordonnées (`MAP`).
 - **Carte des lieux** : tous les lieux ayant des coordonnées sur une carte OpenStreetMap
   (glisser pour déplacer, molette pour zoomer, clic sur un repère pour ouvrir le lieu).
-  Les lieux sans coordonnées se localisent un par un d'un clic (via Nominatim), pour vérifier chaque résultat, ou se
-  placent à la main ; les coordonnées sont écrites dans le GEDCOM (`PLAC.MAP.LATI/LONG`,
+  Les lieux sans coordonnées se localisent un par un depuis Qualité › Lieux sans coordonnées
+  (« Localiser… », via Nominatim), pour vérifier chaque résultat, ou se placent à la main (clic
+  droit sur la carte) ; les coordonnées sont écrites dans le GEDCOM (`PLAC.MAP.LATI/LONG`,
   format `N49.11652` / `W1.11437`) et s'annulent comme toute modification. Les tuiles sont
   gardées en cache sur le disque : en mode « Hors ligne », rien ne part sur Internet.
 

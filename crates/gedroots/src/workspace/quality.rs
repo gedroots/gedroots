@@ -132,6 +132,9 @@ impl Workspace {
     fn locate_file(&mut self, issue: Issue, window: &mut Window, cx: &mut Context<Self>) {
         if place_issue(&issue) {
             self.open_issue(&issue, window, cx);
+            if let Some(name) = issue.related.first().cloned() {
+                self.map.update(cx, |m, cx| m.geocode_place(name, cx));
+            }
             return;
         }
         let rx = cx.prompt_for_paths(PathPromptOptions {
