@@ -436,3 +436,22 @@ fn act_with_several_files_makes_one_paged_media_named_by_template() {
     let renames: Vec<String> = g.media_renames(&m).into_iter().map(|(_, _, new)| new).collect();
     assert_eq!(renames, vec!["Médias/Actes/N_MARCHAND_Louise p1.jpg", "Médias/Actes/N_MARCHAND_Louise p2.pdf"]);
 }
+
+#[test]
+fn swapped_surname_and_given_names_still_match() {
+    french();
+    let g = Gedcom::parse(SAMPLE).unwrap();
+    let mut e = Act::new("S00001", "BIRT");
+    e.date = "3 FEB 1914".into();
+    e.participants = vec![
+        person(ActRole::Principal, "", "Louise"),
+        // “Émile” typed as the surname, “Marchand” as the given names.
+        person(ActRole::Father, "Émile", "Marchand"),
+    ];
+    let s = e.suggestions(&g, 1);
+    assert_eq!(s.first().map(|s| s.xref.as_str()), Some("I00002"), "{s:?}");
+    assert!(s[0].reason.contains("nom et prénom inversés"), "{s:?}");
+    let father = g.individual("I00002").unwrap();
+    assert!(act::names_swapped(&e.participants[1], &father));
+    assert!(!act::names_swapped(&person(ActRole::Father, "MARCHAND", "Émile"), &father));
+}

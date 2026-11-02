@@ -192,6 +192,9 @@ picker.kinship:
 picker.merge_into:
   en: "Add to “%{name}” the Pages of the Media…"
   fr: "Ajouter à « %{name} » les pages du média…"
+picker.act_person:
+  en: Choose an Existing Person
+  fr: Choisir une personne existante
 picker.act_source:
   en: Enter a Record in the Source…
   fr: Saisir un acte dans la source…

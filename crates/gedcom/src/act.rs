@@ -2003,6 +2003,45 @@ impl Gedcom {
     }
 }
 
+/// Score of the names typed for a person (`surname`, `given`, as sort keys) against an individual's
+/// (`s`, `g`); `None` when they cannot be the same person.
+fn name_score(surname: &str, given: &str, s: &str, g: &str) -> Option<f32> {
+    let mut score = 0.0;
+    if !surname.is_empty() {
+        if s == surname {
+            score += 3.0;
+        } else if !s.is_empty() && (s.contains(surname) || surname.contains(s)) {
+            score += 1.5;
+        } else {
+            return None;
+        }
+    }
+    let first_given = given.split_whitespace().next().unwrap_or("");
+    if !first_given.is_empty() {
+        if g == given {
+            score += 3.0;
+        } else if g.split_whitespace().next() == Some(first_given) {
+            score += 2.5;
+        } else if g.split_whitespace().any(|w| w == first_given) {
+            score += 1.5;
+        } else if g.starts_with(&first_given.chars().take(3).collect::<String>()) {
+            score += 0.5;
+        } else if !g.is_empty() {
+            return None;
+        }
+    }
+    Some(score)
+}
+
+/// The surname and given names of `p` are in each other's field, compared with `ind`.
+pub fn names_swapped(p: &Participant, ind: &Individual) -> bool {
+    let (surname, given) = (sort_key(p.get(Surname)), sort_key(p.get(Given)));
+    let (s, g) = (sort_key(&ind.surname()), sort_key(&ind.given()));
+    !(surname.is_empty() && given.is_empty())
+        && name_score(&surname, &given, &s, &g).is_none()
+        && name_score(&given, &surname, &s, &g).is_some()
+}
+
 // ----------------------------------------------------------------------
 // Matches with existing individuals
 // ----------------------------------------------------------------------
@@ -2019,7 +2058,6 @@ impl Act {
         if self.participants.get(idx).is_none_or(|p| p.is_blank()) || (surname.is_empty() && given.is_empty()) {
             return self.context_suggestions(ged, idx);
         }
-        let first_given = given.split_whitespace().next().unwrap_or("").to_string();
         let year = self.year();
         let expected_birth = match (year, parse_age_years(p.get(Age))) {
             (Some(y), Some(a)) => Some(y - a),
@@ -2036,30 +2074,16 @@ impl Act {
                 let i = Individual::new(r);
                 let s = sort_key(&i.surname());
                 let g = sort_key(&i.given());
-                let mut score = 0.0;
                 let mut reasons: Vec<String> = Vec::new();
-                if !surname.is_empty() {
-                    if s == surname {
-                        score += 3.0;
-                    } else if !s.is_empty() && (s.contains(&surname) || surname.contains(&s)) {
-                        score += 1.5;
-                    } else {
-                        return None;
+                // Surname and given names typed in each other's field: still a match, said so.
+                let mut score = match name_score(&surname, &given, &s, &g) {
+                    Some(n) => n,
+                    None => {
+                        let n = name_score(&given, &surname, &s, &g)?;
+                        reasons.push(t!("act.reason.swapped").into_owned());
+                        n
                     }
-                }
-                if !first_given.is_empty() {
-                    if g == given {
-                        score += 3.0;
-                    } else if g.split_whitespace().next() == Some(first_given.as_str()) {
-                        score += 2.5;
-                    } else if g.split_whitespace().any(|w| w == first_given) {
-                        score += 1.5;
-                    } else if g.starts_with(&first_given[..first_given.len().min(3)]) {
-                        score += 0.5;
-                    } else if !g.is_empty() {
-                        return None;
-                    }
-                }
+                };
                 if matches!(sex.as_str(), "M" | "F") && matches!(i.sex(), "M" | "F") && i.sex() != sex {
                     return None;
                 }
