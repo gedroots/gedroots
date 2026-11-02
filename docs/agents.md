@@ -63,7 +63,8 @@ login or a captcha, and never to show ids.
 ## Proposals and review
 
 `propose_act` takes the same model as Source › Enter Record… (`crates/gedcom/src/act.rs`): an
-event, the people with their standard GEDCOM 7 role (each linked to an existing person, created,
+event (any event without its own tag, such as military service, is `EVEN` with its
+`event_type`), the people with their standard GEDCOM 7 role (each linked to an existing person, created,
 or only mentioned), the reference (`PAGE`), the transcription and the source. Nothing raw goes
 into the file: GEDRoots writes the whole chain itself, repository → source → file → event →
 people (`crates/gedcom/src/proposal.rs`).
