@@ -94,8 +94,10 @@ de nom. Les chemins restent des `FILE` standard, relatifs au dossier du `.ged`.
     (média rattaché directement à un individu : portrait) ou `FAM`. Absent : tout le reste.
   - `_GR_NAME <modèle>` : nom des fichiers. Absent : le nom d'origine est gardé.
 
-Un média va dans le premier sous-dossier dont les types contiennent le sien ; sans
-sous-dossier qui le reçoive, il reste où il est.
+Un média va dans le sous-dossier qui nomme son type ; si plusieurs le nomment, le plus précis
+(le moins de types) l'emporte, puis le premier. À défaut, il va dans le premier sous-dossier
+sans type ; sans sous-dossier qui le reçoive, il reste où il est. Dans les réglages, cocher un
+type pour un sous-dossier le retire des autres.
 
 ```
 0 HEAD

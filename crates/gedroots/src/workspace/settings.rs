@@ -321,6 +321,8 @@ impl Workspace {
                 }
                 Ok((msg, None))
             });
+            // Rangement modifié depuis l'aperçu d'import : les noms prévus suivent.
+            self.refresh_import_plan(cx);
         }
         window.focus(&self.focus, cx);
         cx.notify();
@@ -624,15 +626,24 @@ impl Workspace {
                         let (ws, tags) = (ws.clone(), tags.clone());
                         menu = menu.item(PopupMenuItem::new(label.clone()).checked(on).on_click(move |_, _, cx| {
                             let _ = ws.update(cx, |this, cx| {
-                                if let Some(d) = this.settings_dialog()
-                                    && let Some(r) = d.media.get_mut(i)
-                                {
-                                    if on {
-                                        r.types.retain(|t| !tags.contains(t));
-                                    } else {
-                                        for t in &tags {
-                                            if !r.types.contains(t) {
-                                                r.types.push(t.clone());
+                                if let Some(d) = this.settings_dialog() {
+                                    // Un type ne va que dans un sous-dossier : le cocher
+                                    // ici le retire des autres.
+                                    if !on {
+                                        for (j, other) in d.media.iter_mut().enumerate() {
+                                            if j != i {
+                                                other.types.retain(|t| !tags.contains(t));
+                                            }
+                                        }
+                                    }
+                                    if let Some(r) = d.media.get_mut(i) {
+                                        if on {
+                                            r.types.retain(|t| !tags.contains(t));
+                                        } else {
+                                            for t in &tags {
+                                                if !r.types.contains(t) {
+                                                    r.types.push(t.clone());
+                                                }
                                             }
                                         }
                                     }

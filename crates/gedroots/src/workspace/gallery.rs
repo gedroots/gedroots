@@ -318,6 +318,11 @@ impl Workspace {
         rows
     }
 
+    /// Recalcule les noms prévus de l'import en cours (réglages modifiés).
+    pub(super) fn refresh_import_plan(&mut self, cx: &mut Context<Self>) {
+        self.update_draft(|_| {}, cx);
+    }
+
     fn update_draft(&mut self, f: impl FnOnce(&mut ImportDraft), cx: &mut Context<Self>) {
         let Some(mut d) = self.gallery.as_mut().and_then(|g| g.import.take()) else { return };
         f(&mut d);
