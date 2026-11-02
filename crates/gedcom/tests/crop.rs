@@ -1,6 +1,6 @@
 use gedcom::*;
 
-const SAMPLE: &str = include_str!("fixtures/exemple.ged");
+const SAMPLE: &str = include_str!("fixtures/example.ged");
 
 /// Une photo de groupe ajoutée au fichier d'exemple.
 fn with_group_photo() -> Gedcom {

@@ -2,39 +2,41 @@
 name = "gedroots"
 version = "0.1.0"
 edition = "2024"
-description = "GEDRoots — logiciel de généalogie libre et local, GEDCOM 7"
+description = "GEDRoots, free and local genealogy software (GEDCOM 7)"
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
 gpui-kit = "=0.8.1"
 gedcom = { path = "../gedcom", features = ["serde"] }
 lsp-types = "0.97"
-# Déjà utilisée par GPUI : dimensions des images (recadrage) et décodage à la taille d'affichage.
+# Already used by GPUI: image dimensions (cropping) and decoding at display size.
 image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "tiff", "webp", "gif", "bmp"] }
 ureq = { version = "2", features = ["native-certs", "json"] }
 serde_json = "1.0.154"
-# Fichiers ouverts depuis le Finder, transmis à la boucle de l'app.
+# Files opened from the Finder, passed to the app's loop.
 async-channel = "2"
 # Interface translations (also used by gpui-component) and the system's preferred languages.
 rust-i18n = "4.2.4"
 sys-locale = "0.3.2"
 imagesize = "0.14"
-# Export GEDZIP (.gdz) : archive zip, gedcom.ged compressé, médias stockés tels quels.
+# GEDZIP export (.gdz): zip archive, gedcom.ged compressed, media stored as is.
 zip = { version = "9.2.2", default-features = false, features = ["deflate-flate2"] }
-# Agents IA : serveur MCP local (HTTP sur 127.0.0.1), sur un fil à part.
+# AI agents: local MCP server (HTTP on 127.0.0.1), on its own thread.
 rmcp = { version = "3.8.0", features = ["server", "macros", "schemars", "transport-streamable-http-server"] }
 tokio = { version = "1.54.1", features = ["rt-multi-thread", "net", "macros", "sync"] }
 axum = { version = "0.8.9", default-features = false, features = ["http1", "tokio"] }
 serde = { version = "1.0.229", features = ["derive"] }
 schemars = "1"
-# Dossier de configuration de la plateforme (réglage des agents IA, fichiers récents hors macOS).
+# Platform configuration folder (AI agents setting, recent files outside macOS).
 dirs = "6"
 tokio-util = "0.7.20"
 hayro = "0.8.0"
 similar = "2.7.0"
-# Lien d'installation de Cursor (configuration en base64).
+# Cursor install link (configuration in base64).
 base64 = "0.22"
 
-# Fichiers récents : liste du système sous macOS (NSDocumentController)…
+# Recent files: the system's list on macOS (NSDocumentController)…
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
 objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "NSDocumentController"] }

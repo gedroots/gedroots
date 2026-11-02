@@ -1,5 +1,5 @@
 /target
-# Les arbres généalogiques personnels ne doivent pas être versionnés.
+# Personal family trees must never be committed.
 *.ged
 *.ged.bak
 *.ged.tmp

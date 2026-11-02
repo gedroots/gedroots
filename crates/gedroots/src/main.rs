@@ -219,8 +219,8 @@ mod tests {
     #[test]
     fn file_urls() {
         assert_eq!(
-            file_url_path("file:///Users/a/G%C3%A9n%C3%A9alogie%20Guyot/arbre.ged"),
-            Some(PathBuf::from("/Users/a/Généalogie Guyot/arbre.ged"))
+            file_url_path("file:///Users/a/G%C3%A9n%C3%A9alogie%20Martin/arbre.ged"),
+            Some(PathBuf::from("/Users/a/Généalogie Martin/arbre.ged"))
         );
         assert_eq!(file_url_path("file://localhost/tmp/a.ged"), Some(PathBuf::from("/tmp/a.ged")));
         assert_eq!(file_url_path("https://example.org/a.ged"), None);

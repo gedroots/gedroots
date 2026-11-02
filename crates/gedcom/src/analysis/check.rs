@@ -16,7 +16,7 @@ use std::collections::{HashMap, HashSet};
 
 /// Balise d'extension qui masque une anomalie (valeur = code de l'anomalie).
 pub const IGNORE_TAG: &str = "_GR_IGNORE";
-pub const IGNORE_URI: &str = "https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_ignore";
+pub const IGNORE_URI: &str = extension_uri!("_gr_ignore");
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Severity {

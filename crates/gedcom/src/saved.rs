@@ -20,7 +20,7 @@ pub const FIND_TAG: &str = "_GR_FIND";
 const SCOPE_TAG: &str = "_GR_SCOPE";
 const QUERY_TAG: &str = "_GR_QUERY";
 const TYPE_TAG: &str = "_GR_TYPE";
-const URI: &str = "https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_find";
+const URI: &str = extension_uri!("_gr_find");
 
 /// Une recherche enregistrée.
 #[derive(Debug, Clone, PartialEq, Eq)]

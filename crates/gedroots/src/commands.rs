@@ -652,7 +652,7 @@ mod tests {
             }
         }
         let mut seen = Vec::new();
-        let recents = [PathBuf::from("/a/Guyot.ged"), PathBuf::from("/b/Guyot.ged")];
+        let recents = [PathBuf::from("/a/Martin.ged"), PathBuf::from("/b/Martin.ged")];
         let sites = ["Geneanet".to_string(), "FamilySearch".to_string()];
         for (menu, items) in model_with(&recents, &sites) {
             walk(&menu, items, &mut seen);

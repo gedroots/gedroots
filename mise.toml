@@ -1,43 +1,40 @@
-# Environnement de développement de GEDRoots : outils épinglés et tâches.
-# Installer : `mise install` ; lister les tâches : `mise tasks`.
+# GEDRoots development environment: pinned tools and tasks.
+# Install: `mise install`; list the tasks: `mise tasks`.
 min_version = "2026.10.0"
 
 [tools]
 rust = { version = "1.99.1", profile = "minimal", components = "rustfmt,clippy" }
 
 [tasks.app]
-description = "Lancer GEDRoots (optimisé) ; ex. `mise run app arbre.ged`"
+description = "Run GEDRoots (optimized), e.g. `mise run app tree.ged`"
 run = "cargo run --release -p gedroots --"
 
 [tasks.build]
-description = "Compiler tout l'espace de travail"
+description = "Build the whole workspace"
 run = "cargo build --workspace"
 
 [tasks.test]
-description = "Tests de la bibliothèque GEDCOM et de l'app (traductions comprises)"
+description = "Tests of the GEDCOM library and the app (translations included)"
 run = "cargo test --workspace"
 
 [tasks.clippy]
-description = "Clippy, avertissements bloquants"
+description = "Clippy, warnings as errors"
 run = "cargo clippy --workspace -- -D warnings"
 
 [tasks.fmt]
-description = "Formater le code"
+description = "Format the code"
 run = "cargo fmt --all"
 
 [tasks."fmt:check"]
-description = "Vérifier le formatage"
+description = "Check the formatting"
 run = "cargo fmt --all --check"
 
 [tasks.ci]
-description = "Toutes les vérifications de la CI"
+description = "Every CI check"
 depends = ["fmt:check", "test", "clippy"]
 
-[tasks.bundle]
-description = "Construire GEDRoots.app (macOS) ; options : --install, --dmg"
-run = "packaging/macos/bundle.sh"
-
+# `bundle` and the platform installers are file tasks in mise-tasks/.
 [tasks.install]
-description = "Installer GEDRoots sur cette machine"
-run = "{% if os() == 'macos' %}packaging/macos/bundle.sh --install{% else %}packaging/linux/install.sh{% endif %}"
+description = "Install GEDRoots on this machine"
+run = [{ task = "install:{{ os() }}" }]
 run_windows = "cargo build --release -p gedroots"

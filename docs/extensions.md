@@ -6,13 +6,13 @@ start with `_GR_` and are declared in the header, as GEDCOM 7 requires:
 ```
 0 HEAD
 1 SCHMA
-2 TAG _GR_IGNORE https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_ignore
-2 TAG _GR_ROOT https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_root
-2 TAG _GR_FILE https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_file
-2 TAG _GR_EVEN https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_even
-2 TAG _GR_MEDIA https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_media
-2 TAG _GR_FIND https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_find
-2 TAG _GR_WEB https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_web
+2 TAG _GR_IGNORE https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_ignore
+2 TAG _GR_ROOT https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_root
+2 TAG _GR_FILE https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_file
+2 TAG _GR_EVEN https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_even
+2 TAG _GR_MEDIA https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_media
+2 TAG _GR_FIND https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_find
+2 TAG _GR_WEB https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_web
 ```
 
 Other software ignores these tags without losing data.
@@ -29,7 +29,7 @@ Root person of the tree: the one GEDRoots opens when the file loads and the one
 ```
 0 HEAD
 1 SCHMA
-2 TAG _GR_ROOT https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_root
+2 TAG _GR_ROOT https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_root
 1 _GR_ROOT @I00001@
 ```
 
@@ -55,9 +55,9 @@ a label other than its `TYPE`.
 ```
 0 HEAD
 1 SCHMA
-2 TAG _GR_EVEN https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_even
-2 TAG _GR_REC https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_even
-2 TAG _GR_LABEL https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_even
+2 TAG _GR_EVEN https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_even
+2 TAG _GR_REC https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_even
+2 TAG _GR_LABEL https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_even
 1 _GR_EVEN Baptême protestant
 1 _GR_EVEN Publication des bans
 2 _GR_REC FAM
@@ -99,10 +99,10 @@ for one subfolder removes it from the others.
 ```
 0 HEAD
 1 SCHMA
-2 TAG _GR_MEDIA https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_media
-2 TAG _GR_DIR https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_media
-2 TAG _GR_TYPES https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_media
-2 TAG _GR_NAME https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_media
+2 TAG _GR_MEDIA https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_media
+2 TAG _GR_DIR https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_media
+2 TAG _GR_TYPES https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_media
+2 TAG _GR_NAME https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_media
 1 _GR_MEDIA
 2 _GR_DIR Matricules
 3 _GR_TYPES military service, military discharge
@@ -328,10 +328,10 @@ or **View › Rename Search**) and deleted the same way.
 ```
 0 HEAD
 1 SCHMA
-2 TAG _GR_FIND https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_find
-2 TAG _GR_SCOPE https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_find
-2 TAG _GR_QUERY https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_find
-2 TAG _GR_TYPE https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_find
+2 TAG _GR_FIND https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_find
+2 TAG _GR_SCOPE https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_find
+2 TAG _GR_QUERY https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_find
+2 TAG _GR_TYPE https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_find
 1 _GR_FIND Born around 1850
 2 _GR_SCOPE INDI
 2 _GR_QUERY born:1850±5
@@ -362,8 +362,8 @@ and no `_GR_URL`, means no site is wanted.
 ```
 0 HEAD
 1 SCHMA
-2 TAG _GR_WEB https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_web
-2 TAG _GR_URL https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_web
+2 TAG _GR_WEB https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_web
+2 TAG _GR_URL https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_web
 1 _GR_WEB Geneanet
 2 _GR_URL https://www.geneanet.org/fonds/individus/?go=1&nom={surname}&prenom={given}&type_periode=between&from={birth}&to={death}
 1 _GR_WEB Google

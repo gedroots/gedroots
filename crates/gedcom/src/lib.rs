@@ -29,6 +29,14 @@
 
 rust_i18n::i18n!("locales", fallback = "en");
 
+/// URI of a GEDRoots extension tag, declared in `HEAD.SCHMA`: its section in
+/// `docs/extensions.md`, under the `repository` of the workspace `Cargo.toml`.
+macro_rules! extension_uri {
+    ($anchor:literal) => {
+        concat!(env!("CARGO_PKG_REPOSITORY"), "/blob/main/docs/extensions.md#", $anchor)
+    };
+}
+
 #[macro_use]
 pub mod i18n;
 
@@ -106,4 +114,15 @@ pub fn save(ged: &Gedcom, path: impl AsRef<std::path::Path>) -> std::io::Result<
     let tmp = path.with_extension("ged.tmp");
     std::fs::write(&tmp, ged.to_gedcom_string())?;
     std::fs::rename(tmp, path)
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn extension_uris_point_to_the_docs() {
+        assert_eq!(
+            crate::document::ROOT_URI,
+            "https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_root"
+        );
+    }
 }

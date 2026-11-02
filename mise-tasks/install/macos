@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+#MISE description="Install GEDRoots.app in /Applications"
+#MISE depends=["bundle"]
+#MISE hide=true
+set -euo pipefail
+
+TARGET=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
+rm -rf /Applications/GEDRoots.app
+cp -R "$TARGET/release/GEDRoots.app" /Applications/
+# The Finder and the Dock read the icon and the supported file types again.
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f /Applications/GEDRoots.app || true
+echo "→ /Applications/GEDRoots.app"

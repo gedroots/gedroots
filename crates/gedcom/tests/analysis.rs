@@ -1,7 +1,7 @@
 use gedcom::analysis::{check, kinship, stats, timeline};
 use gedcom::*;
 
-const SAMPLE: &str = include_str!("fixtures/exemple.ged");
+const SAMPLE: &str = include_str!("fixtures/example.ged");
 
 /// Arbre de test : deux frères, leurs enfants (cousins germains), une demi-sœur.
 const FAMILY: &str = "0 HEAD
