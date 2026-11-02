@@ -243,8 +243,9 @@ pub enum MediaChoice {
     None,
     /// Média existant (identifiant `OBJE`).
     Existing(String),
-    /// Nouveau fichier, chemin relatif au dossier du `.ged` de préférence.
-    NewFile(String),
+    /// Nouveaux fichiers, une page chacun, chemins relatifs au dossier du `.ged`
+    /// de préférence.
+    NewFiles(Vec<String>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -740,7 +741,7 @@ impl Act {
         let media = match &self.media {
             MediaChoice::None => None,
             MediaChoice::Existing(x) => Some(x.clone()),
-            MediaChoice::NewFile(path) if !path.trim().is_empty() => {
+            MediaChoice::NewFiles(paths) if paths.iter().any(|p| !p.trim().is_empty()) => {
                 let x = w.ged.create(RecordKind::Media);
                 let title = [w.ged.record_label(&source), self.page.trim().to_string()]
                     .into_iter()
@@ -748,16 +749,24 @@ impl Act {
                     .collect::<Vec<_>>()
                     .join(", ");
                 let node = w.ged.get_mut(&x).unwrap();
-                let file = node.ensure_child("FILE");
-                file.value = Some(path.trim().to_string());
-                file.set_child_val("FORM", crate::mime_for(path));
-                file.set_child_val("TITL", &title);
+                node.children.retain(|c| c.tag != "FILE");
+                // Une page par fichier, dans l'ordre ; le titre sur la première.
+                for (i, path) in paths.iter().map(|p| p.trim()).filter(|p| !p.is_empty()).enumerate() {
+                    let mut file = Node::with_value("FILE", path).push(Node::with_value("FORM", crate::mime_for(path)));
+                    if i == 0 {
+                        file.set_child_val("TITL", &title);
+                    }
+                    match node.children.iter().rposition(|c| c.tag == "FILE") {
+                        Some(at) => node.children.insert(at + 1, file),
+                        None => node.insert_child(file),
+                    }
+                }
                 // Un acte est un document manuscrit (`FORM` / `MEDI MANUSCRIPT`).
                 crate::kinds::set_medium(node, "MANUSCRIPT");
                 w.mark_created(&x);
                 Some(x)
             }
-            MediaChoice::NewFile(_) => None,
+            MediaChoice::NewFiles(_) => None,
         };
         if let Some(m) = &media {
             let ptr = format!("@{m}@");

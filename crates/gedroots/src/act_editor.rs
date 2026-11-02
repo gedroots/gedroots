@@ -67,6 +67,8 @@ pub struct ActEditor {
     transcription: Entity<TextareaState>,
     quality: Option<u8>,
     media: MediaChoice,
+    /// Page affichée de l'image de l'acte (à partir de 0).
+    media_page: usize,
     estimate_births: bool,
     rows: Vec<PersonRow>,
     /// Champ de lieu actif (pour afficher les lieux proposés sous ce champ).
@@ -158,6 +160,7 @@ impl ActEditor {
             base_dir: ged_path.and_then(|p| p.parent().map(Path::to_path_buf)),
             quality: act.quality,
             media: act.media.clone(),
+            media_page: 0,
             estimate_births: act.estimate_births,
             base: act.clone(),
             event,
@@ -419,27 +422,59 @@ impl ActEditor {
         let rx = cx.prompt_for_paths(PathPromptOptions {
             files: true,
             directories: false,
-            multiple: false,
+            multiple: true,
             prompt: Some("Image de l'acte".into()),
         });
         cx.spawn_in(window, async move |this, cx| {
-            if let Ok(Ok(Some(mut paths))) = rx.await
-                && let Some(p) = paths.pop()
-            {
-                let _ = this.update(cx, |this, cx| {
-                    let rel = this
-                        .base_dir
-                        .as_ref()
-                        .and_then(|d| p.strip_prefix(d).ok())
-                        .map(|r| r.to_string_lossy().replace('\\', "/"))
-                        .unwrap_or_else(|| p.to_string_lossy().to_string());
-                    this.media = MediaChoice::NewFile(rel);
-                    this.preview = None;
-                    cx.notify();
-                });
+            if let Ok(Ok(Some(paths))) = rx.await {
+                let _ = this.update(cx, |this, cx| this.add_files(&paths, false, cx));
             }
         })
         .detach();
+    }
+
+    /// Chemin à enregistrer : relatif au dossier du .ged si le fichier s'y trouve.
+    fn file_value(&self, p: &Path) -> String {
+        self.base_dir
+            .as_ref()
+            .and_then(|d| p.strip_prefix(d).ok())
+            .map(|r| r.to_string_lossy().replace('\\', "/"))
+            .unwrap_or_else(|| p.to_string_lossy().to_string())
+    }
+
+    /// Fichiers choisis ou déposés pour l'acte (images et PDF, une page chacun).
+    /// `append` : s'ajoutent aux nouveaux fichiers déjà choisis au lieu de les remplacer.
+    /// Ils seront copiés et nommés selon Réglages du fichier › Médias à l'enregistrement.
+    fn add_files(&mut self, paths: &[PathBuf], append: bool, cx: &mut Context<Self>) {
+        let (ok, rejected): (Vec<&PathBuf>, Vec<&PathBuf>) = paths.iter().filter(|p| p.is_file()).partition(|p| {
+            let mime = mime_for(&p.to_string_lossy());
+            mime.starts_with("image/") || mime == "application/pdf"
+        });
+        self.error = (!rejected.is_empty()).then(|| "Seuls les images et les PDF peuvent être joints à un acte".into());
+        let files: Vec<String> = ok.into_iter().map(|p| self.file_value(p)).collect();
+        if !files.is_empty() {
+            let mut all = match (&self.media, append) {
+                (MediaChoice::NewFiles(v), true) => v.clone(),
+                _ => Vec::new(),
+            };
+            let first = all.len();
+            for f in files {
+                if !all.contains(&f) {
+                    all.push(f);
+                }
+            }
+            self.media_page = first.min(all.len().saturating_sub(1));
+            self.media = MediaChoice::NewFiles(all);
+            self.preview = None;
+        }
+        cx.notify();
+    }
+
+    fn set_media(&mut self, media: MediaChoice, cx: &mut Context<Self>) {
+        self.media = media;
+        self.media_page = 0;
+        self.preview = None;
+        cx.notify();
     }
 
     fn fill_transcription(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -472,7 +507,7 @@ impl ActEditor {
     /// sur l'acte suivant du même registre.
     pub fn saved(&mut self, ged: Gedcom, result: &ActResult, window: &mut Window, cx: &mut Context<Self>) {
         let mut n = self.collect(cx).next();
-        if let MediaChoice::NewFile(_) = n.media {
+        if let MediaChoice::NewFiles(_) = n.media {
             n.media = result.media.clone().map(MediaChoice::Existing).unwrap_or_default();
         }
         self.ged = ged;
@@ -480,6 +515,7 @@ impl ActEditor {
         self.places = self.ged.places().into_iter().map(|p| (p.short(), p.name)).collect();
         self.base = n.clone();
         self.media = n.media.clone();
+        self.media_page = 0;
         self.page.update(cx, |s, cx| s.set_value(n.page.clone(), window, cx));
         self.date.update(cx, |s, cx| s.clear(window, cx));
         self.record_date.update(cx, |s, cx| s.clear(window, cx));
@@ -499,18 +535,24 @@ impl ActEditor {
         cx.notify();
     }
 
-    fn media_file(&self) -> Option<(PathBuf, String)> {
-        let rel = match &self.media {
-            MediaChoice::None => return None,
-            MediaChoice::Existing(x) => {
-                let m = Media::new(self.ged.get(x)?);
-                (m.file()?.to_string(), m.title())
-            }
-            MediaChoice::NewFile(f) => (f.clone(), f.rsplit('/').next().unwrap_or(f).to_string()),
+    /// Pages de l'image de l'acte : chemins absolus, dans l'ordre.
+    fn media_pages(&self) -> Vec<PathBuf> {
+        let files: Vec<String> = match &self.media {
+            MediaChoice::None => Vec::new(),
+            MediaChoice::Existing(x) => self
+                .ged
+                .get(x)
+                .map(|n| Media::new(n).files().iter().map(|f| f.path.to_string()).collect())
+                .unwrap_or_default(),
+            MediaChoice::NewFiles(f) => f.clone(),
         };
-        let p = PathBuf::from(rel.0.strip_prefix("file://").unwrap_or(&rel.0));
-        let p = if p.is_absolute() { p } else { self.base_dir.as_ref()?.join(p) };
-        Some((p, rel.1))
+        files
+            .into_iter()
+            .filter_map(|f| {
+                let p = PathBuf::from(f.strip_prefix("file://").unwrap_or(&f));
+                if p.is_absolute() { Some(p) } else { self.base_dir.as_ref().map(|d| d.join(p)) }
+            })
+            .collect()
     }
 }
 
@@ -639,10 +681,20 @@ impl ActEditor {
                     .collect()
             })
             .unwrap_or_default();
-        let file = self.media_file();
+        let pages = self.media_pages();
+        let count = pages.len();
+        let at = self.media_page.min(count.saturating_sub(1));
+        let file = pages.get(at).cloned();
+        let name = |p: &Path| p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+        let label = match (&self.media, &file) {
+            (MediaChoice::Existing(x), _) => self.ged.get(x).map(|n| Media::new(n).title()).unwrap_or_default(),
+            (_, Some(p)) => name(p),
+            _ => "Image de l'acte".into(),
+        };
         let zoom = self.zoom;
+        let is_image = |p: &Path| mime_for(&p.to_string_lossy()).starts_with("image/");
         let viewer: AnyElement = match &file {
-            Some((p, _)) if p.exists() => div()
+            Some(p) if p.exists() && is_image(p) => div()
                 .id("acte-scroll")
                 .flex_1()
                 .min_h_0()
@@ -659,7 +711,27 @@ impl ActEditor {
                     if zoom <= 1.0 { i.size_full() } else { i.w(px(width)).h(px(width * h / w.max(1.))) }
                 })
                 .into_any_element(),
-            Some((p, _)) => v_flex()
+            // PDF : pas d'aperçu intégré, on l'ouvre avec l'application du système.
+            Some(p) if p.exists() => {
+                let target = p.clone();
+                v_flex()
+                    .flex_1()
+                    .items_center()
+                    .justify_center()
+                    .gap_2()
+                    .p_4()
+                    .bg(theme::viewer())
+                    .child(div().text_color(theme::muted()).child(name(p)))
+                    .child(
+                        Button::new("open-doc")
+                            .ghost()
+                            .small()
+                            .label("Ouvrir")
+                            .on_click(move |_, _, cx| cx.open_with_system(&target)),
+                    )
+                    .into_any_element()
+            }
+            Some(p) => v_flex()
                 .flex_1()
                 .items_center()
                 .justify_center()
@@ -676,7 +748,15 @@ impl ActEditor {
                 .child("Aucune image")
                 .into_any_element(),
         };
+        let new_files = match &self.media {
+            MediaChoice::NewFiles(f) if !f.is_empty() => Some(f.clone()),
+            _ => None,
+        };
+        // Pendant un glisser depuis le Finder / l'Explorateur : la zone de dépôt
+        // se signale ; elle s'accentue quand le pointeur la survole.
+        let dragging = cx.has_active_drag();
         v_flex()
+            .relative()
             .w(relative(0.42))
             .max_w(px(620.))
             .flex_none()
@@ -700,8 +780,25 @@ impl ActEditor {
                             .text_ellipsis()
                             .text_xs()
                             .text_color(theme::muted())
-                            .child(file.as_ref().map(|f| f.1.clone()).unwrap_or_else(|| "Image de l'acte".into())),
+                            .child(label),
                     )
+                    .when(count > 1, |d| {
+                        d.child(Button::new("page-prev").ghost().xsmall().label("‹").disabled(at == 0).on_click(
+                            cx.listener(move |this, _, _, cx| {
+                                this.media_page = at.saturating_sub(1);
+                                cx.notify();
+                            }),
+                        ))
+                        .child(mono(format!("{}/{count}", at + 1)))
+                        .child(
+                            Button::new("page-next").ghost().xsmall().label("›").disabled(at + 1 >= count).on_click(
+                                cx.listener(move |this, _, _, cx| {
+                                    this.media_page = at + 1;
+                                    cx.notify();
+                                }),
+                            ),
+                        )
+                    })
                     .child(Button::new("zoom-out").ghost().xsmall().label("−").disabled(zoom <= 1.0).on_click(
                         cx.listener(|this, _, _, cx| {
                             this.zoom = (this.zoom / 1.25).max(1.0);
@@ -726,21 +823,15 @@ impl ActEditor {
                     .border_color(theme::border())
                     .children(candidates.into_iter().map(|(x, title)| {
                         let on = self.media == MediaChoice::Existing(x.clone());
-                        chip(format!("media-{x}"), title, on).max_w(px(240.)).overflow_hidden().on_click(cx.listener(
-                            move |this, _, _, cx| {
-                                this.media = MediaChoice::Existing(x.clone());
-                                this.preview = None;
-                                cx.notify();
-                            },
-                        ))
+                        chip(format!("media-{x}"), title, on).max_w(px(240.)).overflow_hidden().on_click(
+                            cx.listener(move |this, _, _, cx| this.set_media(MediaChoice::Existing(x.clone()), cx)),
+                        )
                     }))
-                    .when_some(
-                        match &self.media {
-                            MediaChoice::NewFile(f) => Some(f.clone()),
-                            _ => None,
-                        },
-                        |d, f| d.child(chip("media-new", f, true)),
-                    )
+                    .when_some(new_files, |d, f| {
+                        let first = f[0].rsplit(['/', '\\']).next().unwrap_or(&f[0]).to_string();
+                        let label = if f.len() > 1 { format!("{first} +{}", f.len() - 1) } else { first };
+                        d.child(chip("media-new", label, true).max_w(px(240.)).overflow_hidden())
+                    })
                     .child(
                         Button::new("pick-file")
                             .ghost()
@@ -749,15 +840,34 @@ impl ActEditor {
                             .on_click(cx.listener(|this, _, w, cx| this.pick_file(w, cx))),
                     )
                     .when(self.media != MediaChoice::None, |d| {
-                        d.child(Button::new("no-media").ghost().xsmall().label("Sans image").on_click(cx.listener(
-                            |this, _, _, cx| {
-                                this.media = MediaChoice::None;
-                                this.preview = None;
-                                cx.notify();
-                            },
-                        )))
+                        d.child(
+                            Button::new("no-media")
+                                .ghost()
+                                .xsmall()
+                                .label("Sans image")
+                                .on_click(cx.listener(|this, _, _, cx| this.set_media(MediaChoice::None, cx))),
+                        )
                     }),
             )
+            .when(dragging, |d| {
+                d.child(
+                    v_flex()
+                        .absolute()
+                        .inset_0()
+                        .m_2()
+                        .items_center()
+                        .justify_center()
+                        .rounded(theme::RADIUS_MD)
+                        .border_2()
+                        .border_dashed()
+                        .border_color(theme::accent())
+                        .bg(theme::panel())
+                        .drag_over::<ExternalPaths>(|d, _, _, _| d.bg(theme::accent_soft()))
+                        .text_color(theme::accent())
+                        .font_weight(FontWeight::MEDIUM)
+                        .child("Déposer les images ou PDF de l'acte"),
+                )
+            })
     }
 
     fn render_act(&self, act: &Act, cx: &mut Context<Self>) -> Div {
@@ -1103,11 +1213,18 @@ impl Render for ActEditor {
                 }),
         );
 
+        // Des images ou PDF déposés n'importe où sur l'éditeur deviennent l'image
+        // de l'acte (les suivants s'ajoutent comme pages).
         v_flex()
+            .id("act-editor")
             .flex_1()
             .min_w_0()
             .min_h_0()
             .bg(theme::bg())
+            .on_drop(cx.listener(|this, paths: &ExternalPaths, _, cx| {
+                cx.stop_propagation();
+                this.add_files(paths.paths(), true, cx);
+            }))
             .child(header)
             .child(h_flex().flex_1().min_h_0().items_stretch().child(self.render_image(cx)).child(form))
             .child(self.render_footer(cx))
