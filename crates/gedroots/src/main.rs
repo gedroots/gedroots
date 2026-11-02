@@ -68,6 +68,7 @@ gpui_kit::assets::icon_assets!(
         AppWindow,
         Plug,
         Bot,
+        Compass,
         Sprout,
         Import,
     ]
@@ -188,9 +189,17 @@ fn open_workspace(path: Option<PathBuf>, cx: &mut App) -> Option<(AnyWindowHandl
 
 /// Help › Open Sample Tree: the sample tree, in a window of its own.
 pub(crate) fn open_sample(cx: &mut App) {
+    open_sample_with_tour(Vec::new(), cx);
+}
+
+/// The sample tree in a window of its own, running the chapters of the guided tour that need it.
+pub(crate) fn open_sample_with_tour(chapters: Vec<workspace::tour::Chapter>, cx: &mut App) {
     let Some((window, ws)) = open_workspace(None, cx) else { return };
     let _ = cx.update_window(window, |_, window, cx| {
-        let _ = ws.update(cx, |ws, cx| ws.open_sample(window, cx));
+        let _ = ws.update(cx, |ws, cx| {
+            ws.open_sample(chapters.is_empty(), window, cx);
+            ws.start_chapters(chapters, window, cx);
+        });
     });
 }
 

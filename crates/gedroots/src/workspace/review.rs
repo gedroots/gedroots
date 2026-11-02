@@ -20,6 +20,8 @@ use std::collections::BTreeSet;
 pub(super) struct Item {
     pending: Pending,
     excluded: BTreeSet<usize>,
+    /// Prepared by the guided tour, not sent by an agent.
+    demo: bool,
 }
 
 impl Item {
@@ -93,14 +95,27 @@ fn change_tag(c: Change) -> (String, Hsla) {
 
 impl Workspace {
     /// Proposal received from the agent: checked against the displayed file, then queued.
-    pub(crate) fn add_proposal(&mut self, mut pending: Pending, cx: &mut Context<Self>) -> Result<usize, String> {
+    pub(crate) fn add_proposal(&mut self, pending: Pending, cx: &mut Context<Self>) -> Result<usize, String> {
+        self.queue_proposal(pending, false, cx)
+    }
+
+    /// Queues a proposal for review; `demo`: prepared by the guided tour, and labelled so.
+    pub(super) fn queue_proposal(
+        &mut self,
+        mut pending: Pending,
+        demo: bool,
+        cx: &mut Context<Self>,
+    ) -> Result<usize, String> {
         let Some(doc) = &self.doc else { return Err("no file is open in GEDRoots".into()) };
         let g = &doc.ged;
         pending.proposal.complete(g);
         pending.proposal.check(g, current_year())?;
-        self.review.items.push(Item { pending, excluded: BTreeSet::new() });
+        self.review.items.push(Item { pending, excluded: BTreeSet::new(), demo });
         let n = self.review.items.len();
-        self.set_status(crate::tn!("review.received", n), false);
+        match demo {
+            true => self.set_status(t!("review.demo"), false),
+            false => self.set_status(crate::tn!("review.received", n), false),
+        }
         cx.notify();
         Ok(n)
     }
@@ -111,6 +126,7 @@ impl Workspace {
         } else {
             self.act_editor = None;
             self.review.open = true;
+            self.tour_did(super::tour::Advance::OpenReview, cx);
         }
         cx.notify();
     }
@@ -139,6 +155,7 @@ impl Workspace {
         }
         if self.review_take().is_some() {
             self.set_status(t!("review.rejected"), false);
+            self.tour_did(super::tour::Advance::Decide, cx);
         }
         cx.notify();
     }
@@ -174,6 +191,7 @@ impl Workspace {
                 };
                 self.review_take();
                 self.set_status(res.summary() + &note, false);
+                self.tour_did(super::tour::Advance::Decide, cx);
                 self.rebuild_rows(cx);
                 self.refresh_editor(window, cx);
                 if !self.review.open
@@ -254,7 +272,8 @@ impl Workspace {
                                 .text_color(theme::accent())
                                 .child(self.review.items.len().to_string()),
                         )
-                        .on_click(cx.listener(|this, _, _, cx| this.open_review(cx))),
+                        .on_click(cx.listener(|this, _, _, cx| this.open_review(cx)))
+                        .children(self.tour_anchor(super::tour::Target::ReviewZone, cx)),
                 )
                 .into_any_element(),
         )
@@ -379,8 +398,8 @@ impl Workspace {
                 _ => None,
             })
             .map(|s| t!("review.sosa", n = s).into_owned());
-        let sub =
-            [sosa, Some(t!("review.by_agent").into_owned())].into_iter().flatten().collect::<Vec<_>>().join(" · ");
+        let by = if item.demo { t!("review.demo") } else { t!("review.by_agent") };
+        let sub = [sosa, Some(by.into_owned())].into_iter().flatten().collect::<Vec<_>>().join(" · ");
 
         // Comparison. Columns: check box, field, “In the tree”, “Proposed”.
         let line = || h_flex().items_start().gap_2().px_2().py_1p5().border_t_1().border_color(theme::border());
