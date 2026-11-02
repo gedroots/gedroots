@@ -43,8 +43,9 @@ register.
 
 - **Family tree and fan chart.** An infinite free tree in both directions, and a fan chart of
   up to seven generations that shows at a glance which ancestors are still missing.
-- **A life on one timeline.** A person's events and those of their unions, with their age at
-  each, and on request the births and deaths of their close relatives.
+- **A life on one timeline.** A person's events and those of their unions, the events they
+  attended as a witness or godparent, and on request the births and deaths of their close
+  relatives. A click shows an event in full: age, place, witnesses, sources and media.
 - **Search that understands genealogy.** Type `1855`, `agneaux` or `louis marchand`: GEDRoots
   suggests *born about 1855*, *place Agneaux*, *ancestors of Louis MARCHAND*. Spelling
   variants, saved searches, and criteria such as `without:source`.

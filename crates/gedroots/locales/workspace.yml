@@ -147,6 +147,42 @@ ws.other_media:
 ws.event_value:
   en: "%{label}: %{value}"
   fr: "%{label} : %{value}"
+ws.ev_with:
+  en: With
+  fr: Avec
+ws.ev_person:
+  en: Person
+  fr: Personne
+ws.ev_people:
+  en: People
+  fr: Personnes
+ws.ev_place:
+  en: Place
+  fr: Lieu
+ws.ev_associates:
+  en: Participants
+  fr: Participants
+ws.ev_sources:
+  en: Sources
+  fr: Sources
+ws.ev_media:
+  en: Media
+  fr: Médias
+ws.ev_notes:
+  en: Notes
+  fr: Notes
+ws.ev_edit:
+  en: Edit…
+  fr: Modifier…
+ws.close:
+  en: Close
+  fr: Fermer
+ws.attended:
+  en: "%{role} · %{event}"
+  fr: "%{role} · %{event}"
+ws.couple:
+  en: "%{a} and %{b}"
+  fr: "%{a} et %{b}"
 ws.with:
   en: "with %{name}"
   fr: "avec %{name}"

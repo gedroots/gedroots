@@ -28,6 +28,7 @@ mod add;
 mod agent;
 mod chart;
 mod commands;
+mod event_detail;
 mod export;
 mod filters;
 mod gallery;
@@ -275,6 +276,8 @@ pub struct Workspace {
     quality: quality::QualityState,
     /// Relationship shown in a modal window (A, B).
     kinship: Option<(String, String)>,
+    /// Event shown read-only (click in a timeline).
+    event_detail: Option<event_detail::EventDetail>,
     /// Record page: also show the relatives' events (View › Relatives' Events).
     show_relative_events: bool,
     /// Statistics of the file (Statistics page).
@@ -346,6 +349,7 @@ impl Workspace {
             list_scroll: UniformListScrollHandle::new(),
             quality: quality::QualityState { stale: true, ..Default::default() },
             kinship: None,
+            event_detail: None,
             show_relative_events: false,
             stats: None,
             recent_gen: (crate::recent::generation(), crate::commands::search_sites_generation()),
@@ -1287,6 +1291,69 @@ fn mono(s: impl Into<SharedString>) -> Div {
 
 fn dot(color: Hsla) -> Div {
     div().size(px(7.)).flex_none().rounded_full().bg(color)
+}
+
+/// Row of a timeline: label and date, then a plain second line (with whom, where). A single click
+/// target; the links live in the event window and the context menu. Orange dot: no source.
+fn event_row(
+    id: SharedString,
+    label: String,
+    date: String,
+    sub: String,
+    unsourced: bool,
+    media: usize,
+    attended: bool,
+) -> Stateful<Div> {
+    v_flex()
+        .id(id)
+        .gap_0p5()
+        .px_2()
+        .py_1()
+        .rounded(theme::RADIUS_SM)
+        .cursor_pointer()
+        .hover(|d| d.bg(theme::hover()))
+        .child(
+            h_flex()
+                .justify_between()
+                .gap_2()
+                .child(
+                    h_flex()
+                        .gap_2()
+                        .items_center()
+                        .min_w_0()
+                        .child(
+                            div()
+                                .font_weight(FontWeight::MEDIUM)
+                                .when(attended, |d| d.italic())
+                                .overflow_hidden()
+                                .whitespace_nowrap()
+                                .text_ellipsis()
+                                .child(label),
+                        )
+                        .when(unsourced, |d| d.child(dot(theme::warn()))),
+                )
+                .child(div().flex_none().text_xs().text_color(theme::muted()).child(date)),
+        )
+        .when(!sub.is_empty() || media > 0, |d| {
+            d.child(
+                h_flex()
+                    .justify_between()
+                    .gap_2()
+                    .text_color(theme::muted())
+                    .child(div().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(sub))
+                    .when(media > 0, |d| {
+                        d.child(
+                            h_flex()
+                                .flex_none()
+                                .gap_1()
+                                .items_center()
+                                .text_xs()
+                                .child(icon(IconName::Image).size_3p5())
+                                .child(media.to_string()),
+                        )
+                    }),
+            )
+        })
 }
 
 fn icon(name: IconName) -> Icon {
@@ -2277,116 +2344,97 @@ impl Workspace {
             .map(|pe| {
                 let PersonEvent { owner: ev_owner, index: ix, event: e, family, spouse } = pe;
                 let sort = e.date().map(|d| d.sort_key()).unwrap_or((i32::MAX, 0, 0));
-                // Age of the person on the date of the event (except their birth).
-                let age = person
-                    .as_ref()
-                    .filter(|_| family || e.tag() != "BIRT")
-                    .and_then(|p| e.date_raw().and_then(|d| timeline::age_at(p, d)));
-                let place = e.place().map(|p| p.to_string());
-                let sources: Vec<String> = e.source_xrefs().iter().map(|s| s.to_string()).collect();
                 let label = match e.value() {
                     Some(v) => t!("ws.event_value", label = e.label(), value = v).into_owned(),
                     None => e.label(),
                 };
-                let key = format!("{ev_owner}-{ix}");
-                let (o1, o2) = (ev_owner.clone(), ev_owner.clone());
+                // Second line, plain text: with whom (event of a union), where.
+                let sub: Vec<String> = spouse
+                    .filter(|_| family)
+                    .map(|s| t!("ws.with", name = g.record_label(&s)).into_owned())
+                    .into_iter()
+                    .chain(e.place().filter(|p| !p.is_empty()).map(short_place))
+                    .collect();
+                let date = e.date().map(|d| d.display()).unwrap_or_default();
+                let (o1, o2, subject) = (ev_owner.clone(), ev_owner.clone(), x.clone());
                 // Dropping files on the event: import preview of its media.
                 let (drop_owner, entity) = (ev_owner.clone(), cx.entity().downgrade());
-                let row = v_flex()
-                    .id(SharedString::from(format!("ev-{key}")))
-                    .gap_0p5()
-                    .px_2()
-                    .py_1()
-                    .rounded(theme::RADIUS_SM)
-                    .cursor_pointer()
-                    .hover(|d| d.bg(theme::hover()))
-                    .drag_over::<ExternalPaths>(|d, _, _, _| d.bg(theme::accent_soft()))
-                    .on_drop(move |paths: &ExternalPaths, window, cx| {
-                        cx.stop_propagation();
-                        let owner = drop_owner.clone();
-                        let _ = entity.update(cx, |this, cx| {
-                            let files = paths.paths().to_vec();
-                            let target = GalleryTarget::Event { owner, ix };
-                            this.open_gallery_with_files(target, files, window, cx);
-                        });
-                    })
-                    .child(
-                        h_flex()
-                            .justify_between()
-                            .gap_2()
-                            .child(
-                                h_flex()
-                                    .gap_2()
-                                    .items_center()
-                                    .child(div().font_weight(FontWeight::MEDIUM).child(label))
-                                    // Orange dot: event without a source.
-                                    .when(sources.is_empty(), |d| d.child(dot(theme::warn()))),
-                            )
-                            .child(
-                                h_flex()
-                                    .gap_2()
-                                    .flex_none()
-                                    .when_some(age, |d, a| d.child(div().text_xs().text_color(theme::muted()).child(a)))
-                                    .child(mono(e.date().map(|d| d.display()).unwrap_or_default())),
-                            ),
-                    )
-                    // Event of a union: with whom.
-                    .when_some(spouse.filter(|_| family), |d, s| {
-                        let target = s.clone();
-                        d.child(
-                            div()
-                                .id(SharedString::from(format!("ev-spouse-{key}")))
-                                .text_color(theme::muted())
-                                .hover(|d| d.text_color(theme::accent()))
-                                .child(t!("ws.with", name = g.record_label(&s)))
-                                .on_click(cx.listener(move |this, _, w, cx| {
-                                    cx.stop_propagation();
-                                    this.goto(target.clone(), w, cx)
-                                })),
-                        )
-                    })
-                    .when_some(place, |d, p| {
-                        let target = p.clone();
-                        d.child(
-                            div()
-                                .id(SharedString::from(format!("ev-place-{key}")))
-                                .text_color(theme::muted())
-                                .hover(|d| d.text_color(theme::accent()))
-                                .child(short_place(&p))
-                                .on_click(cx.listener(move |this, _, w, cx| {
-                                    cx.stop_propagation();
-                                    this.goto_place(target.clone(), w, cx)
-                                })),
-                        )
-                    })
-                    .children(sources.into_iter().map(|s| {
-                        let title = g.record_label(&s);
-                        let target = s.clone();
-                        div()
-                            .id(SharedString::from(format!("ev-src-{key}-{s}")))
-                            .text_xs()
-                            .text_color(theme::ok())
-                            .hover(|d| d.text_color(theme::accent()))
-                            .child(title)
-                            .on_click(cx.listener(move |this, _, w, cx| {
-                                cx.stop_propagation();
-                                this.goto(target.clone(), w, cx)
-                            }))
-                    }))
-                    .children(self.render_event_media(&ev_owner, ix, &e, cx))
-                    .on_click(cx.listener(move |this, _, w, cx| this.open_event_dialog(o1.clone(), Some(ix), w, cx)))
-                    .with_menu(self.event_menu(o2, ix, cx));
+                let row = event_row(
+                    SharedString::from(format!("ev-{ev_owner}-{ix}")),
+                    label,
+                    date,
+                    sub.join(" · "),
+                    !e.is_sourced(),
+                    e.media_xrefs().len(),
+                    false,
+                )
+                .drag_over::<ExternalPaths>(|d, _, _, _| d.bg(theme::accent_soft()))
+                .on_drop(move |paths: &ExternalPaths, window, cx| {
+                    cx.stop_propagation();
+                    let owner = drop_owner.clone();
+                    let _ = entity.update(cx, |this, cx| {
+                        let files = paths.paths().to_vec();
+                        let target = GalleryTarget::Event { owner, ix };
+                        this.open_gallery_with_files(target, files, window, cx);
+                    });
+                })
+                // Click: the event in read-only; double-click: straight to editing.
+                .on_click(cx.listener(move |this, ev: &ClickEvent, w, cx| {
+                    if ev.click_count() >= 2 {
+                        this.event_detail = None;
+                        this.open_event_dialog(o1.clone(), Some(ix), w, cx)
+                    } else {
+                        this.open_event_detail(o1.clone(), ix, subject.clone(), cx)
+                    }
+                }))
+                .with_menu(self.event_menu(o2, ix, cx));
                 (sort, row.into_any_element())
             })
             .collect();
+        // Events of other people the person attended (witness, godparent…): `ASSO`.
+        if person.is_some() {
+            for a in g.attended_events(owner) {
+                let sort = a.event.date().map(|d| d.sort_key()).unwrap_or((i32::MAX, 0, 0));
+                let names: Vec<String> = a.principals.iter().map(|p| g.record_label(p)).collect();
+                let who = match names.as_slice() {
+                    [a, b] => t!("ws.couple", a = a, b = b).into_owned(),
+                    _ => names.join(", "),
+                };
+                let sub: Vec<String> = Some(who)
+                    .filter(|w| !w.is_empty())
+                    .into_iter()
+                    .chain(a.event.place().filter(|p| !p.is_empty()).map(short_place))
+                    .collect();
+                let (ev_owner, ix, subject) = (a.owner.clone(), a.index, x.clone());
+                let row =
+                    event_row(
+                        SharedString::from(format!("att-{}-{}", a.owner, a.index)),
+                        t!("ws.attended", role = a.role, event = a.event.label()).into_owned(),
+                        a.event.date().map(|d| d.display()).unwrap_or_default(),
+                        sub.join(" · "),
+                        false,
+                        0,
+                        true,
+                    )
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.open_event_detail(ev_owner.clone(), ix, subject.clone(), cx)
+                    }))
+                    .with_menu(self.record_menu(
+                        a.principals.first().unwrap_or(&a.owner),
+                        MenuFrom::Link,
+                        cx,
+                    ));
+                rows.push((sort, row.into_any_element()));
+            }
+        }
         if show_relatives {
             for (n, r) in relatives.iter().enumerate() {
                 let sort = r.date.as_ref().map(|d| d.sort_key()).unwrap_or((i32::MAX, 0, 0));
                 rows.push((sort, self.render_relative_event(n, r, cx)));
             }
-            // Stable sort: on the same date, the person's event first.
-            rows.sort_by_key(|r| r.0);
         }
+        // Stable sort: on the same date, the person's event first.
+        rows.sort_by_key(|r| r.0);
         let toggle = (!relatives.is_empty()).then(|| {
             Button::new("relative-events")
                 .xsmall()
@@ -2852,7 +2900,7 @@ impl Render for Workspace {
                     }
                     if this.photo_draw.is_some() {
                         this.cancel_draw(cx);
-                    } else if this.kinship.take().is_some() {
+                    } else if this.kinship.take().is_some() || this.close_event_detail(cx) {
                         cx.notify();
                     }
                 }
@@ -2864,6 +2912,7 @@ impl Render for Workspace {
             .child(body)
             .children(self.render_picker(cx))
             .children(self.render_kinship(cx))
+            .children(self.render_event_detail(cx))
             .children(self.render_media_gallery(cx))
             .children(self.render_add_dialog(cx))
             .children(self.render_new_place(cx))
