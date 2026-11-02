@@ -6,7 +6,10 @@
 //! courant. Le mode suit l'apparence du système (`sync`), et chaque changement redessine les fenêtres.
 
 use gpui_kit::component::{Theme, ThemeMode};
-use gpui_kit::{App, FontFeatures, Hsla, Pixels, SharedString, Window, WindowAppearance, px, rgb};
+use gpui_kit::{
+    App, Div, ElementId, FontFeatures, Hsla, InteractiveElement, Pixels, SharedString, Stateful,
+    StatefulInteractiveElement, Styled, Window, WindowAppearance, div, px, rgb,
+};
 use std::borrow::Cow;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -197,6 +200,21 @@ pub const RADIUS_SM: Pixels = px(8.);
 pub const RADIUS_MD: Pixels = px(12.);
 /// Cartes et fenêtres modales.
 pub const RADIUS_LG: Pixels = px(20.);
+
+// --- Zones qui défilent ----------------------------------------------------------------------
+
+/// Place laissée à l'anneau de focus des champs (3 px, peint hors de leur bordure).
+pub const FOCUS_ROOM: Pixels = px(4.);
+
+/// Zone qui défile verticalement sans rogner l'anneau de focus des champs qu'elle contient.
+///
+/// Une zone qui défile coupe tout ce qui dépasse de ses bords, y compris l'anneau d'un champ posé
+/// contre eux. Elle prend donc `FOCUS_ROOM` de retrait intérieur, compensé par une marge négative :
+/// le contenu reste aligné au pixel près sur ce qui l'entoure. Toute zone qui défile et contient
+/// des champs passe par ici plutôt que par `overflow_y_scroll()`.
+pub fn scroll_y(id: impl Into<ElementId>) -> Stateful<Div> {
+    div().id(id).overflow_y_scroll().p(FOCUS_ROOM).m(-FOCUS_ROOM)
+}
 
 // --- Typographie ----------------------------------------------------------------------------
 
