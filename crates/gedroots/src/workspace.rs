@@ -25,6 +25,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 mod add;
+mod agent;
 mod chart;
 mod commands;
 mod export;
@@ -291,6 +292,13 @@ impl Workspace {
         let map_sub = cx.subscribe_in(&map, window, Self::on_map_event);
         // Clair / sombre : suit l'apparence du système.
         let appearance_sub = cx.observe_window_appearance(window, |_, window, cx| theme::sync(window, cx));
+        // Agents IA : ils lisent le fichier de la dernière fenêtre activée.
+        crate::agent::set_target(cx.entity().downgrade(), cx);
+        let activation_sub = cx.observe_window_activation(window, |_, window, cx| {
+            if window.is_window_active() {
+                crate::agent::set_target(cx.entity().downgrade(), cx);
+            }
+        });
         let mut this = Self {
             focus: cx.focus_handle(),
             doc: None,
@@ -346,7 +354,7 @@ impl Workspace {
             editor_subs: Vec::new(),
             add_dialog: None,
             gallery: None,
-            _subs: vec![sub, map_sub, appearance_sub],
+            _subs: vec![sub, map_sub, appearance_sub, activation_sub],
         };
         if let Some(p) = path {
             this.load(p, window, cx);

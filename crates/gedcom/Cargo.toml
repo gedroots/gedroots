@@ -6,3 +6,9 @@ description = "Lecture/écriture GEDCOM 7 sans perte et vues typées pour GEDRoo
 
 [dependencies]
 rust-i18n = "4.2.4"
+serde = { version = "1", features = ["derive"], optional = true }
+schemars = { version = "1", optional = true }
+
+[features]
+# Sérialisation des données de recherche (serveur MCP de l'app).
+serde = ["dep:serde", "dep:schemars"]

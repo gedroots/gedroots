@@ -10,6 +10,7 @@
 //! - [`gazetteer`] : création de lieux (découpage selon le format, lieux-dits, `EXID`) ;
 //! - [`search`] : recherche et filtres sur les individus ;
 //! - [`relations`] : ajout/liaison/suppression de proches, lieux et médias ;
+//! - [`research`] : fiches, recherche et lacunes pour les agents IA (lecture seule, vivants masqués) ;
 //! - [`events`] : modification et suppression des événements ;
 //! - [`quality`] : page Qualité des données (cohérence, schéma GEDCOM 7, éléments vides ou inutilisés) ;
 //! - [`gedzip`] : préparation de l'export GEDZIP (`gedcom.ged` + médias dans une archive) ;
@@ -57,6 +58,7 @@ pub mod phonetic;
 pub mod quality;
 pub mod query;
 pub mod relations;
+pub mod research;
 pub mod saved;
 pub mod schema;
 pub mod search;

@@ -18,6 +18,7 @@ pub(super) enum AddDialog {
     Settings(Box<super::settings::SettingsDialog>),
     RenameMedia(Box<super::media_files::RenameDialog>),
     Gedzip(Box<super::export::GedzipReport>),
+    Agent(Box<super::agent::AgentDialog>),
 }
 
 /// Action d'une ligne de la fenêtre des proches.
@@ -288,6 +289,7 @@ impl Workspace {
                 (t!("cmd.rename_media_files").trim_end_matches('…').to_string(), self.rename_body(d, cx))
             }
             AddDialog::Gedzip(d) => (self.gedzip_title(d), self.gedzip_body(d, cx)),
+            AddDialog::Agent(d) => (rust_i18n::t!("agent.title").into(), self.agent_body(d, cx)),
         };
         Some(
             div()

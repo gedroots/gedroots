@@ -1,0 +1,18 @@
+_version: 2
+# Fichier › Connecter un agent IA… (crates/gedroots/src/workspace/agent.rs)
+agent:
+  title:
+    en: AI Agents
+    fr: Agents IA
+  allow:
+    en: Allow AI agents
+    fr: Autoriser les agents IA
+  copy_command:
+    en: Copy Command
+    fr: Copier la commande
+  command_copied:
+    en: Command copied
+    fr: Commande copiée
+  port_unavailable:
+    en: "Port %{port} is unavailable: %{error}"
+    fr: "Port %{port} indisponible : %{error}"
