@@ -21,6 +21,8 @@ pub enum PickPurpose {
     ActSource,
     /// Relationship between `indi` and the chosen person (nothing is changed).
     Kinship { indi: String },
+    /// The chosen person is the person at `idx` in the record being entered.
+    ActPerson { idx: usize },
 }
 
 impl PickPurpose {
@@ -33,6 +35,7 @@ impl PickPurpose {
             PickPurpose::Kinship { indi } => t!("picker.kinship", name = g.record_label(indi)).into_owned(),
             PickPurpose::MergeInto { media } => t!("picker.merge_into", name = g.record_label(media)).into_owned(),
             PickPurpose::ActSource => t!("picker.act_source").into(),
+            PickPurpose::ActPerson { .. } => t!("picker.act_person").into(),
         }
     }
 }
@@ -346,6 +349,12 @@ impl Workspace {
             self.open_act(source, None, window, cx);
             return;
         }
+        if let PickPurpose::ActPerson { idx } = p.purpose {
+            if let Some((editor, _)) = &self.act_editor {
+                editor.update(cx, |e, cx| e.link_person(idx, chosen, window, cx));
+            }
+            return;
+        }
         if let PickPurpose::Kinship { indi } = p.purpose {
             self.kinship = Some((indi, chosen));
             cx.notify();
@@ -388,7 +397,7 @@ impl Workspace {
                     Ok((t!("picker.tagged", who = who).into_owned(), None))
                 }
                 // Handled before: nothing to change.
-                PickPurpose::Kinship { .. } => Err(t!("stats.kinship_title").into()),
+                PickPurpose::Kinship { .. } | PickPurpose::ActPerson { .. } => Err(t!("stats.kinship_title").into()),
             }
         });
     }

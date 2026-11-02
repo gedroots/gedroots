@@ -222,6 +222,9 @@ act.reason.parent_of:
 act.reason.child_of:
   en: "child of %{name}"
   fr: "enfant de %{name}"
+act.reason.swapped:
+  en: "surname and given names swapped"
+  fr: "nom et prénom inversés"
 act.suggestion.born:
   en: "born %{date}"
   fr: "né(e) %{date}"

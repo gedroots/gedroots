@@ -989,6 +989,12 @@ impl Workspace {
             }
             ActEditorEvent::Save { act, next } => this.save_act(editor.clone(), act, *next, window, cx),
             ActEditorEvent::PlaceInput { input, changed } => this.place_input(input, *changed, cx),
+            ActEditorEvent::PickPerson { idx, query } => {
+                this.open_picker(relatives::PickPurpose::ActPerson { idx: *idx }, window, cx);
+                if let Some(p) = &this.picker {
+                    p.input.update(cx, |s, cx| s.set_value(query.clone(), window, cx));
+                }
+            }
         });
         // Place fields of the record: the same menu as everywhere else.
         let ws = cx.entity().downgrade();

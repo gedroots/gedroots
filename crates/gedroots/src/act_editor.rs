@@ -30,6 +30,11 @@ pub enum ActEditorEvent {
         next: bool,
     },
     Close,
+    /// Choose an existing individual for the person at `idx`, searching for `query` first.
+    PickPerson {
+        idx: usize,
+        query: String,
+    },
     /// Typing in a place field (`changed`: the text changed): the workspace holds the place menu,
     /// shared by every Place field.
     PlaceInput {
@@ -423,6 +428,12 @@ impl ActEditor {
         if let PersonChoice::Link(x) = &choice
             && let Some(ind) = self.ged.individual(x)
         {
+            // Surname and given names typed in each other's field: put them back in place.
+            if gedcom::act::names_swapped(p, &ind) {
+                let (s, g) = (p.get(PersonField::Surname).to_string(), p.get(PersonField::Given).to_string());
+                p.set(PersonField::Surname, g);
+                p.set(PersonField::Given, s);
+            }
             for (f, val) in [
                 (PersonField::Surname, ind.surname()),
                 (PersonField::Given, ind.given()),
@@ -437,6 +448,22 @@ impl ActEditor {
         self.set_rows(people, window, cx);
         self.error = None;
         cx.notify();
+    }
+
+    /// The person at `idx` is the existing individual `xref` (chosen in the workspace's picker).
+    pub fn link_person(&mut self, idx: usize, xref: String, window: &mut Window, cx: &mut Context<Self>) {
+        self.set_choice(idx, PersonChoice::Link(xref), window, cx);
+    }
+
+    fn pick_person(&mut self, idx: usize, cx: &mut Context<Self>) {
+        let Some(p) = self.collect(cx).participants.get(idx).cloned() else { return };
+        let query = [p.get(PersonField::Given), p.get(PersonField::Surname)]
+            .iter()
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .collect::<Vec<_>>()
+            .join(" ");
+        cx.emit(ActEditorEvent::PickPerson { idx, query });
     }
 
     fn set_of(&mut self, idx: usize, of: usize, cx: &mut Context<Self>) {
@@ -1017,6 +1044,15 @@ impl ActEditor {
                     .children(of_chips)
                     .child(status)
                     .child(div().flex_1())
+                    .when(row.choice == PersonChoice::Create, |d| {
+                        d.child(
+                            Button::new(SharedString::from(format!("existing-{idx}")))
+                                .ghost()
+                                .xsmall()
+                                .label(t!("event_dialog.existing_person"))
+                                .on_click(cx.listener(move |this, _, _, cx| this.pick_person(idx, cx))),
+                        )
+                    })
                     .when(row.choice != PersonChoice::Create, |d| {
                         d.child(
                             Button::new(SharedString::from(format!("unlink-{idx}")))
