@@ -12,7 +12,7 @@ use gedcom::geo::{TILE_SIZE, project, unproject};
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::menu::{ContextMenuExt, PopupMenu, PopupMenuItem};
 use gpui_kit::component::tooltip::Tooltip;
-use gpui_kit::component::{Disableable, Sizable, h_flex};
+use gpui_kit::component::{Sizable, h_flex};
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 use std::collections::HashSet;
@@ -264,6 +264,16 @@ impl MapView {
     // Géocodage
     // ------------------------------------------------------------------
 
+    /// Localise un lieu sans coordonnées (Qualité › Localiser…), un seul à la fois.
+    pub fn geocode_place(&mut self, name: String, cx: &mut Context<Self>) {
+        if !self.online {
+            self.message = Some(("Carte hors ligne : passez-la en ligne pour localiser le lieu".into(), true));
+            cx.notify();
+            return;
+        }
+        self.geocode(vec![name], cx);
+    }
+
     fn geocode(&mut self, names: Vec<String>, cx: &mut Context<Self>) {
         if self.job.is_some() || names.is_empty() {
             return;
@@ -457,8 +467,6 @@ impl MapView {
     }
 
     fn render_toolbar(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let sel_missing = self.selected.as_ref().filter(|n| self.missing.iter().any(|(m, _)| &m == n)).cloned();
-        let busy = self.job.is_some();
         h_flex()
             .absolute()
             .top_2()
@@ -510,39 +518,6 @@ impl MapView {
                         })),
                 ),
             )
-            .when_some(sel_missing, |d, name| {
-                let short: SharedString = gedcom::short_place(&name).into();
-                let n2 = name.clone();
-                d.child(
-                    pill()
-                        .child(
-                            div()
-                                .px_1()
-                                .text_xs()
-                                .text_color(theme::warn())
-                                .child(format!("« {short} » sans coordonnées")),
-                        )
-                        .child(
-                            Button::new("geocode-one")
-                                .ghost()
-                                .xsmall()
-                                .label("Localiser")
-                                .disabled(busy || !self.online)
-                                .on_click(cx.listener(move |this, _, _, cx| this.geocode(vec![n2.clone()], cx))),
-                        )
-                        .child(
-                            Button::new("place-by-hand")
-                                .xsmall()
-                                .when(self.placing, |b| b.primary())
-                                .when(!self.placing, |b| b.ghost())
-                                .label(if self.placing { "Cliquez sur la carte…" } else { "Placer à la main" })
-                                .on_click(cx.listener(|this, _, _, cx| {
-                                    this.placing = !this.placing;
-                                    cx.notify();
-                                })),
-                        ),
-                )
-            })
             .child(div().flex_1())
             .when_some(self.job.as_ref(), |d, job| {
                 let cancel = job.cancel.clone();
