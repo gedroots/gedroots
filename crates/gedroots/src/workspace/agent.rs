@@ -72,15 +72,6 @@ impl Workspace {
                         )),
                 )
             })
-            .child(
-                h_flex().justify_end().child(
-                    Button::new("agent-ok")
-                        .primary()
-                        .small()
-                        .label("OK")
-                        .on_click(cx.listener(|this, _, w, cx| this.close_add_dialog(w, cx))),
-                ),
-            )
             .into_any_element()
     }
 }
