@@ -1151,7 +1151,6 @@ fn avatar(doc: &Document, i: &Individual<'_>, size: f32, ring: Hsla) -> Div {
         .border_2()
         .border_color(ring)
         .bg(theme::surface())
-        .overflow_hidden()
         .flex()
         .items_center()
         .justify_center();
@@ -1162,7 +1161,10 @@ fn avatar(doc: &Document, i: &Individual<'_>, size: f32, ring: Hsla) -> Div {
         Some(p) => {
             // Le recadrage du lien (CROP) cadre le visage sur une photo de groupe.
             let crop = portrait.and_then(|m| doc.ged.link_crop(i.xref(), m.xref()));
-            base.child(photo::linked_img(p, crop, size, size, true))
+            // Le masque de GPUI est rectangulaire : c'est l'image elle-même qui
+            // s'arrondit, dans l'anneau.
+            let inner = size - 4.;
+            base.child(photo::linked_img(p, crop, inner, inner, true).rounded_full())
         }
         None => {
             let initials: String =
