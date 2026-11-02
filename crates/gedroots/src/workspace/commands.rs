@@ -214,6 +214,13 @@ impl Workspace {
                     }
                 })
             })
+            .when(media.is_some() && g.is_some_and(|g| !g.media_naming().is_empty()), |d| {
+                on!(d, cx, RenameMediaFiles, |this, w, cx| {
+                    if let Some(media) = this.selected.clone() {
+                        this.open_rename_media(media, cx)
+                    }
+                })
+            })
     }
 
     /// Image (existante) de la page affichée d'un média.

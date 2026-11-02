@@ -15,6 +15,7 @@ pub(super) enum AddDialog {
     WebLink(Box<super::weblinks::WebLinkDialog>),
     Import(Box<super::import::ImportDialog>),
     Settings(Box<super::settings::SettingsDialog>),
+    RenameMedia(Box<super::media_files::RenameDialog>),
 }
 
 /// Action d'une ligne de la fenêtre des proches.
@@ -268,6 +269,7 @@ impl Workspace {
             AddDialog::WebLink(d) => (self.weblink_dialog_title(d), self.weblink_body(d, cx)),
             AddDialog::Import(d) => (self.import_title(d), self.import_body(d, cx)),
             AddDialog::Settings(d) => ("Réglages du fichier".into(), self.settings_body(d, cx)),
+            AddDialog::RenameMedia(d) => ("Renommer selon le modèle".into(), self.rename_body(d, cx)),
         };
         Some(
             div()

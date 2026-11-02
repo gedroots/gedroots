@@ -16,6 +16,7 @@ pub(super) enum SettingsPage {
     General,
     Places,
     Events,
+    Media,
 }
 
 /// Une juridiction du format des lieux en cours de modification.
@@ -46,6 +47,9 @@ pub(super) struct SettingsDialog {
     events: Vec<EventRow>,
     /// Types déclarés retirés de la liste.
     removed_events: Vec<(bool, String)>,
+    media_dir: Entity<InputState>,
+    media_template: Entity<InputState>,
+    _subs: Vec<Subscription>,
 }
 
 fn text_input(ph: &str, value: &str, window: &mut Window, cx: &mut Context<Workspace>) -> Entity<InputState> {
@@ -88,6 +92,19 @@ impl Workspace {
                 uses: t.uses,
             })
             .collect();
+        let naming = g.media_naming();
+        let media_dir = text_input("Médias", &naming.dir, window, cx);
+        let media_template = text_input("{type}/{annee} {nom} {prenom}", &naming.template, window, cx);
+        // Aperçu du nom des fichiers mis à jour pendant la saisie.
+        let subs = [&media_dir, &media_template]
+            .map(|e| {
+                cx.subscribe(e, |_, _, ev: &InputEvent, cx| {
+                    if matches!(ev, InputEvent::Change) {
+                        cx.notify();
+                    }
+                })
+            })
+            .into();
         self.add_dialog = Some(AddDialog::Settings(Box::new(SettingsDialog {
             page,
             author,
@@ -99,6 +116,9 @@ impl Workspace {
             places,
             events,
             removed_events: Vec::new(),
+            media_dir,
+            media_template,
+            _subs: subs,
         })));
         cx.notify();
     }
@@ -133,11 +153,16 @@ impl Workspace {
             .map(|r| (r.family, r.original.clone(), r.label.read(cx).value().trim().to_string()))
             .collect();
         let removed = d.removed_events.clone();
+        let naming = MediaNaming {
+            dir: d.media_dir.read(cx).value().to_string(),
+            template: d.media_template.read(cx).value().to_string(),
+        };
         self.add_dialog = None;
 
         let g = &self.doc.as_ref().unwrap().ged;
         let mut probe = g.clone();
         let mut changed = probe.set_file_settings(&s);
+        changed |= probe.set_media_naming(&naming);
         let root_changed = root.as_ref().is_some_and(|r| g.root().as_ref() != Some(r));
         let current = g.place_form();
         let format_changed = format.len() != current.len()
@@ -147,6 +172,7 @@ impl Workspace {
         if changed {
             self.mutate(window, cx, move |g| {
                 g.set_file_settings(&s);
+                g.set_media_naming(&naming);
                 if let Some(r) = root.filter(|_| root_changed) {
                     g.set_root(&r);
                 }
@@ -193,6 +219,7 @@ impl Workspace {
             SettingsPage::General => self.settings_general(d, cx),
             SettingsPage::Places => self.settings_places(d, cx),
             SettingsPage::Events => self.settings_events(d, cx),
+            SettingsPage::Media => self.settings_media(d, cx),
         };
         let tab = |id: &'static str, label: &'static str, page: SettingsPage| {
             let active = d.page == page;
@@ -212,7 +239,8 @@ impl Workspace {
                     .gap_1()
                     .child(tab("settings-general", "Général", SettingsPage::General))
                     .child(tab("settings-places", "Lieux", SettingsPage::Places))
-                    .child(tab("settings-events", "Événements", SettingsPage::Events)),
+                    .child(tab("settings-events", "Événements", SettingsPage::Events))
+                    .child(tab("settings-media", "Médias", SettingsPage::Media)),
             )
             .child(div().id("settings-body").max_h(px(460.)).overflow_y_scroll().child(body))
             .child(
@@ -435,6 +463,58 @@ impl Workspace {
             .gap_4()
             .child(section(false, "Événements individuels", cx))
             .child(section(true, "Événements familiaux", cx))
+            .into_any_element()
+    }
+}
+
+impl Workspace {
+    fn settings_media(&self, d: &SettingsDialog, cx: &mut Context<Self>) -> AnyElement {
+        let g = &self.doc.as_ref().unwrap().ged;
+        let naming = MediaNaming {
+            dir: d.media_dir.read(cx).value().to_string(),
+            template: d.media_template.read(cx).value().to_string(),
+        };
+        // Aperçu sur le média sélectionné, sinon le premier média d'un acte ou d'une personne.
+        let selected = self.selected.clone().filter(|x| g.get(x).is_some_and(|n| n.tag == "OBJE"));
+        let sample = selected.or_else(|| {
+            let medias: Vec<String> = g.records_of(RecordKind::Media).filter_map(|m| m.xref.clone()).collect();
+            medias
+                .iter()
+                .find(|m| !g.media_context(m).kind.is_empty())
+                .or_else(|| medias.iter().find(|m| !g.media_context(m).surname.is_empty()))
+                .cloned()
+        });
+        let preview = sample.and_then(|m| {
+            let mut probe = g.clone();
+            probe.set_media_naming(&naming);
+            probe.media_renames(&m).into_iter().next().map(|(_, _, new)| new)
+        });
+        let tokens = MEDIA_TOKENS.iter().map(|t| {
+            let input = d.media_template.clone();
+            Button::new(SharedString::from(format!("token-{t}"))).xsmall().outline().label(format!("{{{t}}}")).on_click(
+                cx.listener(move |_, _, w, cx| {
+                    input.update(cx, |s, cx| {
+                        let v = s.value().to_string();
+                        let sep = if v.is_empty() || v.ends_with(['/', ' ']) { "" } else { " " };
+                        s.set_value(format!("{v}{sep}{{{t}}}"), w, cx);
+                    });
+                }),
+            )
+        });
+        v_flex()
+            .gap_3()
+            .child(field("Dossier", Input::new(&d.media_dir).small().into_any_element()))
+            .child(field(
+                "Nom des fichiers",
+                v_flex()
+                    .gap_2()
+                    .child(Input::new(&d.media_template).small())
+                    .child(h_flex().flex_wrap().gap_1().children(tokens))
+                    .into_any_element(),
+            ))
+            .when_some(preview.filter(|_| !naming.is_empty()), |v, p| {
+                v.child(div().text_sm().text_color(theme::muted()).child(format!("Exemple : {p}")))
+            })
             .into_any_element()
     }
 }

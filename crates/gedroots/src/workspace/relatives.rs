@@ -373,22 +373,22 @@ impl Workspace {
         if files.is_empty() {
             return;
         }
-        let outside = files.iter().filter(|f| std::path::Path::new(f).is_absolute()).count();
+        let base = self.ged_dir();
         self.mutate(window, cx, |g| {
+            let mut created = Vec::new();
             for f in &files {
                 let m = g.media_for_file(f);
                 if let Some(r) = &record {
                     g.attach_media(r, &m)?;
                 }
+                created.push(m);
             }
             let n = files.len();
             let mut msg = match &record {
                 Some(r) => format!("{n} fichier{} rattaché{} à {}", plural(n), plural(n), g.record_label(r)),
                 None => format!("{n} média{} créé{}", plural(n), plural(n)),
             };
-            if outside > 0 {
-                msg.push_str(" — attention : fichier hors du dossier du .ged, chemin absolu enregistré");
-            }
+            msg.push_str(&super::media_files::store_new_media(g, base.as_deref(), &created));
             Ok((msg, None))
         });
     }
@@ -405,11 +405,13 @@ impl Workspace {
         if files.is_empty() {
             return;
         }
-        let outside = files.iter().filter(|f| std::path::Path::new(f).is_absolute()).count();
+        let base = self.ged_dir();
         self.mutate(window, cx, |g| {
+            let mut created = Vec::new();
             for f in &files {
                 let m = g.media_for_file(f);
                 g.attach_media_to_event(&owner, ix, &m)?;
+                created.push(m);
             }
             let n = files.len();
             let what = g.event_title(&owner, ix).unwrap_or_default().to_lowercase();
@@ -419,9 +421,7 @@ impl Workspace {
                 plural(n),
                 g.record_label(&owner)
             );
-            if outside > 0 {
-                msg.push_str(" — attention : fichier hors du dossier du .ged, chemin absolu enregistré");
-            }
+            msg.push_str(&super::media_files::store_new_media(g, base.as_deref(), &created));
             Ok((msg, None))
         });
     }

@@ -13,6 +13,7 @@ l'exige GEDCOM 7 :
 2 TAG _GR_FLD https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_fld
 2 TAG _GR_FILE https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_file
 2 TAG _GR_EVEN https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_even
+2 TAG _GR_MEDIA https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_media
 ```
 
 Les autres logiciels ignorent ces balises sans perte de données.
@@ -63,6 +64,33 @@ cette balise. Elle ne sert qu'à proposer un type pas encore utilisé dans **Ajo
 
 Renommer un type dans les réglages réécrit tous les `TYPE` correspondants (renommer vers un
 type existant les fusionne) ; un type déclaré et inutilisé peut être retiré.
+
+## `_GR_MEDIA`
+
+Rangement des fichiers médias (**Fichier › Réglages du fichier… › Médias**) : dossier et
+modèle de nom. Les chemins restent des `FILE` standard, relatifs au dossier du `.ged`.
+
+- **Sous** : `HEAD`, au niveau 1, une seule occurrence.
+- **Valeur** : le dossier des médias, relatif au `.ged` (peut être vide).
+- **Sous-structures** : `_GR_NAME <modèle>`, le nom des fichiers. `/` crée un sous-dossier ;
+  variables : `{type}` (type d'événement), `{date}` (AAAA-MM-JJ), `{annee}`, `{lieu}`,
+  `{nom}`, `{prenom}`, `{source}` (titre de la source), `{page}` (cote dans la source).
+  Une variable sans valeur est omise ; l'extension du fichier est conservée et un média à
+  plusieurs pages reçoit « p2 », « p3 »…
+
+```
+0 HEAD
+1 SCHMA
+2 TAG _GR_MEDIA https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_media
+2 TAG _GR_NAME https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_media
+1 _GR_MEDIA Actes
+2 _GR_NAME {type}/{annee} {nom} {prenom}
+```
+
+Les variables sont tirées de l'événement qui cite le média (ou sa source), sinon de la
+source qui le porte, sinon de la personne ou de la famille liée. Un fichier rattaché depuis
+l'extérieur du dossier du `.ged` y est copié sous ce nom ; **Média › Renommer selon le
+modèle…** déplace les fichiers d'un média existant après confirmation.
 
 ## `_GR_FILE`
 

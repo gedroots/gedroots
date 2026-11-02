@@ -26,6 +26,7 @@ mod commands;
 mod filters;
 mod history;
 mod import;
+mod media_files;
 mod menus;
 mod pages;
 mod photo;
@@ -702,11 +703,19 @@ impl Workspace {
     ) {
         self.checkpoint();
         let Some(doc) = &mut self.doc else { return };
+        let base = doc.path.as_ref().and_then(|p| p.parent()).map(std::path::Path::to_path_buf);
         match entry.apply(&mut doc.ged) {
             Ok(res) => {
+                // Image de l'acte venue d'ailleurs : copiée et nommée selon Réglages du fichier › Médias.
+                let note = match (&entry.media, &res.media) {
+                    (gedcom::MediaChoice::NewFile(_), Some(m)) => {
+                        media_files::store_new_media(&mut doc.ged, base.as_deref(), std::slice::from_ref(m))
+                    }
+                    _ => String::new(),
+                };
                 let ged = doc.ged.clone();
                 let principal = res.persons.iter().flatten().next().cloned();
-                self.set_status(res.summary(), false);
+                self.set_status(res.summary() + &note, false);
                 self.rebuild_rows(cx);
                 form.update(cx, |f, cx| f.saved(ged, &res, next, window, cx));
                 if !next {

@@ -66,6 +66,7 @@ actions!(
         RemovePage,
         MergeWithMedia,
         MergeSelectedMedia,
+        RenameMediaFiles,
         // Affichage
         GoBack,
         GoForward,
@@ -266,6 +267,7 @@ fn model() -> Vec<(&'static str, Vec<Item>)> {
             ),
             a("Fusionner avec un autre média…", MergeWithMedia),
             a("Fusionner les médias sélectionnés", MergeSelectedMedia),
+            a("Renommer selon le modèle…", RenameMediaFiles),
             Sep,
             a("Identifier une personne sur la photo", TagPerson),
             Sep,
