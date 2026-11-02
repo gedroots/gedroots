@@ -356,6 +356,17 @@ pub fn media_path(naming: &MediaNaming, ctx: &MediaContext, original: &str, page
         .join("/")
 }
 
+/// Une citation qui désigne un média : (force, enregistrement, événement, citation).
+type Found<'a> = (u8, &'a Node, &'a Node, &'a Node);
+
+/// Liens des médias, relevés en un parcours (voir [`Gedcom::media_contexts`]).
+#[derive(Default)]
+struct MediaLinks<'a> {
+    found: HashMap<String, Vec<Found<'a>>>,
+    carriers: HashMap<String, Vec<&'a Node>>,
+    direct: HashMap<String, &'a Node>,
+}
+
 impl Gedcom {
     pub fn media_naming(&self) -> MediaNaming {
         let Some(n) = self.header.child(MEDIA_TAG) else { return MediaNaming::default() };
@@ -513,8 +524,88 @@ impl Gedcom {
         numbers: &HashMap<String, Numbering>,
         naming: Option<&MediaNaming>,
     ) -> MediaContext {
-        let target = format!("@{media}@");
-        let has_media = |n: &Node| n.children.iter().any(|c| c.tag == "OBJE" && c.val() == target);
+        let links = self.media_citations(Some(media));
+        self.resolve_media_context(media, &links, numbers, naming)
+    }
+
+    /// Contexte de tous les médias en un seul parcours du fichier.
+    pub fn media_contexts(
+        &self,
+        numbers: &HashMap<String, Numbering>,
+        naming: Option<&MediaNaming>,
+    ) -> HashMap<String, MediaContext> {
+        let links = self.media_citations(None);
+        self.records
+            .iter()
+            .filter(|r| r.tag == "OBJE")
+            .filter_map(|r| r.xref.as_deref())
+            .map(|x| (x.to_string(), self.resolve_media_context(x, &links, numbers, naming)))
+            .collect()
+    }
+
+    /// Citations, sources porteuses et rattachements directs des médias (de
+    /// `only`, ou de tous), dans l'ordre du fichier.
+    fn media_citations(&self, only: Option<&str>) -> MediaLinks<'_> {
+        let wanted = |m: &str| only.is_none_or(|o| o == m);
+        let media_of = |n: &Node| -> Vec<String> {
+            n.children
+                .iter()
+                .filter(|c| c.tag == "OBJE")
+                .filter_map(|c| c.pointer())
+                .filter(|m| wanted(m))
+                .map(str::to_string)
+                .collect()
+        };
+        let mut links = MediaLinks::default();
+        for r in self.records.iter().filter(|r| r.tag == "SOUR") {
+            for m in media_of(r) {
+                links.carriers.entry(m).or_default().push(&**r);
+            }
+        }
+        for r in self.records.iter().filter(|r| r.tag == "INDI" || r.tag == "FAM") {
+            for m in media_of(r) {
+                links.direct.entry(m).or_insert(&**r);
+            }
+            for e in r.children.iter().filter(|e| event_label(&e.tag).is_some()) {
+                for c in e.children.iter().filter(|c| c.tag == "SOUR") {
+                    let on_citation = media_of(c);
+                    for m in &on_citation {
+                        links.found.entry(m.clone()).or_default().push((0, &**r, e, c));
+                    }
+                    // Média porté par la source citée.
+                    let Some(s) = c.pointer().and_then(|x| self.get(x)) else { continue };
+                    let carried = media_of(s);
+                    if carried.iter().all(|m| on_citation.contains(m)) {
+                        continue;
+                    }
+                    let content = crate::kinds::SourceContent::read(s);
+                    let title = s.child_val("TITL").unwrap_or("").to_lowercase();
+                    let label = Event { node: e }.label().to_lowercase();
+                    let score = if content.events.contains(&e.tag) {
+                        1
+                    } else if !label.is_empty() && title.contains(&label) {
+                        2
+                    } else if !ATTRIBUTES.contains(&e.tag.as_str()) {
+                        3
+                    } else {
+                        4
+                    };
+                    for m in carried.into_iter().filter(|m| !on_citation.contains(m)) {
+                        links.found.entry(m).or_default().push((score, &**r, e, c));
+                    }
+                }
+            }
+        }
+        links
+    }
+
+    fn resolve_media_context(
+        &self,
+        media: &str,
+        links: &MediaLinks<'_>,
+        numbers: &HashMap<String, Numbering>,
+        naming: Option<&MediaNaming>,
+    ) -> MediaContext {
         let mut ctx = MediaContext {
             title: self.get(media).map(|m| crate::model::Media::new(m).title()).unwrap_or_default(),
             ..Default::default()
@@ -535,37 +626,8 @@ impl Gedcom {
             }
             _ => {}
         };
-        let carriers: Vec<&Node> =
-            self.records.iter().filter(|r| r.tag == "SOUR" && has_media(r)).map(|r| &**r).collect();
         // 1. Citation d'un événement, la plus probante d'abord.
-        let mut found: Vec<(u8, &Node, &Node, &Node)> = Vec::new();
-        for r in self.records.iter().filter(|r| r.tag == "INDI" || r.tag == "FAM") {
-            for e in r.children.iter().filter(|e| event_label(&e.tag).is_some()) {
-                for c in e.children.iter().filter(|c| c.tag == "SOUR") {
-                    let score = if has_media(c) {
-                        0
-                    } else if let Some(s) =
-                        carriers.iter().find(|s| s.xref.as_deref().is_some_and(|x| c.pointer() == Some(x)))
-                    {
-                        let content = crate::kinds::SourceContent::read(s);
-                        let title = s.child_val("TITL").unwrap_or("").to_lowercase();
-                        let label = Event { node: e }.label().to_lowercase();
-                        if content.events.contains(&e.tag) {
-                            1
-                        } else if !label.is_empty() && title.contains(&label) {
-                            2
-                        } else if !ATTRIBUTES.contains(&e.tag.as_str()) {
-                            3
-                        } else {
-                            4
-                        }
-                    } else {
-                        continue;
-                    };
-                    found.push((score, r, e, c));
-                }
-            }
-        }
+        let mut found: Vec<Found<'_>> = links.found.get(media).cloned().unwrap_or_default();
         // À score égal, le type d'événement le plus cité l'emporte (un registre
         // matricule cité par trois événements militaires et par le décès).
         let key =
@@ -601,7 +663,7 @@ impl Gedcom {
         }
         // 2. Source qui porte le média : son contenu (`DATA.EVEN`) quand il désigne un
         //    seul type d'acte, une date précise plutôt qu'une période.
-        if let Some(s) = carriers.first() {
+        if let Some(s) = links.carriers.get(media).and_then(|c| c.first()) {
             let content = crate::kinds::SourceContent::read(s);
             if let [t] = content.events.as_slice() {
                 ctx.event = t.clone();
@@ -614,7 +676,7 @@ impl Gedcom {
             ctx.source = s.child_val("TITL").unwrap_or("").to_string();
         }
         // 3. Personne ou famille liée directement (portrait, photo de famille).
-        if let Some(r) = self.records.iter().find(|r| (r.tag == "INDI" || r.tag == "FAM") && has_media(r)) {
+        if let Some(r) = links.direct.get(media) {
             person(r, &mut ctx);
             if ctx.event.is_empty() {
                 ctx.event = r.tag.clone();

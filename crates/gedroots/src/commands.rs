@@ -99,7 +99,6 @@ actions!(
         FilterNoMarriage,
         FilterWithMedia,
         ClearSearch,
-        ToggleSearchHelp,
         // Aide
         CommandPalette,
     ]
@@ -405,10 +404,7 @@ fn model_with(recents: &[std::path::PathBuf]) -> Vec<(&'static str, Vec<Item>)> 
             ),
         ],
     ));
-    menus.push((
-        "Aide",
-        vec![a("Toutes les commandes…", CommandPalette), a("Aide de la recherche avancée", ToggleSearchHelp)],
-    ));
+    menus.push(("Aide", vec![a("Toutes les commandes…", CommandPalette)]));
     menus
 }
 

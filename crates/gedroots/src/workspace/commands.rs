@@ -62,11 +62,6 @@ impl Workspace {
         let d = on!(d, cx, EnterRecord, |this, w, cx| this.enter_act(w, cx));
         let d = on!(d, cx, FocusSearch, |this, w, cx| this.filter.update(cx, |f, cx| f.focus(w, cx)));
         let d = on!(d, cx, ClearSearch, |this, w, cx| this.set_query(String::new(), w, cx));
-        let d = on!(d, cx, ToggleSearchHelp, |this, w, cx| {
-            this.set_view(View::Individuals, w, cx);
-            this.search_help = !this.search_help;
-            cx.notify();
-        });
 
         // Créations : on passe dans la bonne liste puis on crée.
         let d = on!(d, cx, NewIndividual, |this, w, cx| this.create_in(View::Individuals, w, cx));
@@ -308,7 +303,12 @@ impl Workspace {
     }
 
     pub(super) fn set_query(&mut self, query: String, window: &mut Window, cx: &mut Context<Self>) {
-        self.filter.update(cx, |f, cx| f.set_value(query, window, cx));
+        self.filter.update(cx, |f, cx| {
+            let end = query.len();
+            f.set_value(query, window, cx);
+            f.set_selected_range(end..end, cx);
+        });
+        self.tokenize_search(window, cx);
         self.rebuild_rows(cx);
         cx.notify();
     }

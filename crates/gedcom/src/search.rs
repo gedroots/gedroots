@@ -15,6 +15,7 @@
 //! | `vécu:1870` | en vie cette année-là (d'après naissance/décès connus) |
 //! | `lieu:troyes` | un événement de la personne a eu lieu à cet endroit |
 //! | `prof:meunier` | profession (`OCCU`) |
+//! | `nom:guyot` | nom de famille |
 //! | `sexe:h` / `sexe:f` / `sexe:?` | sexe (h/m = homme, f = femme, ? = inconnu) |
 //! | `sans:source`, `sans:parents`, `sans:date`, `sans:famille`, `sans:média` | ce qui manque |
 //! | `sans:mariage` | a une union sans mariage (`MARR`) |
@@ -35,7 +36,7 @@ pub struct YearRange {
 }
 
 impl YearRange {
-    fn parse(s: &str) -> Option<Self> {
+    pub(crate) fn parse(s: &str) -> Option<Self> {
         let s = s.trim();
         if let Some(r) = s.strip_prefix('<') {
             return Some(Self { from: None, to: Some(r.trim().parse::<i32>().ok()? - 1) });
@@ -122,6 +123,8 @@ pub struct IndividualQuery {
     pub alive_in: Option<i32>,
     pub place: Option<String>,
     pub occupation: Option<String>,
+    /// Nom de famille (`nom:`), normalisé.
+    pub surname: Option<String>,
     /// `M`, `F` ou `U`.
     pub sex: Option<char>,
     pub without: Vec<Feature>,
@@ -135,7 +138,7 @@ pub struct IndividualQuery {
 impl IndividualQuery {
     pub fn parse(q: &str) -> Self {
         let mut out = Self::default();
-        for tok in q.split_whitespace() {
+        for (_, tok) in crate::query::words(q) {
             if tok.len() > 2 && tok.starts_with('@') && tok.ends_with('@') {
                 out.xref = Some(tok.trim_matches('@').to_string());
                 continue;
@@ -146,15 +149,20 @@ impl IndividualQuery {
                 continue;
             }
             let Some((key, val)) = tok.split_once(':') else {
-                out.words.push(sort_key(tok));
+                out.words.push(sort_key(crate::query::unquote(tok)));
                 continue;
             };
+            let val = crate::query::unquote(val);
             let ok = match sort_key(key).as_str() {
                 "ne" | "nee" | "naissance" | "n" => YearRange::parse(val).map(|r| out.born = Some(r)).is_some(),
                 "mort" | "morte" | "deces" | "d" => YearRange::parse(val).map(|r| out.died = Some(r)).is_some(),
                 "vecu" | "vivant" | "en" => val.parse().map(|y| out.alive_in = Some(y)).is_ok(),
                 "lieu" | "a" => {
                     out.place = Some(sort_key(val));
+                    !val.is_empty()
+                }
+                "nom" => {
+                    out.surname = Some(sort_key(val));
                     !val.is_empty()
                 }
                 "prof" | "profession" | "metier" => {
@@ -185,7 +193,7 @@ impl IndividualQuery {
                 }
                 // « 1 rue de la Paix » n'est pas un critère : on garde le mot tel quel.
                 _ => {
-                    out.words.push(sort_key(tok));
+                    out.words.push(sort_key(crate::query::unquote(tok)));
                     true
                 }
             };
@@ -222,6 +230,11 @@ impl IndividualQuery {
             if !self.words.iter().all(|w| names.contains(w.as_str())) {
                 return false;
             }
+        }
+        if let Some(n) = &self.surname
+            && !sort_key(&i.surname()).contains(n.as_str())
+        {
+            return false;
         }
         if let Some(s) = self.sex
             && i.sex().chars().next().unwrap_or('U') != s
