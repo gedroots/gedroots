@@ -127,6 +127,7 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new(shortcut!("e"), EnterRecord, WS),
         KeyBinding::new(shortcut!("shift-h"), GoToRoot, WS),
         KeyBinding::new(shortcut!("shift-p"), CommandPalette, WS),
+        KeyBinding::new(shortcut!(","), OpenFileSettings, WS),
         KeyBinding::new(shortcut!("["), GoBack, WS),
         KeyBinding::new(shortcut!("]"), GoForward, WS),
         KeyBinding::new(shortcut!("1"), ShowIndividuals, WS),
@@ -169,7 +170,16 @@ fn model() -> Vec<(&'static str, Vec<Item>)> {
     let mac = cfg!(target_os = "macos");
     let mut menus = Vec::new();
     if mac {
-        menus.push(("GEDRoots", vec![a("Toutes les commandes…", CommandPalette), Sep, a("Quitter GEDRoots", Quit)]));
+        // Sur macOS, les réglages vont à leur place habituelle : menu de l'application, ⌘,.
+        menus.push((
+            "GEDRoots",
+            vec![
+                a("Réglages du fichier…", OpenFileSettings),
+                a("Toutes les commandes…", CommandPalette),
+                Sep,
+                a("Quitter GEDRoots", Quit),
+            ],
+        ));
     }
     let mut file = vec![
         a("Nouveau fichier", NewFile),
@@ -178,11 +188,9 @@ fn model() -> Vec<(&'static str, Vec<Item>)> {
         Sep,
         a("Enregistrer", SaveFile),
         a("Enregistrer sous…", SaveFileAs),
-        Sep,
-        a("Réglages du fichier…", OpenFileSettings),
     ];
     if !mac {
-        file.extend([Sep, a("Quitter", Quit)]);
+        file.extend([Sep, a("Réglages du fichier…", OpenFileSettings), Sep, a("Quitter", Quit)]);
     }
     menus.push(("Fichier", file));
     menus.push((
