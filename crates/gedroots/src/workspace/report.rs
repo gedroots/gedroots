@@ -98,11 +98,23 @@ impl Workspace {
         }
         let g = &doc.ged;
         let selected = self.selected.as_ref().and_then(|x| g.get(x)).and_then(|n| RecordKind::from_tag(&n.tag));
+        // Only how big the tree is: numbers of records, never their contents.
         let counts: Vec<String> = RecordKind::ALL
             .iter()
             .map(|&k| (k, g.count(k)))
             .filter(|&(_, n)| n > 0)
-            .map(|(k, n)| format!("{k:?}: {n}"))
+            .map(|(k, n)| {
+                let (one, many) = match k {
+                    RecordKind::Individual => ("person", "people"),
+                    RecordKind::Family => ("family", "families"),
+                    RecordKind::Source => ("source", "sources"),
+                    RecordKind::Repository => ("repository", "repositories"),
+                    RecordKind::Media => ("media", "media"),
+                    RecordKind::SharedNote => ("note", "notes"),
+                    RecordKind::Submitter => ("submitter", "submitters"),
+                };
+                format!("{n} {}", if n == 1 { one } else { many })
+            })
             .collect();
         // `HEAD.SOUR`: the product identifier of the software that wrote the file.
         let product = |path: &[&str]| {
@@ -110,7 +122,7 @@ impl Workspace {
         };
         let mut format = format!("GEDCOM {}", g.version());
         if let Some(sour) = product(&["SOUR"]) {
-            format.push_str(&format!(", written by {sour}"));
+            format.push_str(&format!(" from {sour}"));
             if let Some(vers) = product(&["SOUR", "VERS"]) {
                 format.push_str(&format!(" {vers}"));
             }
@@ -118,14 +130,11 @@ impl Workspace {
         if doc.dirty {
             format.push_str(", unsaved changes");
         }
-        let mut out = vec![("Screen", screen)];
         if let Some(kind) = selected {
-            out.push(("Selection", format!("{kind:?}")));
+            screen.push_str(&format!(", {} selected", format!("{kind:?}").to_lowercase()));
         }
-        out.push((
-            "File",
-            format!("{} · {format}", if counts.is_empty() { "empty".into() } else { counts.join(", ") }),
-        ));
+        let size = if counts.is_empty() { "empty".to_string() } else { counts.join(", ") };
+        let out = vec![("Screen", screen), ("Tree size", size), ("Format", format)];
         out
     }
 

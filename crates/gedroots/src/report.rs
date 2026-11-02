@@ -165,13 +165,14 @@ pub fn context(screen: &[(&str, String)], language: &str, dark: bool) -> String 
             j.started.elapsed().as_secs() / 60,
         )
     });
+    let language = match language {
+        "fr" => "French",
+        "en" => "English",
+        other => other,
+    };
     let mut lines = vec![
-        format!("- Version: GEDRoots {}", env!("CARGO_PKG_VERSION")),
-        format!("- System: {}", system()),
-        format!(
-            "- Interface: {language}, {} appearance, running for {uptime} min",
-            if dark { "dark" } else { "light" }
-        ),
+        format!("- App: GEDRoots {} on {}", env!("CARGO_PKG_VERSION"), system()),
+        format!("- Interface: {language}, {} mode, open for {uptime} min", if dark { "dark" } else { "light" }),
     ];
     lines.extend(screen.iter().map(|(k, v)| format!("- {k}: {v}")));
     if !commands.is_empty() {
