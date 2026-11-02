@@ -1226,12 +1226,23 @@ impl Workspace {
                     )
                     // Linux, Windows : menus dans la fenêtre (natifs sous macOS).
                     .children(self.menu_bar.clone().map(|m| div().h_full().child(m)))
-                    .children(self.doc.is_some().then(|| self.render_history_buttons(cx))),
+                    // Flèches : à gauche sous macOS (après les feux), à droite ailleurs (après les menus).
+                    .when(mac && self.doc.is_some(), |d| d.child(self.render_history_buttons(cx))),
             )
             .children(title.map(|t| div().flex_none().text_sm().font_weight(FontWeight::MEDIUM).child(t)))
-            .child(h_flex().flex_1().min_w_0().justify_end().text_xs().children(self.status.clone().map(
-                |(msg, err)| div().truncate().text_color(if err { theme::danger() } else { theme::muted() }).child(msg),
-            )))
+            .child(
+                h_flex()
+                    .flex_1()
+                    .min_w_0()
+                    .gap_3()
+                    .items_center()
+                    .justify_end()
+                    .text_xs()
+                    .children(self.status.clone().map(|(msg, err)| {
+                        div().truncate().text_color(if err { theme::danger() } else { theme::muted() }).child(msg)
+                    }))
+                    .when(!mac && self.doc.is_some(), |d| d.child(self.render_history_buttons(cx))),
+            )
     }
 
     /// Flèches « Précédent / Suivant » : reviennent à l'endroit quitté (un individu
