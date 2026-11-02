@@ -24,32 +24,23 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-dev libfontconfig-dev libwayland-dev libxcb1-dev libvulkan-dev
-      # mise seul ; les outils s'installent après la restauration du cache.
+      # mise installe Rust avec rustup : la toolchain va dans le dossier de
+      # données de mise, pour que le cache de mise-action la conserve.
+      - name: Toolchain Rust dans le dossier de mise
+        run: echo "MISE_RUSTUP_HOME=$HOME/.local/share/mise/rustup" >> "$GITHUB_ENV"
       - uses: jdx/mise-action@v5
         with:
           version: 2026.10.25
-          install: false
-          cache: false
-          env: false
-      # Rust s'installe par rustup, hors du dossier de mise : on place rustup
-      # et cargo (toolchain, index et crates téléchargés) dans le dossier de
-      # cache de mise, qu'un seul cache suffit ensuite à conserver.
-      - name: Dossier de cache de mise
-        id: mise-cache
-        run: |
-          dir=$(mise cache path)
-          echo "dir=$dir" >> "$GITHUB_OUTPUT"
-          echo "MISE_RUSTUP_HOME=$dir/rustup" >> "$GITHUB_ENV"
-          echo "MISE_CARGO_HOME=$dir/cargo" >> "$GITHUB_ENV"
+      # Crates téléchargées et compilations : elles suivent Cargo.lock.
       - uses: actions/cache@v6
         with:
           path: |
-            ${{ steps.mise-cache.outputs.dir }}
-            !${{ steps.mise-cache.outputs.dir }}/cargo/registry/src
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
             target
-          key: ${{ github.job }}-${{ hashFiles('mise.lock', 'Cargo.lock') }}
-          restore-keys: ${{ github.job }}-
-      - run: mise install --locked
+          key: ${{ github.job }}-${{ runner.os }}-${{ hashFiles('mise.lock', 'Cargo.lock') }}
+          restore-keys: ${{ github.job }}-${{ runner.os }}-
       - run: mise run ci
 
   macos-build:
@@ -60,28 +51,20 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v7
+      - name: Toolchain Rust dans le dossier de mise
+        run: echo "MISE_RUSTUP_HOME=$HOME/.local/share/mise/rustup" >> "$GITHUB_ENV"
       - uses: jdx/mise-action@v5
         with:
           version: 2026.10.25
-          install: false
-          cache: false
-          env: false
-      - name: Dossier de cache de mise
-        id: mise-cache
-        run: |
-          dir=$(mise cache path)
-          echo "dir=$dir" >> "$GITHUB_OUTPUT"
-          echo "MISE_RUSTUP_HOME=$dir/rustup" >> "$GITHUB_ENV"
-          echo "MISE_CARGO_HOME=$dir/cargo" >> "$GITHUB_ENV"
       - uses: actions/cache@v6
         with:
           path: |
-            ${{ steps.mise-cache.outputs.dir }}
-            !${{ steps.mise-cache.outputs.dir }}/cargo/registry/src
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
             target
-          key: ${{ github.job }}-${{ hashFiles('mise.lock', 'Cargo.lock') }}
-          restore-keys: ${{ github.job }}-
-      - run: mise install --locked
+          key: ${{ github.job }}-${{ runner.os }}-${{ hashFiles('mise.lock', 'Cargo.lock') }}
+          restore-keys: ${{ github.job }}-${{ runner.os }}-
       - name: Construire GEDRoots.app et GEDRoots.dmg
         run: mise run bundle --dmg
       - uses: actions/upload-artifact@v7
