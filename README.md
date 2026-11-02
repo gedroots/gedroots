@@ -160,6 +160,12 @@ et suit le [design system GEDRoots](design.md) (fonds neutres et touches de viol
   d'après l'âge, et toutes les citations avec leur rôle (`EVEN`/`ROLE`), sans aucune
   extension. Aperçu du GEDCOM avant d'écrire, et « Enregistrer et acte suivant » pour
   dépouiller un registre (le numéro de la référence avance tout seul).
+  Images ou PDF de l'acte : un média du fichier (« Média existant… », recherche par titre),
+  ou des fichiers déposés n'importe où sur l'éditeur (ou « Autre fichier… ») ; un fichier déjà
+  importé reprend son média, sans doublon ;
+  plusieurs fichiers font un seul média à plusieurs pages. À l'enregistrement, ils sont
+  nommés et rangés selon Réglages du fichier › Médias : copiés s'ils viennent d'ailleurs,
+  déplacés s'ils sont déjà dans le dossier et qu'aucun autre média ne les utilise.
 - Créer / supprimer un enregistrement (avec confirmation ; un lieu peut être retiré de tous
   les événements), annuler (50 niveaux), date de modification `CHAN`
   mise à jour comme dans Ancestris.

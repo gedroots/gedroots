@@ -2,6 +2,9 @@
 //! (`gedcom::media_naming`) :
 //! - un fichier rattaché depuis l'extérieur du dossier du .ged y est copié,
 //!   sous le nom donné par le modèle ;
+//! - les fichiers d'un nouvel acte (déposés ou choisis dans l'éditeur d'acte)
+//!   prennent directement le nom du modèle : copiés s'ils viennent d'ailleurs,
+//!   déplacés s'ils sont déjà dans le dossier et ne servent à aucun autre média ;
 //! - Média › Renommer selon le modèle… déplace les fichiers d'un média.
 //!
 //! Le déplacement d'un fichier ne s'annule pas : l'historique d'annulation est
@@ -38,13 +41,19 @@ fn relative(base: &Path, p: &Path) -> String {
 }
 
 /// Range les fichiers des médias selon le réglage. Les fichiers hors du dossier
-/// du .ged sont copiés ; ceux du dossier ne sont déplacés que si `move_inside`.
-fn place_files(g: &mut Gedcom, base: &Path, media: &[String], move_inside: bool) -> Result<Vec<Moved>, String> {
+/// du .ged sont copiés ; ceux du dossier ne sont déplacés que si `move_inside`
+/// l'accepte (média, chemin actuel).
+fn place_files(
+    g: &mut Gedcom,
+    base: &Path,
+    media: &[String],
+    move_inside: &dyn Fn(&Gedcom, &str, &str) -> bool,
+) -> Result<Vec<Moved>, String> {
     let mut moved = Vec::new();
     for m in media {
         for (i, old, new) in g.media_renames(m) {
             let inside = !Path::new(&old).is_absolute();
-            if (inside && !move_inside) || old == new {
+            if (inside && !move_inside(g, m, &old)) || old == new {
                 continue;
             }
             let from = if inside { base.join(&old) } else { PathBuf::from(&old) };
@@ -85,13 +94,38 @@ pub(super) fn store_new_media(g: &mut Gedcom, base: Option<&Path>, media: &[Stri
     let Some(base) = base.filter(|_| !g.media_naming().is_empty()) else {
         return " — attention : fichier hors du dossier du .ged, chemin absolu enregistré".into();
     };
-    match place_files(g, base, media, false) {
+    match place_files(g, base, media, &|_, _, _| false) {
         Ok(m) if !m.is_empty() => {
             let n = m.len();
             format!(" · {n} copié{} dans le dossier du fichier", if n > 1 { "s" } else { "" })
         }
         Ok(_) => String::new(),
         Err(e) => format!(" — copie impossible : {e}"),
+    }
+}
+
+/// Fichiers du média créé par un acte : nommés selon le modèle, copiés s'ils
+/// viennent d'ailleurs, déplacés s'ils sont dans le dossier du .ged et
+/// qu'aucun autre média ne les utilise. Renvoie le complément du message d'état.
+pub(super) fn store_act_media(g: &mut Gedcom, base: Option<&Path>, media: &str) -> String {
+    let Some(base) = base.filter(|_| !g.media_naming().is_empty()) else {
+        return store_new_media(g, base, &[media.to_string()]);
+    };
+    let alone = |g: &Gedcom, m: &str, file: &str| {
+        !g.records_of(RecordKind::Media)
+            .any(|o| o.xref.as_deref() != Some(m) && o.children_with("FILE").any(|f| f.val() == file))
+    };
+    match place_files(g, base, &[media.to_string()], &alone) {
+        Ok(m) if !m.is_empty() => {
+            let n = m.len();
+            format!(
+                " · {n} fichier{} nommé{} selon le modèle",
+                if n > 1 { "s" } else { "" },
+                if n > 1 { "s" } else { "" }
+            )
+        }
+        Ok(_) => String::new(),
+        Err(e) => format!(" — rangement impossible : {e}"),
     }
 }
 
@@ -121,7 +155,7 @@ impl Workspace {
             return;
         };
         let Some(doc) = &mut self.doc else { return };
-        match place_files(&mut doc.ged, &base, std::slice::from_ref(&d.media), true) {
+        match place_files(&mut doc.ged, &base, std::slice::from_ref(&d.media), &|_, _, _| true) {
             Ok(moved) => {
                 // Les états précédents pointent aussi vers le nouveau nom : annuler une
                 // modification antérieure ne doit pas casser le lien vers le fichier déplacé.
@@ -167,5 +201,72 @@ impl Workspace {
                 ),
             )
             .into_any_element()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::store_act_media;
+    use gedcom::{Act, ActRole, Gedcom, MediaChoice, MediaFolder, MediaNaming, Participant, PersonField, RecordKind};
+
+    /// Fichier .ged de test (variable `GEDROOTS_TEST_GED` : une copie d'un vrai fichier).
+    fn sample() -> (Gedcom, String) {
+        match std::env::var("GEDROOTS_TEST_GED") {
+            Ok(p) => {
+                let g = Gedcom::parse(&std::fs::read_to_string(p).unwrap()).unwrap();
+                let s = g.records_of(RecordKind::Source).next().and_then(|s| s.xref.clone()).unwrap();
+                (g, s)
+            }
+            Err(_) => {
+                (Gedcom::parse(include_str!("../../../gedcom/tests/fixtures/exemple.ged")).unwrap(), "S00001".into())
+            }
+        }
+    }
+
+    #[test]
+    fn act_files_are_copied_or_moved_under_the_template_name() {
+        let root = std::env::temp_dir().join(format!("gedroots-act-media-{}", std::process::id()));
+        let (base, elsewhere) = (root.join("arbre"), root.join("Téléchargements"));
+        std::fs::create_dir_all(&base).unwrap();
+        std::fs::create_dir_all(&elsewhere).unwrap();
+        let outside = elsewhere.join("IMG_0412.JPG");
+        std::fs::write(&outside, b"jpg").unwrap();
+        std::fs::write(base.join("scan.pdf"), b"pdf").unwrap();
+        std::fs::write(base.join("partagé.jpg"), b"jpg").unwrap();
+
+        let (mut g, source) = sample();
+        g.set_media_naming(&MediaNaming {
+            root: String::new(),
+            folders: vec![MediaFolder {
+                dir: "Actes".into(),
+                types: vec!["BIRT".into()],
+                template: "{type:1}_{nom:simple}_{prenom}".into(),
+            }],
+        });
+        // Un fichier du dossier déjà utilisé par un autre média ne doit pas bouger.
+        let other = g.media_for_file("partagé.jpg");
+        let mut act = Act::new(&source, "BIRT");
+        act.date = "3 FEB 1914".into();
+        act.participants = vec![
+            Participant::new(ActRole::Principal)
+                .with(PersonField::Surname, "MARCHAND")
+                .with(PersonField::Given, "Louise")
+                .with(PersonField::Sex, "F"),
+        ];
+        act.media =
+            MediaChoice::NewFiles(vec![outside.to_string_lossy().to_string(), "scan.pdf".into(), "partagé.jpg".into()]);
+        let m = act.save(&mut g).unwrap().media.unwrap();
+        let note = store_act_media(&mut g, Some(&base), &m);
+        assert!(note.contains("2 fichiers nommés"), "{note}");
+
+        let files: Vec<String> = g.get(&m).unwrap().children_with("FILE").map(|f| f.val().to_string()).collect();
+        assert_eq!(files, ["Actes/N_MARCHAND_Louise p1.jpg", "Actes/N_MARCHAND_Louise p2.pdf", "partagé.jpg"]);
+        assert!(base.join("Actes/N_MARCHAND_Louise p1.jpg").is_file());
+        assert!(outside.is_file(), "un fichier venu d'ailleurs est copié, pas déplacé");
+        assert!(base.join("Actes/N_MARCHAND_Louise p2.pdf").is_file());
+        assert!(!base.join("scan.pdf").exists(), "un fichier du dossier est déplacé");
+        assert!(base.join("partagé.jpg").is_file());
+        assert_eq!(g.get(&other).unwrap().child("FILE").unwrap().val(), "partagé.jpg");
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

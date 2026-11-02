@@ -19,7 +19,7 @@ fn birth_act_links_existing_and_creates_new() {
     e.place = ", Saint-Lô, 50000, Manche, Normandie, France".into();
     e.page = "Acte n° 27, vue 12".into();
     e.transcription = "L'an mil neuf cent quatorze…".into();
-    e.media = MediaChoice::NewFile("Actes/naissance_1914_27.jpg".into());
+    e.media = MediaChoice::NewFiles(vec!["Actes/naissance_1914_27.jpg".into()]);
     e.participants = vec![
         person(ActRole::Principal, "", "Louise").with(PersonField::Sex, "F"),
         person(ActRole::Father, "MARCHAND", "Émile")
@@ -416,4 +416,32 @@ fn legacy_templates_are_cleaned_by_import() {
     assert!(out.contains("3 PAGE Acte n° 112, vue 37\n3 EVEN BIRT\n"), "{out}");
     assert!(g.header.child("SCHMA").unwrap().children.iter().all(|t| !t.val().starts_with("_GR_")));
     assert_eq!(g.acts("S00001").len(), 1);
+}
+
+#[test]
+fn act_with_several_files_makes_one_paged_media_named_by_template() {
+    let mut g = Gedcom::parse(SAMPLE).unwrap();
+    g.set_media_naming(&MediaNaming {
+        root: "Médias".into(),
+        folders: vec![MediaFolder {
+            dir: "Actes".into(),
+            types: vec!["BIRT".into()],
+            template: "{type:1}_{nom}_{prenom}".into(),
+        }],
+    });
+    let mut e = Act::new("S00001", "BIRT");
+    e.date = "3 FEB 1914".into();
+    e.media = MediaChoice::NewFiles(vec!["/tmp/scan 1.JPG".into(), "/tmp/scan 2.pdf".into()]);
+    e.participants = vec![person(ActRole::Principal, "MARCHAND", "Louise").with(PersonField::Sex, "F")];
+    let res = e.save(&mut g).unwrap();
+    let m = res.media.clone().unwrap();
+    let files = Media::new(g.get(&m).unwrap()).files();
+    assert_eq!(files.len(), 2, "une page par fichier");
+    assert_eq!(files[0].form, Some("image/jpeg"));
+    assert_eq!(files[1].form, Some("application/pdf"));
+    assert!(files[0].title.is_some() && files[1].title.is_none(), "titre sur la première page seulement");
+    assert_eq!(medium(g.get(&m).unwrap()), Some("MANUSCRIPT"));
+    // Nommage selon le modèle, numéro de page en fin de nom, extension d'origine en minuscules.
+    let renames: Vec<String> = g.media_renames(&m).into_iter().map(|(_, _, new)| new).collect();
+    assert_eq!(renames, vec!["Médias/Actes/N_MARCHAND_Louise p1.jpg", "Médias/Actes/N_MARCHAND_Louise p2.pdf"]);
 }

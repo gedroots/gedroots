@@ -859,10 +859,10 @@ impl Workspace {
         let base = doc.path.as_ref().and_then(|p| p.parent()).map(std::path::Path::to_path_buf);
         match act.save(&mut doc.ged) {
             Ok(res) => {
-                // Image de l'acte venue d'ailleurs : copiée et nommée selon Réglages du fichier › Médias.
+                // Images de l'acte : copiées (ou déplacées) et nommées selon Réglages du fichier › Médias.
                 let note = match (&act.media, &res.media) {
-                    (gedcom::MediaChoice::NewFile(_), Some(m)) => {
-                        media_files::store_new_media(&mut doc.ged, base.as_deref(), std::slice::from_ref(m))
+                    (gedcom::MediaChoice::NewFiles(_), Some(m)) => {
+                        media_files::store_act_media(&mut doc.ged, base.as_deref(), m)
                     }
                     _ => String::new(),
                 };
