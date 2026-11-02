@@ -57,16 +57,19 @@ impl Workspace {
         let d = on!(d, cx, NewFile, |this, w, cx| this.new_file(&NewFile, w, cx));
         let d = on!(d, cx, CommandPalette, |this, w, cx| this.toggle_palette(w, cx));
         let d = on!(d, cx, ReportIssue, |this, w, cx| this.open_report(w, cx));
+        let d = on!(d, cx, OpenSampleTree, |_this, w, cx| cx.defer(crate::open_sample));
         if !has_doc {
             return d;
         }
-        let d = on!(d, cx, SaveFile, |this, w, cx| this.save_file(&SaveFile, w, cx));
+        let sample = doc.is_some_and(|d| d.sample);
+        let d = if sample { d } else { on!(d, cx, SaveFile, |this, w, cx| this.save_file(&SaveFile, w, cx)) };
+        let d = on!(d, cx, TakeTour, |this, w, cx| this.start_tour(w, cx));
         let d = on!(d, cx, OpenFileSettings, |this, w, cx| this.open_settings(w, cx));
         let d = on!(d, cx, ReviewProposals, |this, w, cx| this.open_review(cx));
         let d = on!(d, cx, AcceptProposal, |this, w, cx| this.accept_proposal(w, cx));
         let d = on!(d, cx, RejectProposal, |this, w, cx| this.reject_proposal(cx));
         let d = on!(d, cx, ConnectAgent, |this, w, cx| this.open_agent_dialog(cx));
-        let d = on!(d, cx, SaveFileAs, |this, w, cx| this.save_file_as(w, cx));
+        let d = if sample { d } else { on!(d, cx, SaveFileAs, |this, w, cx| this.save_file_as(w, cx)) };
         let d = on!(d, cx, ExportGedzip, |this, w, cx| this.export_gedzip(w, cx));
         let d = on!(d, cx, ExportGedcom551, |this, w, cx| this.export_gedcom(Flavor::Standard, w, cx));
         let d = on!(d, cx, ExportGeneanet, |this, w, cx| this.export_gedcom(Flavor::Geneanet, w, cx));
@@ -423,6 +426,7 @@ impl Workspace {
             .collect();
         let state = cx.new(|cx| CommandState::new(window, cx));
         state.update(cx, |s, cx| s.focus(window, cx));
+        self.tour_did(super::tour::Advance::Palette, window, cx);
         self.palette = Some(Palette { state, items });
         cx.notify();
     }

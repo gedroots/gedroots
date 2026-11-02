@@ -383,18 +383,20 @@ impl Workspace {
                 cx.stop_propagation();
                 cx.notify();
             }))
-            .child(Input::new(&self.filter).small().cleanable(true).on_token_click({
-                let ws = cx.entity().downgrade();
-                move |ev, _, cx| {
-                    let (range, word) = (ev.range(), ev.token().id().to_string());
-                    let at = ev.bounds().bottom_left() + point(px(0.), px(4.));
-                    ws.update(cx, |this, cx| {
-                        this.chip_menu = Some(ChipMenu { range, word, at });
-                        cx.notify();
-                    })
-                    .ok();
-                }
-            }))
+            .child(div().relative().children(self.tour_anchor(super::tour::Target::Search, cx)).child(
+                Input::new(&self.filter).small().cleanable(true).on_token_click({
+                    let ws = cx.entity().downgrade();
+                    move |ev, _, cx| {
+                        let (range, word) = (ev.range(), ev.token().id().to_string());
+                        let at = ev.bounds().bottom_left() + point(px(0.), px(4.));
+                        ws.update(cx, |this, cx| {
+                            this.chip_menu = Some(ChipMenu { range, word, at });
+                            cx.notify();
+                        })
+                        .ok();
+                    }
+                }),
+            ))
     }
 
     /// Malformed criteria (`without:foo`), only when there are some.

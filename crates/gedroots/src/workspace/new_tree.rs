@@ -198,6 +198,7 @@ impl Workspace {
         self.select(root, window, cx);
         self.tab = CenterTab::Tree;
         window.focus(&self.focus, cx);
+        self.offer_tour(window, cx);
         cx.notify();
     }
 

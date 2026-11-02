@@ -16,6 +16,7 @@ mod images;
 mod map;
 mod recent;
 mod report;
+mod sample;
 mod theme;
 mod updates;
 mod viewer;
@@ -183,6 +184,14 @@ fn open_workspace(path: Option<PathBuf>, cx: &mut App) -> Option<(AnyWindowHandl
     let ws = ws.downgrade();
     cx.global_mut::<updates::Windows>().0.push(ws.clone());
     Some((window, ws))
+}
+
+/// Help › Open Sample Tree: the sample tree, in a window of its own.
+pub(crate) fn open_sample(cx: &mut App) {
+    let Some((window, ws)) = open_workspace(None, cx) else { return };
+    let _ = cx.update_window(window, |_, window, cx| {
+        let _ = ws.update(cx, |ws, cx| ws.open_sample(window, cx));
+    });
 }
 
 /// Opens a file received from the Finder: in the last window if it has no unsaved changes,

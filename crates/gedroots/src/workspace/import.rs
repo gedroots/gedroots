@@ -100,7 +100,7 @@ impl Workspace {
         let needs_root = g.declared_root().is_none() && g.count(RecordKind::Individual) > 0;
         if findings.is_empty() && !needs_root {
             self.set_status(format!("{}{note}", t!("import.already_conform", file = file)), false);
-            return;
+            return self.offer_tour(window, cx);
         }
         let root = needs_root.then(|| picker(g, RecordKind::Individual, g.root().as_deref().unwrap_or(""), window, cx));
         self.add_dialog = Some(AddDialog::Import(Box::new(ImportDialog { file, root, findings, note })));
@@ -135,6 +135,7 @@ impl Workspace {
             }
         }
         window.focus(&self.focus, cx);
+        self.offer_tour(window, cx);
         cx.notify();
     }
 
