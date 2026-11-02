@@ -61,7 +61,7 @@ fn place_files(g: &mut Gedcom, base: &Path, media: &[String], move_inside: bool)
             let done = if inside { std::fs::rename(&from, &to) } else { std::fs::copy(&from, &to).map(|_| ()) };
             done.map_err(|e| format!("{} : {e}", from.display()))?;
             let rel = relative(base, &to);
-            g.set_media_file(m, i, &old, &rel);
+            g.replace_media_file(m, i, &old, &rel);
             moved.push((m.clone(), i, old, rel));
         }
         if moved.iter().any(|(x, ..)| x == m)
@@ -127,7 +127,7 @@ impl Workspace {
                 // modification antérieure ne doit pas casser le lien vers le fichier déplacé.
                 for h in &mut doc.history {
                     for (m, i, old, new) in &moved {
-                        h.set_media_file(m, *i, old, new);
+                        h.replace_media_file(m, *i, old, new);
                     }
                 }
                 doc.dirty = true;

@@ -67,20 +67,20 @@ type existant les fusionne) ; un type déclaré et inutilisé peut être retiré
 
 ## `_GR_MEDIA`
 
-Rangement des fichiers médias (**Fichier › Réglages du fichier… › Médias**) : un dossier
-racine, puis des dossiers de rangement, chacun avec les types de médias qu'il reçoit et son
-modèle de nom. Les chemins restent des `FILE` standard, relatifs au dossier du `.ged`.
+Rangement des fichiers médias (**Fichier › Réglages du fichier… › Médias**) : le dossier
+des médias, puis des sous-dossiers, chacun avec les événements qu'il reçoit et son modèle
+de nom. Les chemins restent des `FILE` standard, relatifs au dossier du `.ged`.
 
 - **Sous** : `HEAD`, au niveau 1, une seule occurrence.
-- **Valeur** : le dossier racine des médias, relatif au `.ged` (peut être vide).
-- **Sous-structures** : un `_GR_DIR <sous-dossier>` par dossier de rangement, dans l'ordre :
+- **Valeur** : le dossier des médias, relatif au `.ged` (peut être vide).
+- **Sous-structures** : un `_GR_DIR <sous-dossier>` par sous-dossier, dans l'ordre :
   - `_GR_TYPES <liste>` : ce que le dossier reçoit, séparé par des virgules — balises
     d'événements (`BIRT`, `MARR`…), types personnalisés (le `TYPE` d'un `EVEN`), `INDI`
     (média rattaché directement à un individu : portrait) ou `FAM`. Absent : tout le reste.
   - `_GR_NAME <modèle>` : nom des fichiers. Absent : le nom d'origine est gardé.
 
-Un média va dans le premier dossier dont les types contiennent le sien ; sans dossier qui
-le reçoive, il reste où il est.
+Un média va dans le premier sous-dossier dont les types contiennent le sien ; sans
+sous-dossier qui le reçoive, il reste où il est.
 
 ```
 0 HEAD
@@ -121,7 +121,7 @@ vide disparaît avec le séparateur qui la précède.
 Les variables sont tirées de l'événement qui cite le média, ou une source qui le porte : de
 préférence celui que la source décrit (`DATA.EVEN`) ou que son titre nomme (« Acte de
 naissance… »), plutôt qu'un attribut (profession, résidence) ; à égalité, celui que le
-premier dossier reçoit. À défaut, de la source qui porte le média, puis de la personne ou
+premier sous-dossier reçoit. À défaut, de la source qui porte le média, puis de la personne ou
 de la famille liée. Un fichier rattaché depuis l'extérieur du dossier du `.ged` y est copié
 sous ce nom ; **Média › Renommer selon le modèle…** déplace les fichiers d'un média existant
 après confirmation.

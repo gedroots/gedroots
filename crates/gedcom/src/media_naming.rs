@@ -24,7 +24,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::date::Date;
 use crate::document::Gedcom;
-use crate::model::{EVENT_TAGS, Event, Family, Individual, event_label, short_place};
+use crate::model::{Event, Family, Individual, event_label, short_place};
 use crate::node::Node;
 
 pub const MEDIA_TAG: &str = "_GR_MEDIA";
@@ -62,7 +62,7 @@ type DateKey = (i32, u8, u8);
 const ATTRIBUTES: &[&str] =
     &["OCCU", "RESI", "EDUC", "RELI", "TITL", "NATI", "CAST", "DSCR", "IDNO", "NCHI", "NMR", "PROP", "SSN", "FACT"];
 
-/// Un dossier de rangement : où, pour quoi, sous quel nom.
+/// Un sous-dossier des médias : où, pour quoi, sous quel nom.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct MediaFolder {
     /// Sous-dossier du dossier racine (peut être vide).
@@ -80,7 +80,7 @@ impl MediaFolder {
     }
 }
 
-/// Dossier racine (relatif au .ged) et dossiers de rangement des médias.
+/// Dossier des médias (relatif au .ged) et ses sous-dossiers.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct MediaNaming {
     pub root: String,
@@ -97,43 +97,6 @@ impl MediaNaming {
     pub fn folder_for(&self, ctx: &MediaContext) -> Option<&MediaFolder> {
         self.folders.iter().find(|f| f.accepts(&ctx.event))
     }
-}
-
-/// Lit une liste de types saisie dans le panneau (« naissance, mariage,
-/// military service, portrait ») : balises, libellés français, types
-/// personnalisés (`custom`), « portrait » (`INDI`) et « famille » (`FAM`).
-pub fn parse_media_types(text: &str, custom: &[String]) -> Result<Vec<String>, String> {
-    let key = |s: &str| crate::model::sort_key(s).trim_end_matches('s').to_string();
-    let mut out: Vec<String> = Vec::new();
-    for item in text.split([',', ';']).map(str::trim).filter(|s| !s.is_empty()) {
-        let up = item.to_uppercase();
-        let k = key(item);
-        let k = k.strip_prefix("acte de ").unwrap_or(&k).to_string();
-        let tag = if EVENT_TAGS.iter().any(|(t, _)| *t == up) || up == "INDI" || up == "FAM" {
-            Some(up)
-        } else if k == "portrait" {
-            Some("INDI".into())
-        } else if k == "famille" || k == "photo de famille" {
-            Some("FAM".into())
-        } else if let Some(c) = custom.iter().find(|c| key(c) == k) {
-            Some(c.clone())
-        } else if k == "bapteme" {
-            Some("BAPM".into())
-        } else if k == "sepulture" {
-            Some("BURI".into())
-        } else {
-            EVENT_TAGS.iter().find(|(_, l)| key(l) == k).map(|(t, _)| t.to_string())
-        };
-        let Some(tag) = tag else { return Err(format!("type inconnu : « {item} »")) };
-        // « Baptême » couvre les deux balises (CHR, BAPM), affichées sous ce seul nom.
-        let tags = if tag == "BAPM" || tag == "CHR" { vec!["BAPM".to_string(), "CHR".to_string()] } else { vec![tag] };
-        for t in tags {
-            if !out.contains(&t) {
-                out.push(t);
-            }
-        }
-    }
-    Ok(out)
 }
 
 /// Libellés des types de [`MediaFolder::types`] pour le panneau, sans doublon.
@@ -678,7 +641,7 @@ impl Gedcom {
 
     /// Remplace le chemin du `FILE` n° `index` d'un média, s'il vaut encore `old`
     /// (sans toucher à la date de modification). Renvoie `true` s'il a changé.
-    pub fn set_media_file(&mut self, media: &str, index: usize, old: &str, path: &str) -> bool {
+    pub fn replace_media_file(&mut self, media: &str, index: usize, old: &str, path: &str) -> bool {
         let matches =
             |g: &Gedcom| g.get(media).and_then(|m| m.children_with("FILE").nth(index)).is_some_and(|f| f.val() == old);
         if !matches(self) {
@@ -744,14 +707,9 @@ mod tests {
     }
 
     #[test]
-    fn parses_types() {
-        let custom = vec!["Service militaire".to_string()];
-        assert_eq!(
-            parse_media_types("naissances, Mariage, décès, sépulture, portrait, service militaire, CENS", &custom)
-                .unwrap(),
-            ["BIRT", "MARR", "DEAT", "BURI", "INDI", "Service militaire", "CENS"]
-        );
-        assert!(parse_media_types("naissance, foo", &custom).is_err());
+    fn labels_types() {
+        let types: Vec<String> = ["BIRT", "BAPM", "CHR", "BURI", "INDI", "Service militaire"].map(String::from).into();
+        assert_eq!(media_type_labels(&types), "naissance, baptême, inhumation, portrait, Service militaire");
     }
 
     #[test]

@@ -3,7 +3,8 @@
 //!   anomalies masquées (voir `gedcom::settings`) ;
 //! - Lieux : format des lieux (`HEAD.PLAC.FORM`), avec réécriture des lieux ;
 //! - Événements : types d'événements personnalisés (`EVEN` + `TYPE`) ;
-//! - Médias : dossiers de rangement et modèles de nom (`gedcom::media_naming`).
+//! - Médias : dossier des médias, sous-dossiers par type et modèles de nom
+//!   (`gedcom::media_naming`).
 //!
 //! Tout est rangé dans le .ged et s'annule comme toute modification.
 
@@ -11,6 +12,7 @@ use super::add::{AddDialog, plus_button};
 use super::*;
 use crate::editor::{PickerState, choice, picker};
 use gpui_kit::component::input::TextareaState;
+use gpui_kit::component::menu::{DropdownMenu, PopupMenuItem};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum SettingsPage {
@@ -57,10 +59,11 @@ pub(super) struct SettingsDialog {
     _subs: Vec<Subscription>,
 }
 
-/// Un dossier de rangement des médias en cours de modification.
+/// Un sous-dossier des médias en cours de modification.
 struct MediaRow {
     dir: Entity<InputState>,
-    types: Entity<InputState>,
+    /// Ce qu'il reçoit (vide : tout le reste), choisi dans un menu.
+    types: Vec<String>,
     template: Entity<InputState>,
 }
 
@@ -68,14 +71,10 @@ impl MediaRow {
     fn new(f: &MediaFolder, window: &mut Window, cx: &mut Context<Workspace>) -> (Self, Vec<Subscription>) {
         let row = MediaRow {
             dir: text_input("Actes", &f.dir, window, cx),
-            types: text_input("tout le reste", &media_type_labels(&f.types), window, cx),
+            types: f.types.clone(),
             template: text_input("{annee} {nom} {prenom}", &f.template, window, cx),
         };
-        let subs = vec![
-            refresh_on_change(&row.dir, cx),
-            refresh_on_change(&row.types, cx),
-            refresh_on_change(&row.template, cx),
-        ];
+        let subs = vec![refresh_on_change(&row.dir, cx), refresh_on_change(&row.template, cx)];
         (row, subs)
     }
 }
@@ -208,14 +207,7 @@ impl Workspace {
             .map(|r| (r.family, r.original.clone(), r.label.read(cx).value().trim().to_string()))
             .collect();
         let removed = d.removed_events.clone();
-        let naming = match media_naming(d, &self.doc.as_ref().unwrap().ged, cx) {
-            Ok(n) => n,
-            Err(e) => {
-                self.set_status(e, true);
-                cx.notify();
-                return;
-            }
-        };
+        let naming = media_naming(d, cx);
         self.add_dialog = None;
 
         let g = &self.doc.as_ref().unwrap().ged;
@@ -529,23 +521,70 @@ impl Workspace {
 impl Workspace {
     fn settings_media(&self, d: &SettingsDialog, cx: &mut Context<Self>) -> AnyElement {
         let g = &self.doc.as_ref().unwrap().ged;
-        let custom = custom_types(g);
-        let root = d.media_root.read(cx).value().to_string();
-        let parsed: Vec<Result<MediaFolder, String>> = d.media.iter().map(|r| folder(r, &custom, cx)).collect();
-        let folders: Vec<MediaFolder> = parsed.iter().filter_map(|f| f.as_ref().ok().cloned()).collect();
-        let naming = MediaNaming { root, folders };
+        let options = type_options(g);
+        let naming = media_naming(d, cx);
         let n = d.media.len();
         let rows = d.media.iter().enumerate().map(|(i, r)| {
             let id = |what: &str| SharedString::from(format!("media-{what}-{i}"));
-            // Exemple : le premier média du fichier rangé dans ce dossier.
-            let example = match &parsed[i] {
-                Err(e) => Some((e.clone(), true)),
-                Ok(f) => d
-                    .media_samples
-                    .iter()
-                    .find(|(ctx, _)| naming.folder_for(ctx) == Some(f))
-                    .map(|(ctx, file)| (media_path(&naming, ctx, file, None), false)),
-            };
+            // Exemple : le premier média du fichier rangé dans ce sous-dossier.
+            let f = folder(r, cx);
+            let example = d
+                .media_samples
+                .iter()
+                .find(|(ctx, _)| naming.folder_for(ctx) == Some(&f))
+                .map(|(ctx, file)| media_path(&naming, ctx, file, None));
+            let ws = cx.entity().downgrade();
+            let opts = options.clone();
+            let types = Button::new(id("types"))
+                .small()
+                .outline()
+                .w_full()
+                .dropdown_caret(true)
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .truncate()
+                        .when(r.types.is_empty(), |d| d.text_color(theme::muted()))
+                        .child(if r.types.is_empty() {
+                            "Tout le reste".to_string()
+                        } else {
+                            media_type_labels(&r.types)
+                        }),
+                )
+                .dropdown_menu(move |menu, _, cx| {
+                    let current = ws
+                        .upgrade()
+                        .and_then(|ws| match &ws.read(cx).add_dialog {
+                            Some(AddDialog::Settings(d)) => d.media.get(i).map(|r| r.types.clone()),
+                            _ => None,
+                        })
+                        .unwrap_or_default();
+                    let mut menu = menu.scrollable(true).max_h(px(360.));
+                    for (label, tags) in &opts {
+                        let on = tags.iter().all(|t| current.contains(t));
+                        let (ws, tags) = (ws.clone(), tags.clone());
+                        menu = menu.item(PopupMenuItem::new(label.clone()).checked(on).on_click(move |_, _, cx| {
+                            let _ = ws.update(cx, |this, cx| {
+                                if let Some(d) = this.settings_dialog()
+                                    && let Some(r) = d.media.get_mut(i)
+                                {
+                                    if on {
+                                        r.types.retain(|t| !tags.contains(t));
+                                    } else {
+                                        for t in &tags {
+                                            if !r.types.contains(t) {
+                                                r.types.push(t.clone());
+                                            }
+                                        }
+                                    }
+                                }
+                                cx.notify();
+                            });
+                        }));
+                    }
+                    menu
+                });
             v_flex()
                 .gap_1()
                 .p_2()
@@ -557,7 +596,7 @@ impl Workspace {
                         .gap_1()
                         .items_center()
                         .child(div().w(px(150.)).child(Input::new(&r.dir).small()))
-                        .child(div().flex_1().min_w_0().child(Input::new(&r.types).small()))
+                        .child(div().flex_1().min_w_0().child(types))
                         .child(
                             Button::new(id("up")).xsmall().ghost().icon(IconName::ChevronUp).disabled(i == 0).on_click(
                                 cx.listener(move |this, _, _, cx| {
@@ -592,14 +631,8 @@ impl Workspace {
                         ))),
                 )
                 .child(Input::new(&r.template).small())
-                .when_some(example, |v, (text, error)| {
-                    v.child(
-                        div()
-                            .text_sm()
-                            .truncate()
-                            .text_color(if error { theme::danger() } else { theme::muted() })
-                            .child(text),
-                    )
+                .when_some(example, |v, text| {
+                    v.child(div().text_sm().truncate().text_color(theme::muted()).child(text))
                 })
         });
         let active = d.media.get(d.media_active).map(|r| r.template.clone());
@@ -623,7 +656,7 @@ impl Workspace {
                 v_flex()
                     .gap_2()
                     .child(section_header(
-                        "Rangement",
+                        "Sous-dossiers",
                         plus_button("media-add").on_click(cx.listener(|this, _, w, cx| {
                             let (row, subs) = MediaRow::new(&MediaFolder::default(), w, cx);
                             row.dir.update(cx, |s, cx| s.focus(w, cx));
@@ -642,30 +675,47 @@ impl Workspace {
     }
 }
 
-/// Types d'événements personnalisés du fichier (`TYPE` des `EVEN`).
-fn custom_types(g: &Gedcom) -> Vec<String> {
-    g.event_types().into_iter().map(|t| t.label).collect()
+/// Choix du menu des types : libellé, balises. Les événements courants, les
+/// types personnalisés du fichier, puis « Portrait » (média rattaché à une personne).
+fn type_options(g: &Gedcom) -> Vec<(String, Vec<String>)> {
+    const ATTRIBUTES: &[&str] = &["RESI", "OCCU", "EDUC", "RELI", "TITL", "NATI", "FACT", "EVEN", "CHR"];
+    let mut out: Vec<(String, Vec<String>)> = gedcom::EVENT_TAGS
+        .iter()
+        .filter(|(t, _)| !ATTRIBUTES.contains(t))
+        .map(|(t, l)| {
+            let tags = if *t == "BAPM" { vec!["BAPM".into(), "CHR".into()] } else { vec![t.to_string()] };
+            (l.to_string(), tags)
+        })
+        .collect();
+    // Les actes d'état civil d'abord.
+    const FIRST: &[&str] = &["BIRT", "BAPM", "MARR", "DEAT", "BURI", "CENS"];
+    out.sort_by_key(|(_, tags)| FIRST.iter().position(|t| *t == tags[0]).unwrap_or(FIRST.len()));
+    for t in g.event_types() {
+        if !out.iter().any(|(l, _)| *l == t.label) {
+            out.push((t.label.clone(), vec![t.label]));
+        }
+    }
+    out.push(("Portrait".into(), vec!["INDI".into()]));
+    out
 }
 
-fn folder(r: &MediaRow, custom: &[String], cx: &App) -> Result<MediaFolder, String> {
-    Ok(MediaFolder {
+fn folder(r: &MediaRow, cx: &App) -> MediaFolder {
+    MediaFolder {
         dir: r.dir.read(cx).value().trim().to_string(),
-        types: parse_media_types(&r.types.read(cx).value(), custom)?,
+        types: r.types.clone(),
         template: r.template.read(cx).value().trim().to_string(),
-    })
+    }
 }
 
-/// Le réglage saisi, ou la première erreur (type inconnu).
-fn media_naming(d: &SettingsDialog, g: &Gedcom, cx: &App) -> Result<MediaNaming, String> {
-    let custom = custom_types(g);
+/// Le réglage saisi (les sous-dossiers laissés vides sont ignorés).
+fn media_naming(d: &SettingsDialog, cx: &App) -> MediaNaming {
     let folders = d
         .media
         .iter()
-        .map(|r| folder(r, &custom, cx))
-        .filter(|f| !matches!(f, Ok(f) if f.dir.is_empty() && f.types.is_empty() && f.template.is_empty()))
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("Médias : {e}"))?;
-    Ok(MediaNaming { root: d.media_root.read(cx).value().trim().to_string(), folders })
+        .map(|r| folder(r, cx))
+        .filter(|f| !(f.dir.is_empty() && f.types.is_empty() && f.template.is_empty()))
+        .collect();
+    MediaNaming { root: d.media_root.read(cx).value().trim().to_string(), folders }
 }
 
 fn field(label: &'static str, el: AnyElement) -> Div {

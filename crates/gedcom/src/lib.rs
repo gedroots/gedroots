@@ -56,7 +56,7 @@ pub use entry::{Entry, EntryResult, MediaChoice, Participant, PersonChoice, Sour
 pub use events::PersonEvent;
 pub use kinds::{MEDIUMS, SourceContent, medium, medium_label, parse_event_list, set_medium};
 pub use media_naming::{
-    MEDIA_TOKENS, MediaContext, MediaFolder, MediaNaming, Numbering, media_path, media_type_labels, parse_media_types,
+    MEDIA_TOKENS, MediaContext, MediaFolder, MediaNaming, Numbering, media_path, media_type_labels,
 };
 pub use model::*;
 pub use multipage::{MediaFile, PAGE_TAG, page_of_link, strip_page_suffix};
