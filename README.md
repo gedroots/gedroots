@@ -215,8 +215,8 @@ French (see [docs/localization.md](docs/localization.md)).
   longevity by century, age at marriage, completeness of the root person's ancestry by
   generation, and pedigree collapse.
 - **AI agents** (File › Connect an AI Agent…): a local MCP server, on `127.0.0.1`, lets an
-  agent such as Claude Code read the open file (records, search, records to look for among the
-  ancestors) without ever writing it: the records it finds wait in the “To Review” page, where
+  agent (Claude Code, Codex, Gemini CLI, Claude Desktop, Cursor, VS Code or any MCP client) read
+  the open file (records, search, records to look for among the ancestors) without ever writing it: the records it finds wait in the “To Review” page, where
   you compare what will be written with the tree before saving. Living people are hidden. Two
   prompts, `find_record` and `read_record`, give the agent the method to look for a record and
   then propose it. See [docs/agents.md](docs/agents.md).
