@@ -37,6 +37,24 @@ either: it only adds a proposal to review.
 Ids (`I12`, `F3`…) are only for passing between tools; the server's instructions ask the agent
 not to show them.
 
+## Prompts
+
+The server also serves two working methods as MCP prompts, so no plugin is needed: in Claude
+Code they appear as slash commands once the server is connected.
+
+| Prompt | Arguments | Does |
+| --- | --- | --- |
+| `find_record` | `person`, `event` (both optional) | Picks a gap with `research_gaps`, finds the right archive and register, searches it in the browser at a human pace, downloads the act and goes on with `read_record` |
+| `read_record` | `file`, `person` (both optional) | Transcribes the act, checks it against the person's sheet, picks or describes the source with `search_sources`, then calls `propose_act` and fixes it if refused |
+
+```text
+/mcp__gedroots__find_record "Jean MARCHAND" birth
+/mcp__gedroots__read_record ~/Downloads/act.pdf
+```
+
+Their text lives in `crates/gedroots/src/agent/prompts/`. They tell the agent never to bypass a
+login or a captcha, and never to show ids.
+
 ## Proposals and review
 
 `propose_act` takes the same model as Source › Enter Record… (`crates/gedcom/src/act.rs`): an

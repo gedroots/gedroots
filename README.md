@@ -228,7 +228,8 @@ et suit le [design system GEDRoots](design.md) (fonds neutres et touches de viol
   laisse un agent comme Claude Code lire le fichier ouvert (fiches, recherche, actes à chercher
   parmi les ascendants), sans jamais l'écrire : les actes qu'il trouve attendent dans la page
   « À relire », où l'on compare ce qui sera écrit avec l'arbre avant d'enregistrer. Les personnes
-  vivantes sont masquées. Voir [docs/agents.md](docs/agents.md).
+  vivantes sont masquées. Deux prompts, `find_record` et `read_record`, donnent à l'agent la
+  méthode pour chercher un acte puis le proposer. Voir [docs/agents.md](docs/agents.md).
 - Enregistrement **sans perte** : un fichier relu puis réécrit est identique à l'octet près
   (balises propriétaires `_SOSADABOVILLE`, `_TODO`… comprises). Une copie `.ged.bak` est
   gardée à chaque enregistrement.
