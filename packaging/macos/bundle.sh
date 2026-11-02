@@ -5,7 +5,8 @@
 #   packaging/macos/bundle.sh --install   # … puis copie dans /Applications
 #   packaging/macos/bundle.sh --dmg       # … et <target>/release/GEDRoots.dmg
 #
-# CARGO permet de choisir la commande cargo (ex. CARGO="mise exec rust@stable -- cargo").
+# Normalement lancé par `mise run bundle` / `mise run install`, qui fournit la toolchain du
+# projet ; CARGO permet sinon de choisir la commande cargo.
 # Le dossier de compilation suit CARGO_TARGET_DIR / .cargo/config comme `cargo build`.
 set -eu
 
