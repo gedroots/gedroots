@@ -279,6 +279,12 @@ impl Gedcom {
     // GEDRoots extensions (documented in docs/extensions.md)
     // ------------------------------------------------------------------
 
+    /// Root individual declared in `HEAD._GR_ROOT`, if it exists (see [`Gedcom::root`]).
+    pub fn declared_root(&self) -> Option<String> {
+        let x = self.header.child(ROOT_TAG).and_then(|n| n.pointer())?;
+        self.get(x).is_some().then(|| x.to_string())
+    }
+
     /// Root individual: `HEAD._GR_ROOT`, otherwise Ancestris' Sosa 1, otherwise the first
     /// individual.
     pub fn root(&self) -> Option<String> {

@@ -104,3 +104,17 @@ fn missing_files_keep_their_value() {
     assert_eq!(file_of(&p.ged, "O4"), ["file:///Users/moi/Autres/portrait.jpg"]);
     assert_eq!(file_of(&p.ged, "O1"), ["Actes/naissance%20Jean.jpg", "Actes/page%202.jpg"]);
 }
+
+#[test]
+fn unpack_reverses_the_escaping_of_pack() {
+    let g = Gedcom::parse(GED).unwrap();
+    let mut packed = gedzip::pack(&g, &|_| true).ged;
+    let escaped = file_of(&packed, "O7");
+    assert!(escaped[0].contains("%20"), "{escaped:?}");
+    assert!(gedzip::unpack(&mut packed) > 0);
+    assert_eq!(file_of(&packed, "O1"), ["Actes/naissance Jean.jpg", "Actes/page 2.jpg"]);
+    assert_eq!(file_of(&packed, "O7"), ["media/Recensement 1906 #3.png"]);
+    assert_eq!(file_of(&packed, "O5"), ["https://www.archives43.fr/ark:1/x"], "web links unchanged");
+    assert_eq!(gedzip::unescape("100%"), "100%", "invalid sequence kept");
+    assert_eq!(gedzip::unescape("%C3%A9t%C3%A9"), "été");
+}
