@@ -132,12 +132,8 @@ impl Workspace {
         let date = date_field(&cur.date, &cur.date_phrase, window, cx);
         let place = text("Commune…", cur.place, window, cx);
         let source = picker(g, RecordKind::Source, cur.source.as_deref().unwrap_or(""), window, cx);
-        let sub = cx.subscribe_in(&place, window, |this, input, ev: &InputEvent, _, cx| {
-            if matches!(ev, InputEvent::Focus | InputEvent::Change) {
-                this.place_focus = Some(input.entity_id());
-                cx.notify();
-            }
-        });
+        let sub =
+            cx.subscribe_in(&place, window, |this, input, ev: &InputEvent, _, cx| this.on_place_input(input, ev, cx));
         let sub_kind = cx.observe(&kind, |_, _, cx| cx.notify());
         self.add_dialog = Some(AddDialog::Event(Box::new(EventDialog {
             owner,
@@ -162,6 +158,7 @@ impl Workspace {
 
     pub(super) fn close_add_dialog(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.add_dialog = None;
+        self.new_place = None;
         window.focus(&self.focus, cx);
         cx.notify();
     }

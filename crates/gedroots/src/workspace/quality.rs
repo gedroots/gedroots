@@ -128,7 +128,7 @@ impl Workspace {
         if place_issue(&issue) {
             self.open_issue(&issue, window, cx);
             if let Some(name) = issue.related.first().cloned() {
-                self.map.update(cx, |m, cx| m.geocode_place(name, cx));
+                self.start_locate(name, cx);
             }
             return;
         }

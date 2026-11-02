@@ -34,6 +34,7 @@ mod media_files;
 mod menus;
 mod pages;
 mod photo;
+mod places;
 mod quality;
 mod relatives;
 mod settings;
@@ -213,6 +214,14 @@ pub struct Workspace {
     add_dialog: Option<add::AddDialog>,
     /// Champ de lieu en cours de saisie dans la fiche.
     place_focus: Option<EntityId>,
+    /// Lieux réels proposés pendant la saisie d'un lieu.
+    place_search: places::PlaceSearch,
+    /// Coordonnées des lieux créés, écrites quand le lieu entre dans le fichier.
+    pending_places: Vec<places::PendingPlace>,
+    /// Fenêtre « Nouveau lieu ».
+    new_place: Option<places::NewPlace>,
+    /// « Localiser » sur la fiche d'un lieu.
+    locate: Option<places::Locate>,
     editor_subs: Vec<Subscription>,
     /// Ligne de la liste visée par le dernier clic droit.
     menu_row: Rc<std::cell::RefCell<Option<String>>>,
@@ -284,6 +293,10 @@ impl Workspace {
             recent_gen: crate::recent::generation(),
             menu_row: Rc::default(),
             place_focus: None,
+            place_search: Default::default(),
+            pending_places: Vec::new(),
+            new_place: None,
+            locate: None,
             editor_subs: Vec::new(),
             add_dialog: None,
             _subs: vec![sub, map_sub, appearance_sub],
@@ -452,6 +465,7 @@ impl Workspace {
 
     /// Affiche une liste et un élément (`None` : le dernier vu dans cette liste).
     fn open_location(&mut self, view: View, key: Option<String>, window: &mut Window, cx: &mut Context<Self>) {
+        self.new_place = None;
         if self.view == view {
             if let Some(k) = key {
                 self.select(k, window, cx);
@@ -592,20 +606,17 @@ impl Workspace {
         let ed = RecordEditor::new(&doc.ged, target, window, cx);
         // Champs de lieu : suggestions des lieux existants pendant la saisie.
         self.place_focus = None;
-        self.editor_subs = ed
-            .fields
-            .iter()
-            .filter(|f| f.place)
-            .filter_map(|f| match &f.state {
-                FieldState::Text(e) => Some(cx.subscribe_in(e, window, |this, input, ev: &InputEvent, _, cx| {
-                    if matches!(ev, InputEvent::Focus | InputEvent::Change) {
-                        this.place_focus = Some(input.entity_id());
-                        cx.notify();
-                    }
-                })),
-                _ => None,
-            })
-            .collect();
+        self.editor_subs =
+            ed.fields
+                .iter()
+                .filter(|f| f.place)
+                .filter_map(|f| match &f.state {
+                    FieldState::Text(e) => Some(cx.subscribe_in(e, window, |this, input, ev: &InputEvent, _, cx| {
+                        this.on_place_input(input, ev, cx)
+                    })),
+                    _ => None,
+                })
+                .collect();
         self.editor = Some(ed);
         // Les anciens champs disparaissent : on rend le focus à l'espace de travail
         // pour que les raccourcis clavier restent actifs.
@@ -668,6 +679,9 @@ impl Workspace {
         let result = ed.apply_form(&mut doc.ged, cx);
         let renamed = ed.place_name(cx);
         self.editor = Some(ed);
+        if result.is_ok() {
+            self.apply_pending_places();
+        }
         let unchanged =
             self.doc.as_ref().is_some_and(|d| d.history.last().is_some_and(|prev| prev.records == d.ged.records));
         if result.is_ok() && unchanged {
@@ -1603,58 +1617,6 @@ impl Workspace {
         )
     }
 
-    /// Lieux existants qui correspondent au champ de lieu en cours de saisie.
-    fn place_suggestions(&self, input: &Entity<InputState>, cx: &mut Context<Self>) -> Option<AnyElement> {
-        if self.place_focus != Some(input.entity_id()) {
-            return None;
-        }
-        let value = input.read(cx).value().to_string();
-        let q = sort_key(value.trim());
-        if q.len() < 2 {
-            return None;
-        }
-        let doc = self.doc.as_ref()?;
-        let mut hits: Vec<(String, String)> = doc
-            .ged
-            .places()
-            .into_iter()
-            .filter(|p| p.name != value && sort_key(&p.name).contains(&q))
-            .map(|p| (short_place(&p.name), p.name))
-            .collect();
-        // Les lieux qui commencent par la saisie d'abord.
-        hits.sort_by_key(|(short, _)| (!sort_key(short).starts_with(&q), short.clone()));
-        hits.truncate(6);
-        if hits.is_empty() {
-            return None;
-        }
-        Some(
-            h_flex()
-                .flex_wrap()
-                .gap_1()
-                .children(hits.into_iter().enumerate().map(|(n, (short, full))| {
-                    let entity = input.clone();
-                    div()
-                        .id(SharedString::from(format!("pl-{}-{n}", input.entity_id())))
-                        .px_2()
-                        .py(px(3.))
-                        .rounded(theme::RADIUS_SM)
-                        .border_1()
-                        .border_color(theme::border_strong())
-                        .bg(theme::surface())
-                        .text_xs()
-                        .cursor_pointer()
-                        .hover(|d| d.border_color(theme::accent()))
-                        .child(short)
-                        .on_click(cx.listener(move |this, _, window, cx| {
-                            entity.update(cx, |s, cx| s.set_value(full.clone(), window, cx));
-                            this.place_focus = None;
-                            cx.notify();
-                        }))
-                }))
-                .into_any_element(),
-        )
-    }
-
     /// Images liées à une source, affichées en grand sous la fiche.
     fn record_images(&self, ed: &RecordEditor, cx: &mut Context<Self>) -> Option<AnyElement> {
         let Target::Record { xref, kind } = &ed.target else { return None };
@@ -1998,6 +1960,7 @@ impl Workspace {
                                 div().text_color(theme::muted()).child(parts)
                             })),
                     )
+                    .children(place.as_ref().and_then(|p| self.render_locate(p, cx)))
                     .child(self.render_links("Cité par", refs, cx))
                     .into_any_element()
             }
@@ -2654,6 +2617,7 @@ impl Render for Workspace {
             .child(body)
             .children(self.render_picker(cx))
             .children(self.render_add_dialog(cx))
+            .children(self.render_new_place(cx))
             .children(self.render_palette(cx))
     }
 }

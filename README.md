@@ -63,11 +63,17 @@ et suit le [design system GEDRoots](design.md) (fonds neutres et touches de viol
 - **Sources, dépôts, médias, notes partagées** : liste, éditeur visuel,
   et panneau « Utilisé par / Liens » pour naviguer entre les enregistrements.
 - **Lieux** : index de tous les `PLAC` du fichier, renommage global et coordonnées (`MAP`).
+  En saisissant un lieu, le menu propose les lieux du fichier, un lieu-dit d'un lieu connu
+  (« La Borde, Troyes »), des lieux réels d'OpenStreetMap (Photon, pendant la saisie) et
+  « Créer « … » ». Un nouveau lieu s'ouvre dans la fenêtre « Nouveau lieu » : un champ par
+  juridiction du format des lieux du fichier (Réglages du fichier › Lieux), déjà rempli, et une
+  carte où un clic place l'épingle. Les coordonnées vont dans `PLAC.MAP`, l'identifiant
+  OpenStreetMap dans `PLAC.EXID` (GEDCOM 7 standard).
 - **Carte des lieux** : tous les lieux ayant des coordonnées sur une carte OpenStreetMap
   (glisser pour déplacer, molette pour zoomer, clic sur un repère pour ouvrir le lieu).
-  Les lieux sans coordonnées se localisent un par un depuis Qualité › Lieux sans coordonnées
-  (« Localiser… », via Nominatim), pour vérifier chaque résultat, ou se placent à la main (clic
-  droit sur la carte) ; les coordonnées sont écrites dans le GEDCOM (`PLAC.MAP.LATI/LONG`,
+  Les lieux sans coordonnées se localisent un par un depuis leur fiche (« Localiser » propose
+  les lieux correspondants, on choisit le bon) ou Qualité › Lieux sans coordonnées, ou se
+  placent à la main (« Placer sur la carte », ou clic droit sur la carte) ; les coordonnées sont écrites dans le GEDCOM (`PLAC.MAP.LATI/LONG`,
   format `N49.11652` / `W1.11437`) et s'annulent comme toute modification. Les tuiles sont
   gardées en cache sur le disque : en mode « Hors ligne », rien ne part sur Internet.
 
@@ -266,7 +272,7 @@ Raccourcis : `⌘O` / `Ctrl+O` ouvrir, `⌘S` / `Ctrl+S` enregistrer, `⌘N` nou
 Variables d'environnement facultatives pour la carte : `GEDROOTS_OFFLINE=1` (démarrer hors ligne),
 `GEDROOTS_TILE_URL` (autre serveur de tuiles, `{z}/{x}/{y}`), `GEDROOTS_TILE_CACHE` (dossier du
 cache, par défaut `~/Library/Caches/GEDRoots/tiles` ou `~/.cache/gedroots/tiles`),
-`GEDROOTS_GEOCODER` (autre instance Nominatim).
+`GEDROOTS_GEOCODER` (autre instance de Photon).
 
 ## Organisation du code
 
