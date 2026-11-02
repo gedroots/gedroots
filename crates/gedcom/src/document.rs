@@ -1,11 +1,11 @@
-//! Un fichier GEDCOM chargé en mémoire.
+//! A GEDCOM file loaded in memory.
 
 use crate::node::Node;
 use crate::parse::{self, ParseError, TextFormat};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-/// Types d'enregistrements de niveau 0 gérés par GEDCOM 7.
+/// Level 0 record types handled by GEDCOM 7.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RecordKind {
     Individual,
@@ -44,7 +44,7 @@ impl RecordKind {
         Self::ALL.into_iter().find(|k| k.tag() == tag)
     }
 
-    /// Préfixe utilisé pour les nouveaux identifiants (convention Ancestris).
+    /// Prefix used for new identifiers (Ancestris convention).
     pub fn xref_prefix(self) -> &'static str {
         match self {
             RecordKind::Individual => "I",
@@ -74,16 +74,15 @@ impl RecordKind {
 #[derive(Debug, Clone, Default)]
 pub struct Gedcom {
     pub header: Node,
-    /// Enregistrements dans l'ordre du fichier (hors `HEAD` et `TRLR`). Partagés
-    /// entre les copies (historique d'annulation) : une modification ne copie que
-    /// l'enregistrement modifié (`Arc::make_mut`).
+    /// Records in file order (without `HEAD` and `TRLR`). Shared between copies (undo history): a
+    /// change only copies the record changed (`Arc::make_mut`).
     pub records: Vec<Arc<Node>>,
     pub format: TextFormat,
     index: HashMap<String, usize>,
 }
 
 impl Gedcom {
-    /// Nouveau fichier GEDCOM 7 vide.
+    /// New empty GEDCOM 7 file.
     pub fn new() -> Self {
         let header = Node::new("HEAD")
             .push(Node::new("GEDC").push(Node::with_value("VERS", "7.0")))
@@ -126,12 +125,12 @@ impl Gedcom {
         s
     }
 
-    /// Version déclarée dans `HEAD.GEDC.VERS`.
+    /// Version declared in `HEAD.GEDC.VERS`.
     pub fn version(&self) -> &str {
         self.header.path_val(&["GEDC", "VERS"]).unwrap_or("?")
     }
 
-    /// Format des lieux déclaré dans `HEAD.PLAC.FORM`.
+    /// Place format declared in `HEAD.PLAC.FORM`.
     pub fn place_form(&self) -> Vec<String> {
         self.header
             .path_val(&["PLAC", "FORM"])
@@ -161,8 +160,8 @@ impl Gedcom {
         self.records.iter().map(|r| &**r).filter(move |r| r.tag == kind.tag())
     }
 
-    /// Enregistrements à modifier : seuls ceux qui vérifient `touches` sont copiés,
-    /// les autres restent partagés avec l'historique d'annulation.
+    /// Records to modify: only those matching `touches` are copied, the others stay shared with the
+    /// undo history.
     pub fn records_where_mut(&mut self, touches: impl Fn(&Node) -> bool) -> impl Iterator<Item = &mut Node> {
         self.records.iter_mut().filter(move |r| touches(r)).map(Arc::make_mut)
     }
@@ -171,7 +170,7 @@ impl Gedcom {
         self.records_of(kind).count()
     }
 
-    /// Prochain identifiant libre, au format du fichier (`I00042`, `S00249`…).
+    /// Next free identifier, in the file's format (`I00042`, `S00249`…).
     pub fn next_xref(&self, kind: RecordKind) -> String {
         let prefix = kind.xref_prefix();
         let mut max = 0u64;
@@ -193,7 +192,7 @@ impl Gedcom {
         }
     }
 
-    /// Ajoute un enregistrement vide du type donné et renvoie son identifiant.
+    /// Adds an empty record of the given type and returns its identifier.
     pub fn create(&mut self, kind: RecordKind) -> String {
         let xref = self.next_xref(kind);
         let mut node = Node::new(kind.tag()).with_xref(xref.clone());
@@ -222,8 +221,8 @@ impl Gedcom {
         xref
     }
 
-    /// Remplace un enregistrement (ex. après édition brute). L'identifiant peut changer :
-    /// les pointeurs vers l'ancien identifiant sont alors mis à jour.
+    /// Replaces a record (e.g. after raw editing). The identifier can change: pointers to the old
+    /// identifier are then updated.
     pub fn replace(&mut self, xref: &str, node: Node) -> Result<(), String> {
         let i = *self.index.get(xref).ok_or_else(|| format!("@{xref}@ introuvable"))?;
         let new_xref = node.xref.clone().ok_or_else(|| rust_i18n::t!("error.keep_xref"))?;
@@ -252,7 +251,7 @@ impl Gedcom {
         }
     }
 
-    /// Supprime un enregistrement et toutes les structures qui pointent vers lui.
+    /// Deletes a record and every structure that points to it.
     pub fn delete(&mut self, xref: &str) -> Option<Node> {
         let i = *self.index.get(xref)?;
         let removed = Arc::unwrap_or_clone(self.records.remove(i));
@@ -271,16 +270,17 @@ impl Gedcom {
         Some(removed)
     }
 
-    /// Enregistrements qui pointent vers `xref` (citations, liens familiaux…).
+    /// Records that point to `xref` (citations, family links…).
     pub fn referrers(&self, xref: &str) -> Vec<&Node> {
         self.records.iter().map(|r| &**r).filter(|r| r.pointers().iter().any(|p| p == xref)).collect()
     }
 
     // ------------------------------------------------------------------
-    // Extensions GEDRoots (documentées dans docs/extensions.md)
+    // GEDRoots extensions (documented in docs/extensions.md)
     // ------------------------------------------------------------------
 
-    /// Individu racine : `HEAD._GR_ROOT`, sinon le Sosa 1 d'Ancestris, sinon le premier individu.
+    /// Root individual: `HEAD._GR_ROOT`, otherwise Ancestris' Sosa 1, otherwise the first
+    /// individual.
     pub fn root(&self) -> Option<String> {
         if let Some(x) = self.header.child(ROOT_TAG).and_then(|n| n.pointer()).filter(|x| self.get(x).is_some()) {
             return Some(x.to_string());
@@ -291,7 +291,7 @@ impl Gedcom {
             .and_then(|r| r.xref.clone())
     }
 
-    /// Définit l'individu racine dans l'en-tête, et déclare l'extension dans `HEAD.SCHMA`.
+    /// Sets the root individual in the header, and declares the extension in `HEAD.SCHMA`.
     pub fn set_root(&mut self, xref: &str) {
         self.declare_extension(ROOT_TAG, ROOT_URI);
         let v = format!("@{xref}@");
@@ -301,7 +301,7 @@ impl Gedcom {
         }
     }
 
-    /// Déclare une balise d'extension (`HEAD.SCHMA.TAG`), comme l'exige GEDCOM 7.
+    /// Declares an extension tag (`HEAD.SCHMA.TAG`), as GEDCOM 7 requires.
     pub fn declare_extension(&mut self, tag: &str, uri: &str) {
         let schma = self.header.ensure_child("SCHMA");
         let declared = schma.children_with("TAG").any(|t| t.val().split_whitespace().next() == Some(tag));
@@ -311,6 +311,6 @@ impl Gedcom {
     }
 }
 
-/// Balise de l'individu racine (dans `HEAD`).
+/// Tag of the root individual (in `HEAD`).
 pub const ROOT_TAG: &str = "_GR_ROOT";
 pub const ROOT_URI: &str = extension_uri!("_gr_root");

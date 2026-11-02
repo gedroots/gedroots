@@ -1,32 +1,31 @@
-//! Champ de recherche des listes : critères en jetons, propositions, types de médias.
+//! Search field of the lists: criteria as tokens, suggestions, media types.
 //!
-//! La requête reste du texte (`born:1850 place:troyes guyot`, voir `gedcom::query`) ;
-//! chaque critère complet s'affiche en jeton atomique dans le champ. Sous le
-//! champ, des propositions tirées du fichier, avec le nombre de résultats que
-//! donnerait chacune. Dans la zone Médias, une ligne de types (sous-dossiers des
-//! réglages, sinon support GEDCOM) restreint la liste.
+//! The query stays text (`born:1850 place:troyes martin`, see `gedcom::query`); each complete
+//! criterion is shown as an atomic token in the field. Under the field, suggestions taken from the
+//! file, with the number of results each would give. In the Media zone, a row of types (subfolders
+//! of the settings, otherwise GEDCOM medium) restricts the list.
 
 use super::*;
 use gedcom::query::{Group, Suggestion, words};
 use gpui_kit::component::input::{InlineToken, InputContent};
 use rust_i18n::t;
 
-/// Nombre maximal de propositions affichées.
+/// Maximum number of suggestions shown.
 const MAX_SUGGESTIONS: usize = 8;
 
-/// Menu ouvert sur un jeton de la recherche.
+/// Menu opened on a search token.
 pub(super) struct ChipMenu {
-    /// Plage du critère dans le texte du champ.
+    /// Range of the criterion in the field's text.
     range: std::ops::Range<usize>,
     word: String,
     at: Point<Pixels>,
 }
 
-/// Réglages proposés dans le menu d'un jeton.
+/// Settings offered in a token's menu.
 enum ChipOption {
-    /// Marge d'une année (`born:1850±5`) : 0 = exactement.
+    /// Margin of a year (`born:1850±5`): 0 = exactly.
     Margin { key: String, year: String, margin: u32, on: bool },
-    /// Variantes d'orthographe d'un nom (`name:guyot` / `name:=guyot`).
+    /// Spelling variants of a name (`name:guyot` / `name:=guyot`).
     Variants { name: String, on: bool },
 }
 
@@ -73,7 +72,7 @@ impl ChipOption {
         }
     }
 
-    /// Critère une fois l'option choisie (ou décochée, pour les variantes).
+    /// Criterion once the option is chosen (or unchecked, for variants).
     fn apply(&self) -> String {
         match self {
             ChipOption::Margin { key, year, margin: 0, .. } => format!("{key}:{year}"),
@@ -85,7 +84,7 @@ impl ChipOption {
 }
 
 impl Workspace {
-    /// Le texte du champ a changé (frappe, effacement, jeton supprimé).
+    /// The field's text changed (keystroke, deletion, token removed).
     pub(super) fn on_search_changed(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.suggest_closed = false;
         self.tokenize_search(window, cx);
@@ -94,7 +93,7 @@ impl Workspace {
         cx.notify();
     }
 
-    /// Transforme chaque critère complet en jeton (le texte ne change pas).
+    /// Turns each complete criterion into a token (the text does not change).
     pub(super) fn tokenize_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(scope) = self.view.scope() else { return };
         let (text, spans, cursor) = {
@@ -119,14 +118,14 @@ impl Workspace {
         });
     }
 
-    /// Requête appliquée à la liste : sans le critère en cours de frappe
-    /// (`born:18…`), qui ne compte qu'une fois suivi d'une espace ou de ↵.
+    /// Query applied to the list: without the criterion being typed (`born:18…`), which only counts
+    /// once followed by a space or ↵.
     pub(super) fn committed_query(text: &str) -> String {
         let (range, partial) = Self::partial_word(text);
         if partial.contains(':') { text[..range.start].to_string() } else { text.to_string() }
     }
 
-    /// Valide le critère en cours de frappe (↵ sans proposition).
+    /// Confirms the criterion being typed (↵ with no suggestion).
     fn commit_partial(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let text = self.filter.read(cx).value().to_string();
         let (_, partial) = Self::partial_word(&text);
@@ -142,12 +141,12 @@ impl Workspace {
         self.on_search_changed(window, cx);
     }
 
-    /// Une recherche ou un filtre réduit la liste affichée.
+    /// A search or a filter narrows the displayed list.
     pub(super) fn is_filtered(&self, cx: &App) -> bool {
         self.only_flagged || !self.filter.read(cx).value().trim().is_empty() || self.active_media_type().is_some()
     }
 
-    /// Type de média choisi, s'il existe dans le fichier ouvert.
+    /// Chosen media type, if it exists in the open file.
     pub(super) fn active_media_type(&self) -> Option<String> {
         if self.view != View::Media {
             return None;
@@ -167,7 +166,7 @@ impl Workspace {
         }
     }
 
-    /// Mot en cours de frappe (plage et texte) ; vide après une espace.
+    /// Word being typed (range and text); empty after a space.
     fn partial_word(text: &str) -> (std::ops::Range<usize>, String) {
         if text.is_empty() || text.ends_with(char::is_whitespace) {
             return (text.len()..text.len(), String::new());
@@ -178,8 +177,8 @@ impl Workspace {
         }
     }
 
-    /// Mots libres tapés juste avant le mot en cours (« jean » dans « jean guy »),
-    /// avec le début du premier.
+    /// Free words typed just before the current word (“jean” in “jean mar”), with the start of the
+    /// first one.
     fn previous_free_words(scope: Scope, text: &str, partial: &std::ops::Range<usize>) -> (usize, Vec<String>) {
         let mut start = partial.start;
         let mut out: Vec<String> = Vec::new();
@@ -196,8 +195,8 @@ impl Workspace {
         (start, out)
     }
 
-    /// Plage remplacée par une proposition : le mot en cours et, pour une
-    /// personne, les mots libres qui le précèdent.
+    /// Range replaced by a suggestion: the current word and, for a person, the free words before
+    /// it.
     fn suggestion_range(scope: Scope, text: &str, consumes: usize) -> std::ops::Range<usize> {
         let (range, _) = Self::partial_word(text);
         if consumes <= 1 {
@@ -210,14 +209,14 @@ impl Workspace {
         start..range.end
     }
 
-    /// Recalcule les propositions et le nombre de résultats de chacune.
+    /// Recomputes the suggestions and the number of results of each.
     pub(super) fn refresh_suggestions(&mut self, cx: &App) {
         self.suggestions.clear();
         self.suggest_sel = 0;
         let (Some(scope), Some(doc)) = (self.view.scope(), &self.doc) else { return };
         let text = self.filter.read(cx).value().to_string();
         let (range, partial) = Self::partial_word(&text);
-        // Le dernier mot est déjà un critère complet : rien à proposer.
+        // The last word is already a complete criterion: nothing to suggest.
         if gedcom::chip_label(scope, &partial, Some(&doc.ged)).is_some() {
             return;
         }
@@ -243,7 +242,7 @@ impl Workspace {
         }
     }
 
-    /// Remplace le mot en cours par la proposition, qui devient un jeton.
+    /// Replaces the current word with the suggestion, which becomes a token.
     pub(super) fn accept_suggestion(&mut self, i: usize, window: &mut Window, cx: &mut Context<Self>) {
         let Some((s, _)) = self.suggestions.get(i).cloned() else { return };
         let Some(scope) = self.view.scope() else { return };
@@ -260,7 +259,7 @@ impl Workspace {
         self.on_search_changed(window, cx);
     }
 
-    /// Remplace (ou retire, si `with` est vide) un critère du champ.
+    /// Replaces (or removes, if `with` is empty) a criterion of the field.
     fn replace_criterion(
         &mut self,
         range: std::ops::Range<usize>,
@@ -283,7 +282,7 @@ impl Workspace {
         self.on_search_changed(window, cx);
     }
 
-    /// Menu d'un jeton cliqué : marge des années, variantes des noms, Retirer.
+    /// Menu of a clicked token: year margin, name variants, Remove.
     pub(super) fn render_chip_menu(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let m = self.chip_menu.as_ref()?;
         let range = m.range.clone();
@@ -351,7 +350,7 @@ impl Workspace {
             && self.view.scope().is_some()
     }
 
-    /// Champ de recherche ; ↑ ↓ ↵ et Échap pilotent les propositions.
+    /// Search field; ↑ ↓ ↵ and Esc drive the suggestions.
     pub(super) fn render_search_field(&self, cx: &mut Context<Self>) -> impl IntoElement {
         div()
             .px_3()
@@ -398,7 +397,7 @@ impl Workspace {
             }))
     }
 
-    /// Critères mal écrits (`without:foo`), seulement quand il y en a.
+    /// Malformed criteria (`without:foo`), only when there are some.
     pub(super) fn render_search_notes(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let query = Self::committed_query(&self.filter.read(cx).value());
         let unknown = match self.view.scope() {
@@ -415,7 +414,7 @@ impl Workspace {
         })
     }
 
-    /// Types de médias sur une ligne qui défile : Tous · Actes · Portraits…
+    /// Media types on a scrolling row: All · Records · Portraits…
     pub(super) fn render_media_types(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let types: Vec<String> = self.media_index.as_ref().map(|i| i.types.clone()).unwrap_or_default();
         let current = self.active_media_type();
@@ -457,7 +456,7 @@ impl Workspace {
         })
     }
 
-    /// Propositions sous le champ, groupées (Lieu, Nom, Critères…).
+    /// Suggestions under the field, grouped (Place, Name, Criteria…).
     pub(super) fn render_suggestions(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         if !self.suggestions_visible() {
             return None;
@@ -502,7 +501,7 @@ impl Workspace {
                     }))
                     .child(div().flex_1().min_w_0().truncate().child(s.label.clone()))
                     .child(div().text_xs().text_color(theme::muted()).child(group_thousands(*n)))
-                    // Au clic, le champ garde le focus.
+                    // On click, the field keeps the focus.
                     .on_mouse_down(
                         MouseButton::Left,
                         cx.listener(move |this, _, window, cx| {

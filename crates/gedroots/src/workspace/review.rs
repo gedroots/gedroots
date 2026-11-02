@@ -1,13 +1,12 @@
-//! Page « À relire » : les actes proposés par un agent IA, comparés à l'arbre avant
-//! d'être enregistrés.
+//! “To Review” page: the records proposed by an AI agent, compared with the tree before being
+//! saved.
 //!
-//! L'agent n'écrit jamais : ses propositions attendent ici, en mémoire, le temps de la
-//! session. Pour chacune, la page montre l'image de l'acte, une comparaison « Dans
-//! l'arbre » / « Proposé » (chaque personne se décoche), le rattachement (dépôt, source,
-//! fichier, événement) et, sur demande, les lignes GEDCOM exactes qui changeront.
-//! « Enregistrer dans l'arbre » écrit tout en une fois (un seul point d'annulation) et
-//! range le fichier selon Réglages du fichier › Médias ; « Rejeter » la retire sans rien
-//! écrire.
+//! The agent never writes: its proposals wait here, in memory, for the session. For each one, the
+//! page shows the record’s image, an “In the tree” / “Proposed” comparison (each person can be
+//! unchecked), the attachment (repository, source, file, event) and, on request, the exact GEDCOM
+//! lines that will change. “Save to Tree” writes everything at once (a single undo point) and
+//! organizes the file according to File Settings › Media; “Reject” removes it without writing
+//! anything.
 
 use super::*;
 use crate::agent::propose::Pending;
@@ -17,14 +16,14 @@ use gpui_kit::component::checkbox::Checkbox;
 use rust_i18n::t;
 use std::collections::BTreeSet;
 
-/// Une proposition et les personnes que l'utilisateur a décochées.
+/// A proposal and the people the user unchecked.
 pub(super) struct Item {
     pending: Pending,
     excluded: BTreeSet<usize>,
 }
 
 impl Item {
-    /// La proposition, sans les personnes décochées.
+    /// The proposal, without the unchecked people.
     fn proposal(&self) -> Proposal {
         let mut p = self.pending.proposal.clone();
         let mut i = 0;
@@ -40,10 +39,10 @@ impl Item {
 #[derive(Default)]
 pub(super) struct Review {
     items: Vec<Item>,
-    /// Page affichée à la place des listes.
+    /// Page displayed instead of the lists.
     pub(super) open: bool,
     sel: usize,
-    /// Section GEDCOM dépliée.
+    /// GEDCOM section expanded.
     gedcom: bool,
 }
 
@@ -53,7 +52,7 @@ impl Review {
     }
 }
 
-/// « Naissance · Jean BLANC » : les personnes liées sont nommées comme dans l'arbre.
+/// “Birth · Jean BLANC”: linked people are named as in the tree.
 fn title(ged: &Gedcom, p: &Proposal) -> String {
     let act = &p.act;
     let names: Vec<String> = act
@@ -91,7 +90,7 @@ fn change_tag(c: Change) -> (String, Hsla) {
 }
 
 impl Workspace {
-    /// Proposition reçue de l'agent : contrôlée sur le fichier affiché, puis mise en attente.
+    /// Proposal received from the agent: checked against the displayed file, then queued.
     pub(crate) fn add_proposal(&mut self, mut pending: Pending, cx: &mut Context<Self>) -> Result<usize, String> {
         let Some(doc) = &self.doc else { return Err("no file is open in GEDRoots".into()) };
         let g = &doc.ged;
@@ -119,7 +118,7 @@ impl Workspace {
         cx.notify();
     }
 
-    /// Retire la proposition affichée ; referme la page s'il n'en reste plus.
+    /// Removes the displayed proposal; closes the page if none is left.
     fn review_take(&mut self) -> Option<Item> {
         if self.review.sel >= self.review.items.len() {
             return None;
@@ -142,7 +141,7 @@ impl Workspace {
         cx.notify();
     }
 
-    /// Enregistre la proposition affichée : un point d'annulation, puis le fichier rangé.
+    /// Saves the displayed proposal: an undo point, then the file organized.
     pub(super) fn accept_proposal(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if !self.review.open || self.doc.is_none() {
             return;
@@ -150,7 +149,7 @@ impl Workspace {
         let Some(item) = self.review.items.get(self.review.sel) else { return };
         let proposal = item.proposal();
         let base = self.ged_dir();
-        // L'image extraite vit dans le cache de l'app : elle doit rejoindre le dossier du .ged.
+        // The extracted image lives in the app’s cache: it must join the .ged folder.
         if base.is_none() && item.pending.image.is_some() {
             self.set_status(t!("review.save_ged_first"), true);
             cx.notify();
@@ -189,12 +188,12 @@ impl Workspace {
         cx.notify();
     }
 
-    /// Ouvre la proposition dans la saisie d'acte, pour tout modifier. Une source
-    /// nouvelle est créée d'abord (⌘Z la retire).
+    /// Opens the proposal in the record entry, to change anything. A new source is created first
+    /// (⌘Z removes it).
     fn edit_proposal(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(item) = self.review.items.get(self.review.sel) else { return };
         let proposal = item.proposal();
-        // Source nouvelle : créée d'abord, avec un point d'annulation.
+        // New source: created first, with an undo point.
         let act = match &proposal.source {
             SourceChoice::Existing(x) => gedcom::Act { source: x.clone(), ..proposal.act.clone() },
             SourceChoice::New(_) => {
@@ -219,7 +218,7 @@ impl Workspace {
         self.show_act_editor(act, window, cx);
     }
 
-    /// Zone « À relire » de la barre latérale, tant qu'il y a des propositions.
+    /// “To Review” area of the sidebar, as long as there are proposals.
     pub(super) fn render_review_zone(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         if self.review.is_empty() {
             return None;
@@ -259,7 +258,7 @@ impl Workspace {
         )
     }
 
-    /// La page : liste des propositions, image de l'acte, comparaison.
+    /// The page: list of proposals, record image, comparison.
     pub(super) fn render_review(&self, cx: &mut Context<Self>) -> AnyElement {
         let Some(doc) = &self.doc else { return div().into_any_element() };
         let g = &doc.ged;
@@ -351,8 +350,8 @@ impl Workspace {
     fn review_detail(&self, item: &Item, g: &Gedcom, cx: &mut Context<Self>) -> AnyElement {
         let full = &item.pending.proposal;
         let p = item.proposal();
-        // La proposition peut ne plus aller avec l'arbre (modifié depuis) : elle reste
-        // visible, mais ne s'enregistre pas.
+        // The proposal may no longer fit the tree (changed since): it stays visible, but is not
+        // saved.
         let problem = p.check(g, current_year()).err();
         let rows = full.compare(g);
         let sosa = full
@@ -369,8 +368,7 @@ impl Workspace {
         let sub =
             [sosa, Some(t!("review.by_agent").into_owned())].into_iter().flatten().collect::<Vec<_>>().join(" · ");
 
-        // Comparaison.
-        // Colonnes : case, champ, « Dans l'arbre », « Proposé ».
+        // Comparison. Columns: check box, field, “In the tree”, “Proposed”.
         let line = || h_flex().items_start().gap_2().px_2().py_1p5().border_t_1().border_color(theme::border());
         let mut grid = v_flex().border_1().border_color(theme::border()).rounded(theme::RADIUS_SM).text_sm().child(
             h_flex()
@@ -437,7 +435,7 @@ impl Workspace {
             );
         }
 
-        // Rattachement : dépôt → source → fichier → événement.
+        // Attachment: repository → source → file → event.
         let chain = p.chain(g);
         let link_row =
             |k: String, v: String, detail: String, created: bool| {
@@ -489,8 +487,7 @@ impl Workspace {
             false,
         ));
 
-        // Lignes GEDCOM.
-        // Le fichier y figure sous le nom qu'il prendra, pas dans le cache de l'app.
+        // GEDCOM lines. The file appears under the name it will get, not in the app’s cache.
         let mut diff = p.diff(g).unwrap_or_default();
         if let Some(img) = &item.pending.image
             && let Some(name) = planned_file(g, &p)
@@ -624,8 +621,8 @@ impl Workspace {
     }
 }
 
-/// Nom que prendra le fichier de l'acte selon Réglages du fichier › Médias (sans
-/// modèle : son nom, à côté du .ged).
+/// Name the record’s file will get according to File Settings › Media (without a template: its own
+/// name, next to the .ged).
 fn planned_file(g: &Gedcom, p: &Proposal) -> Option<String> {
     let mut copy = g.clone();
     let res = p.apply(&mut copy).ok()?;
@@ -635,8 +632,8 @@ fn planned_file(g: &Gedcom, p: &Proposal) -> Option<String> {
     if path.is_absolute() { path.file_name().map(|n| n.to_string_lossy().into_owned()) } else { Some(to) }
 }
 
-/// Fichiers du média restés dans le cache de l'app (aucun modèle de nommage) : copiés
-/// à côté du .ged. Rend `true` si un fichier a été copié.
+/// Files of the media left in the app’s cache (no naming template): copied next to the .ged.
+/// Returns `true` if a file was copied.
 fn copy_out_of_cache(g: &mut Gedcom, base: &std::path::Path, media: &str) -> Result<bool, String> {
     let cache = crate::agent::propose::cache_dir();
     let Some(node) = g.get_mut(media) else { return Ok(false) };

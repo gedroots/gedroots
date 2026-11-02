@@ -62,16 +62,16 @@ fn detects_structure_empty_and_unused() {
     ] {
         assert!(c.contains(&code), "{code} absent de {c:?}");
     }
-    // Le témoin (ASSO) est relié à l'individu racine, pas l'individu isolé.
+    // The witness (ASSO) is connected to the root individual, not the isolated individual.
     let disc: Vec<&str> = issues.iter().filter(|i| i.code == "disconnected").map(|i| i.xref.as_str()).collect();
     assert_eq!(disc, ["I4"]);
-    // La famille F2 est vide (F1 a un membre) ; les deux sont signalées une fois chacune au plus.
+    // Family F2 is empty (F1 has one member); each is reported at most once.
     let empty: Vec<&str> = issues.iter().filter(|i| i.code == "empty_family").map(|i| i.xref.as_str()).collect();
     assert_eq!(empty, ["F2", "F3"]);
-    // Le dépôt sans citation est inutilisé, la note vide n'est signalée qu'une fois.
+    // The repository without a citation is unused, the empty note is only reported once.
     assert_eq!(issues.iter().filter(|i| i.xref == "N1").count(), 1);
     assert!(issues.iter().any(|i| i.code == "unused_record" && i.xref == "N2"));
-    // Catégories.
+    // Categories.
     assert_eq!(quality::category("empty_note"), Category::Empty);
     assert_eq!(quality::category("too_many"), Category::Structure);
 }
@@ -92,9 +92,9 @@ fn batch_fixes_keep_other_structures() {
     assert!(i1.child("RESI").is_some_and(|r| r.child("NOTE").is_none()), "note vide retirée, résidence gardée");
     assert!(i1.child("BIRT").is_some());
     assert!(g.get("F2").is_none() && g.get("F3").is_none() && g.get("N1").is_none());
-    // I1 est cité dans F2 (FAMC) : la famille a été supprimée, donc le lien aussi.
+    // I1 is cited in F2 (FAMC): the family was deleted, so the link too.
     assert!(g.get("I1").unwrap().child("FAMC").is_none());
-    // I2 se dit membre de F1 sans y figurer : rétabli en WIFE.
+    // I2 claims to be a member of F1 without being in it: restored as WIFE.
     assert!(g.get("F1").unwrap().children_with("WIFE").any(|n| n.pointer() == Some("I2")));
     let after = codes(&quality::run(&g));
     for code in ["empty_fact", "empty_note", "empty_family", "missing_backlink"] {
@@ -184,7 +184,7 @@ fn media_checks() {
     assert!(
         issues.iter().filter(|i| i.code == "unattached_file").all(|i| quality::category(i.code) == Category::Files)
     );
-    // Sans accès aux fichiers : seulement ce qui se voit dans le .ged.
+    // Without access to the files: only what can be seen in the .ged.
     let plain = quality::run(&g);
     assert!(plain.iter().all(|i| !matches!(i.code, "moved_file" | "missing_file" | "unattached_file")));
 }
@@ -199,16 +199,16 @@ fn media_fixes() {
         .cloned()
         .collect();
     assert_eq!(g.fix_issues(&fixable), 4);
-    // Doublon fusionné : un seul lien, la note conservée.
+    // Duplicate merged: a single link, the note kept.
     assert!(g.get("M2").is_none());
     let indi = g.get("I1").unwrap();
     assert_eq!(indi.children_with("OBJE").filter(|o| o.val() == "@M1@").count(), 1);
     assert!(g.get("M1").unwrap().child("NOTE").is_some());
-    // Chemin corrigé, format déduit.
+    // Path fixed, format inferred.
     let f = g.get("M3").unwrap().child("FILE").unwrap();
     assert_eq!(f.val(), "Actes/deces.jpg");
     assert_eq!(f.child_val("FORM"), Some("image/jpeg"));
-    // Médias créés pour les fichiers du dossier.
+    // Media created for the folder's files.
     assert!(g.media_by_file("Portraits/jean.png").is_some());
     assert!(media_issues(&g).iter().all(|i| i.code == "missing_file" || quality::category(i.code) != Category::Media));
 }
@@ -249,7 +249,8 @@ fn place_checks() {
     let g = Gedcom::parse(PLACES).unwrap();
     let issues = quality::run(&g);
     let of = |code: &str| issues.iter().filter(|i| i.code == code).map(|i| i.related.clone()).collect::<Vec<_>>();
-    // Variantes : écriture différente, et forme abrégée d'un seul lieu ; « Saint-Martin » est ambigu.
+    // Variants: different spelling, and abbreviated form of a single place; “Saint-Martin” is
+    // ambiguous.
     let variants = of("place_variant");
     assert!(variants.contains(&vec![
         "St Etienne, Loire, Auvergne-Rhône-Alpes, France".to_string(),
@@ -276,7 +277,7 @@ fn place_fixes() {
     assert_eq!(g.fix_issues(&fix), 3);
     let names: Vec<String> = g.places().into_iter().map(|p| p.name).collect();
     assert!(!names.iter().any(|n| n.starts_with("St ") || n == "Unias" || n.contains(", Rhône-Alpes")));
-    // La variante reprend les coordonnées du lieu gardé.
+    // The variant takes the coordinates of the kept place.
     let st = g.places().into_iter().find(|p| p.name.starts_with("Saint-Étienne")).unwrap();
     assert_eq!(st.uses, 3);
     assert!(st.coords().is_some());

@@ -1,12 +1,11 @@
-//! Dates GEDCOM 7, complètes : qualificatifs (`ABT`, `CAL`, `EST`), intervalles
-//! (`BEF`, `AFT`, `BET … AND …`), périodes (`FROM … TO …`), calendriers
-//! grégorien, julien, républicain et hébraïque (conversions exactes), calendriers
-//! d'extension (`_XXX`) conservés tels quels, et phrases (`PHRASE`).
+//! Complete GEDCOM 7 dates: qualifiers (`ABT`, `CAL`, `EST`), ranges (`BEF`, `AFT`, `BET … AND …`),
+//! periods (`FROM … TO …`), Gregorian, Julian, French Republican and Hebrew calendars (exact
+//! conversions), extension calendars (`_XXX`) kept as is, and phrases (`PHRASE`).
 //!
-//! - [`Date::parse`] lit la valeur GEDCOM (tolérant, sans jamais la réécrire) ;
-//! - [`parse_input`] comprend une saisie en français (« vers 1850 »,
-//!   « 15 brumaire an XII », « entre 1820 et 1825 (d'après l'âge) »…) ;
-//! - [`Date::to_input_text`] redonne un texte que [`parse_input`] relit à l'identique.
+//! - [`Date::parse`] reads the GEDCOM value (lenient, never rewriting it);
+//! - [`parse_input`] understands everyday input (“vers 1850”, “15 brumaire an XII”, “between 1820
+//!   and 1825 (from the age)”…);
+//! - [`Date::to_input_text`] gives back a text that [`parse_input`] reads identically.
 
 pub mod calendar;
 mod input;
@@ -25,12 +24,12 @@ pub enum Calendar {
     Julian,
     FrenchRepublican,
     Hebrew,
-    /// Calendrier d'extension (`_MAYA`…) : conservé, sans conversion.
+    /// Extension calendar (`_MAYA`…): kept, without conversion.
     Extension(String),
 }
 
 impl Calendar {
-    /// Les calendriers connus, dans l'ordre d'affichage.
+    /// Known calendars, in display order.
     pub const KNOWN: [Calendar; 4] =
         [Calendar::Gregorian, Calendar::Julian, Calendar::FrenchRepublican, Calendar::Hebrew];
 
@@ -79,9 +78,9 @@ impl Calendar {
 pub struct SimpleDate {
     pub calendar: Calendar,
     pub day: Option<u8>,
-    /// Mois 1..=12 (1..=13 pour les calendriers républicain et hébraïque).
+    /// Month 1..=12 (1..=13 for the Republican and Hebrew calendars).
     pub month: Option<u8>,
-    /// Mois d'extension (`_XUL`…) ou d'un calendrier d'extension, conservé tel quel.
+    /// Extension month (`_XUL`…) or month of an extension calendar, kept as is.
     pub month_tag: Option<String>,
     pub year: Option<i32>,
     pub bce: bool,
@@ -99,11 +98,11 @@ pub enum Date {
     From(SimpleDate),
     To(SimpleDate),
     FromTo(SimpleDate, SimpleDate),
-    /// Valeur non reconnue, conservée telle quelle.
+    /// Unrecognized value, kept as is.
     Other(String),
 }
 
-/// Précision d'une date, telle que l'utilisateur la choisit.
+/// Precision of a date, as the user picks it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DateKind {
     Exact,
@@ -158,7 +157,7 @@ const REP_MONTHS: [&str; 13] =
 const HEB_MONTHS: [&str; 13] =
     ["TSH", "CSH", "KSL", "TVT", "SHV", "ADR", "ADS", "NSN", "IYR", "SVN", "TMZ", "AAV", "ELL"];
 
-/// Short name of a Gregorian or Julian month (1..=12): “Mar”, « mars ».
+/// Short name of a Gregorian or Julian month (1..=12): “Mar”, “mars”.
 fn month_name(m: u32, lang: &str) -> Cow<'static, str> {
     match GREG_MONTHS.get((m as usize).wrapping_sub(1)) {
         Some(tag) => crate::i18n::lookup_in(&format!("month.{tag}"), lang).unwrap_or(Cow::Borrowed("?")),
@@ -213,7 +212,7 @@ pub(crate) fn roman(mut n: i32) -> String {
 }
 
 impl SimpleDate {
-    /// Date grégorienne complète.
+    /// Complete Gregorian date.
     pub fn ymd(year: i32, month: u8, day: u8) -> SimpleDate {
         SimpleDate { day: Some(day), month: Some(month), year: Some(year), ..Default::default() }
     }
@@ -261,18 +260,18 @@ impl SimpleDate {
         self.month.is_some() || self.month_tag.is_some()
     }
 
-    /// Date complète (jour, mois, année) d'un calendrier connu : convertible exactement.
+    /// Complete date (day, month, year) of a known calendar: exactly convertible.
     pub fn is_complete(&self) -> bool {
         self.day.is_some() && self.month.is_some() && self.year.is_some() && self.month_tag.is_none()
     }
 
-    /// Année astronomique (1 av. J.-C. = 0).
+    /// Astronomical year (1 BC = 0).
     fn astro_year(&self) -> Option<i64> {
         let y = self.year? as i64;
         Some(if self.bce { 1 - y } else { y })
     }
 
-    /// Valeur GEDCOM ; `with_calendar` force le préfixe `GREGORIAN`.
+    /// GEDCOM value; `with_calendar` forces the `GREGORIAN` prefix.
     pub fn to_gedcom(&self, with_calendar: bool) -> String {
         let mut parts: Vec<String> = Vec::new();
         if with_calendar || self.calendar != Calendar::Gregorian {
@@ -293,7 +292,7 @@ impl SimpleDate {
         parts.join(" ")
     }
 
-    /// Nombre de jours du mois (calendriers connus).
+    /// Number of days in the month (known calendars).
     fn month_days(&self) -> Option<u32> {
         let y = self.astro_year()?;
         let m = self.month? as u32;
@@ -306,7 +305,7 @@ impl SimpleDate {
         })
     }
 
-    /// Vérifie que la date existe (jour du mois, année 0, époque…).
+    /// Checks that the date exists (day of the month, year 0, era…).
     pub fn validate(&self) -> Result<(), String> {
         if matches!(self.calendar, Calendar::Extension(_)) || self.month_tag.is_some() {
             return Ok(());
@@ -337,7 +336,7 @@ impl SimpleDate {
         Ok(())
     }
 
-    /// Jours fixes couverts : un jour, un mois ou une année entière.
+    /// Fixed days covered: one day, a month or a whole year.
     pub fn rd_range(&self) -> Option<(i64, i64)> {
         let y = self.astro_year()?;
         let fixed = |y: i64, m: u32, d: u32| -> i64 {
@@ -374,7 +373,7 @@ impl SimpleDate {
         }
     }
 
-    /// Même jour dans un autre calendrier (date complète uniquement).
+    /// Same day in another calendar (complete date only).
     pub fn convert(&self, to: &Calendar) -> Option<SimpleDate> {
         if &self.calendar == to {
             return Some(self.clone());
@@ -407,7 +406,7 @@ impl SimpleDate {
         })
     }
 
-    /// Année grégorienne approximative (pour le tri et la chronologie).
+    /// Approximate Gregorian year (for sorting and the timeline).
     pub fn gregorian_year(&self) -> Option<i32> {
         match self.calendar {
             Calendar::Gregorian | Calendar::Extension(_) => {
@@ -426,7 +425,7 @@ impl SimpleDate {
         }
     }
 
-    /// Clé de tri (année, mois, jour) grégorienne approximative.
+    /// Approximate Gregorian sort key (year, month, day).
     pub fn sort_key(&self) -> (i32, u8, u8) {
         let y = self.gregorian_year().unwrap_or(i32::MIN);
         if self.calendar != Calendar::Gregorian
@@ -535,7 +534,7 @@ impl SimpleDate {
 impl Date {
     pub fn parse(raw: &str) -> Date {
         let s = raw.trim();
-        // Échappements de calendrier GEDCOM 5.5.1 (`@#DJULIAN@`…).
+        // GEDCOM 5.5.1 calendar escapes (`@#DJULIAN@`…).
         let owned;
         let s = if s.contains("@#D") {
             owned = s
@@ -583,7 +582,7 @@ impl Date {
         })
     }
 
-    /// Les dates simples qui composent la valeur.
+    /// The simple dates that make up the value.
     pub fn dates(&self) -> Vec<&SimpleDate> {
         match self {
             Date::Between(a, b) | Date::FromTo(a, b) => vec![a, b],
@@ -592,8 +591,7 @@ impl Date {
         }
     }
 
-    /// Change la précision en gardant la (première) date ; une seconde date manquante
-    /// reprend la première.
+    /// Changes the precision, keeping the (first) date; a missing second date takes the first one.
     pub fn with_kind(&self, kind: DateKind) -> Option<Date> {
         let ds = self.dates();
         let a = (*ds.first()?).clone();
@@ -612,7 +610,7 @@ impl Date {
         })
     }
 
-    /// Applique `f` à chaque date simple ; `None` si l'une échoue.
+    /// Applies `f` to each simple date; `None` if one fails.
     pub fn try_map(&self, f: impl Fn(&SimpleDate) -> Option<SimpleDate>) -> Option<Date> {
         Some(match self {
             Date::Exact(d) => Date::Exact(f(d)?),
@@ -629,15 +627,15 @@ impl Date {
         })
     }
 
-    /// Calendrier commun à toutes les dates simples, s'il y en a un.
+    /// Calendar shared by every simple date, if there is one.
     pub fn calendar(&self) -> Option<&Calendar> {
         let ds = self.dates();
         let c = &ds.first()?.calendar;
         ds.iter().all(|d| &d.calendar == c).then_some(c)
     }
 
-    /// Valeur GEDCOM 7. Les calendriers sont tous nommés dès qu'une date n'est pas
-    /// grégorienne (recommandation de la norme).
+    /// GEDCOM 7 value. Every calendar is named as soon as one date is not Gregorian (the standard's
+    /// recommendation).
     pub fn to_gedcom(&self) -> String {
         let named = self.dates().iter().any(|d| d.calendar != Calendar::Gregorian);
         let s = |d: &SimpleDate| d.to_gedcom(named);
@@ -656,7 +654,7 @@ impl Date {
         }
     }
 
-    /// Vérifie que chaque date existe et que les bornes sont dans l'ordre.
+    /// Checks that each date exists and that the bounds are in order.
     pub fn validate(&self) -> Result<(), String> {
         for d in self.dates() {
             d.validate()?;
@@ -670,7 +668,7 @@ impl Date {
         Ok(())
     }
 
-    /// Date principale (la première borne pour une période).
+    /// Main date (the first bound for a period).
     pub fn primary(&self) -> Option<&SimpleDate> {
         match self {
             Date::Exact(d)
@@ -695,7 +693,7 @@ impl Date {
         self.primary().map(|d| d.sort_key()).unwrap_or((i32::MIN, 0, 0))
     }
 
-    /// Une année courte pour les listes : `1850`, `~1850`, `<1809`.
+    /// A short year for lists: `1850`, `~1850`, `<1809`.
     pub fn short_year(&self) -> String {
         let y = match self.year() {
             Some(y) => y.to_string(),
@@ -710,7 +708,7 @@ impl Date {
     }
 
     fn render(&self, lang: &str, f: impl Fn(&SimpleDate) -> String) -> String {
-        // French changes the preposition with a day: « du 10 mai au 12 juin », « de 1850 à 1860 ».
+        // French changes the preposition with a day: “du 10 mai au 12 juin”, “de 1850 à 1860”.
         let until = |d: &SimpleDate| match d.day {
             Some(_) => t!("date.until_day", d = f(d), locale = lang),
             None => t!("date.until_year", d = f(d), locale = lang),
@@ -770,10 +768,10 @@ impl Date {
 }
 
 // ---------------------------------------------------------------------------
-// Lecture et écriture de `DATE` + `PHRASE` dans l'arbre.
+// Reading and writing `DATE` + `PHRASE` in the tree.
 // ---------------------------------------------------------------------------
 
-/// Valeur et phrase de la sous-structure `DATE` d'un nœud.
+/// Value and phrase of a node's `DATE` substructure.
 pub fn read_date(node: &Node) -> (String, String) {
     match node.child("DATE") {
         Some(d) => (d.val().to_string(), d.child_val("PHRASE").unwrap_or("").to_string()),
@@ -781,7 +779,7 @@ pub fn read_date(node: &Node) -> (String, String) {
     }
 }
 
-/// Nouveau nœud `DATE` (avec `PHRASE` éventuelle) ; `None` si les deux sont vides.
+/// New `DATE` node (with `PHRASE` if any); `None` if both are empty.
 pub fn date_node(value: &str, phrase: &str) -> Option<Node> {
     let (value, phrase) = (value.trim(), phrase.trim());
     if value.is_empty() && phrase.is_empty() {
@@ -794,7 +792,7 @@ pub fn date_node(value: &str, phrase: &str) -> Option<Node> {
     Some(n)
 }
 
-/// Écrit `DATE` + `PHRASE` sous `parent`, en gardant les autres sous-structures (`TIME`…).
+/// Writes `DATE` + `PHRASE` under `parent`, keeping the other substructures (`TIME`…).
 pub fn write_date(parent: &mut Node, value: &str, phrase: &str) {
     let (value, phrase) = (value.trim(), phrase.trim());
     if value.is_empty() && phrase.is_empty() {
@@ -865,7 +863,7 @@ mod tests {
         assert_eq!(r.to_gedcom(false), "FRENCH_R 15 BRUM 12");
         assert_eq!(r.convert(&Calendar::Gregorian).unwrap(), g);
         assert_eq!(g.convert(&Calendar::Julian).unwrap().to_gedcom(false), "JULIAN 26 OCT 1803");
-        // Avant l'an I : pas d'équivalent républicain.
+        // Before year I: no Republican equivalent.
         assert!(SimpleDate::ymd(1700, 1, 1).convert(&Calendar::FrenchRepublican).is_none());
     }
 

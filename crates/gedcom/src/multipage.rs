@@ -1,21 +1,20 @@
-//! Médias à plusieurs pages (acte sur deux feuillets, registre…).
+//! Multi-page media (record on two sheets, register…).
 //!
-//! En GEDCOM 7, un enregistrement `OBJE` peut porter plusieurs `FILE`, chacun
-//! avec son `FORM` et son `TITL`, dans l'ordre des pages :
+//! In GEDCOM 7, an `OBJE` record can hold several `FILE`s, each with its `FORM` and `TITL`, in page
+//! order:
 //!
 //! ```text
 //! 0 @M1@ OBJE
-//! 1 FILE Actes/acte_1.jpg
+//! 1 FILE Records/record_1.jpg
 //! 2 FORM image/jpeg
-//! 2 TITL Acte de mariage
-//! 1 FILE Actes/acte_2.jpg
+//! 2 TITL Marriage record
+//! 1 FILE Records/record_2.jpg
 //! 2 FORM image/jpeg
 //! ```
 //!
-//! Les individus et les sources pointent alors vers un seul média. La norme
-//! applique le `CROP` d'un lien au premier fichier ; pour situer une personne
-//! sur une autre page, GEDRoots ajoute au lien l'extension `_GR_FILE` (numéro
-//! de la page, à partir de 1, voir `docs/extensions.md`) :
+//! Individuals and sources then point to a single media. The standard applies a link's `CROP` to
+//! the first file; to place a person on another page, GEDRoots adds the `_GR_FILE` extension to the
+//! link (page number, from 1, see `docs/extensions.md`):
 //!
 //! ```text
 //! 1 OBJE @M1@
@@ -25,21 +24,21 @@
 //! 2 _GR_FILE 2
 //! ```
 //!
-//! Un lien sans `CROP` ni `_GR_FILE` concerne le document entier.
+//! A link without `CROP` or `_GR_FILE` is about the whole document.
 //!
-//! Fusionner plusieurs médias en un seul, ou séparer une page en un nouveau
-//! média, réécrit tous les pointeurs du fichier (y compris dans les citations).
+//! Merging several media into one, or splitting a page into a new media, rewrites every pointer of
+//! the file (in citations too).
 
 use crate::document::{Gedcom, RecordKind};
 use crate::model::Media;
 use crate::node::Node;
 use crate::relations::mime_for;
 
-/// Balise de la page visée par un lien `OBJE`.
+/// Tag of the page a `OBJE` link points to.
 pub const PAGE_TAG: &str = "_GR_FILE";
 pub const PAGE_URI: &str = extension_uri!("_gr_file");
 
-/// Un fichier (une page) d'un média.
+/// A file (a page) of a media.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MediaFile<'a> {
     pub path: &'a str,
@@ -48,7 +47,7 @@ pub struct MediaFile<'a> {
 }
 
 impl<'a> Media<'a> {
-    /// Les fichiers du média, dans l'ordre des pages.
+    /// The files of the media, in page order.
     pub fn files(&self) -> Vec<MediaFile<'a>> {
         self.node
             .children_with("FILE")
@@ -60,33 +59,34 @@ impl<'a> Media<'a> {
         self.node.children_with("FILE").count()
     }
 
-    /// Fichier de la page `page` (à partir de 1).
+    /// File of page `page` (from 1).
     pub fn page_file(&self, page: usize) -> Option<&'a str> {
         self.node.children_with("FILE").nth(page.checked_sub(1)?).map(|f| f.val())
     }
 }
 
-/// Page visée par un lien `OBJE` (1 sans `_GR_FILE`).
+/// Page an `OBJE` link points to (1 without `_GR_FILE`).
 pub fn page_of_link(link: &Node) -> usize {
     link.child_val(PAGE_TAG).and_then(|v| v.trim().parse::<usize>().ok()).filter(|p| *p >= 1).unwrap_or(1)
 }
 
-/// Le lien vise-t-il une page précise (zone recadrée ou `_GR_FILE`) plutôt que le document entier ?
+/// Does the link point to a specific page (cropped area or `_GR_FILE`) rather than the whole
+/// document?
 fn is_page_link(link: &Node) -> bool {
     link.child("CROP").is_some() || link.child(PAGE_TAG).is_some()
 }
 
-/// Écrit la page d'un lien : rien pour la première (lecture standard du `CROP`).
+/// Writes the page of a link: nothing for the first one (standard reading of the `CROP`).
 fn set_page(link: &mut Node, page: usize) {
     link.children.retain(|c| c.tag != PAGE_TAG);
     if page > 1 {
-        // Après CROP et TITL, l'ordre de la norme pour les sous-structures du lien.
+        // After CROP and TITL, the standard's order for the link's substructures.
         let at = link.children.iter().position(|c| c.tag != "CROP" && c.tag != "TITL").unwrap_or(link.children.len());
         link.children.insert(at, Node::with_value(PAGE_TAG, page.to_string()));
     }
 }
 
-/// Retire le « (1/2) », « (2) »… final d'un titre de page.
+/// Removes the final “(1/2)”, “(2)”… of a page title.
 pub fn strip_page_suffix(title: &str) -> &str {
     let t = title.trim_end();
     if let Some(inner) = t.strip_suffix(')')
@@ -106,8 +106,8 @@ fn ptr(x: &str) -> String {
     format!("@{x}@")
 }
 
-/// Applique `f` à tous les liens `OBJE` vers `p` du nœud et de ses descendants.
-/// `f` renvoie des liens à insérer juste après (copies vers un autre média).
+/// Applies `f` to every `OBJE` link to `p` in the node and its descendants. `f` returns links to
+/// insert right after (copies to another media).
 fn for_links(n: &mut Node, p: &str, f: &mut impl FnMut(&mut Node) -> Vec<Node>) -> bool {
     let mut touched = false;
     let mut i = 0;
@@ -127,7 +127,7 @@ fn for_links(n: &mut Node, p: &str, f: &mut impl FnMut(&mut Node) -> Vec<Node>) 
     touched
 }
 
-/// Supprime les liens `OBJE` en double (même cible, mêmes sous-structures) sous un même parent.
+/// Removes duplicate `OBJE` links (same target, same substructures) under the same parent.
 fn dedupe_links(n: &mut Node, p: &str) {
     let mut seen: Vec<Node> = Vec::new();
     n.children.retain(|c| {
@@ -149,7 +149,7 @@ impl Gedcom {
         self.get(media).filter(|n| n.tag == "OBJE").ok_or_else(|| rust_i18n::t!("error.media_not_found").into_owned())
     }
 
-    /// Média qui peut avoir des pages : pas un lien web (`FILE https://…`).
+    /// Media that can have pages: not a web link (`FILE https://…`).
     fn paged_media(&self, media: &str) -> Result<&Node, String> {
         let n = self.media_node(media)?;
         if Media::new(n).is_web() {
@@ -158,7 +158,7 @@ impl Gedcom {
         Ok(n)
     }
 
-    /// Réécrit les liens vers `media` dans tout le fichier ; touche les enregistrements modifiés.
+    /// Rewrites the links to `media` in the whole file; touches the modified records.
     pub(crate) fn rewrite_links(&mut self, media: &str, mut f: impl FnMut(&mut Node) -> Vec<Node>, dedupe: &[&str]) {
         let p = ptr(media);
         let mut uses_pages = false;
@@ -182,8 +182,8 @@ impl Gedcom {
         }
     }
 
-    /// Ajoute des pages (fichiers) à la fin d'un média. Les fichiers déjà présents
-    /// dans ce média sont ignorés. Renvoie le nombre de pages ajoutées.
+    /// Adds pages (files) at the end of a media. Files already in this media are ignored. Returns
+    /// the number of pages added.
     pub fn add_media_pages(&mut self, media: &str, files: &[String]) -> Result<usize, String> {
         self.paged_media(media)?;
         let node = self.get_mut(media).unwrap();
@@ -207,8 +207,8 @@ impl Gedcom {
         Ok(added)
     }
 
-    /// Retire une page d'un média (le fichier reste sur le disque). Les personnes
-    /// situées sur cette page restent liées au média, sans zone.
+    /// Removes a page from a media (the file stays on the disk). The people placed on this page
+    /// stay linked to the media, without an area.
     pub fn remove_media_page(&mut self, media: &str, page: usize) -> Result<(), String> {
         let n = Media::new(self.media_node(media)?).page_count();
         if n < 2 {
@@ -241,7 +241,7 @@ impl Gedcom {
         Ok(())
     }
 
-    /// Déplace une page (`from` → `to`, à partir de 1).
+    /// Moves a page (`from` → `to`, from 1).
     pub fn move_media_page(&mut self, media: &str, from: usize, to: usize) -> Result<(), String> {
         let n = Media::new(self.media_node(media)?).page_count();
         if from == 0 || to == 0 || from > n || to > n {
@@ -262,7 +262,7 @@ impl Gedcom {
         }
         keep_title(node, base.as_deref());
         node.touch();
-        // Nouvelle position de chaque ancienne page.
+        // New position of each old page.
         let mut order: Vec<usize> = (1..=n).collect();
         let m = order.remove(from - 1);
         order.insert(to - 1, m);
@@ -280,10 +280,9 @@ impl Gedcom {
         Ok(())
     }
 
-    /// Fusionne des médias en un seul média multipage, dans l'ordre donné : le
-    /// premier reçoit les pages des suivants, qui sont supprimés. Tous les liens
-    /// vers les médias fusionnés pointent ensuite vers le premier (les personnes
-    /// situées sur une page gardent leur zone, avec le numéro de page).
+    /// Merges media into a single multi-page media, in the given order: the first one receives the
+    /// pages of the next ones, which are deleted. Every link to the merged media then points to the
+    /// first one (people placed on a page keep their area, with the page number).
     pub fn merge_media(&mut self, media: &[String]) -> Result<String, String> {
         let mut list: Vec<&str> = Vec::new();
         for m in media {
@@ -296,7 +295,7 @@ impl Gedcom {
             return Err(rust_i18n::t!("error.merge_two").into());
         }
         let target = list[0].to_string();
-        // Titre commun : « Acte de mariage (1/2) » et « (2/2) » → « Acte de mariage ».
+        // Common title: “Marriage record (1/2)” and “(2/2)” → “Marriage record”.
         let titles: Vec<Option<String>> = list
             .iter()
             .flat_map(|m| {
@@ -320,7 +319,7 @@ impl Gedcom {
                     let at = node.children.iter().rposition(|x| x.tag == "FILE").map(|i| i + 1).unwrap_or(0);
                     node.children.insert(at, c.clone());
                 } else if !node.children.contains(c) {
-                    // Notes, sources, identifiants… du média fusionné : conservés.
+                    // Notes, sources, identifiers… of the merged media: kept.
                     node.insert_child(c.clone());
                 }
             }
@@ -353,9 +352,9 @@ impl Gedcom {
         Ok(target)
     }
 
-    /// Sépare une page d'un média multipage en un nouveau média. Les personnes
-    /// situées sur cette page sont reliées au nouveau média ; les liens vers le
-    /// document entier sont dupliqués. Renvoie l'identifiant du nouveau média.
+    /// Splits a page of a multi-page media into a new media. The people placed on this page are
+    /// linked to the new media; links to the whole document are duplicated. Returns the identifier
+    /// of the new media.
     pub fn split_media_page(&mut self, media: &str, page: usize) -> Result<String, String> {
         let m = Media::new(self.media_node(media)?);
         let n = m.page_count();
@@ -371,7 +370,7 @@ impl Gedcom {
         let mut file = node.children.remove(i);
         keep_title(node, base.as_deref());
         node.touch();
-        // Titre de la page séparée : le sien s'il est propre à la page, sinon « titre (k/n) ».
+        // Title of the split page: its own if it is specific to the page, otherwise “title (k/n)”.
         if let Some(b) = &base
             && file.child_val("TITL").is_none_or(|t| t.trim() == b)
         {
@@ -386,7 +385,7 @@ impl Gedcom {
             media,
             |l| {
                 if !is_page_link(l) {
-                    // Document entier : lié aussi à la page séparée.
+                    // Whole document: linked to the split page too.
                     let mut copy = l.clone();
                     copy.value = Some(new_p.clone());
                     return vec![copy];
@@ -406,14 +405,14 @@ impl Gedcom {
     }
 }
 
-/// Titre saisi du média (`TITL` de la première page), sans « (1/2) » final.
+/// Typed title of the media (`TITL` of the first page), without the final “(1/2)”.
 fn base_title(node: &Node) -> Option<String> {
     let t = node.child("FILE").and_then(|f| f.child_val("TITL")).or_else(|| node.child_val("TITL"))?;
     Some(strip_page_suffix(t).to_string()).filter(|t| !t.is_empty())
 }
 
-/// Après un retrait ou un déplacement, la première page porte le titre du média :
-/// s'il était sur une page qui n'est plus la première, il y remonte.
+/// After a removal or a move, the first page carries the media's title: if it was on a page that is
+/// no longer the first, it moves up.
 fn keep_title(node: &mut Node, base: Option<&str>) {
     let Some(base) = base else { return };
     if node.child("FILE").is_none_or(|f| f.child_val("TITL").is_some()) {

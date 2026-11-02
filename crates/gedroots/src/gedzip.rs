@@ -1,10 +1,9 @@
-//! Écriture d'une archive GEDZIP (`.gdz`) préparée par `gedcom::gedzip::pack`.
+//! Writing a GEDZIP archive (`.gdz`) prepared by `gedcom::gedzip::pack`.
 //!
-//! L'archive est d'abord écrite à côté de la destination (`.part`), puis
-//! renommée : un export interrompu ne laisse jamais une archive incomplète à la
-//! place d'une bonne. Le jeu de données et les fichiers texte sont compressés ;
-//! les images et documents, déjà compressés, sont stockés tels quels (comme le
-//! conseille la norme).
+//! The archive is first written next to the destination (`.part`), then renamed: an interrupted
+//! export never leaves an incomplete archive in place of a good one. The dataset and text files are
+//! compressed; images and documents, already compressed, are stored as is (as the standard
+//! advises).
 
 use std::fs::File;
 use std::io::{self, BufWriter};
@@ -13,13 +12,13 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, DateTime, ZipWriter};
 
-/// Un fichier du disque à mettre dans l'archive sous `name`.
+/// A file of the disk to put in the archive under `name`.
 pub struct Entry {
     pub name: String,
     pub source: PathBuf,
 }
 
-/// Écrit l'archive `dest` : `gedcom.ged` (le texte `dataset`), puis les fichiers.
+/// Writes the archive `dest`: `gedcom.ged` (the `dataset` text), then the files.
 pub fn write(dest: &Path, dataset: &str, entries: &[Entry]) -> Result<(), String> {
     let mut part = dest.as_os_str().to_owned();
     part.push(".part");
@@ -61,7 +60,7 @@ fn write_to(path: &Path, dataset: &str, entries: &[Entry]) -> Result<(), String>
     out.into_inner().map_err(|e| e.error().to_string())?.sync_all().map_err(|e| e.to_string())
 }
 
-/// Date zip (heure UTC, à 2 s près) ; les dates hors de 1980–2107 deviennent 1980.
+/// Zip date (UTC time, to within 2 s); dates outside 1980–2107 become 1980.
 fn date_time(t: SystemTime) -> DateTime {
     let secs = t.duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
     let (days, rem) = ((secs / 86_400) as i64, secs % 86_400);
@@ -108,7 +107,7 @@ mod tests {
         assert_eq!(bytes, [0xFF, 0xD8, 0xFF, 1, 2, 3]);
         drop(f);
 
-        // Un fichier disparu fait échouer l'export sans rien laisser derrière.
+        // A missing file makes the export fail without leaving anything behind.
         let gone = [Entry { name: "x.jpg".into(), source: dir.join("absent.jpg") }];
         assert!(write(&dir.join("autre.gdz"), "", &gone).is_err());
         assert!(!dir.join("autre.gdz").exists() && !dir.join("autre.gdz.part").exists());

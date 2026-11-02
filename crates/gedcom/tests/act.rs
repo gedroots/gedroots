@@ -2,7 +2,7 @@ use gedcom::*;
 
 const SAMPLE: &str = include_str!("fixtures/example.ged");
 
-/// Ces tests vérifient les textes écrits par l'app en français, la langue des fichiers d'exemple.
+/// These tests check the texts the app writes in French, the language of the sample files.
 fn french() {
     rust_i18n::set_locale("fr");
 }
@@ -11,7 +11,7 @@ fn person(role: ActRole, surname: &str, given: &str) -> Participant {
     Participant::new(role).with(PersonField::Surname, surname).with(PersonField::Given, given)
 }
 
-/// Source vide, comme la crée « Nouvelle source ».
+/// Empty source, as “New Source” creates it.
 fn new_source(g: &mut Gedcom) -> String {
     g.create(RecordKind::Source)
 }
@@ -35,14 +35,14 @@ fn birth_act_links_existing_and_creates_new() {
         person(ActRole::Witness, "LEFEBVRE", "François").with(PersonField::Kinship, "voisin"),
     ];
 
-    // Le père et la mère existants sont proposés.
+    // The existing father and mother are suggested.
     let s = e.suggestions(&g, 1);
     assert_eq!(s[0].xref, "I00002", "{s:?}");
     assert!(!s.iter().any(|s| s.xref == "I00001"), "Paul (né en 1912) ne peut pas être le père : {s:?}");
     e.participants[1].choice = PersonChoice::Link("I00002".into());
     let s = e.suggestions(&g, 2);
     assert_eq!(s[0].xref, "I00003");
-    // Sans nom saisi, la mère est déduite du père lié.
+    // Without a typed name, the mother is inferred from the linked father.
     let mut blank = e.clone();
     blank.participants[2] = Participant::new(ActRole::Mother);
     let s = blank.suggestions(&g, 2);
@@ -69,18 +69,18 @@ fn birth_act_links_existing_and_creates_new() {
     assert_eq!(cite.path_val(&["EVEN", "ROLE"]), Some("CHIL"));
     assert!(cite.child("OBJE").is_some());
     assert!(cite.path_val(&["DATA", "TEXT"]).unwrap().starts_with("L'an"));
-    // Types : la source contient des naissances de 1914, l'image est un manuscrit.
+    // Types: the source contains births of 1914, the image is a manuscript.
     let content = SourceContent::read(g.get("S00001").unwrap());
     assert!(content.events.contains(&"BIRT".to_string()), "{content:?}");
     assert!(content.period.contains("1914"), "{content:?}");
     assert_eq!(medium(g.get(res.media.as_deref().unwrap()).unwrap()), Some("MANUSCRIPT"));
-    // Témoin associé à l'événement.
+    // Witness associated with the event.
     let witness = res.persons[3].clone().unwrap();
     let asso = birt.child("ASSO").unwrap();
     assert_eq!(asso.val(), format!("@{witness}@"));
     assert_eq!(asso.path_val(&["ROLE", "PHRASE"]), Some("voisin"));
 
-    // Le père : citation avec son rôle, profession datée ; pas de naissance estimée (il en a une).
+    // The father: citation with his role, dated occupation; no estimated birth (he has one).
     let emile = g.get("I00002").unwrap();
     assert!(emile.children.iter().any(|c| c.tag == "SOUR" && c.path_val(&["EVEN", "ROLE"]) == Some("FATH")));
     let occu = emile.children.iter().find(|c| c.tag == "OCCU").unwrap();
@@ -88,12 +88,12 @@ fn birth_act_links_existing_and_creates_new() {
     assert_eq!(occu.child_val("DATE"), Some("3 FEB 1914"));
     assert_eq!(emile.children.iter().filter(|c| c.tag == "BIRT").count(), 1);
 
-    // Source : image liée, et aucune extension écrite.
+    // Source: image linked, and no extension written.
     let src = g.get("S00001").unwrap();
     assert_eq!(src.children_with("OBJE").count(), 2);
     let text = g.to_gedcom_string();
     assert!(!text.contains("_GR_"), "{text}");
-    // Le fichier reste du GEDCOM valide qui se relit à l'identique.
+    // The file stays valid GEDCOM that reads back identically.
     assert_eq!(Gedcom::parse(&text).unwrap().to_gedcom_string(), text);
 }
 
@@ -101,7 +101,7 @@ fn birth_act_links_existing_and_creates_new() {
 fn source_lists_its_acts_from_citations() {
     french();
     let mut g = Gedcom::parse(SAMPLE).unwrap();
-    // La citation existante de Paul (« Acte n° 112, vue 37 ») est déjà un acte.
+    // Paul's existing citation (“Acte n° 112, vue 37”) is already a record.
     let acts = g.acts("S00001");
     assert_eq!(acts.len(), 1);
     assert_eq!(acts[0].event, "BIRT");
@@ -141,7 +141,7 @@ fn source_lists_its_acts_from_citations() {
     assert_eq!(father.get(PersonField::Occupation), "Cultivateur");
     let godmother = &a.participants[2];
     assert_eq!(godmother.get(PersonField::Kinship), "tante");
-    // La personne mentionnée est relue depuis la note de la citation.
+    // The mentioned person is read back from the citation's note.
     let witness = &a.participants[3];
     assert_eq!(witness.choice, PersonChoice::Mention);
     assert_eq!(witness.get(PersonField::Given), "Jean");
@@ -172,7 +172,7 @@ fn reopened_act_is_replaced_not_duplicated() {
     let mut a = g.acts(&s).pop().unwrap();
     assert_eq!(a.participants[1].role, ActRole::Declarant);
     assert_eq!(a.participants[1].get(PersonField::Kinship), "fils");
-    // Correction : date précise, autre profession, sans déclarant.
+    // Correction: precise date, another occupation, without an informant.
     a.date = "12 MAR 1950".into();
     a.participants[0].set(PersonField::Occupation, "Charpentier");
     a.participants.truncate(1);
@@ -186,11 +186,11 @@ fn reopened_act_is_replaced_not_duplicated() {
     assert!(deaths[0].child("ASSO").is_none(), "le déclarant retiré n'est plus associé");
     let occus: Vec<&str> = node.children_with("OCCU").map(|o| o.val()).collect();
     assert_eq!(occus, vec!["Charpentier"]);
-    // Le déclarant retiré garde sa fiche, sans citation de l'acte.
+    // The removed informant keeps their record, without a citation of the record.
     let p = g.get(&pierre).unwrap();
     assert!(!p.children.iter().any(|c| c.tag == "SOUR"));
     assert_eq!(g.acts(&s).len(), 1);
-    // Les événements gardent leur place dans la fiche.
+    // Events keep their place in the person's page.
     let mut a = g.acts("S00001").remove(0);
     a.date = "15 MAR 1912".into();
     a.save(&mut g).unwrap();
@@ -203,7 +203,7 @@ fn reopened_act_is_replaced_not_duplicated() {
 fn removing_an_act_keeps_other_data() {
     french();
     let mut g = Gedcom::parse(SAMPLE).unwrap();
-    // Supprimer l'acte de Paul retire la citation, pas la naissance.
+    // Deleting Paul's record removes the citation, not the birth.
     let key = g.acts("S00001")[0].original.clone().unwrap();
     g.remove_act("S00001", &key);
     let birt = g.get("I00001").unwrap().child("BIRT").unwrap();
@@ -211,7 +211,7 @@ fn removing_an_act_keeps_other_data() {
     assert_eq!(birt.child_val("DATE"), Some("14 MAR 1912"));
     assert!(birt.child("PLAC").is_some());
     assert!(g.acts("S00001").is_empty());
-    // L'individu et sa famille restent.
+    // The individual and their family stay.
     assert_eq!(g.individual("I00001").unwrap().famc(), vec!["F00001"]);
 }
 
@@ -247,7 +247,7 @@ fn marriage_creates_family_and_parents() {
     let marie = res.persons[1].clone().unwrap();
     assert_eq!(g.record_label(&s), "Acte de mariage de Paul Émile MARCHAND et Marie DUVAL");
 
-    // Famille du couple avec MARR, âges des époux et mention du témoin.
+    // Family of the couple with MARR, ages of the spouses and mention of the witness.
     let fam = g.records_of(RecordKind::Family).find(|f| f.child_val("WIFE") == Some(&format!("@{marie}@"))).unwrap();
     assert_eq!(fam.child_val("HUSB"), Some("@I00001@"));
     let marr = fam.child("MARR").unwrap();
@@ -256,21 +256,21 @@ fn marriage_creates_family_and_parents() {
     assert!(marr.path_val(&["SOUR", "NOTE"]).unwrap().contains("François LEFEBVRE"));
     assert_eq!(res.families_created.len(), 2, "couple + parents de l'épouse");
 
-    // Naissance estimée de l'épouse d'après son âge, au lieu déclaré.
+    // Estimated birth of the wife from her age, at the declared place.
     let birt = g.get(&marie).unwrap().child("BIRT").unwrap();
     assert_eq!(birt.child_val("DATE"), Some("EST 1915"));
     assert_eq!(birt.child_val("PLAC"), Some("Caen"));
     let (f, m) = g.parents(&marie);
     assert_eq!(f.unwrap().display_name(), "Henri DUVAL");
     assert_eq!(m.unwrap().display_name(), "Anne LEROY");
-    // Paul est déjà enfant d'Émile : pas de nouvelle famille d'origine.
+    // Paul is already Émile's child: no new family of origin.
     assert_eq!(g.individual("I00001").unwrap().famc(), vec!["F00001"]);
-    // Rôle précisé : père de l'épouse.
+    // Detailed role: father of the bride.
     let henri = res.persons[3].clone().unwrap();
     let cite = g.get(&henri).unwrap().children.iter().find(|c| c.tag == "SOUR").unwrap().clone();
     assert_eq!(cite.path_val(&["EVEN", "ROLE", "PHRASE"]), Some("Père de l'épouse"));
 
-    // Relu : les époux, puis les parents de chacun.
+    // Read back: the spouses, then each one's parents.
     let a = g.acts(&s).pop().unwrap();
     assert!(a.is_family());
     assert_eq!(a.participants[0].choice, PersonChoice::Link("I00001".into()));
@@ -304,7 +304,7 @@ fn census_builds_household() {
     assert_eq!(f.unwrap().xref(), ids[0]);
     assert_eq!(m.unwrap().xref(), ids[1]);
     assert!(g.individual(&ids[3]).unwrap().famc().is_empty(), "petit-fils : pas de lien direct");
-    // Chaque membre a son propre recensement.
+    // Each member has their own census.
     for x in &ids {
         assert!(g.get(x).unwrap().child("CENS").is_some());
     }
@@ -350,7 +350,7 @@ fn single_parent_joins_their_only_family() {
 fn existing_citation_is_completed_not_duplicated() {
     french();
     let mut g = Gedcom::parse(SAMPLE).unwrap();
-    // Paul a déjà une naissance citant S00001 (« Acte n° 112, vue 37 ») : on la complète.
+    // Paul already has a birth citing S00001 (“Acte n° 112, vue 37”): it is completed.
     let mut e = Act::new("S00001", "BIRT");
     e.page = "Acte n° 112, vue 37".into();
     e.participants = vec![person(ActRole::Principal, "MARCHAND", "Paul")];
@@ -432,7 +432,7 @@ fn act_with_several_files_makes_one_paged_media_named_by_template() {
     assert_eq!(files[1].form, Some("application/pdf"));
     assert!(files[0].title.is_some() && files[1].title.is_none(), "titre sur la première page seulement");
     assert_eq!(medium(g.get(&m).unwrap()), Some("MANUSCRIPT"));
-    // Nommage selon le modèle, numéro de page en fin de nom, extension d'origine en minuscules.
+    // Naming by the template, page number at the end of the name, original extension in lowercase.
     let renames: Vec<String> = g.media_renames(&m).into_iter().map(|(_, _, new)| new).collect();
     assert_eq!(renames, vec!["Médias/Actes/N_MARCHAND_Louise p1.jpg", "Médias/Actes/N_MARCHAND_Louise p2.pdf"]);
 }

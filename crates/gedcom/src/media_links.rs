@@ -1,16 +1,15 @@
-//! Rattachements des médias, pour la fenêtre « Médias » : ce que montre la
-//! galerie d'un individu, d'une famille, d'un événement ou d'une source, et où
-//! se joint un média importé ou lié depuis elle.
+//! Media attachments, for the “Media” window: what the gallery of an individual, a family, an event
+//! or a source shows, and where a media imported or linked from it is attached.
 //!
-//! Un média peut être lié :
-//! - à un enregistrement (`1 OBJE` sous `INDI`, `FAM`, `SOUR`) : portrait,
-//!   photo de famille, image d'une source qui ne contient qu'un acte ;
-//! - à un événement (`2 OBJE` sous `BIRT`, `MARR`…) : faire-part, photo ;
-//! - à un acte d'une source : `OBJE` sous chaque citation de l'acte (même
-//!   `PAGE` et même date), et sur la source, comme le fait la saisie d'acte.
+//! A media can be linked:
+//! - to a record (`1 OBJE` under `INDI`, `FAM`, `SOUR`): portrait, family photo, image of a source
+//!   that contains only one record;
+//! - to an event (`2 OBJE` under `BIRT`, `MARR`…): announcement, photo;
+//! - to a record of a source: `OBJE` under each citation of the record (same `PAGE` and same date),
+//!   and on the source, as record entry does.
 //!
-//! Le nom du fichier (Réglages du fichier › Médias) se déduit ensuite de ces
-//! liens, voir [`crate::media_naming`].
+//! The file name (File Settings › Media) is then inferred from these links, see
+//! [`crate::media_naming`].
 
 use std::collections::HashSet;
 
@@ -19,32 +18,32 @@ use crate::document::Gedcom;
 use crate::model::{Event, Media, event_label};
 use crate::node::Node;
 
-/// Où un média est lié.
+/// Where a media is linked.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum MediaHost {
-    /// `OBJE` au niveau 1 d'un individu, d'une famille ou d'une source.
+    /// `OBJE` at level 1 of an individual, a family or a source.
     Record(String),
-    /// `OBJE` sous l'événement `ix` de `owner`.
+    /// `OBJE` under event `ix` of `owner`.
     Event { owner: String, ix: usize },
-    /// `OBJE` sous les citations d'un acte de la source.
+    /// `OBJE` under the citations of a record of the source.
     Act { source: String, key: ActKey },
 }
 
-/// Ce dont on ouvre la galerie.
+/// What the gallery is opened for.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GalleryTarget {
     Record(String),
     Event { owner: String, ix: usize },
 }
 
-/// Un groupe de la galerie : un événement, un acte, les portraits…
+/// A group of the gallery: an event, a record, the portraits…
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GalleryGroup {
     pub title: String,
     pub subtitle: String,
-    /// Où se joint un fichier déposé sur le groupe (`None` : groupe en lecture seule).
+    /// Where a file dropped on the group is attached (`None`: read-only group).
     pub host: Option<MediaHost>,
-    /// Médias du groupe, avec le lien qu'on défait pour les détacher.
+    /// Media of the group, with the link to undo to detach them.
     pub items: Vec<(String, MediaHost)>,
 }
 
@@ -57,13 +56,13 @@ fn is_event(n: &Node) -> bool {
 }
 
 impl Gedcom {
-    /// Média local (pas une page web).
+    /// Local media (not a web page).
     fn is_file_media(&self, m: &str) -> bool {
         self.get(m).is_some_and(|n| n.tag == "OBJE" && !Media::new(n).is_web())
     }
 
-    /// Citations de la source dans les individus et familles (niveau 1 ou sous un
-    /// événement), avec leur acte.
+    /// Citations of the source in individuals and families (level 1 or under an event), with their
+    /// record.
     fn source_citations(&self, source: &str) -> Vec<(&Node, ActKey)> {
         let p = format!("@{source}@");
         let mut out = Vec::new();
@@ -81,10 +80,9 @@ impl Gedcom {
         out
     }
 
-    /// Une source « registre » contient plusieurs actes, distingués par leur
-    /// référence (`PAGE`) : ses images se rangent par acte. Une source sans
-    /// référence, ou avec une seule, décrit un acte : galerie simple, images
-    /// sur la source (nommées d'après l'événement qui la cite).
+    /// A “register” source contains several records, told apart by their reference (`PAGE`): its
+    /// images are grouped by record. A source without a reference, or with only one, describes one
+    /// record: simple gallery, images on the source (named after the event that cites it).
     pub fn is_register(&self, source: &str) -> bool {
         let mut pages: Vec<&str> = Vec::new();
         for (c, _) in self.source_citations(source) {
@@ -99,8 +97,8 @@ impl Gedcom {
         false
     }
 
-    /// Où joindre l'image de l'acte que cite `c` : ses citations dans un
-    /// registre, la source elle-même sinon.
+    /// Where to attach the image of the record that `c` cites: its citations in a register,
+    /// otherwise the source itself.
     fn cited_act_host(&self, source: &str, c: &Node) -> MediaHost {
         if self.is_register(source) {
             MediaHost::Act { source: source.to_string(), key: key_of(c) }
@@ -109,7 +107,7 @@ impl Gedcom {
         }
     }
 
-    /// Médias d'un acte : ceux de ses citations.
+    /// Media of a record: those of its citations.
     fn act_media(&self, source: &str, key: &ActKey) -> Vec<String> {
         let mut out: Vec<String> = Vec::new();
         for (c, k) in self.source_citations(source) {
@@ -124,7 +122,7 @@ impl Gedcom {
         out
     }
 
-    /// Médias portés par la source qu'aucun acte ne revendique (couverture, tables…).
+    /// Media held by the source that no record claims (cover, indexes…).
     fn loose_source_media(&self, source: &str) -> Vec<String> {
         let claimed: HashSet<String> = self.source_citations(source).into_iter().flat_map(|(c, _)| ptrs(c)).collect();
         let mut out: Vec<String> = Vec::new();
@@ -136,8 +134,8 @@ impl Gedcom {
         out
     }
 
-    /// Médias d'un événement : les siens, ceux des actes qu'il cite, puis ceux que
-    /// portent les sources citées (sauf ceux d'un autre acte d'un registre).
+    /// Media of an event: its own, those of the records it cites, then those held by the cited
+    /// sources (except those of another record of a register).
     fn event_groups(&self, owner: &str, ix: usize, e: &Node) -> Vec<GalleryGroup> {
         let mut groups = Vec::new();
         let mut seen: HashSet<String> = HashSet::new();
@@ -177,8 +175,8 @@ impl Gedcom {
             .filter(|m| self.is_file_media(m) && seen.insert(m.clone()))
             .map(|m| (m, MediaHost::Event { owner: owner.to_string(), ix }))
             .collect();
-        // Un événement sourcé range ses médias dans l'acte : le groupe propre à
-        // l'événement n'apparaît que s'il porte déjà des médias.
+        // A sourced event files its media under the record: the event's own group only appears if
+        // it already holds media.
         if !own.is_empty() || groups.is_empty() {
             groups.insert(
                 0,
@@ -193,7 +191,7 @@ impl Gedcom {
         groups
     }
 
-    /// Titre court d'un événement : « Naissance · 1er oct. 1902 ».
+    /// Short title of an event: “Birth · 1 Oct 1902”.
     pub fn event_heading(&self, owner: &str, ix: usize) -> String {
         let Some(e) = self.get(owner).and_then(|n| n.children.get(ix)) else { return String::new() };
         let title = self.event_title(owner, ix).unwrap_or_default();
@@ -203,8 +201,8 @@ impl Gedcom {
         }
     }
 
-    /// Groupes de la galerie, du plus direct au plus lointain. Les groupes vides
-    /// sont gardés quand on peut y déposer des fichiers (événement, acte).
+    /// Groups of the gallery, from the most direct to the most distant. Empty groups are kept when
+    /// files can be dropped on them (event, record).
     pub fn gallery(&self, target: &GalleryTarget) -> Vec<GalleryGroup> {
         match target {
             GalleryTarget::Event { owner, ix } => {
@@ -262,8 +260,8 @@ impl Gedcom {
         groups
     }
 
-    /// Individu ou famille : ses médias, ceux de ses unions (individu), puis
-    /// événement par événement. Les groupes d'événements vides sont omis.
+    /// Individual or family: its media, those of its unions (individual), then event by event.
+    /// Empty event groups are left out.
     fn person_groups(&self, x: &str, n: &Node) -> Vec<GalleryGroup> {
         let mut seen: HashSet<String> = HashSet::new();
         let host = MediaHost::Record(x.to_string());
@@ -301,7 +299,7 @@ impl Gedcom {
                 }
             }
         }
-        // Événements dans l'ordre chronologique, comme dans la fiche.
+        // Events in chronological order, as in the record page.
         let events: Vec<(String, usize)> = if n.tag == "INDI" {
             self.person_events(x).into_iter().map(|e| (e.owner, e.index)).collect()
         } else {
@@ -331,9 +329,8 @@ impl Gedcom {
         groups
     }
 
-    /// Où joindre un fichier importé ou lié depuis la galerie, le choix par défaut
-    /// en premier : pour un événement, l'acte qu'il cite, puis l'événement, puis
-    /// la personne ou l'union.
+    /// Where to attach a file imported or linked from the gallery, the default choice first: for an
+    /// event, the record it cites, then the event, then the person or the union.
     pub fn media_hosts(&self, target: &GalleryTarget) -> Vec<(String, MediaHost)> {
         match target {
             GalleryTarget::Event { owner, ix } => {
@@ -379,9 +376,9 @@ impl Gedcom {
                         out
                     }
                     "INDI" | "FAM" => {
-                        // La personne, puis chacun de ses événements, par ordre
-                        // chronologique. Un événement sourcé propose l'acte cité
-                        // (là où va son média par défaut), une seule fois.
+                        // The person, then each of their events, in chronological order. A sourced
+                        // event offers the cited record (where its media goes by default), only
+                        // once.
                         let mut out = vec![(self.record_label(x), MediaHost::Record(x.clone()))];
                         let events: Vec<(String, usize)> = if n.tag == "INDI" {
                             self.person_events(x).into_iter().map(|e| (e.owner, e.index)).collect()
@@ -412,7 +409,7 @@ impl Gedcom {
         }
     }
 
-    /// Lie un média là où l'indique `host` (sans doublon).
+    /// Links a media where `host` says (without duplicates).
     pub fn link_media(&mut self, host: &MediaHost, media: &str) -> Result<(), String> {
         if self.get(media).is_none_or(|m| m.tag != "OBJE") {
             return Err(rust_i18n::t!("error.media_not_found").into());
@@ -450,13 +447,13 @@ impl Gedcom {
                 if !found {
                     return Err(rust_i18n::t!("error.act_not_found").into());
                 }
-                // Comme la saisie d'acte : la source porte aussi l'image.
+                // As in record entry: the source holds the image too.
                 self.attach_media(source, media)
             }
         }
     }
 
-    /// Défait le lien `host` → média (le média reste dans le fichier).
+    /// Undoes the `host` → media link (the media stays in the file).
     pub fn unlink_media(&mut self, host: &MediaHost, media: &str) -> Result<(), String> {
         match host {
             MediaHost::Record(x) => {
@@ -488,7 +485,7 @@ impl Gedcom {
                         r.touch();
                     }
                 }
-                // La source garde l'image si un autre acte l'utilise encore.
+                // The source keeps the image if another record still uses it.
                 let still = self.source_citations(source).iter().any(|(c, _)| ptrs(c).iter().any(|m| m == media));
                 if !still {
                     self.detach_media(source, media);
@@ -535,7 +532,7 @@ mod tests {
         assert_eq!(groups[0].items, vec![("M2".to_string(), MediaHost::Record("S1".into()))]);
         let act15 = groups.iter().find(|gr| gr.subtitle.contains("15") || gr.title.contains("15"));
         assert!(act15.is_some_and(|gr| gr.items == vec![("M5".to_string(), host.clone())]));
-        // Galerie de l'événement de Rémi : pas l'image de l'acte n° 15.
+        // Gallery of Paul's event: not the image of record no. 15.
         let ev = g.gallery(&GalleryTarget::Event { owner: "I1".into(), ix: 1 });
         assert!(!ev.iter().flat_map(|gr| &gr.items).any(|(m, _)| m == "M5"));
         g.unlink_media(&host, "M5").unwrap();
@@ -549,11 +546,11 @@ mod tests {
         let groups = g.gallery(&t);
         assert_eq!(groups[0].items, vec![("M4".to_string(), MediaHost::Event { owner: "I3".into(), ix: 1 })]);
         assert_eq!(groups[1].items, vec![("M3".to_string(), MediaHost::Record("S2".into()))]);
-        // Source d'un seul acte : l'image va sur la source.
+        // Source of a single record: the image goes on the source.
         let hosts = g.media_hosts(&t);
         assert_eq!(hosts[0].1, MediaHost::Record("S2".into()));
         assert_eq!(hosts.last().unwrap().1, MediaHost::Record("I3".into()));
-        // Galerie de la personne : portrait, puis l'événement.
+        // Gallery of the person: portrait, then the event.
         let p = g.gallery(&GalleryTarget::Record("I1".into()));
         assert_eq!(p[0].items[0].0, "M1");
         let d = g.gallery(&GalleryTarget::Record("I3".into()));
@@ -567,7 +564,7 @@ mod tests {
         assert_eq!(hosts[0].1, MediaHost::Record("I1".into()));
         assert_eq!(hosts[1].1, MediaHost::Act { source: "S1".into(), key: key("Acte n° 14") });
         assert_eq!(hosts[1].0, "Registre des naissances, 1902 · Acte n° 14");
-        // Événement sourcé sans média propre : seul le groupe de l'acte.
+        // Sourced event without its own media: only the record's group.
         let ev = g.gallery(&GalleryTarget::Event { owner: "I1".into(), ix: 1 });
         assert!(ev.iter().all(|gr| gr.title != "Événement"));
     }

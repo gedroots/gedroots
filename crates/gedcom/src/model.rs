@@ -1,8 +1,7 @@
-//! Vues typées sur les enregistrements les plus courants, et leurs éditions.
+//! Typed views on the most common records, and their editing.
 //!
-//! Les vues empruntent le [`Node`] sous-jacent ; les formulaires (`*Form`)
-//! sont des copies modifiables qu'on réapplique sur le nœud avec `apply`,
-//! en ne touchant qu'aux champs qu'ils représentent.
+//! Views borrow the underlying [`Node`]; forms (`*Form`) are editable copies applied back to the
+//! node with `apply`, touching only the fields they represent.
 
 use crate::date::Date;
 use crate::document::Gedcom;
@@ -57,8 +56,8 @@ pub fn event_label(tag: &str) -> Option<Cow<'static, str>> {
     })
 }
 
-/// Names of an event in every language, to read what people type whatever the interface
-/// language (“births”, « naissances »).
+/// Names of an event in every language, to read what people type whatever the interface language
+/// (“births”, “naissances”).
 pub fn event_labels_everywhere(tag: &str) -> Vec<Cow<'static, str>> {
     crate::i18n::LANGUAGES.iter().filter_map(|lang| crate::i18n::lookup_in(&format!("event.{tag}"), lang)).collect()
 }
@@ -68,19 +67,18 @@ pub fn event_name(tag: &str) -> String {
     event_label(tag).map(Cow::into_owned).unwrap_or_else(|| tag.to_string())
 }
 
-/// Libellés affichés des types d'événements personnalisés du fichier ouvert (`TYPE` → libellé).
+/// Displayed labels of the custom event types of the open file (`TYPE` → label).
 static EVENT_LABELS: std::sync::RwLock<Vec<(String, String)>> = std::sync::RwLock::new(Vec::new());
 
-/// Indique les libellés affichés des types d'événements du fichier ouvert
-/// (voir [`crate::Gedcom::event_labels`]).
+/// Sets the displayed labels of the open file's event types (see [`crate::Gedcom::event_labels`]).
 pub fn set_event_labels(labels: Vec<(String, String)>) {
     if let Ok(mut l) = EVENT_LABELS.write() {
         *l = labels;
     }
 }
 
-/// Libellé affiché d'un `TYPE` d'événement personnalisé : celui des réglages du
-/// fichier ouvert, sinon le `TYPE` lui-même.
+/// Displayed label of a custom event `TYPE`: the one from the open file's settings, otherwise the
+/// `TYPE` itself.
 pub fn event_type_label(ty: &str) -> String {
     let ty = ty.trim();
     EVENT_LABELS
@@ -90,7 +88,7 @@ pub fn event_type_label(ty: &str) -> String {
         .unwrap_or_else(|| ty.to_string())
 }
 
-/// Un événement ou attribut (BIRT, DEAT, OCCU, RESI, MARR…).
+/// An event or attribute (BIRT, DEAT, OCCU, RESI, MARR…).
 #[derive(Debug, Clone)]
 pub struct Event<'a> {
     pub node: &'a Node,
@@ -109,7 +107,7 @@ impl<'a> Event<'a> {
         }
     }
 
-    /// Valeur de l'attribut (ex. la profession pour OCCU).
+    /// Value of the attribute (e.g. the occupation for OCCU).
     pub fn value(&self) -> Option<&str> {
         self.node.value.as_deref().filter(|v| !v.is_empty() && *v != "Y")
     }
@@ -130,7 +128,7 @@ impl<'a> Event<'a> {
         self.node.children_with("SOUR").filter_map(|s| s.pointer()).collect()
     }
 
-    /// Médias liés à l'événement (`2 OBJE @M1@` : acte de mariage, faire-part…).
+    /// Media linked to the event (`2 OBJE @M1@`: marriage record, announcement…).
     pub fn media_xrefs(&self) -> Vec<&'a str> {
         self.node.children_with("OBJE").filter_map(|n| n.pointer()).collect()
     }
@@ -139,7 +137,7 @@ impl<'a> Event<'a> {
     }
 }
 
-/// Vue sur un enregistrement `INDI`.
+/// View on an `INDI` record.
 #[derive(Debug, Clone, Copy)]
 pub struct Individual<'a> {
     pub node: &'a Node,
@@ -158,7 +156,7 @@ impl<'a> Individual<'a> {
         self.node.child("NAME")
     }
 
-    /// Nom de famille : `SURN` sinon la partie entre `/…/`.
+    /// Surname: `SURN`, otherwise the part between `/…/`.
     pub fn surname(&self) -> String {
         let Some(n) = self.name_node() else { return String::new() };
         if let Some(s) = n.child_val("SURN") {
@@ -180,7 +178,7 @@ impl<'a> Individual<'a> {
         v.split('/').next().unwrap_or("").trim().to_string()
     }
 
-    /// « Prénom NOM ».
+    /// “Given name SURNAME”.
     pub fn display_name(&self) -> String {
         let (g, s) = (self.given(), self.surname());
         match (g.is_empty(), s.is_empty()) {
@@ -220,7 +218,7 @@ impl<'a> Individual<'a> {
         self.event("DEAT").or_else(|| self.event("BURI"))
     }
 
-    /// « 1850–1912 », avec « ? » pour les bornes inconnues.
+    /// “1850–1912”, with “?” for unknown bounds.
     pub fn years(&self) -> String {
         let y = |e: Option<Event>| e.and_then(|e| e.date()).map(|d| d.short_year());
         match (y(self.birth()), y(self.death())) {
@@ -245,18 +243,18 @@ impl<'a> Individual<'a> {
         self.node.children_with("OBJE").filter_map(|n| n.pointer()).collect()
     }
 
-    /// Numéro Sosa calculé par Ancestris (`_SOSADABOVILLE 12 G4`).
+    /// Sosa number computed by Ancestris (`_SOSADABOVILLE 12 G4`).
     pub fn sosa(&self) -> Option<String> {
         self.node.child_val("_SOSADABOVILLE").and_then(|v| v.split_whitespace().next()).map(str::to_string)
     }
 
-    /// Nombre d'événements sourcés / total.
+    /// Number of sourced events / total.
     pub fn sourced_ratio(&self) -> (usize, usize) {
         let ev = self.events();
         (ev.iter().filter(|e| e.is_sourced()).count(), ev.len())
     }
 
-    /// Toutes les sources citées (directement ou dans un événement).
+    /// Every cited source (directly or in an event).
     pub fn cited_sources(&self) -> Vec<String> {
         let mut out: Vec<String> = Vec::new();
         self.node.walk(&mut |n| {
@@ -275,7 +273,7 @@ impl<'a> Individual<'a> {
     }
 }
 
-/// Vue sur un enregistrement `FAM`.
+/// View on a `FAM` record.
 #[derive(Debug, Clone, Copy)]
 pub struct Family<'a> {
     pub node: &'a Node,
@@ -309,13 +307,13 @@ impl<'a> Family<'a> {
     pub fn notes(&self) -> Vec<String> {
         self.node.children_with("NOTE").map(|n| n.text()).collect()
     }
-    /// Fin de l'union : divorce ou annulation.
+    /// End of the union: divorce or annulment.
     pub fn separation(&self) -> Option<Event<'a>> {
         self.node.children.iter().find(|c| c.tag == "DIV" || c.tag == "ANUL").map(|node| Event { node })
     }
 }
 
-/// Vue sur un enregistrement `SOUR`.
+/// View on a `SOUR` record.
 #[derive(Debug, Clone, Copy)]
 pub struct Source<'a> {
     pub node: &'a Node,
@@ -351,7 +349,7 @@ impl<'a> Source<'a> {
     }
 }
 
-/// Vue sur un enregistrement `REPO`.
+/// View on a `REPO` record.
 #[derive(Debug, Clone, Copy)]
 pub struct Repository<'a> {
     pub node: &'a Node,
@@ -369,7 +367,7 @@ impl<'a> Repository<'a> {
     }
 }
 
-/// Vue sur un enregistrement `OBJE` (photo, scan d'acte…).
+/// View on an `OBJE` record (photo, scanned record…).
 #[derive(Debug, Clone, Copy)]
 pub struct Media<'a> {
     pub node: &'a Node,
@@ -400,7 +398,7 @@ impl<'a> Media<'a> {
             .unwrap_or_else(|| t!("record.no_title").into())
     }
     pub fn is_image(&self) -> bool {
-        // Une image en ligne n'a pas de fichier local à afficher.
+        // An online image has no local file to display.
         !self.is_web()
             && (self.form().is_some_and(|f| f.starts_with("image/"))
                 || self.file().is_some_and(|f| {
@@ -410,31 +408,31 @@ impl<'a> Media<'a> {
     }
 }
 
-/// Un lieu distinct du fichier, agrégé à partir de toutes les balises `PLAC`.
+/// A distinct place of the file, aggregated from every `PLAC` tag.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Place {
     pub name: String,
     pub latitude: Option<String>,
     pub longitude: Option<String>,
-    /// Nombre d'occurrences dans le fichier.
+    /// Number of occurrences in the file.
     pub uses: usize,
-    /// Enregistrements qui le citent.
+    /// Records that cite it.
     pub records: Vec<String>,
 }
 
 impl Place {
-    /// Juridictions non vides, de la plus précise à la plus large.
+    /// Non-empty jurisdictions, from the most precise to the broadest.
     pub fn parts(&self) -> Vec<&str> {
         self.name.split(',').map(str::trim).filter(|s| !s.is_empty()).collect()
     }
 
-    /// Libellé court : « Commune (Département) » selon le format Ancestris.
+    /// Short label: “Municipality (Department)” in Ancestris' format.
     pub fn short(&self) -> String {
         short_place(&self.name)
     }
 }
 
-/// Clé de tri insensible à la casse et aux accents courants.
+/// Sort key insensitive to case and common accents.
 pub fn sort_key(s: &str) -> String {
     s.chars()
         .flat_map(char::to_lowercase)
@@ -451,32 +449,31 @@ pub fn sort_key(s: &str) -> String {
         .collect()
 }
 
-/// Libellé court d'un lieu au format Ancestris
-/// (`Lieudit, Commune, Code_Postal, Département, Région, Pays`) :
-/// « , Troyes, 10000, Aube, Grand Est, France » → « Troyes (Aube) »,
-/// « La Gare, Amions, 42260, Loire, … » → « La Gare, Amions (Loire) ».
+/// Short label of a place in Ancestris' format (`Lieudit, Commune, Code_Postal, Département,
+/// Région, Pays`): “, Troyes, 10000, Aube, Grand Est, France” → “Troyes (Aube)”, “La Gare, Amions,
+/// 42260, Loire, …” → “La Gare, Amions (Loire)”.
 ///
-/// Si un format des lieux a été indiqué avec [`set_place_layout`] (celui du
-/// fichier ouvert), le libellé suit ce format : voir [`short_place_in`].
+/// If a place format was set with [`set_place_layout`] (the open file's), the label follows that
+/// format: see [`short_place_in`].
 pub fn short_place(raw: &str) -> String {
     let layout = PLACE_LAYOUT.read().map(|l| l.clone()).unwrap_or_default();
     short_place_in(raw, &layout)
 }
 
-/// Format des lieux du fichier ouvert, utilisé par [`short_place`].
+/// Place format of the open file, used by [`short_place`].
 static PLACE_LAYOUT: std::sync::RwLock<Vec<String>> = std::sync::RwLock::new(Vec::new());
 
-/// Indique le format des lieux (`HEAD.PLAC.FORM`) à suivre pour les libellés courts.
+/// Sets the place format (`HEAD.PLAC.FORM`) to follow for short labels.
 pub fn set_place_layout(form: &[String]) {
     if let Ok(mut l) = PLACE_LAYOUT.write() {
         *l = form.to_vec();
     }
 }
 
-/// Libellé court d'un lieu selon un format (`["Commune", "Département", "Pays"]`) :
-/// commune (précédée du lieu-dit éventuel) et, entre parenthèses, la première
-/// juridiction plus large reconnue (département, comté, province…, sinon région,
-/// sinon pays). Sans format, ou si le lieu ne le suit pas, format Ancestris.
+/// Short label of a place according to a format (`["Commune", "Département", "Pays"]`):
+/// municipality (preceded by the locality if any) and, in parentheses, the first broader
+/// jurisdiction recognized (department, county, province…, otherwise region, otherwise country).
+/// Without a format, or if the place does not follow it, Ancestris' format.
 pub fn short_place_in(raw: &str, form: &[String]) -> String {
     let parts: Vec<&str> = raw.split(',').map(str::trim).collect();
     if form.len() >= 2 && parts.len() == form.len() && !is_ancestris_layout(form) {
@@ -485,7 +482,7 @@ pub fn short_place_in(raw: &str, form: &[String]) -> String {
     short_ancestris(raw)
 }
 
-/// Le format par défaut d'Ancestris, que [`short_ancestris`] connaît déjà.
+/// Ancestris' default format, which [`short_ancestris`] already knows.
 fn is_ancestris_layout(form: &[String]) -> bool {
     let k: Vec<String> = form.iter().map(|f| sort_key(f)).collect();
     k.len() == 6 && k[1].contains("commune") && k[3].contains("departement")
@@ -498,7 +495,7 @@ fn short_by_layout(parts: &[&str], form: &[String]) -> String {
     let nonempty: Vec<usize> = (0..parts.len()).filter(|&i| at(i).is_some()).collect();
     let Some(&first) = nonempty.first() else { return String::new() };
     let commune = find(&["commune", "ville", "city", "town", "village", "paroisse", "parish", "municip", "localite"]);
-    // Nom : la commune (ou la juridiction la plus précise remplie), avec un lieu-dit qui la précède.
+    // Name: the municipality (or the most precise filled jurisdiction), with a locality before it.
     let main = commune.filter(|&c| at(c).is_some()).unwrap_or(first);
     let name = match (first < main).then(|| at(first)).flatten() {
         Some(l) => format!("{l}, {}", at(main).unwrap_or("")),
@@ -538,8 +535,8 @@ fn short_ancestris(raw: &str) -> String {
     }
 }
 
-/// Lieu tel qu'il s'affiche dans un champ de saisie : juridictions vides omises
-/// (« , Troyes, 10000, Aube, , France » → « Troyes, 10000, Aube, France »).
+/// Place as displayed in an input field: empty jurisdictions left out (“, Troyes, 10000, Aube, ,
+/// France” → “Troyes, 10000, Aube, France”).
 pub fn place_label(name: &str) -> String {
     if !name.contains(',') {
         return name.trim().to_string();
@@ -548,8 +545,8 @@ pub fn place_label(name: &str) -> String {
 }
 
 impl Gedcom {
-    /// Valeur `PLAC` d'un lieu saisi : le lieu du fichier (ou de `extra`, lieux créés pas
-    /// encore écrits) qui s'affiche ainsi, juridictions vides comprises ; sinon la saisie.
+    /// `PLAC` value of a typed place: the place of the file (or of `extra`, created places not
+    /// written yet) displayed this way, empty jurisdictions included; otherwise the input.
     pub fn place_value(&self, typed: &str, extra: &[String]) -> String {
         let typed = typed.trim();
         let places = self.places();
@@ -564,7 +561,7 @@ impl Gedcom {
             .unwrap_or_else(|| typed.to_string())
     }
 
-    /// Index des lieux, trié par nom.
+    /// Index of the places, sorted by name.
     pub fn places(&self) -> Vec<Place> {
         let mut map: std::collections::BTreeMap<String, Place> = Default::default();
         for r in &self.records {
@@ -594,7 +591,8 @@ impl Gedcom {
         v
     }
 
-    /// Renomme un lieu partout et met à jour ses coordonnées. Renvoie le nombre d'occurrences modifiées.
+    /// Renames a place everywhere and updates its coordinates. Returns the number of occurrences
+    /// changed.
     pub fn update_place(&mut self, old: &str, new: &str, lat: &str, long: &str) -> usize {
         let mut count = 0;
         for r in self.records_where_mut(|r| r.any(&|n| n.tag == "PLAC" && n.val() == old)) {
@@ -623,7 +621,7 @@ impl Gedcom {
         self.get(xref).filter(|n| n.tag == "FAM").map(Family::new)
     }
 
-    /// Père et mère de l'individu (première famille d'origine).
+    /// Father and mother of the individual (first family of origin).
     pub fn parents(&self, xref: &str) -> (Option<Individual<'_>>, Option<Individual<'_>>) {
         let Some(fam) = self.individual(xref).and_then(|i| i.famc().first().and_then(|f| self.family(f))) else {
             return (None, None);
@@ -631,7 +629,7 @@ impl Gedcom {
         (fam.husband().and_then(|x| self.individual(x)), fam.wife().and_then(|x| self.individual(x)))
     }
 
-    /// Conjoints et enfants, par famille.
+    /// Spouses and children, by family.
     pub fn spouses_and_children(&self, xref: &str) -> Vec<(Option<Individual<'_>>, Vec<Individual<'_>>)> {
         let Some(ind) = self.individual(xref) else { return vec![] };
         ind.fams()
@@ -649,7 +647,7 @@ impl Gedcom {
             .collect()
     }
 
-    /// Ascendance en numérotation Sosa (index 1 = la personne, 2k = père, 2k+1 = mère).
+    /// Ancestry in Sosa numbering (index 1 = the person, 2k = father, 2k+1 = mother).
     pub fn ancestry(&self, xref: &str, generations: u32) -> Vec<Option<String>> {
         let size = 1usize << generations;
         let mut out = vec![None; size];
@@ -666,11 +664,10 @@ impl Gedcom {
         out
     }
 
-    /// Portrait d'un individu : sa première photo (`MEDI PHOTO`), dans l'ordre
-    /// de ses liens (« Définir comme portrait » met le lien en tête). À défaut,
-    /// une image sans support déclaré rangée dans un dossier « Portraits » ou
-    /// titrée « Portrait », puis une image sans support qui n'est pas le scan
-    /// d'une source ; sinon sa première image.
+    /// Portrait of an individual: their first photo (`MEDI PHOTO`), in the order of their links
+    /// (“Set as Portrait” moves the link to the top). Failing that, an image without a declared
+    /// medium filed in a “Portraits” folder or titled “Portrait”, then an image without a medium
+    /// that is not a scan of a source; otherwise their first image.
     pub fn portrait(&self, xref: &str) -> Option<Media<'_>> {
         let ind = self.individual(xref)?;
         let images: Vec<Media> = ind
@@ -695,7 +692,7 @@ impl Gedcom {
         untyped().find(|m| is_portrait(m)).or_else(|| untyped().find(|m| !cited(m))).or(images.first()).copied()
     }
 
-    /// Médias images liés à un enregistrement (source, individu…).
+    /// Image media linked to a record (source, individual…).
     pub fn images_of(&self, xref: &str) -> Vec<Media<'_>> {
         let Some(n) = self.get(xref) else { return vec![] };
         let mut out: Vec<Media> = Vec::new();
@@ -710,7 +707,7 @@ impl Gedcom {
         out
     }
 
-    /// Libellé court d'un enregistrement quelconque, pour les listes et les liens.
+    /// Short label of any record, for lists and links.
     pub fn record_label(&self, xref: &str) -> String {
         let Some(n) = self.get(xref) else { return t!("record.missing").into() };
         match n.tag.as_str() {
@@ -735,13 +732,13 @@ impl Gedcom {
 }
 
 // ---------------------------------------------------------------------------
-// Formulaires des éditeurs visuels.
+// Forms of the visual editors.
 // ---------------------------------------------------------------------------
 
-/// Date + lieu d'un événement, édités ensemble.
+/// Date + place of an event, edited together.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct EventForm {
-    /// Valeur GEDCOM de la date et sa phrase (`DATE.PHRASE`).
+    /// GEDCOM value of the date and its phrase (`DATE.PHRASE`).
     pub date: String,
     pub phrase: String,
     pub place: String,
@@ -757,7 +754,7 @@ impl EventForm {
     fn apply(&self, node: &mut Node, tag: &str) {
         let empty = self.date.trim().is_empty() && self.phrase.trim().is_empty() && self.place.trim().is_empty();
         if empty {
-            // On ne supprime l'événement que s'il ne porte rien d'autre (sources, notes…).
+            // The event is only deleted if it holds nothing else (sources, notes…).
             if let Some(i) = node.children.iter().position(|c| c.tag == tag) {
                 let ev = &mut node.children[i];
                 ev.children.retain(|c| c.tag != "DATE" && c.tag != "PLAC");
@@ -769,7 +766,7 @@ impl EventForm {
         }
         let ev = node.ensure_child(tag);
         crate::date::write_date(ev, &self.date, &self.phrase);
-        // Le lieu garde ses coordonnées si son libellé ne change pas.
+        // The place keeps its coordinates if its label does not change.
         let place = self.place.trim();
         match ev.child_mut("PLAC") {
             Some(p) if p.val() == place => {}

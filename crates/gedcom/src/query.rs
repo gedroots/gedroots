@@ -1,27 +1,25 @@
-//! Recherche par critères dans les quatre zones (individus, sources, lieux, médias).
+//! Search by criteria in the four zones (individuals, sources, places, media).
 //!
-//! Une requête reste du texte : des mots libres et des critères `clé:valeur`.
-//! Une valeur qui contient des espaces s'écrit entre guillemets
-//! (`place:"Bar-sur-Aube"`, `repository:"AD de l'Aube"`). Dans l'interface, chaque
-//! critère complet devient un jeton : [`chip_label`] donne son libellé et
-//! [`Gedcom::suggest`] propose les critères et les valeurs du fichier.
+//! A query stays text: free words and `key:value` criteria. A value that contains spaces is written
+//! in quotes (`place:"Bar-sur-Aube"`, `repository:"AD de l'Aube"`). In the interface, each complete
+//! criterion becomes a token: [`chip_label`] gives its label and [`Gedcom::suggest`] suggests
+//! criteria and values from the file.
 //!
-//! Les individus ont leurs propres critères ([`crate::search::IndividualQuery`]) ;
-//! ce module ajoute ceux des autres zones :
+//! Individuals have their own criteria ([`crate::search::IndividualQuery`]); this module adds those
+//! of the other zones:
 //!
-//! | Zone | Critères |
+//! | Zone | Criteria |
 //! | --- | --- |
-//! | Sources | `type:naissance` (type d'acte), `repository:…`, `without:media`, `with:media`, `without:citation` |
-//! | Lieux | `in:aube` (juridiction), `without:coordinates`, `with:coordinates` |
-//! | Médias | `event:naissance`, `person:marchand` (personne liée), `format:image\|pdf\|web`, `medium:photo` (`MEDI`), `without:link` |
+//! | Sources | `type:birth` (record type), `repository:…`, `without:media`, `with:media`, `without:citation` |
+//! | Places | `in:aube` (jurisdiction), `without:coordinates`, `with:coordinates` |
+//! | Media | `event:birth`, `person:marchand` (linked person), `format:image\|pdf\|web`, `medium:photo` (`MEDI`), `without:link` |
 //!
-//! Partout : `id:…` (identifiant GEDCOM, jamais suggéré) et les mots libres
-//! (titre, nom, fichier…). Les mots-clés sont en anglais ; les libellés des jetons et
-//! des propositions sont dans la langue de l'interface.
+//! Everywhere: `id:…` (GEDCOM identifier, never suggested) and free words (title, name, file…).
+//! Keywords are in English; the labels of tokens and suggestions are in the interface language.
 //!
-//! Les médias sont aussi classés par **type** ([`MediaIndex::types`]) : les
-//! sous-dossiers déclarés dans Réglages du fichier › Médias, sinon le support
-//! GEDCOM 7 (`MEDI`). La barre des types de la zone Médias s'appuie dessus.
+//! Media are also grouped by **type** ([`MediaIndex::types`]): the subfolders declared in File
+//! Settings › Media, otherwise the GEDCOM 7 medium (`MEDI`). The type bar of the Media zone relies
+//! on it.
 
 use std::collections::{HashMap, HashSet};
 use std::ops::Range;
@@ -34,7 +32,7 @@ use crate::search::{IndividualQuery, Kin, YearRange};
 use rust_i18n::t;
 use std::borrow::Cow;
 
-/// Zone où l'on cherche.
+/// Zone being searched.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Scope {
     Individuals,
@@ -43,8 +41,8 @@ pub enum Scope {
     Media,
 }
 
-/// Découpe une requête en mots, en gardant ensemble un `clé:"valeur avec espaces"`.
-/// Renvoie la plage (octets) et le texte de chaque mot.
+/// Splits a query into words, keeping a `key:"value with spaces"` together. Returns the range
+/// (bytes) and the text of each word.
 pub fn words(q: &str) -> Vec<(Range<usize>, &str)> {
     let mut out = Vec::new();
     let mut start: Option<usize> = None;
@@ -67,13 +65,13 @@ pub fn words(q: &str) -> Vec<(Range<usize>, &str)> {
     out
 }
 
-/// Valeur d'un critère sans ses guillemets.
+/// Value of a criterion without its quotes.
 pub fn unquote(v: &str) -> &str {
     let v = v.trim();
     v.strip_prefix('"').map(|v| v.strip_suffix('"').unwrap_or(v)).unwrap_or(v)
 }
 
-/// Écrit `clé:valeur`, entre guillemets si la valeur contient un espace.
+/// Writes `key:value`, in quotes if the value contains a space.
 pub fn criterion(key: &str, value: &str) -> String {
     if value.chars().any(char::is_whitespace) {
         format!("{key}:\"{}\"", value.replace('"', ""))
@@ -82,7 +80,7 @@ pub fn criterion(key: &str, value: &str) -> String {
     }
 }
 
-/// Clé normalisée d'un critère (`dépôt` → `depot`), s'il a la forme `clé:valeur`.
+/// Normalized key of a criterion (`dépôt` → `depot`), if it has the `key:value` form.
 fn split(word: &str) -> Option<(String, &str)> {
     let (k, v) = word.split_once(':')?;
     if k.is_empty() || k.starts_with('"') {
@@ -91,23 +89,23 @@ fn split(word: &str) -> Option<(String, &str)> {
     Some((sort_key(k), unquote(v)))
 }
 
-/// Critère des zones autres que les individus.
+/// Criterion of the zones other than individuals.
 #[derive(Debug, Clone, PartialEq)]
 enum Crit {
     Id(String),
-    /// Source : type d'acte (balise ou libellé, normalisé).
+    /// Source: record type (tag or label, normalized).
     ActType(String),
     Repository(String),
-    /// Source / média : `with:` (true) ou `without:` (false) média.
+    /// Source / media: `with:` (true) or `without:` (false) media.
     HasMedia(bool),
-    /// Source citée, média rattaché.
+    /// Cited source, attached media.
     Linked(bool),
     Within(String),
     HasCoordinates(bool),
     Event(String),
     Person(String),
     Format(Format),
-    /// Support GEDCOM 7 (`MEDI`) : balise ou libellé, normalisé.
+    /// GEDCOM 7 medium (`MEDI`): tag or label, normalized.
     Medium(String),
 }
 
@@ -172,13 +170,13 @@ fn parse_crit(scope: Scope, key: &str, val: &str) -> Option<Crit> {
     }
 }
 
-/// Requête analysée pour les sources, les lieux ou les médias.
+/// Parsed query for sources, places or media.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct RecordQuery {
-    /// Mots libres, normalisés.
+    /// Free words, normalized.
     pub words: Vec<String>,
     crits: Vec<Crit>,
-    /// Critères mal formés (`without:foo`), pour les signaler.
+    /// Malformed criteria (`without:foo`), to report them.
     pub unknown: Vec<String>,
 }
 
@@ -190,7 +188,7 @@ impl RecordQuery {
                 Some((k, v)) => match parse_crit(scope, &k, v) {
                     Some(c) => out.crits.push(c),
                     None if is_key(scope, &k) => out.unknown.push(w.to_string()),
-                    // « 10:30 » ou une clé inconnue : un mot comme un autre.
+                    // “10:30” or an unknown key: a word like any other.
                     None => out.words.push(sort_key(w)),
                 },
                 None => out.words.push(sort_key(unquote(w))),
@@ -216,7 +214,7 @@ impl RecordQuery {
     }
 }
 
-/// Clés connues d'une zone, pour distinguer « critère mal écrit » et « mot avec deux-points ».
+/// Known keys of a zone, to tell a “misspelled criterion” from a “word with a colon”.
 fn is_key(scope: Scope, key: &str) -> bool {
     let keys: &[&str] = match scope {
         Scope::Individuals => &[],
@@ -227,24 +225,24 @@ fn is_key(scope: Scope, key: &str) -> bool {
     key == "id" || keys.contains(&key)
 }
 
-/// Ce que l'on sait d'un média pour la recherche (calculé une fois par version du fichier).
+/// What is known about a media for search (computed once per version of the file).
 #[derive(Debug, Clone, Default)]
 pub struct MediaInfo {
-    /// Index dans [`MediaIndex::types`].
+    /// Index in [`MediaIndex::types`].
     pub kind: Option<usize>,
-    /// Événement illustré (« Naissance »), normalisé.
+    /// Illustrated event (“Birth”), normalized.
     event: String,
     event_label: String,
-    /// Personnes liées (noms normalisés).
+    /// Linked people (normalized names).
     people: String,
     linked: bool,
     format: Option<Format>,
 }
 
-/// Types et contexte de tous les médias.
+/// Types and context of every media.
 #[derive(Debug, Clone, Default)]
 pub struct MediaIndex {
-    /// Types dans l'ordre d'affichage (sans « Tous »). Le dernier peut être « Autres ».
+    /// Types in display order (without “All”). The last one can be “Others”.
     pub types: Vec<String>,
     pub media: HashMap<String, MediaInfo>,
 }
@@ -260,7 +258,7 @@ pub fn web_type() -> String {
 }
 
 impl MediaIndex {
-    /// Type d'un média (libellé).
+    /// Type of a media (label).
     pub fn type_of(&self, xref: &str) -> Option<&str> {
         self.media.get(xref).and_then(|m| m.kind).map(|k| self.types[k].as_str())
     }
@@ -278,13 +276,13 @@ fn format_of(m: &Media) -> Option<Format> {
     pdf.then_some(Format::Pdf)
 }
 
-/// Dernier élément d'un chemin de dossier (« Médias/Actes » → « Actes »).
+/// Last element of a folder path (“Media/Records” → “Records”).
 fn dir_label(dir: &str) -> &str {
     dir.trim_matches('/').rsplit('/').next().unwrap_or(dir).trim()
 }
 
 impl Gedcom {
-    /// Tous les pointeurs du fichier (pour « non citée », « non rattaché »).
+    /// Every pointer of the file (for “not cited”, “not attached”).
     fn all_pointers(&self) -> HashSet<String> {
         let mut out = HashSet::new();
         for r in &self.records {
@@ -299,16 +297,16 @@ impl Gedcom {
         out
     }
 
-    /// Classe les médias par type et calcule ce qu'ils illustrent.
+    /// Groups the media by type and computes what they illustrate.
     ///
-    /// Le type d'un média est, dans l'ordre :
-    /// 1. le sous-dossier (Réglages du fichier › Médias) qui contient son fichier,
-    ///    sinon celui qui recevrait ce média d'après ce qu'il illustre ;
-    /// 2. sans sous-dossiers réglés, le premier dossier de son fichier (« Actes »,
-    ///    « Portraits »…), quand les fichiers sont rangés dans plusieurs dossiers ;
-    /// 3. sinon son support GEDCOM (`MEDI`).
+    /// The type of a media is, in order:
+    /// 1. the subfolder (File Settings › Media) that contains its file, otherwise the one that
+    ///    would receive this media from what it illustrates;
+    /// 2. without subfolders set, the first folder of its file (“Records”, “Portraits”…), when the
+    ///    files are filed in several folders;
+    /// 3. otherwise its GEDCOM medium (`MEDI`).
     ///
-    /// Le reste va dans « Autres ».
+    /// The rest goes into “Others”.
     pub fn media_index(&self) -> MediaIndex {
         let naming = self.media_naming();
         let contexts = self.media_contexts(&HashMap::new(), Some(&naming));
@@ -323,7 +321,7 @@ impl Gedcom {
                 }
             }
         }
-        // Chemin d'un fichier local, relatif au dossier des médias.
+        // Path of a local file, relative to the media folder.
         let local = |f: &Node| -> Option<String> {
             let path = f.val().replace('\\', "/");
             if path.contains("://") || path.starts_with('/') || path.get(1..2) == Some(":") {
@@ -344,7 +342,7 @@ impl Gedcom {
                 .filter(|d| !d.is_empty() && d != "." && d != "..")
         };
 
-        // Types : sous-dossiers réglés, sinon dossiers des fichiers, sinon supports.
+        // Types: subfolders set, otherwise folders of the files, otherwise media.
         let mut types: Vec<String> = Vec::new();
         for f in &naming.folders {
             let l = dir_label(&f.dir);
@@ -359,7 +357,7 @@ impl Gedcom {
             for r in &medias {
                 let x = r.xref.clone().unwrap_or_default();
                 let mut label = None;
-                // 1. Le dossier où se trouve le fichier.
+                // 1. The folder where the file is.
                 for path in r.children.iter().filter(|c| c.tag == "FILE").filter_map(&local) {
                     if let Some(d) = naming.folders.iter().find(|d| {
                         let dir = d.dir.trim().trim_matches('/');
@@ -369,7 +367,7 @@ impl Gedcom {
                         break;
                     }
                 }
-                // 2. Le dossier qui le recevrait.
+                // 2. The folder that would receive it.
                 if label.is_none()
                     && let Some(ctx) = contexts.get(&x).filter(|c| !c.event.is_empty())
                 {
@@ -403,7 +401,7 @@ impl Gedcom {
                 }
             }
         }
-        // Les liens web n'ont pas de dossier : un type à part.
+        // Web links have no folder: a type of their own.
         for r in &medias {
             let x = r.xref.clone().unwrap_or_default();
             if Media::new(r).web_url().is_some() && kind_of.get(&x).cloned().flatten().is_none() {
@@ -443,7 +441,7 @@ impl Gedcom {
             };
             index.media.insert(x, info);
         }
-        // « Autres » pour ce qui n'entre dans aucun type, seulement s'il existe d'autres types.
+        // “Others” for what fits no type, only if there are other types.
         let n = types.len();
         for m in index.media.values_mut() {
             if m.kind == Some(usize::MAX) {
@@ -457,9 +455,8 @@ impl Gedcom {
         index
     }
 
-    /// Clés (identifiants, ou nom complet pour un lieu) des enregistrements de la
-    /// zone qui correspondent à la requête. `media_type` restreint les médias à
-    /// un type de [`MediaIndex::types`].
+    /// Keys (identifiers, or full name for a place) of the zone's records that match the query.
+    /// `media_type` restricts the media to one type of [`MediaIndex::types`].
     pub fn search(
         &self,
         scope: Scope,
@@ -593,7 +590,7 @@ fn media_matches(q: &RecordQuery, r: &Node, info: Option<&MediaInfo>) -> bool {
 }
 
 // ----------------------------------------------------------------------
-// Jetons et suggestions
+// Tokens and suggestions
 // ----------------------------------------------------------------------
 
 fn capitalize(s: &str) -> String {
@@ -604,7 +601,7 @@ fn capitalize(s: &str) -> String {
     }
 }
 
-/// « en 1850 », « vers 1850 (± 5 ans) », « 1800–1850 », « avant 1800 ».
+/// “in 1850”, “about 1850 (± 5 years)”, “1800–1850”, “before 1800”.
 fn years_label(r: &str) -> String {
     let r = r.trim();
     if let Some(y) = r.strip_prefix('<') {
@@ -620,14 +617,14 @@ fn years_label(r: &str) -> String {
     }
 }
 
-/// « Jean GUYOT (1850–1912) », pour les propositions de proches.
+/// “Jean MARCHAND (1850–1912)”, for relative suggestions.
 fn person_label(i: &Individual) -> String {
     let y = i.years();
     if y.is_empty() { i.display_name() } else { format!("{} ({y})", i.display_name()) }
 }
 
-/// Libellé du jeton d'un critère complet, ou `None` si ce mot n'est pas un critère valide
-/// de la zone (il reste alors du texte). `g` donne le nom des personnes (`ascendants:@I1@`).
+/// Label of the token of a complete criterion, or `None` if this word is not a valid criterion of
+/// the zone (it then stays text). `g` gives the names of people (`ancestors:@I1@`).
 pub fn chip_label(scope: Scope, word: &str, g: Option<&Gedcom>) -> Option<String> {
     if scope == Scope::Individuals {
         if sort_key(word) == "sosa" {
@@ -712,8 +709,8 @@ fn feature_label(with: bool, v: &str) -> String {
     text.into()
 }
 
-/// Critères complets d'une requête : (plage, texte, libellé du jeton). Le dernier
-/// mot n'en fait partie que s'il est suivi d'une espace (on est encore en train de le taper).
+/// Complete criteria of a query: (range, text, token label). The last word is only included if a
+/// space follows it (it is still being typed).
 pub fn chips(scope: Scope, q: &str, g: Option<&Gedcom>) -> Vec<(Range<usize>, String, String)> {
     let ended = q.ends_with(char::is_whitespace);
     let ws = words(q);
@@ -725,20 +722,20 @@ pub fn chips(scope: Scope, q: &str, g: Option<&Gedcom>) -> Vec<(Range<usize>, St
         .collect()
 }
 
-/// Une proposition sous le champ de recherche.
+/// A suggestion under the search field.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Suggestion {
     /// Group the suggestion is listed under.
     pub group: Group,
     pub label: String,
-    /// Critère à insérer à la place du mot en cours.
+    /// Criterion to insert in place of the current word.
     pub insert: String,
-    /// Nombre de mots remplacés, en partant du mot en cours (2 pour « jean guy » →
-    /// `ascendants:@I1@`).
+    /// Number of words replaced, counting back from the current word (2 for “jean guy” →
+    /// `ancestors:@I1@`).
     pub consumes: usize,
 }
 
-/// Group of a [`Suggestion`] (« Lieu », « Nom », « Critères »…).
+/// Group of a [`Suggestion`] (“Place”, “Name”, “Criteria”…).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Group {
     Family,
@@ -779,7 +776,7 @@ fn sugg(group: Group, label: impl Into<String>, insert: impl Into<String>) -> Su
     Suggestion { group, label: label.into(), insert: insert.into(), consumes: 1 }
 }
 
-/// Critères sans valeur proposés dans chaque zone.
+/// Criteria without a value offered in each zone.
 fn fixed(scope: Scope) -> Vec<Suggestion> {
     let list: Vec<(Cow<'static, str>, &str)> = match scope {
         Scope::Individuals => vec![
@@ -814,7 +811,7 @@ fn fixed(scope: Scope) -> Vec<Suggestion> {
     list.into_iter().map(|(l, t)| sugg(Group::Criteria, l, t)).collect()
 }
 
-/// Ajoute `(valeur → nombre)` en gardant les plus fréquentes.
+/// Adds `(value → count)`, keeping the most frequent ones.
 fn top(counts: HashMap<String, usize>, n: usize) -> Vec<String> {
     let mut v: Vec<(String, usize)> = counts.into_iter().collect();
     v.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| sort_key(&a.0).cmp(&sort_key(&b.0))));
@@ -827,11 +824,10 @@ fn matches_word(value: &str, partial: &str) -> bool {
 }
 
 impl Gedcom {
-    /// Propositions pour le mot en cours `partial` (vide : les critères de la zone).
-    /// `previous` : les mots libres tapés juste avant (« jean » dans « jean guy »),
-    /// pour proposer les proches d'une personne.
-    /// Les valeurs viennent du fichier (lieux, noms, professions, types d'actes…).
-    /// L'appelant compte les résultats de chacune et écarte celles qui n'en ont pas.
+    /// Suggestions for the current word `partial` (empty: the zone's criteria). `previous`: the
+    /// free words typed just before (“jean” in “jean guy”), to suggest a person's relatives. The
+    /// values come from the file (places, names, occupations, record types…). The caller counts the
+    /// results of each and drops those that have none.
     pub fn suggest(
         &self,
         scope: Scope,
@@ -844,7 +840,7 @@ impl Gedcom {
             return Vec::new();
         }
         let mut out: Vec<Suggestion> = Vec::new();
-        // Une année ou une période : naissance, décès, en vie.
+        // A year or a period: birth, death, alive.
         if scope == Scope::Individuals && !p.is_empty() && YearRange::parse(&p).is_some() {
             let year = p.chars().all(|c| c.is_ascii_digit());
             let label = years_label(&p);
@@ -859,7 +855,7 @@ impl Gedcom {
             }
             return out;
         }
-        // Les mots tapés désignent une ou deux personnes : leurs proches.
+        // The typed words designate one or two people: their relatives.
         let mut family: Vec<Suggestion> = Vec::new();
         if scope == Scope::Individuals && p.chars().count() >= 2 {
             let mut text: Vec<&str> = previous.to_vec();
@@ -878,7 +874,7 @@ impl Gedcom {
                     for k in kins {
                         family.push(Suggestion {
                             group: Group::Family,
-                            // Les années ne servent qu'à départager deux personnes.
+                            // Years only serve to tell two people apart.
                             label: if found.len() == 1 {
                                 k.label(&i.display_name())
                             } else {
@@ -990,7 +986,7 @@ impl Gedcom {
                     for v in top(names, 3) {
                         out.push(sugg(Group::Person, v.clone(), criterion("person", &v)));
                     }
-                    // Support GEDCOM (`MEDI`) : premier mot du libellé (« manuscrit », « photo »).
+                    // GEDCOM medium (`MEDI`): first word of the label (“manuscript”, “photo”).
                     let mut mediums: HashMap<String, usize> = HashMap::new();
                     for r in self.records_of(RecordKind::Media) {
                         if let Some(l) = medium(r).and_then(medium_label)
@@ -1006,8 +1002,8 @@ impl Gedcom {
                 }
             }
         }
-        // Les groupes dont une valeur commence par le mot tapé passent devant
-        // (« guy » : le nom GUYOT avant le lieu Villeneuve-la-Guyard).
+        // Groups with a value starting with the typed word come first (“guy”: the surname GUYOT
+        // before the place Villeneuve-la-Guyard).
         let starts = |g: &Group| out.iter().any(|s| s.group == *g && sort_key(&s.label).starts_with(&p));
         let mut groups: Vec<Group> = Vec::new();
         for s in &out {
@@ -1017,7 +1013,7 @@ impl Gedcom {
         }
         groups.sort_by_key(|g| !starts(g));
         let mut ordered: Vec<Suggestion> = Vec::new();
-        // Plusieurs mots (« jean guyot ») : on cherche sûrement une personne.
+        // Several words (“jean martin”): surely looking for a person.
         let (first, last) = if previous.is_empty() { (Vec::new(), family) } else { (family, Vec::new()) };
         ordered.extend(first);
         for g in groups {
@@ -1097,13 +1093,13 @@ mod tests {
     fn media_types_from_file_folders_then_medium() {
         let g = ged();
         let index = g.media_index();
-        // Pas de sous-dossiers réglés : les dossiers des fichiers, les plus remplis d'abord.
+        // No subfolders set: the files' folders, the fullest first.
         assert_eq!(index.types, ["Actes", "divers", "Portraits", &web_type()]);
         assert_eq!(index.type_of("M4"), Some(web_type().as_str()));
         assert_eq!(index.type_of("M2"), Some("Portraits"));
         let actes = g.search(Scope::Media, "", Some(&index), Some("Actes"));
         assert_eq!(actes.len(), 1);
-        // Fichiers tous à la racine : le support GEDCOM, puis « Autres ».
+        // Files all at the root: the GEDCOM medium, then “Others”.
         let flat = Gedcom::parse(&GED.replace("Actes/", "").replace("Portraits/", "").replace("divers/", "")).unwrap();
         let index = flat.media_index();
         assert_eq!(index.types, ["Photo", &web_type(), &other_type()]);
@@ -1147,7 +1143,7 @@ mod tests {
         assert_eq!(s[0].insert, "born:1850");
         let s = g.suggest(Scope::Sources, &[], "bir", None);
         assert!(s.iter().any(|s| s.insert == "type:birth"));
-        // Champ vide : les critères de la zone.
+        // Empty field: the zone's criteria.
         assert!(g.suggest(Scope::Places, &[], "", None).iter().all(|s| s.group == Group::Criteria));
     }
 
@@ -1180,7 +1176,7 @@ mod tests {
         assert_eq!(ids(&g, "born:1730"), Vec::<String>::new());
         assert_eq!(chip_label(Scope::Individuals, "born:1730±5", None).as_deref(), Some("Born about 1730 (± 5 years)"));
         assert_eq!(chip_label(Scope::Individuals, "died:1730", None).as_deref(), Some("Died in 1730"));
-        // Guyot, Guyau, Guillot : un même nom.
+        // Guyot, Guyau, Guillot: one and the same name.
         assert_eq!(ids(&g, "name:guyot"), ["I0", "I1", "I3", "I4"]);
         assert_eq!(ids(&g, "name:=guyot"), ["I1", "I4"]);
         assert_eq!(chip_label(Scope::Individuals, "name:=guyot", None).as_deref(), Some("Exact Name guyot"));
@@ -1201,7 +1197,7 @@ mod tests {
             Some("Ancestors of Luc GUYOT")
         );
         assert!(chip_label(Scope::Individuals, "ancestors:@I99@", Some(&g)).is_none());
-        // « luc guy » : une seule personne, ses proches d'abord.
+        // “luc guy”: a single person, their relatives first.
         let s = g.suggest(Scope::Individuals, &["luc"], "guy", None);
         assert_eq!(s[0].group, Group::Family);
         assert_eq!(s[0].consumes, 2);

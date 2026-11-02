@@ -1,14 +1,13 @@
-//! Rangement des fichiers médias selon Réglages du fichier › Médias
-//! (`gedcom::media_naming`) :
-//! - un fichier rattaché depuis l'extérieur du dossier du .ged y est copié,
-//!   sous le nom donné par le modèle ;
-//! - les fichiers d'un nouvel acte (déposés ou choisis dans l'éditeur d'acte)
-//!   prennent directement le nom du modèle : copiés s'ils viennent d'ailleurs,
-//!   déplacés s'ils sont déjà dans le dossier et ne servent à aucun autre média ;
-//! - Média › Renommer selon le modèle… déplace les fichiers d'un média.
+//! Organization of media files according to File Settings › Media (`gedcom::media_naming`):
+//! - a file attached from outside the .ged folder is copied there, under the name given by the
+//!   template;
+//! - the files of a new record (dropped or chosen in the record editor) directly take the
+//!   template’s name: copied if they come from elsewhere, moved if they are already in the folder
+//!   and used by no other media;
+//! - Media › Rename According to Template… moves the files of a media.
 //!
-//! Le déplacement d'un fichier ne s'annule pas : l'historique d'annulation est
-//! mis à jour avec le nouveau chemin pour ne jamais pointer vers l'ancien.
+//! Moving a file cannot be undone: the undo history is updated with the new path so it never points
+//! to the old one.
 
 use super::add::AddDialog;
 use super::*;
@@ -22,7 +21,7 @@ pub(super) struct RenameDialog {
     rows: Vec<(String, String)>,
 }
 
-/// Un fichier déplacé ou copié : (média, position du `FILE`, ancien chemin, nouveau chemin).
+/// A moved or copied file: (media, position of the `FILE`, old path, new path).
 type Moved = (String, usize, String, String);
 
 /// Chemin libre : `nom.jpg`, sinon `nom (2).jpg`, `nom (3).jpg`…
@@ -35,8 +34,8 @@ fn free_path(p: PathBuf, current: &Path) -> PathBuf {
     (2..).map(|n| p.with_file_name(format!("{stem} ({n}){ext}"))).find(|c| !c.exists()).unwrap()
 }
 
-/// Aperçu de [`free_path`] : nom relatif que prendra `new` dans `base`, sans
-/// écraser un fichier existant ni un nom déjà prévu (`taken`).
+/// Preview of [`free_path`]: relative name `new` will get in `base`, without overwriting an
+/// existing file or an already planned name (`taken`).
 pub(super) fn free_name(base: &Path, new: &str, taken: &mut HashSet<PathBuf>) -> String {
     let p = base.join(new);
     let free = |c: &PathBuf| !c.exists() && !taken.contains(c);
@@ -58,9 +57,9 @@ fn relative(base: &Path, p: &Path) -> String {
     }
 }
 
-/// Range les fichiers des médias selon le réglage. Les fichiers hors du dossier
-/// du .ged sont copiés (déplacés si `move_outside`) ; ceux du dossier ne sont
-/// déplacés que si `move_inside` l'accepte (média, chemin actuel).
+/// Organizes the media files according to the setting. Files outside the .ged folder are copied
+/// (moved if `move_outside`); those in the folder are only moved if `move_inside` accepts it
+/// (media, current path).
 fn place_files(
     g: &mut Gedcom,
     base: &Path,
@@ -108,8 +107,8 @@ fn place_files(
     Ok(moved)
 }
 
-/// Après un rattachement : copie dans le dossier des médias les fichiers venus
-/// d'ailleurs (`base` : dossier du .ged). Renvoie le complément du message d'état.
+/// After attaching: copies the files coming from elsewhere into the media folder (`base`: the .ged
+/// folder). Returns the complement of the status message.
 pub(super) fn store_new_media(g: &mut Gedcom, base: Option<&Path>, media: &[String]) -> String {
     let outside = media
         .iter()
@@ -130,9 +129,9 @@ pub(super) fn store_new_media(g: &mut Gedcom, base: Option<&Path>, media: &[Stri
     }
 }
 
-/// Fichiers du média créé par un acte : nommés selon le modèle, copiés s'ils
-/// viennent d'ailleurs, déplacés s'ils sont dans le dossier du .ged et
-/// qu'aucun autre média ne les utilise. Renvoie le complément du message d'état.
+/// Files of the media created by a record: named according to the template, copied if they come
+/// from elsewhere, moved if they are in the .ged folder and no other media uses them. Returns the
+/// complement of the status message.
 pub(super) fn store_act_media(g: &mut Gedcom, base: Option<&Path>, media: &str) -> String {
     let Some(base) = base.filter(|_| !g.media_naming().is_empty()) else {
         return store_new_media(g, base, &[media.to_string()]);
@@ -151,10 +150,9 @@ pub(super) fn store_act_media(g: &mut Gedcom, base: Option<&Path>, media: &str) 
     }
 }
 
-/// Fichiers importés depuis la fenêtre Médias : nommés selon le modèle, déplacés
-/// (`move_files`) ou copiés s'ils viennent d'ailleurs, déplacés s'ils sont déjà
-/// dans le dossier et qu'aucun autre média ne les utilise. Renvoie le complément
-/// du message d'état.
+/// Files imported from the Media window: named according to the template, moved (`move_files`) or
+/// copied if they come from elsewhere, moved if they are already in the folder and no other media
+/// uses them. Returns the complement of the status message.
 pub(super) fn store_imported(g: &mut Gedcom, base: Option<&Path>, media: &[String], move_files: bool) -> String {
     let Some(base) = base.filter(|_| !g.media_naming().is_empty()) else {
         return store_new_media(g, base, media);
@@ -177,8 +175,8 @@ pub(super) fn store_imported(g: &mut Gedcom, base: Option<&Path>, media: &[Strin
     }
 }
 
-/// Chemins que prendraient les fichiers d'un média selon le modèle (aperçu,
-/// avant tout déplacement) : `(chemin actuel, nouveau chemin)`.
+/// Paths the files of a media would get according to the template (preview, before any move):
+/// `(current path, new path)`.
 pub(super) fn planned_paths(g: &Gedcom, media: &str) -> Vec<(String, String)> {
     if g.media_naming().is_empty() {
         return Vec::new();
@@ -187,7 +185,7 @@ pub(super) fn planned_paths(g: &Gedcom, media: &str) -> Vec<(String, String)> {
 }
 
 impl Workspace {
-    /// Dossier du .ged, s'il est enregistré.
+    /// Folder of the .ged, if it is saved.
     pub(super) fn ged_dir(&self) -> Option<PathBuf> {
         self.doc.as_ref()?.path.as_ref()?.parent().map(Path::to_path_buf)
     }
@@ -214,8 +212,8 @@ impl Workspace {
         let Some(doc) = &mut self.doc else { return };
         match place_files(&mut doc.ged, &base, std::slice::from_ref(&d.media), &|_, _, _| true, false) {
             Ok(moved) => {
-                // Les états précédents pointent aussi vers le nouveau nom : annuler une
-                // modification antérieure ne doit pas casser le lien vers le fichier déplacé.
+                // The previous states also point to the new name: undoing an earlier change must
+                // not break the link to the moved file.
                 for h in &mut doc.history {
                     for (m, i, old, new) in &moved {
                         h.replace_media_file(m, *i, old, new);
@@ -263,7 +261,7 @@ mod tests {
     use super::store_act_media;
     use gedcom::{Act, ActRole, Gedcom, MediaChoice, MediaFolder, MediaNaming, Participant, PersonField, RecordKind};
 
-    /// Fichier .ged de test (variable `GEDROOTS_TEST_GED` : une copie d'un vrai fichier).
+    /// Test .ged file (`GEDROOTS_TEST_GED` variable: a copy of a real file).
     fn sample() -> (Gedcom, String) {
         match std::env::var("GEDROOTS_TEST_GED") {
             Ok(p) => {
@@ -297,7 +295,7 @@ mod tests {
                 template: "{type:1}_{surname:simple}_{given}".into(),
             }],
         });
-        // Un fichier du dossier déjà utilisé par un autre média ne doit pas bouger.
+        // A file of the folder already used by another media must not move.
         let other = g.media_for_file("partagé.jpg");
         let mut act = Act::new(&source, "BIRT");
         act.date = "3 FEB 1914".into();

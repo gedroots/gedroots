@@ -1,17 +1,13 @@
-//! Qualité des données : tous les contrôles du fichier, rangés par catégorie,
-//! avec leur correction quand elle est sûre.
+//! Data quality: every check of the file, grouped by category, with their fix when it is safe.
 //!
-//! Les contrôles de cohérence (dates, âges, liens familiaux) viennent de
-//! [`crate::analysis::check`] ; ce module y ajoute la conformité au schéma
-//! GEDCOM 7, les éléments vides, les enregistrements que rien n'utilise et,
-//! quand l'appelant donne accès aux fichiers ([`Files`]), l'état des médias.
-//! Une anomalie se masque comme les autres, par `_GR_IGNORE <code>` sous son
-//! enregistrement.
+//! Consistency checks (dates, ages, family links) come from [`crate::analysis::check`]; this module
+//! adds conformance to the GEDCOM 7 schema, empty items, records that nothing uses and, when the
+//! caller gives access to the files ([`Files`]), the state of the media. A problem is hidden like
+//! the others, with `_GR_IGNORE <code>` under its record.
 //!
-//! Pour ajouter un contrôle : produire des [`Issue`] avec un nouveau code dans
-//! [`run`], lui donner une catégorie dans [`category`], un libellé dans
-//! [`crate::analysis::check::code_label`] et, s'il y a lieu, une correction
-//! dans [`fix_of`].
+//! To add a check: produce [`Issue`]s with a new code in [`run`], give it a category in
+//! [`category`], a label in [`crate::analysis::check::code_label`] and, if relevant, a fix in
+//! [`fix_of`].
 
 use crate::analysis::check::{self, Issue, Severity, Thresholds};
 use crate::date::Date;
@@ -25,12 +21,12 @@ use rust_i18n::t;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet, VecDeque};
 
-/// Les deux blocs de la page.
+/// The two blocks of the page.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Group {
-    /// Erreurs à corriger.
+    /// Errors to fix.
     Fix,
-    /// Données manquantes à compléter.
+    /// Missing data to complete.
     Complete,
 }
 
@@ -43,7 +39,7 @@ impl Group {
     }
 }
 
-/// Catégorie d'anomalies, dans l'ordre de la page.
+/// Category of problems, in page order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Category {
     Dates,
@@ -84,7 +80,7 @@ impl Category {
         }
     }
 
-    /// Identifiant stable (clé de la liste).
+    /// Stable identifier (key of the list).
     pub fn id(self) -> &'static str {
         match self {
             Category::Dates => "dates",
@@ -111,7 +107,7 @@ impl Category {
     }
 }
 
-/// Catégorie d'un code d'anomalie.
+/// Category of a problem code.
 pub fn category(code: &str) -> Category {
     match code {
         "husband_not_male" | "wife_not_female" | "own_ancestor" | "missing_backlink" | "role_sex_mismatch" => {
@@ -130,16 +126,16 @@ pub fn category(code: &str) -> Category {
     }
 }
 
-/// Correction automatique d'une anomalie.
+/// Automatic fix of a problem.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Fix {
-    /// Libellé du bouton (« Supprimer »).
+    /// Label of the button (“Delete”).
     pub label: Cow<'static, str>,
-    /// Applicable à toute la liste d'un coup (« Tout supprimer »).
+    /// Applicable to the whole list at once (“Delete All”).
     pub batch: Option<Cow<'static, str>>,
 }
 
-/// Correction proposée pour un code, s'il y en a une de sûre.
+/// Fix offered for a code, if there is a safe one.
 pub fn fix_of(code: &str) -> Option<Fix> {
     Some(match code {
         "empty_fact" => Fix { label: t!("quality.fix.delete"), batch: Some(t!("quality.fix.delete_empty_facts")) },
@@ -156,30 +152,28 @@ pub fn fix_of(code: &str) -> Option<Fix> {
         "unattached_file" => {
             Fix { label: t!("quality.fix.create_media"), batch: Some(t!("quality.fix.create_all_media")) }
         }
-        // Deux lieux du même nom peuvent être distincts : à vérifier un par un.
+        // Two places with the same name can be distinct: to check one by one.
         "place_variant" => Fix { label: t!("quality.fix.merge"), batch: None },
         "place_hierarchy" => Fix { label: t!("quality.fix.harmonize"), batch: None },
         _ => return None,
     })
 }
 
-/// Accès aux fichiers des médias, fourni par l'application (la bibliothèque ne
-/// lit pas le disque).
+/// Access to the media files, provided by the application (the library does not read the disk).
 pub struct Files<'a> {
-    /// Le fichier désigné par une valeur `FILE` existe-t-il ?
+    /// Does the file designated by a `FILE` value exist?
     pub exists: &'a dyn Fn(&str) -> bool,
-    /// Fichiers de médias du dossier du `.ged`, en chemins relatifs (`Actes/x.jpg`).
+    /// Media files of the `.ged` folder, as relative paths (`Records/x.jpg`).
     pub folder: &'a [String],
 }
 
-/// Toutes les anomalies du fichier, masquées comprises (champ `ignored`),
-/// triées par catégorie puis gravité. Sans accès aux fichiers.
+/// Every problem of the file, hidden ones included (`ignored` field), sorted by category then
+/// severity. Without access to the files.
 pub fn run(g: &Gedcom) -> Vec<Issue> {
     run_with(g, None)
 }
 
-/// Comme [`run`], avec en plus les contrôles qui regardent les fichiers des
-/// médias (absents, déplacés, non rattachés).
+/// Like [`run`], plus the checks that look at the media files (missing, moved, unattached).
 pub fn run_with(g: &Gedcom, files: Option<&Files>) -> Vec<Issue> {
     let t = Thresholds { report_unsourced: true, ..Thresholds::default() };
     let mut issues = check::check_all(g, &t);
@@ -211,7 +205,7 @@ fn issue(severity: Severity, code: &'static str, xref: &str, path: Vec<usize>, m
 }
 
 // ---------------------------------------------------------------------------
-// Conformité au schéma GEDCOM 7
+// Conformance to the GEDCOM 7 schema
 // ---------------------------------------------------------------------------
 
 fn structure(g: &Gedcom, out: &mut Vec<Issue>) {
@@ -225,8 +219,8 @@ fn structure(g: &Gedcom, out: &mut Vec<Issue>) {
 fn validate(g: &Gedcom, x: &str, who: &str, node: &Node, def: &StructDef, path: &mut Vec<usize>, out: &mut Vec<Issue>) {
     let here = schema::label(&node.tag, def);
     for (i, c) in node.children.iter().enumerate() {
-        // Extensions (`_XXX`) : libres, on ne descend pas dedans. CONT est une ligne
-        // de suite, pas une structure.
+        // Extensions (`_XXX`): free, do not go into them. CONT is a continuation line, not a
+        // structure.
         if c.tag.starts_with('_') || c.tag == "CONT" {
             continue;
         }
@@ -260,7 +254,7 @@ fn validate(g: &Gedcom, x: &str, who: &str, node: &Node, def: &StructDef, path: 
     for sub in def.subs {
         let n = node.children.iter().filter(|c| c.tag == sub.tag).count();
         let what = schema::label(sub.tag, sub.def());
-        // `FILE` sans `FORM` : signalé (et corrigé) par `missing_form`.
+        // `FILE` without `FORM`: reported (and fixed) by `missing_form`.
         if n == 0 && sub.card.required() && !(sub.tag == "FORM" && node.tag == "FILE") {
             out.push(issue(
                 Severity::Warning,
@@ -281,14 +275,14 @@ fn validate(g: &Gedcom, x: &str, who: &str, node: &Node, def: &StructDef, path: 
     }
 }
 
-/// Problème de valeur : `(pointeur vers le mauvais type ?, description)`.
+/// Problem with a value: `(pointer to the wrong type?, description)`.
 fn payload_problem(g: &Gedcom, n: &Node, payload: Payload) -> Option<(bool, String)> {
     let v = n.val().trim();
     match payload {
         Payload::Pointer(tag) => match n.pointer() {
             Some("VOID") | None if v.is_empty() => None,
             Some("VOID") => None,
-            // Lien vers un enregistrement absent : signalé par `broken_link`.
+            // Link to a missing record: reported by `broken_link`.
             Some(p) => {
                 let target = g.get(p)?;
                 (target.tag != tag).then(|| {
@@ -323,7 +317,7 @@ fn payload_problem(g: &Gedcom, n: &Node, payload: Payload) -> Option<(bool, Stri
 }
 
 // ---------------------------------------------------------------------------
-// Éléments vides
+// Empty items
 // ---------------------------------------------------------------------------
 
 fn note_is_empty(n: &Node) -> bool {
@@ -355,7 +349,7 @@ fn empty(g: &Gedcom, out: &mut Vec<Issue>) {
                 ));
             }
         }
-        // Notes vides, à toute profondeur.
+        // Empty notes, at any depth.
         let mut path = Vec::new();
         empty_notes(x, &who, r, &mut path, out);
     }
@@ -380,11 +374,11 @@ fn empty_notes(x: &str, who: &str, node: &Node, path: &mut Vec<usize>, out: &mut
 }
 
 // ---------------------------------------------------------------------------
-// Enregistrements que rien n'utilise
+// Records that nothing uses
 // ---------------------------------------------------------------------------
 
 fn unused(g: &Gedcom, out: &mut Vec<Issue>) {
-    // Tout ce qui est cité quelque part (sauf par soi-même).
+    // Everything cited somewhere (except by itself).
     let mut cited: HashSet<&str> = HashSet::new();
     for (owner, n) in std::iter::once((None, &g.header)).chain(g.records.iter().map(|r| (r.xref.as_deref(), &**r))) {
         n.walk(&mut |c| {
@@ -406,7 +400,7 @@ fn unused(g: &Gedcom, out: &mut Vec<Issue>) {
                 }
             }
             "OBJE" | "SOUR" | "REPO" | "SNOTE" if !cited.contains(x) => {
-                // Une note vide est déjà signalée comme telle.
+                // An empty note is already reported as such.
                 if r.tag == "SNOTE" && r.text().trim().is_empty() {
                     continue;
                 }
@@ -423,10 +417,9 @@ fn unused(g: &Gedcom, out: &mut Vec<Issue>) {
         }
     }
 
-    // Individus sans aucun lien avec l'individu racine : un signalement par
-    // groupe de personnes reliées entre elles (un arbre à part). Un lien, c'est
-    // une famille commune ou une association (`ASSO`, témoins d'un acte…), dans
-    // un sens ou dans l'autre.
+    // Individuals without any link to the root individual: one report per group of people connected
+    // to each other (a separate tree). A link is a common family or an association (`ASSO`,
+    // witnesses of a record…), in either direction.
     let Some(root) = g.root() else { return };
     let linked = |n: &Node| matches!(n.tag.as_str(), "INDI" | "FAM");
     let mut edges: HashMap<&str, Vec<&str>> = HashMap::new();
@@ -483,10 +476,10 @@ fn unused(g: &Gedcom, out: &mut Vec<Issue>) {
 }
 
 // ---------------------------------------------------------------------------
-// Médias et fichiers
+// Media and files
 // ---------------------------------------------------------------------------
 
-/// Chemin `FILE` comparable à ceux du dossier (`./Actes\\x.jpg` → `Actes/x.jpg`).
+/// `FILE` path comparable with those of the folder (`./Records\\x.jpg` → `Records/x.jpg`).
 fn normalize(file: &str) -> String {
     let f = file.trim().strip_prefix("file://").unwrap_or(file.trim()).replace('\\', "/");
     f.strip_prefix("./").unwrap_or(&f).to_string()
@@ -497,7 +490,7 @@ fn file_name(path: &str) -> String {
 }
 
 fn media(g: &Gedcom, files: Option<&Files>, out: &mut Vec<Issue>) {
-    // Fichiers du dossier par nom, pour retrouver un fichier déplacé.
+    // Files of the folder by name, to find a moved file.
     let mut by_name: HashMap<String, Vec<&str>> = HashMap::new();
     for f in files.map(|f| f.folder).unwrap_or_default() {
         by_name.entry(file_name(f)).or_default().push(f);
@@ -530,7 +523,7 @@ fn media(g: &Gedcom, files: Option<&Files>, out: &mut Vec<Issue>) {
             }
             match by_name.get(&file_name(&normalize(v))).map(Vec::as_slice) {
                 Some([found]) => {
-                    // Le fichier retrouvé n'est pas « à rattacher » : la correction du chemin s'en charge.
+                    // The found file is not “to attach”: fixing the path takes care of it.
                     referenced.insert(found.to_string());
                     let mut i = issue(
                         Severity::Warning,
@@ -571,7 +564,7 @@ fn media(g: &Gedcom, files: Option<&Files>, out: &mut Vec<Issue>) {
             }
         }
     }
-    // Fichiers du dossier qu'aucun média ne désigne.
+    // Files of the folder that no media designates.
     for f in files.map(|f| f.folder).unwrap_or_default() {
         if !referenced.contains(f) {
             let mut i = issue(Severity::Info, "unattached_file", "", vec![], f.clone());
@@ -585,9 +578,8 @@ fn media(g: &Gedcom, files: Option<&Files>, out: &mut Vec<Issue>) {
 // Lieux
 // ---------------------------------------------------------------------------
 
-/// Parties significatives d'un nom de lieu, pour comparer deux écritures :
-/// sans casse, accents, tirets ni ponctuation, sans les codes (postal, INSEE),
-/// « St » et « Ste » développés. Les parties vides sont retirées.
+/// Meaningful parts of a place name, to compare two spellings: without case, accents, hyphens or
+/// punctuation, without codes (postal, INSEE), “St” and “Ste” expanded. Empty parts are removed.
 fn place_parts(name: &str) -> Vec<String> {
     name.split(',')
         .map(|part| {
@@ -606,8 +598,8 @@ fn place_parts(name: &str) -> Vec<String> {
         .collect()
 }
 
-/// `short` est-il une écriture abrégée de `long` (mêmes parties dans le même
-/// ordre, certaines en moins, la première identique) ?
+/// Is `short` an abbreviated spelling of `long` (same parts in the same order, some missing, the
+/// first one identical)?
 fn abbreviates(short: &[String], long: &[String]) -> bool {
     if short.len() >= long.len() || short.first() != long.first() {
         return false;
@@ -643,8 +635,8 @@ fn places(g: &Gedcom, out: &mut Vec<Issue>) {
         }
     }
 
-    // Variantes : même nom une fois normalisé, ou forme abrégée d'un seul autre lieu.
-    // Chaque variante est rapprochée du lieu le plus utilisé de son groupe.
+    // Variants: same name once normalized, or abbreviated form of a single other place. Each
+    // variant is matched with the most used place of its group.
     let parts: Vec<Vec<String>> = all.iter().map(|p| place_parts(&p.name)).collect();
     let better = |a: &Place, b: &Place| {
         (a.uses, a.coords().is_some(), a.name.len()) > (b.uses, b.coords().is_some(), b.name.len())
@@ -666,7 +658,7 @@ fn places(g: &Gedcom, out: &mut Vec<Issue>) {
         }
         let longer: Vec<usize> =
             (0..all.len()).filter(|&j| target[j].is_none() && abbreviates(&parts[i], &parts[j])).collect();
-        // Plusieurs lieux possibles (Saint-Martin, Isère / Saint-Martin, Gard) : on ne devine pas.
+        // Several possible places (Saint-Martin, Isère / Saint-Martin, Gard): do not guess.
         if let [j] = longer[..] {
             target[i] = Some(j);
         }
@@ -685,17 +677,17 @@ fn places(g: &Gedcom, out: &mut Vec<Issue>) {
     }
 }
 
-/// Niveaux d'un nom de lieu, à leur position (vides compris).
+/// Levels of a place name, at their position (empty ones included).
 fn levels(name: &str) -> Vec<&str> {
     name.split(',').map(str::trim).collect()
 }
 
-/// Une même division rattachée à deux divisions supérieures différentes
-/// (« Loire » tantôt en « Rhône-Alpes », tantôt en « Auvergne-Rhône-Alpes »).
-/// Le niveau le plus bas d'un lieu (sa commune, son lieu-dit) n'est pas
-/// comparé : deux communes homonymes sont souvent dans deux départements.
+/// The same division attached to two different higher divisions (“Loire” sometimes in
+/// “Rhône-Alpes”, sometimes in “Auvergne-Rhône-Alpes”). The lowest level of a place (its
+/// municipality, its locality) is not compared: two municipalities with the same name are often in
+/// two departments.
 fn hierarchy(all: &[Place], out: &mut Vec<Issue>) {
-    // (niveau du parent, parent) → valeur au niveau suivant → nombre de lieux.
+    // (parent level, parent) → value at the next level → number of places.
     let mut seen: HashMap<(usize, String), HashMap<&str, usize>> = HashMap::new();
     for p in all {
         let l = levels(&p.name);
@@ -703,7 +695,7 @@ fn hierarchy(all: &[Place], out: &mut Vec<Issue>) {
         for m in (lowest + 2)..l.len() {
             let (parent, child) = (l[m - 1], l[m]);
             let code = |x: &str| x.chars().all(|c| c.is_ascii_digit() || c == ' ');
-            // Codes (postal, INSEE) : deux communes homonymes en ont de différents.
+            // Codes (postal, INSEE): two municipalities with the same name have different ones.
             if parent.is_empty() || child.is_empty() || code(parent) || code(child) {
                 continue;
             }
@@ -742,20 +734,19 @@ fn hierarchy(all: &[Place], out: &mut Vec<Issue>) {
 // ---------------------------------------------------------------------------
 
 impl Gedcom {
-    /// Applique la correction d'une anomalie. Renvoie `false` si elle n'en a pas
-    /// ou si le fichier a changé depuis le contrôle.
+    /// Applies the fix of a problem. Returns `false` if it has none or if the file changed since
+    /// the check.
     pub fn fix_issue(&mut self, issue: &Issue) -> bool {
         self.fix_issues(std::slice::from_ref(issue)) > 0
     }
 
-    /// Applique la correction de plusieurs anomalies. Renvoie le nombre corrigé.
+    /// Applies the fix of several problems. Returns the number fixed.
     pub fn fix_issues(&mut self, issues: &[Issue]) -> usize {
         let mut fixable: Vec<&Issue> = issues.iter().filter(|i| fix_of(i.code).is_some()).collect();
-        // Retirer d'abord les structures les plus loin dans chaque enregistrement,
-        // pour que les positions des autres restent valables ; les suppressions
-        // d'enregistrements à la fin.
+        // Remove the structures deepest in each record first, so the positions of the others stay
+        // valid; record deletions at the end.
         fixable.sort_by(|a, b| (a.path.is_empty(), &b.xref, &b.path).cmp(&(b.path.is_empty(), &a.xref, &a.path)));
-        // Les variantes de lieux d'abord : harmoniser renomme les lieux qu'elles visent.
+        // Place variants first: harmonizing renames the places they target.
         fixable.sort_by_key(|i| i.code == "place_hierarchy");
         let mut done = 0;
         let mut touched: HashSet<String> = HashSet::new();
@@ -795,7 +786,7 @@ impl Gedcom {
         done
     }
 
-    /// Retire la sous-structure à `path` si c'est bien un événement ou une des balises `also`.
+    /// Removes the substructure at `path` if it is indeed an event or one of the `also` tags.
     fn remove_at(&mut self, xref: &str, path: &[usize], also: &[&str]) -> bool {
         let Some((last, parents)) = path.split_last() else { return false };
         let Some(mut n) = self.get_mut(xref) else { return false };
@@ -810,7 +801,7 @@ impl Gedcom {
         ok
     }
 
-    /// Ajoute l'individu à la famille qu'il cite sans qu'elle le mentionne.
+    /// Adds the individual to the family they cite without it mentioning them.
     pub fn add_backlink(&mut self, indi: &str, fam: &str) -> bool {
         let Some(ind) = self.get(indi) else { return false };
         let p = format!("@{indi}@");
@@ -838,15 +829,14 @@ impl Gedcom {
         true
     }
 
-    /// Le `FILE` à `path` dans le média (position parmi ses sous-structures).
+    /// The `FILE` at `path` in the media (position among its substructures).
     fn media_file_at(&mut self, media: &str, path: &[usize]) -> Option<&mut Node> {
         let [i] = path else { return None };
         let m = self.get_mut(media).filter(|m| m.tag == "OBJE")?;
         m.children.get_mut(*i).filter(|f| f.tag == "FILE")
     }
 
-    /// Change le chemin d'un fichier de média (fichier déplacé ou retrouvé à la
-    /// main) et son format.
+    /// Changes the path of a media file (file moved or found by hand) and its format.
     pub fn set_media_file(&mut self, media: &str, path: &[usize], value: &str) -> bool {
         let Some(f) = self.media_file_at(media, path) else { return false };
         f.value = Some(value.to_string());
@@ -854,7 +844,7 @@ impl Gedcom {
         true
     }
 
-    /// Déduit `FORM` de l'extension du fichier.
+    /// Infers `FORM` from the file extension.
     fn infer_form(&mut self, media: &str, path: &[usize]) -> bool {
         let Some(f) = self.media_file_at(media, path) else { return false };
         if f.child("FORM").is_some() {
@@ -865,9 +855,8 @@ impl Gedcom {
         true
     }
 
-    /// Fusionne le média `dup` dans `keep` (même fichier) : les liens vers `dup`
-    /// pointent vers `keep`, ses notes et sources lui sont ajoutées, puis `dup`
-    /// est supprimé.
+    /// Merges media `dup` into `keep` (same file): links to `dup` point to `keep`, its notes and
+    /// sources are added to it, then `dup` is deleted.
     pub fn merge_duplicate_media(&mut self, keep: &str, dup: &str) -> bool {
         if keep == dup || self.get(keep).is_none_or(|n| n.tag != "OBJE") {
             return false;
@@ -892,8 +881,8 @@ impl Gedcom {
         self.delete(dup).is_some()
     }
 
-    /// Remplace partout le lieu `from` par `to`, en gardant les coordonnées de
-    /// `to` (ou celles de `from` si `to` n'en a pas).
+    /// Replaces place `from` with `to` everywhere, keeping the coordinates of `to` (or those of
+    /// `from` if `to` has none).
     pub fn merge_place(&mut self, from: &str, to: &str) -> bool {
         let places = self.places();
         let find = |n: &str| places.iter().find(|p| p.name == n);
@@ -909,8 +898,8 @@ impl Gedcom {
         true
     }
 
-    /// Dans les lieux dont le niveau `level` vaut `parent`, remplace `from` par
-    /// `to` au niveau suivant. Renvoie le nombre de lieux renommés.
+    /// In the places whose level `level` is `parent`, replaces `from` with `to` at the next level.
+    /// Returns the number of places renamed.
     pub fn rename_jurisdiction(&mut self, level: usize, parent: &str, from: &str, to: &str) -> usize {
         let mut n = 0;
         for p in self.places() {
@@ -927,7 +916,7 @@ impl Gedcom {
         n
     }
 
-    /// Retire de l'enregistrement les structures qui pointent vers `target`.
+    /// Removes from the record the structures that point to `target`.
     fn remove_pointers(&mut self, xref: &str, target: &str) -> bool {
         let p = format!("@{target}@");
         let Some(r) = self.get_mut(xref) else { return false };

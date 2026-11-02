@@ -1,11 +1,9 @@
-//! Historique de navigation (Précédent / Suivant) et dernier élément vu dans
-//! chaque liste.
+//! Navigation history (Back / Forward) and last item viewed in each list.
 //!
-//! Chaque changement d'élément affiché (clic dans la liste, lien depuis une
-//! fiche, lieu d'un événement…) mémorise l'endroit quitté, quel que soit son
-//! type : depuis un lieu ouvert à partir d'un individu, « Précédent » ramène à
-//! l'individu. ⌘[ / ⌘], les flèches de la barre du haut et les boutons
-//! « précédent / suivant » de la souris y reviennent.
+//! Each change of displayed item (click in the list, link from a record, place of an event…)
+//! remembers the place left, whatever its type: from a place opened from an individual, “Back”
+//! returns to the individual. ⌘[ / ⌘], the arrows of the top bar and the mouse’s “back / forward”
+//! buttons go back there.
 
 use super::*;
 use std::collections::HashMap;
@@ -13,7 +11,7 @@ use std::collections::HashMap;
 /// Taille maximale de l'historique.
 const MAX: usize = 200;
 
-/// Un endroit de l'interface : liste, élément affiché et onglet central.
+/// A place in the interface: list, displayed item and central tab.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct Location {
     pub view: View,
@@ -25,9 +23,9 @@ pub(super) struct Location {
 pub(super) struct History {
     back: Vec<Location>,
     forward: Vec<Location>,
-    /// Dernier élément affiché dans chaque liste.
+    /// Last item displayed in each list.
     last: HashMap<View, String>,
-    /// Retour en arrière en cours : ne rien mémoriser.
+    /// Going back in progress: remember nothing.
     restoring: bool,
 }
 
@@ -40,7 +38,7 @@ impl History {
         !self.forward.is_empty()
     }
 
-    /// Mémorise l'endroit qu'on quitte ; une nouvelle navigation efface « Suivant ».
+    /// Remembers the place being left; a new navigation clears “Forward”.
     fn leave(&mut self, here: Option<Location>) {
         if self.restoring {
             return;
@@ -61,24 +59,24 @@ impl Workspace {
         Some(Location { view: self.view, key: self.selected.clone()?, tab: self.tab })
     }
 
-    /// À appeler avant de changer l'élément affiché.
+    /// To call before changing the displayed item.
     pub(super) fn leave_location(&mut self) {
         let here = self.here();
         self.history.leave(here);
     }
 
-    /// Note l'élément affiché comme dernier vu de sa liste.
+    /// Records the displayed item as the last viewed of its list.
     pub(super) fn note_selected(&mut self, key: &str) {
         self.history.last.insert(self.view, key.to_string());
     }
 
-    /// Oublie l'historique (autre fichier ouvert).
+    /// Forgets the history (another file opened).
     pub(super) fn reset_history(&mut self) {
         self.history = History::default();
     }
 
-    /// Élément à afficher en arrivant dans une liste : le dernier vu, sinon
-    /// l'individu racine pour les individus, sinon le premier de la liste.
+    /// Item to display when arriving in a list: the last viewed, otherwise the root individual for
+    /// individuals, otherwise the first of the list.
     pub(super) fn landing(&self, view: View) -> Option<String> {
         let exists = |k: &String| self.rows.iter().any(|r| &r.key == k);
         if let Some(k) = self.history.last.get(&view).filter(|k| exists(k)) {
@@ -92,7 +90,7 @@ impl Workspace {
         self.rows.first().map(|r| r.key.clone())
     }
 
-    /// Nom de l'endroit où mène « Précédent » (ou « Suivant »), pour l'infobulle.
+    /// Name of the place “Back” (or “Forward”) leads to, for the tooltip.
     pub(super) fn next_label(&self, back: bool) -> Option<String> {
         let stack = if back { &self.history.back } else { &self.history.forward };
         let loc = stack.iter().rev().find(|l| self.still_there(l))?;
@@ -104,7 +102,7 @@ impl Workspace {
         })
     }
 
-    /// L'endroit existe-t-il encore (élément supprimé, lieu renommé…) ?
+    /// Does the place still exist (item deleted, place renamed…)?
     fn still_there(&self, loc: &Location) -> bool {
         let Some(doc) = &self.doc else { return false };
         match loc.view {

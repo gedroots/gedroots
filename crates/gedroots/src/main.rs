@@ -1,6 +1,6 @@
-//! GEDRoots — logiciel de généalogie libre et local, avec GEDCOM 7 comme format de données.
+//! GEDRoots, free and local genealogy software, with GEDCOM 7 as its data format.
 
-// Sous Windows, pas de fenêtre de console derrière l'app (sauf en debug, pour les messages).
+// On Windows, no console window behind the app (except in debug, for the messages).
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod act_editor;
@@ -27,7 +27,7 @@ use workspace::Workspace;
 // Interface strings: crates/gedroots/locales/*.yml (see i18n.rs).
 rust_i18n::i18n!("locales", fallback = "en");
 
-// Icônes Lucide utilisées en plus du jeu par défaut de gpui-kit.
+// Lucide icons used on top of gpui-kit's default set.
 gpui_kit::assets::icon_assets!(
     ExtraIcons,
     [
@@ -69,7 +69,7 @@ gpui_kit::assets::icon_assets!(
 
 struct AppAssets;
 
-/// Marque GEDRoots (sources SVG du kit de marque), affichée avec `img("brand/…")`.
+/// GEDRoots brand (SVG sources from the brand kit), displayed with `img("brand/…")`.
 const BRAND: [(&str, &[u8]); 4] = [
     ("brand/logo-horizontal-light.svg", include_bytes!("../assets/brand/logo-horizontal-light.svg")),
     ("brand/logo-horizontal-dark.svg", include_bytes!("../assets/brand/logo-horizontal-dark.svg")),
@@ -99,11 +99,11 @@ impl AssetSource for AppAssets {
 }
 
 fn main() {
-    // Sous macOS, une app lancée par le Finder peut recevoir un argument `-psn_…` : on l'ignore.
+    // On macOS, an app launched by the Finder can receive a `-psn_…` argument: ignore it.
     let path = std::env::args_os().skip(1).find(|a| !a.to_string_lossy().starts_with("-psn")).map(PathBuf::from);
 
-    // Fichiers ouverts depuis le Finder (double-clic sur un .ged, « Ouvrir avec », glisser sur
-    // l'icône du Dock) : macOS les envoie à l'app sous forme d'URL `file://`.
+    // Files opened from the Finder (double-click on a .ged, “Open With”, drop on the Dock icon):
+    // macOS sends them to the app as `file://` URLs.
     let (opened_tx, opened_rx) = async_channel::unbounded::<PathBuf>();
     let app = gpui_kit::application().with_assets(AppAssets);
     app.on_open_urls(move |urls| {
@@ -111,7 +111,7 @@ fn main() {
             let _ = opened_tx.try_send(path);
         }
     });
-    // Clic sur l'icône du Dock alors que toutes les fenêtres sont fermées : on en rouvre une.
+    // Click on the Dock icon while every window is closed: reopen one.
     app.on_reopen(|cx| {
         if cx.windows().is_empty() {
             open_workspace(None, cx);
@@ -140,12 +140,12 @@ fn main() {
     });
 }
 
-/// Fenêtre principale ouverte sur `path` (ou sur l'écran d'accueil).
+/// Main window opened on `path` (or on the welcome screen).
 fn open_workspace(path: Option<PathBuf>, cx: &mut App) -> Option<(AnyWindowHandle, WeakEntity<Workspace>)> {
     let bounds = Bounds::centered(None, size(px(1440.), px(900.)), cx);
     let options = WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(bounds)),
-        // macOS : barre de titre fondue dans la barre du haut de l'app, feux tricolores compris.
+        // macOS: title bar merged into the app's top bar, traffic lights included.
         titlebar: Some(TitlebarOptions {
             title: Some("GEDRoots".into()),
             appears_transparent: cfg!(target_os = "macos"),
@@ -163,8 +163,8 @@ fn open_workspace(path: Option<PathBuf>, cx: &mut App) -> Option<(AnyWindowHandl
     Some((window, ws.downgrade()))
 }
 
-/// Ouvre un fichier reçu du Finder : dans la dernière fenêtre si elle n'a pas de modifications
-/// non enregistrées, sinon dans une nouvelle fenêtre.
+/// Opens a file received from the Finder: in the last window if it has no unsaved changes,
+/// otherwise in a new window.
 fn open_in(
     last: Option<(AnyWindowHandle, WeakEntity<Workspace>)>,
     path: PathBuf,
@@ -188,10 +188,10 @@ fn open_in(
     opened
 }
 
-/// `file:///Users/a/G%C3%A9n%C3%A9alogie/arbre.ged` → chemin local. Les autres URL sont ignorées.
+/// `file:///Users/a/G%C3%A9n%C3%A9alogie/tree.ged` → local path. Other URLs are ignored.
 fn file_url_path(url: &str) -> Option<PathBuf> {
     let rest = url.strip_prefix("file://")?;
-    // `file://localhost/…` est aussi une forme valide.
+    // `file://localhost/…` is a valid form too.
     let rest = rest.strip_prefix("localhost").unwrap_or(rest);
     let bytes = rest.as_bytes();
     let mut out = Vec::with_capacity(bytes.len());

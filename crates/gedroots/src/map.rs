@@ -1,9 +1,9 @@
-//! Carte des lieux : tuiles OpenStreetMap mises en cache sur le disque, un repère par
-//! lieu ayant des coordonnées (`PLAC.MAP`) et placement à la main d'un clic.
-//! La même vue, en mode « sélecteur », sert à poser l'épingle d'un nouveau lieu.
+//! Place map: OpenStreetMap tiles cached on disk, a marker per place with coordinates (`PLAC.MAP`)
+//! and placing by hand with a click. The same view, in “picker” mode, is used to set the pin of a
+//! new place.
 //!
-//! Hors ligne, la carte utilise les tuiles déjà en cache et affiche les repères sur
-//! un quadrillage : les coordonnées viennent du fichier GEDCOM, pas d'Internet.
+//! Offline, the map uses the tiles already cached and shows the markers on a grid: the coordinates
+//! come from the GEDCOM file, not from the Internet.
 
 use crate::images::picture;
 use crate::theme;
@@ -24,20 +24,19 @@ const MAX_ZOOM: u8 = 18;
 const MAX_INFLIGHT: usize = 6;
 const DEFAULT_TILES: &str = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 
-/// Ce que la carte demande à l'espace de travail.
+/// What the map asks of the workspace.
 pub enum MapEvent {
-    /// Un repère a été cliqué.
+    /// A marker was clicked.
     Select(String),
-    /// Coordonnées posées à la main, à écrire dans le GEDCOM (en mode sélecteur :
-    /// nouvelle position de l'épingle, `name` vide).
-    /// `checkpoint` : créer un point d'annulation (faux pour la suite d'une même série).
+    /// Coordinates set by hand, to write into the GEDCOM (in picker mode: new position of the pin,
+    /// `name` empty). `checkpoint`: create an undo point (false for the rest of the same series).
     SetCoords { name: String, lat: f64, lon: f64, checkpoint: bool },
 }
 
 struct Marker {
     name: String,
     label: SharedString,
-    /// Position « monde » au zoom 0.
+    /// “World” position at zoom 0.
     world: (f64, f64),
     uses: usize,
 }
@@ -46,10 +45,10 @@ type TileKey = (u8, u32, u32);
 
 pub struct MapView {
     markers: Vec<Marker>,
-    /// Nombre de lieux sans coordonnées.
+    /// Number of places without coordinates.
     missing: usize,
     selected: Option<String>,
-    /// Centre de la vue, en coordonnées « monde » au zoom 0.
+    /// Center of the view, in “world” coordinates at zoom 0.
     center: (f64, f64),
     zoom: u8,
     bounds: Bounds<Pixels>,
@@ -58,18 +57,18 @@ pub struct MapView {
     scroll_acc: f32,
     online: bool,
     placing: bool,
-    /// Position du dernier clic droit sur la carte (menu « Placer ici »).
-    /// (Partagée sans passer par la vue : la mettre à jour pendant le clic
-    /// empêcherait le menu de recevoir la souris.)
+    /// Position of the last right-click on the map (“Place Here” menu). (Shared without going
+    /// through the view: updating it during the click would stop the menu from receiving the
+    /// mouse.)
     menu_pos: std::rc::Rc<std::cell::Cell<Option<Point<Pixels>>>>,
     tile_dir: Option<PathBuf>,
     tile_url: String,
     pending: HashSet<TileKey>,
     failed: HashSet<TileKey>,
     agent: ureq::Agent,
-    /// Sélecteur de position (fenêtre « Nouveau lieu ») : une seule épingle, chaque clic la déplace.
+    /// Position picker (“New Place” window): a single pin, each click moves it.
     picker: bool,
-    /// Sélecteur : position du bouton enfoncé, pour distinguer un clic d'un glissé.
+    /// Picker: position where the button was pressed, to tell a click from a drag.
     press: Option<Point<Pixels>>,
 }
 
@@ -105,8 +104,8 @@ impl MapView {
         }
     }
 
-    /// Petite carte pour choisir la position d'un lieu : épingle en `pin`, vue centrée sur
-    /// `pin` ou, à défaut, sur `near` (lieu parent) ; sinon la France.
+    /// Small map to choose a place's position: pin at `pin`, view centered on `pin` or, failing
+    /// that, on `near` (parent place); otherwise France.
     pub fn picker(pin: Option<(f64, f64)>, near: Option<(f64, f64)>) -> Self {
         let mut m = Self::new();
         m.picker = true;
@@ -126,14 +125,14 @@ impl MapView {
         self.markers = vec![Marker { name: String::new(), label: "".into(), world: project(lat, lon), uses: 1 }];
     }
 
-    /// « Placer sur la carte » : le prochain clic sur la carte place ce lieu.
+    /// “Place on the Map”: the next click on the map places this place.
     pub fn start_placing(&mut self, name: String, cx: &mut Context<Self>) {
         self.selected = Some(name);
         self.placing = true;
         cx.notify();
     }
 
-    /// Met à jour la liste des lieux (après chaque modification du document).
+    /// Updates the list of places (after each change to the document).
     pub fn set_places(&mut self, places: &[Place], cx: &mut Context<Self>) {
         let had_markers = !self.markers.is_empty();
         self.markers.clear();
@@ -149,7 +148,7 @@ impl MapView {
                 None => self.missing += 1,
             }
         }
-        // Les plus utilisés dessinés en dernier, donc au-dessus.
+        // The most used drawn last, so on top.
         self.markers.sort_by_key(|m| m.uses);
         if !had_markers && !self.markers.is_empty() {
             self.needs_fit = true;
@@ -157,7 +156,7 @@ impl MapView {
         cx.notify();
     }
 
-    /// Lieu sélectionné dans la liste : on le montre s'il sort de la vue.
+    /// Place selected in the list: show it if it is out of view.
     pub fn set_selected(&mut self, name: Option<String>, cx: &mut Context<Self>) {
         if self.selected == name {
             return;
@@ -179,7 +178,7 @@ impl MapView {
         f64::from(1u32 << self.zoom)
     }
 
-    /// Position dans la vue (pixels depuis le coin haut-gauche) d'un point « monde ».
+    /// Position in the view (pixels from the top left corner) of a “world” point.
     fn to_screen(&self, world: (f64, f64)) -> (f32, f32) {
         let s = self.scale();
         let w = f64::from(f32::from(self.bounds.size.width));
@@ -187,7 +186,7 @@ impl MapView {
         (((world.0 - self.center.0) * s + w / 2.) as f32, ((world.1 - self.center.1) * s + h / 2.) as f32)
     }
 
-    /// Point « monde » sous une position de la fenêtre.
+    /// “World” point under a window position.
     fn to_world(&self, pos: Point<Pixels>) -> (f64, f64) {
         let s = self.scale();
         let x = f64::from(f32::from(pos.x - self.bounds.origin.x) - f32::from(self.bounds.size.width) / 2.);
@@ -208,7 +207,7 @@ impl MapView {
         let anchor = around.map(|p| (p, self.to_world(p)));
         self.zoom = z;
         if let Some((p, world)) = anchor {
-            // Le point sous le curseur reste sous le curseur.
+            // The point under the cursor stays under the cursor.
             let after = self.to_world(p);
             self.center.0 += world.0 - after.0;
             self.center.1 += world.1 - after.1;
@@ -217,7 +216,7 @@ impl MapView {
         cx.notify();
     }
 
-    /// Cadre la vue sur tous les repères.
+    /// Fits the view to every marker.
     fn fit(&mut self) {
         let (w, h) = (f64::from(f32::from(self.bounds.size.width)), f64::from(f32::from(self.bounds.size.height)));
         if self.markers.is_empty() || w < 1. || h < 1. {
@@ -293,7 +292,7 @@ impl MapView {
         let (ty0, ty1) =
             (((top / TILE_SIZE).floor() as i64).max(0), ((top + h) / TILE_SIZE).floor().min(f64::from(n - 1)) as i64);
         let mut out = Vec::new();
-        // Du centre vers les bords : les tuiles du milieu se chargent d'abord.
+        // From the center to the edges: the tiles in the middle load first.
         let mut keys: Vec<(i64, i64)> = (ty0..=ty1).flat_map(|ty| (tx0..=tx1).map(move |tx| (tx, ty))).collect();
         let (cx0, cy0) = ((tx0 + tx1) as f64 / 2., (ty0 + ty1) as f64 / 2.);
         keys.sort_by(|a, b| {
@@ -360,7 +359,7 @@ impl MapView {
                     .into_any_element(),
             );
         }
-        // Le lieu sélectionné, au-dessus des autres et avec son nom.
+        // The selected place, above the others and with its name.
         if let Some((m, x, y)) = selected {
             out.push(
                 div()
@@ -406,7 +405,7 @@ impl MapView {
             .gap_1()
             .flex_wrap()
             .items_center()
-            // Les clics sur la barre ne déplacent pas la carte.
+            // Clicks on the bar do not move the map.
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .child(
                 pill()
@@ -503,7 +502,7 @@ impl Render for MapView {
                 MouseButton::Left,
                 cx.listener(|this, ev: &MouseDownEvent, _, cx| {
                     if this.picker {
-                        // Sélecteur : glisser déplace la carte, un simple clic pose l'épingle.
+                        // Picker: dragging moves the map, a simple click sets the pin.
                         this.press = Some(ev.position);
                         this.drag = Some(ev.position);
                     } else if this.placing {
@@ -595,7 +594,7 @@ impl Render for MapView {
     }
 }
 
-/// Une entrée du menu contextuel de la carte.
+/// An entry of the map's context menu.
 fn map_item(
     map: &WeakEntity<MapView>,
     label: impl Into<SharedString>,
@@ -610,7 +609,7 @@ fn map_item(
     })
 }
 
-/// Clic droit sur un repère. `at` : position du repère dans la carte.
+/// Right-click on a marker. `at`: position of the marker in the map.
 fn marker_menu(
     map: WeakEntity<MapView>,
     name: String,
@@ -631,7 +630,7 @@ fn marker_menu(
     }
 }
 
-/// Clic droit sur le fond de la carte.
+/// Right-click on the map background.
 fn background_menu(
     map: WeakEntity<MapView>,
 ) -> impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static {
@@ -662,7 +661,7 @@ fn background_menu(
     }
 }
 
-/// Dossier de cache des tuiles (`~/Library/Caches/GEDRoots/tiles`, `$XDG_CACHE_HOME/gedroots/tiles`…).
+/// Tile cache folder (`~/Library/Caches/GEDRoots/tiles`, `$XDG_CACHE_HOME/gedroots/tiles`…).
 fn tile_cache_dir() -> Option<PathBuf> {
     if let Some(d) = std::env::var_os("GEDROOTS_TILE_CACHE") {
         return Some(PathBuf::from(d));

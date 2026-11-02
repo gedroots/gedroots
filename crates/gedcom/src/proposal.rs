@@ -1,33 +1,31 @@
-//! Propositions d'un agent IA : un acte à relire avant d'être écrit.
+//! Proposals of an AI agent: a record to review before it is written.
 //!
-//! Un agent (connecté par le serveur MCP de l'app) ne modifie jamais l'arbre : il
-//! décrit un acte avec le même modèle que la saisie d'acte ([`Act`]), et la source
-//! qui le contient (existante, ou nouvelle avec son registre et son dépôt). Avant
-//! d'être montrée, une proposition est contrôlée ([`Proposal::check`]) : elle doit
-//! s'insérer dans la structure de l'arbre (dépôt → source → fichier → événement →
-//! personnes) et suivre les habitudes du fichier (une source par acte, ou par
-//! registre). Une proposition incohérente est refusée avec la raison, que l'agent lit
-//! pour la corriger.
+//! An agent (connected through the app's MCP server) never modifies the tree: it describes a record
+//! with the same model as record entry ([`Act`]), and the source that contains it (existing, or new
+//! with its register and repository). Before it is shown, a proposal is checked
+//! ([`Proposal::check`]): it must fit into the tree's structure (repository → source → file → event
+//! → people) and follow the file's habits (one source per record, or per register). An inconsistent
+//! proposal is rejected with the reason, which the agent reads to correct it.
 //!
-//! Pour la relecture, [`Proposal::compare`] met en regard ce que l'arbre contient et
-//! ce qui est proposé, et [`Proposal::diff`] donne les lignes GEDCOM exactes qui
-//! changeront, calculées sur une copie du fichier.
+//! For the review, [`Proposal::compare`] puts what the tree contains next to what is proposed, and
+//! [`Proposal::diff`] gives the exact GEDCOM lines that will change, computed on a copy of the
+//! file.
 
 use crate::act::{Act, ActResult, ActRole, PersonChoice, PersonField};
 use crate::document::{Gedcom, RecordKind};
 use crate::node::Node;
 use crate::parse::node_to_string;
 
-/// Nouvelle source, créée à l'enregistrement de la proposition.
+/// New source, created when the proposal is saved.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct NewSource {
-    /// Titre ; vide : titre automatique de l'acte (« Acte de naissance de… »).
+    /// Title; empty: automatic title of the record (“Birth record of…”).
     pub title: String,
-    /// Registre (`PUBL`) : « Rennes, naissances an X ».
+    /// Register (`PUBL`): “Rennes, births year X”.
     pub register: String,
-    /// Dépôt existant (`REPO`).
+    /// Existing repository (`REPO`).
     pub repository: Option<String>,
-    /// Cote dans le dépôt (`CALN`).
+    /// Call number in the repository (`CALN`).
     pub call_number: String,
 }
 
@@ -37,47 +35,47 @@ pub enum SourceChoice {
     New(NewSource),
 }
 
-/// Un acte proposé, avec sa source.
+/// A proposed record, with its source.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Proposal {
     pub source: SourceChoice,
-    /// L'acte ; sa source (`act.source`) est remplacée par celle créée si elle est nouvelle.
+    /// The record; its source (`act.source`) is replaced by the one created if it is new.
     pub act: Act,
-    /// Page web de l'acte (visionneuse des archives), gardée comme lien web de la source.
+    /// Web page of the record (the archives' viewer), kept as a web link of the source.
     pub url: String,
 }
 
-/// Ce qu'une ligne de la comparaison change.
+/// What a line of the comparison changes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Change {
-    /// Déjà dans l'arbre.
+    /// Already in the tree.
     Same,
-    /// Rien dans l'arbre : la valeur est ajoutée.
+    /// Nothing in the tree: the value is added.
     Added,
-    /// La valeur de l'arbre est précisée (date plus précise, compatible).
+    /// The tree's value is refined (more precise, compatible date).
     Refined,
-    /// La valeur proposée contredit celle de l'arbre.
+    /// The proposed value contradicts the tree's.
     Differs,
-    /// Personne créée.
+    /// Person created.
     Create,
-    /// Personne liée à un individu de l'arbre.
+    /// Person linked to an individual of the tree.
     Link,
-    /// Personne seulement mentionnée dans la citation.
+    /// Person only mentioned in the citation.
     Mention,
 }
 
-/// Champ d'une ligne de comparaison.
+/// Field of a comparison line.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Field {
-    /// Date de l'événement (valeurs GEDCOM).
+    /// Date of the event (GEDCOM values).
     Date,
-    /// Lieu de l'événement.
+    /// Place of the event.
     Place,
-    /// Personne de l'acte (indice dans `act.participants`) et son rôle affiché.
+    /// Person of the record (index in `act.participants`) and their displayed role.
     Person { index: usize, role: String },
 }
 
-/// Ligne « Dans l'arbre » / « Proposé ».
+/// “In the tree” / “Proposed” line.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Row {
     pub field: Field,
@@ -86,7 +84,7 @@ pub struct Row {
     pub change: Change,
 }
 
-/// Maillon du rattachement : existe déjà, ou sera créé.
+/// Link of the attachment chain: already exists, or will be created.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Link {
     pub value: String,
@@ -94,25 +92,25 @@ pub struct Link {
     pub created: bool,
 }
 
-/// Rattachement de la proposition dans l'arbre.
+/// Where the proposal attaches in the tree.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Chain {
     pub repository: Option<Link>,
     pub source: Option<Link>,
-    /// Sources du fichier tirées du même registre.
+    /// Sources of the file taken from the same register.
     pub same_register: usize,
 }
 
-/// Ligne du diff GEDCOM : `'+'` ajoutée, `'-'` retirée, `' '` inchangée.
+/// Line of the GEDCOM diff: `'+'` added, `'-'` removed, `' '` unchanged.
 pub type DiffLine = (char, String);
 
 impl Proposal {
-    /// Rattache la saisie de l'agent à l'arbre : un lieu nommé comme un lieu du fichier
-    /// (« Agneaux ») devient ce lieu, et les personnes liées prennent leur nom de l'arbre
-    /// (titres d'actes, noms de fichiers).
+    /// Attaches the agent's input to the tree: a place named like a place of the file (“Agneaux”)
+    /// becomes that place, and linked people take their name from the tree (record titles, file
+    /// names).
     pub fn complete(&mut self, ged: &Gedcom) {
         let act = &mut self.act;
-        // Dates en syntaxe GEDCOM 7 (`FRENCH_R 30 GERM 4`, pas `@#DFRENCH R@ 30 GERM 4`).
+        // Dates in GEDCOM 7 syntax (`FRENCH_R 30 GERM 4`, not `@#DFRENCH R@ 30 GERM 4`).
         for d in [&mut act.date, &mut act.record_date] {
             let parsed = crate::Date::parse(d);
             if !d.trim().is_empty() && parsed.year().is_some() {
@@ -143,8 +141,8 @@ impl Proposal {
         }
     }
 
-    /// Crée la source si elle est nouvelle et rend l'acte qui la désigne (pour le
-    /// reprendre dans la saisie d'acte).
+    /// Creates the source if it is new and returns the record pointing to it (to pick it up in
+    /// record entry).
     pub fn materialize(&self, ged: &mut Gedcom) -> Result<Act, String> {
         let mut act = self.act.clone();
         match &self.source {
@@ -173,8 +171,8 @@ impl Proposal {
         Ok(act)
     }
 
-    /// Lien web vers la page de l'acte, comme le reste de l'app : média `FILE <url>`
-    /// (`FORM text/html`) lié à la source, là où va aussi l'image de l'acte.
+    /// Web link to the record's page, like the rest of the app: media `FILE <url>` (`FORM
+    /// text/html`) linked to the source, where the record's image goes too.
     fn link_page(&self, ged: &mut Gedcom, act: &Act) -> Result<(), String> {
         if self.url.trim().is_empty() {
             return Ok(());
@@ -189,7 +187,7 @@ impl Proposal {
         ged.add_web_link(&act.source, &url, &title)
     }
 
-    /// Écrit la proposition dans l'arbre (source si nouvelle, puis l'acte).
+    /// Writes the proposal into the tree (source if new, then the record).
     pub fn apply(&self, ged: &mut Gedcom) -> Result<ActResult, String> {
         let mut copy = ged.clone();
         let act = self.materialize(&mut copy)?;
@@ -210,7 +208,7 @@ impl Proposal {
         Ok(res)
     }
 
-    /// La proposition s'insère-t-elle dans l'arbre ? L'erreur dit quoi corriger.
+    /// Does the proposal fit into the tree? The error says what to correct.
     pub fn check(&self, ged: &Gedcom, this_year: i32) -> Result<(), String> {
         self.check_source(ged)?;
         self.check_people(ged, this_year)?;
@@ -223,7 +221,8 @@ impl Proposal {
                 if ged.get(x).is_none_or(|n| n.tag != "SOUR") {
                     return Err(format!("no source with id {x}"));
                 }
-                // Source d'un seul acte (sans référence) : le fichier range un acte par source.
+                // Source of a single record (without a reference): the file keeps one record per
+                // source.
                 let acts = ged.acts(x);
                 if self.act.original.is_none() && acts.len() == 1 && acts[0].page.trim().is_empty() {
                     let s = crate::model::Source::new(ged.get(x).unwrap());
@@ -243,7 +242,7 @@ impl Proposal {
                 if s.register.trim().is_empty() && s.title.trim().is_empty() {
                     return Err("give the new source's register (e.g. \"Rennes, births 1802\")".into());
                 }
-                // Registre déjà décrit par une source qui rassemble plusieurs actes.
+                // Register already described by a source that gathers several records.
                 if let Some(x) = ged.register_sources(&s.register).into_iter().find(|x| ged.acts(x).len() > 1) {
                     return Err(format!(
                         "this file keeps one source per register: use source {x} with the act's reference as page"
@@ -266,7 +265,7 @@ impl Proposal {
                 }
             }
         }
-        // Parents : ceux de l'arbre ne sont pas remplacés en silence.
+        // Parents: those of the tree are not replaced silently.
         for (i, p) in act.participants.iter().enumerate() {
             if !matches!(p.role, ActRole::Father | ActRole::Mother) || p.choice == PersonChoice::Mention || p.is_blank()
             {
@@ -288,7 +287,7 @@ impl Proposal {
         Ok(())
     }
 
-    /// Individu lié comme `nth`-ième personne principale.
+    /// Individual linked as the `nth` principal person.
     fn linked_principal(&self, nth: usize) -> Option<String> {
         self.act.participants.iter().enumerate().find_map(|(i, p)| match &p.choice {
             PersonChoice::Link(x) if p.role == ActRole::Principal && self.act.nth_principal(i) == nth => {
@@ -298,7 +297,7 @@ impl Proposal {
         })
     }
 
-    /// Événement de l'arbre que l'acte complète (sur la personne principale liée).
+    /// Event of the tree that the record completes (on the linked principal person).
     fn current_event(&self, ged: &Gedcom) -> Option<(String, String)> {
         let x = self.linked_principal(0)?;
         let node = if self.act.is_family() {
@@ -316,7 +315,7 @@ impl Proposal {
         Some((ev.child_val("DATE").unwrap_or("").to_string(), ev.child_val("PLAC").unwrap_or("").to_string()))
     }
 
-    /// Lignes « Dans l'arbre » / « Proposé ».
+    /// “In the tree” / “Proposed” lines.
     pub fn compare(&self, ged: &Gedcom) -> Vec<Row> {
         let act = &self.act;
         let (cur_date, cur_place) = self.current_event(ged).unwrap_or_default();
@@ -337,7 +336,7 @@ impl Proposal {
             if p.is_blank() && p.choice == PersonChoice::Create {
                 continue;
             }
-            // Dans l'arbre : la personne liée elle-même, ou le parent déjà connu.
+            // In the tree: the linked person themselves, or the parent already known.
             let current = match (&p.choice, p.role) {
                 (_, ActRole::Father | ActRole::Mother) => self.linked_principal(p.of).and_then(|c| {
                     let (f, m) = ged.parents(&c);
@@ -367,7 +366,7 @@ impl Proposal {
         rows
     }
 
-    /// Rattachement : dépôt et source.
+    /// Attachment: repository and source.
     pub fn chain(&self, ged: &Gedcom) -> Chain {
         let mut chain = Chain::default();
         let repo_link = |x: &str, created: bool, caln: &str| {
@@ -398,7 +397,7 @@ impl Proposal {
         chain
     }
 
-    /// Lignes GEDCOM qui changeront, enregistrement par enregistrement.
+    /// GEDCOM lines that will change, record by record.
     pub fn diff(&self, ged: &Gedcom) -> Result<Vec<DiffLine>, String> {
         let mut copy = ged.clone();
         let res = self.apply(&mut copy)?;
@@ -443,22 +442,22 @@ fn text_change(current: &str, proposed: &str) -> Change {
     }
 }
 
-/// Date proposée face à celle de l'arbre : identique, plus précise (comprise dans
-/// l'intervalle de celle de l'arbre, ou proche d'une date approchée) ou contraire.
+/// Proposed date against the tree's: identical, more precise (within the interval of the tree's, or
+/// close to an approximate date) or contrary.
 fn date_change(current: &str, proposed: &str) -> Change {
     let (c, p) = (current.trim(), proposed.trim());
     if c.is_empty() {
         return Change::Added;
     }
     let (dc, dp) = (crate::Date::parse(c), crate::Date::parse(p));
-    // Même date, écrite autrement (`FRENCH_R` / `@#DFRENCH R@`, casse).
+    // Same date, written differently (`FRENCH_R` / `@#DFRENCH R@`, case).
     if p.is_empty() || c.eq_ignore_ascii_case(p) || dc.to_gedcom() == dp.to_gedcom() {
         return Change::Same;
     }
     match (dc.rd_range_any(), dp.rd_range_any()) {
         (Some((c0, c1)), Some((p0, p1))) if p0 >= c0 && p1 <= c1 => Change::Refined,
         _ => match (dc.year(), dp.year()) {
-            // « vers 1802 », « 1802 » : une date du même ordre la précise.
+            // “about 1802”, “1802”: a date of the same order refines it.
             (Some(a), Some(b)) if dc.kind().is_some() && (a - b).abs() <= 2 => Change::Refined,
             _ => Change::Differs,
         },
@@ -466,15 +465,15 @@ fn date_change(current: &str, proposed: &str) -> Change {
 }
 
 impl crate::Date {
-    /// Intervalle (jours) couvert par la date simple principale.
+    /// Interval (days) covered by the main simple date.
     fn rd_range_any(&self) -> Option<(i64, i64)> {
         self.primary()?.rd_range()
     }
 }
 
 impl Gedcom {
-    /// Lieu du fichier désigné par `typed` : son libellé complet, ou sa commune s'il
-    /// n'y en a qu'un de ce nom. Sinon, la saisie telle quelle.
+    /// Place of the file designated by `typed`: its full label, or its municipality if there is
+    /// only one with this name. Otherwise, the input as is.
     pub fn known_place(&self, typed: &str) -> String {
         let value = self.place_value(typed, &[]);
         let t = norm(typed);
@@ -494,7 +493,7 @@ impl Gedcom {
         }
     }
 
-    /// Sources dont le registre (`PUBL`) est celui-ci.
+    /// Sources whose register (`PUBL`) is this one.
     pub fn register_sources(&self, register: &str) -> Vec<String> {
         let r = norm(register);
         if r.is_empty() {
@@ -507,7 +506,7 @@ impl Gedcom {
     }
 }
 
-/// Diff ligne à ligne (plus longue sous-suite commune ; les enregistrements sont courts).
+/// Line by line diff (longest common subsequence; records are short).
 fn line_diff(before: &str, after: &str) -> Vec<DiffLine> {
     let a: Vec<&str> = before.lines().collect();
     let b: Vec<&str> = after.lines().collect();
@@ -604,34 +603,34 @@ mod tests {
         let diff = p.diff(&g).unwrap();
         assert!(diff.iter().any(|(c, l)| *c == '+' && l.contains("PUBL Rennes, naissances an X")));
         assert!(diff.iter().any(|(c, l)| *c == '+' && l.contains("CALN 10 NUM 35238")));
-        // Date de l'arbre remplacée : l'ancienne ligne retirée.
+        // Date of the tree replaced: the old line removed.
         assert!(diff.iter().any(|(c, l)| *c == '-' && l.contains("DATE ABT 1802")), "{diff:?}");
 
         let mut g2 = g.clone();
         let res = p.apply(&mut g2).unwrap();
         let src = g2.get(&res.source).unwrap();
         assert_eq!(src.child_val("PUBL"), Some("Rennes, naissances an X"));
-        // Rien n'est écrit dans l'original.
+        // Nothing is written to the original.
         assert_eq!(g.count(RecordKind::Source), 1);
     }
 
     #[test]
     fn incoherent_proposals_are_refused_with_reason() {
         let g = ged();
-        // Source d'un seul acte : le fichier range un acte par source.
+        // Source of a single record: the file keeps one record per source.
         let e = birth(SourceChoice::Existing("S1".into())).check(&g, 2026).unwrap_err();
         assert!(e.contains("one source per act"), "{e}");
-        // Dépôt inconnu.
+        // Unknown repository.
         let mut s = NewSource { register: "X".into(), repository: Some("R9".into()), ..Default::default() };
         let e = birth(SourceChoice::New(s.clone())).check(&g, 2026).unwrap_err();
         assert!(e.contains("no repository"), "{e}");
         s.repository = None;
-        // Un autre père que celui de l'arbre.
+        // Another father than the tree's.
         let mut p = birth(SourceChoice::New(s));
         p.act.participants[1] = Participant::new(ActRole::Father).with(PersonField::Given, "Paul");
         let e = p.check(&g, 2026).unwrap_err();
         assert!(e.contains("Pierre BLANC"), "{e}");
-        // Date impossible (contrôle de la saisie d'acte).
+        // Impossible date (record entry check).
         let mut p = birth(new_source());
         p.act.date = "31 FEB 1802".into();
         assert!(p.check(&g, 2026).is_err());

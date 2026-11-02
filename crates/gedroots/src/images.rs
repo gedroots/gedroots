@@ -1,12 +1,11 @@
-//! Images à l'écran : décodées à leur taille d'affichage, gardées dans un cache borné.
+//! Images on screen: decoded at their display size, kept in a bounded cache.
 //!
-//! `img(chemin)` de GPUI décode le fichier en pleine résolution et le garde jusqu'à
-//! la fermeture de l'app, en mémoire et en texture GPU : un scan d'acte de
-//! 4000 × 3000 pèse 48 Mo, deux fois. Ici, l'image est réduite au palier juste
-//! au-dessus de sa taille à l'écran, et au-delà de [`BUDGET`] les images les moins
-//! récemment affichées sont libérées (mémoire et texture).
+//! GPUI's `img(path)` decodes the file at full resolution and keeps it until the app closes, in
+//! memory and as a GPU texture: a 4000 × 3000 record scan weighs 48 MB, twice. Here, the image is
+//! reduced to the step just above its size on screen, and beyond [`BUDGET`] the least recently
+//! displayed images are released (memory and texture).
 //!
-//! `GEDROOTS_DEBUG_IMAGES=1` affiche l'état du cache sur la sortie d'erreur.
+//! `GEDROOTS_DEBUG_IMAGES=1` prints the state of the cache to standard error.
 
 use gedcom::Rect;
 use gpui_kit::*;
@@ -15,20 +14,19 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Condvar, Mutex};
 
-/// Pixels décodés gardés au plus (hors images affichées dans la dernière image rendue).
+/// Decoded pixels kept at most (excluding images displayed in the last rendered frame).
 const BUDGET: usize = 64 << 20;
-/// Plus petit palier, en pixels sur le grand côté.
+/// Smallest step, in pixels on the long side.
 const MIN_SIDE: f32 = 256.;
 
-/// L'image `path`, affichée en entier dans une boîte `w × h` (pixels logiques)
-/// selon `fit`. Pour un recadrage, la boîte est la taille de l'image entière à l'écran.
+/// Image `path`, displayed whole in a `w × h` box (logical pixels) according to `fit`. For a crop,
+/// the box is the size of the whole image on screen.
 pub fn picture(path: PathBuf, w: f32, h: f32, fit: ObjectFit) -> Img {
     region(path, None, w, h, fit)
 }
 
-/// La zone `rect` (pixels de l'image orientée) de l'image `path`, décodée seule :
-/// l'élément n'est que cette zone, il se cadre et s'arrondit comme une image entière
-/// (un portrait recadré reste ainsi un disque).
+/// Area `rect` (pixels of the oriented image) of image `path`, decoded alone: the element is only
+/// this area, it is fitted and rounded like a whole image (a cropped portrait thus stays a disc).
 pub fn picture_region(path: PathBuf, rect: Rect, w: f32, h: f32, fit: ObjectFit) -> Img {
     region(path, Some(rect), w, h, fit)
 }
@@ -42,8 +40,8 @@ thread_local! {
     static SIZES: RefCell<HashMap<PathBuf, Option<(u32, u32)>>> = RefCell::new(HashMap::new());
 }
 
-/// Dimensions de l'image telle qu'affichée (orientation EXIF appliquée),
-/// lues dans l'en-tête du fichier et mises en cache.
+/// Dimensions of the image as displayed (EXIF orientation applied), read from the file header and
+/// cached.
 pub fn image_size(path: &Path) -> Option<(u32, u32)> {
     if let Some(s) = SIZES.with(|c| c.borrow().get(path).copied()) {
         return s;
@@ -66,9 +64,9 @@ pub fn image_size(path: &Path) -> Option<(u32, u32)> {
     s
 }
 
-/// Grand côté à décoder pour une image `natural` affichée dans `bx` (en entier si
-/// `contain`, sinon en la remplissant), à l'échelle d'écran `scale` ; `0` : pleine résolution. Paliers de √2 à partir de 256 px :
-/// au pire deux fois trop de pixels, et peu de variantes d'une même image.
+/// Long side to decode for a `natural` image displayed in `bx` (whole if `contain`, otherwise
+/// filling it), at screen scale `scale`; `0`: full resolution. Steps of √2 from 256 px: at worst
+/// twice too many pixels, and few variants of the same image.
 fn side_for(natural: (u32, u32), bx: (f32, f32), contain: bool, scale: f32) -> u32 {
     let (nw, nh) = (natural.0.max(1) as f32, natural.1.max(1) as f32);
     let (fx, fy) = (bx.0 / nw, bx.1 / nh);
@@ -116,7 +114,7 @@ fn load(
     Some(res)
 }
 
-/// Images décodées par [`Scaled`], avec la dernière image rendue où elles figuraient.
+/// Images decoded by [`Scaled`], with the last rendered frame they appeared in.
 #[derive(Default)]
 struct Cache {
     entries: HashMap<Key, Entry>,
@@ -133,8 +131,8 @@ struct Entry {
     last: u64,
 }
 
-/// Après le rendu : au-delà du budget, libère les images les plus anciennement
-/// affichées. Celles de l'image qui vient d'être rendue ne sont jamais libérées.
+/// After rendering: beyond the budget, releases the images displayed longest ago. Those of the
+/// frame just rendered are never released.
 fn end_frame(window: &mut Window, cx: &mut App) {
     let cache = cx.default_global::<Cache>();
     let mut evicted = Vec::new();
@@ -162,14 +160,14 @@ fn end_frame(window: &mut Window, cx: &mut App) {
     }
 }
 
-/// Chargement en tâche de fond : décodage puis réduction au palier demandé.
+/// Background loading: decoding, then reduction to the requested step.
 enum Scaled {}
 
 impl Asset for Scaled {
     type Source = Key;
     type Output = Result<Arc<RenderImage>, ImageCacheError>;
 
-    // Pas d'`async fn` : le futur ne doit pas emprunter `App`.
+    // No `async fn`: the future must not borrow `App`.
     #[allow(clippy::manual_async_fn)]
     fn load(source: Self::Source, _: &mut App) -> impl Future<Output = Self::Output> + Send + 'static {
         async move {
@@ -183,9 +181,9 @@ impl Asset for Scaled {
     }
 }
 
-/// Décodages simultanés au plus : chacun passe par l'image entière (48 Mo pour un
-/// scan de 4000 × 3000) avant réduction, et macOS garde un moment la mémoire libérée.
-/// Un à la fois, ce pic reste celui d'une seule image.
+/// Simultaneous decodes at most: each goes through the whole image (48 MB for a 4000 × 3000 scan)
+/// before reduction, and macOS holds on to released memory for a while. One at a time, the peak
+/// stays that of a single image.
 const PARALLEL: usize = 1;
 static DECODING: (Mutex<usize>, Condvar) = (Mutex::new(0), Condvar::new());
 
@@ -198,15 +196,15 @@ fn decode(path: &Path, rect: Option<Rect>, side: u32) -> Result<RenderImage, Ima
     res
 }
 
-/// Décode comme GPUI (orientation EXIF, BGRA), ne garde que `rect` s'il est donné,
-/// puis réduit à `side` px sur le grand côté.
+/// Decodes like GPUI (EXIF orientation, BGRA), keeps only `rect` if given, then reduces to `side`
+/// px on the long side.
 fn decode_now(path: &Path, rect: Option<Rect>, side: u32) -> Result<RenderImage, ImageCacheError> {
     use image::ImageDecoder;
     let mut decoder = image::ImageReader::open(path)?.with_guessed_format()?.into_decoder()?;
     let orientation = decoder.orientation()?;
     let mut image = image::DynamicImage::from_decoder(decoder)?;
     if let Some((x, y, w, h)) = rect {
-        // Le rectangle est donné sur l'image orientée.
+        // The rectangle is given on the oriented image.
         image.apply_orientation(orientation);
         image = image.crop_imm(x, y, w.max(1), h.max(1));
         if side > 0 && image.width().max(image.height()) > side {
@@ -230,20 +228,20 @@ mod tests {
     use super::{decode, side_for};
 
     #[test]
-    fn paliers() {
-        // Vignette de 96 px sur écran Retina : 192 px utiles, premier palier.
+    fn steps() {
+        // 96 px thumbnail on a Retina screen: 192 px needed, first step.
         assert_eq!(side_for((4000, 3000), (96., 96.), false, 2.), 256);
-        // Fiche d'un média : 1600 px logiques × 2 dépasse la taille réelle.
+        // Media page: 1600 logical px × 2 exceeds the real size.
         assert_eq!(side_for((4000, 3000), (1600., 1200.), false, 2.), 0);
-        // Contain : c'est la contrainte la plus forte qui compte.
+        // Contain: the strongest constraint is the one that counts.
         assert_eq!(side_for((4000, 1000), (400., 400.), true, 1.), 512);
         assert_eq!(side_for((4000, 1000), (400., 400.), false, 1.), 2048);
-        // Petite image (tuile de carte) : toujours en entier.
+        // Small image (map tile): always whole.
         assert_eq!(side_for((256, 256), (256., 256.), false, 2.), 0);
     }
 
     #[test]
-    fn reduction_et_orientation() {
+    fn downscaling_and_orientation() {
         let dir = std::env::temp_dir().join(format!("gedroots-images-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("large.png");
@@ -254,7 +252,7 @@ mod tests {
         assert_eq!(&small.as_bytes(0).unwrap()[..4], &[30, 20, 10, 255]);
         let full = decode(&path, None, 0).unwrap();
         assert_eq!((full.size(0).width.0, full.size(0).height.0), (1200, 600));
-        // Zone seule (visage d'un portrait recadré), puis réduite.
+        // Area alone (face of a cropped portrait), then reduced.
         let face = decode(&path, Some((100, 50, 400, 200)), 0).unwrap();
         assert_eq!((face.size(0).width.0, face.size(0).height.0), (400, 200));
         let face = decode(&path, Some((100, 50, 400, 200)), 256).unwrap();

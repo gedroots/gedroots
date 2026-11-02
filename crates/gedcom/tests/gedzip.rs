@@ -50,7 +50,7 @@ fn local_files_get_archive_names() {
             ("C:\\Généalogie\\Recensement 1906 #3.png", "media/Recensement 1906 #3.png"),
         ]
     );
-    // Un fichier cité par deux médias n'est mis qu'une fois.
+    // A file referenced by two media is only added once.
     assert_eq!(
         p.files[0],
         PackedFile {
@@ -69,10 +69,10 @@ fn file_values_are_rewritten_as_urls() {
     assert_eq!(file_of(&p.ged, "O2"), ["media/portrait.jpg"]);
     assert_eq!(file_of(&p.ged, "O4"), ["media/portrait%20(2).jpg"]);
     assert_eq!(file_of(&p.ged, "O7"), ["media/Recensement%201906%20%233.png"]);
-    // Les liens web ne bougent pas, ni le fichier d'origine.
+    // Web links do not move, nor does the original file.
     assert_eq!(file_of(&p.ged, "O5"), ["https://www.archives43.fr/ark:1/x"]);
     assert_eq!(file_of(&g, "O1"), ["Actes/naissance Jean.jpg", "./Actes\\page 2.jpg"]);
-    // La copie se relit.
+    // The copy reads back.
     let again = Gedcom::parse(&p.ged.to_gedcom_string()).unwrap();
     assert_eq!(file_of(&again, "O2"), ["media/portrait.jpg"]);
 }
@@ -98,7 +98,7 @@ fn missing_files_keep_their_value() {
             MissingFile { original: "file:///Users/moi/Autres/portrait.jpg".into(), media: vec!["O4".into()] },
         ]
     );
-    // Pas d'entrée dans l'archive, et le chemin d'origine n'est pas perdu.
+    // No entry in the archive, and the original path is not lost.
     assert!(!p.files.iter().any(|f| f.original.contains("portrait")));
     assert_eq!(file_of(&p.ged, "O2"), ["/Users/moi/Photos/portrait.jpg"]);
     assert_eq!(file_of(&p.ged, "O4"), ["file:///Users/moi/Autres/portrait.jpg"]);

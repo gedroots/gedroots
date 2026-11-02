@@ -1,6 +1,5 @@
-//! Prompts MCP de GEDRoots : les méthodes de travail de l'agent, servies par l'app
-//! (Claude Code les montre comme commandes `/mcp__gedroots__find_record`…). Le texte est
-//! dans `prompts/*.md`.
+//! GEDRoots' MCP prompts: the agent's working methods, served by the app (Claude Code shows them as
+//! `/mcp__gedroots__find_record`… commands). The text is in `prompts/*.md`.
 
 use super::tools::GedrootsMcp;
 use rmcp::handler::server::wrapper::Parameters;

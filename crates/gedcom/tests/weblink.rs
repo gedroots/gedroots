@@ -33,11 +33,11 @@ fn add_edit_remove_a_web_link() {
     g.add_web_link("I1", "geneanet.org/fiche/jean", "Fiche Geneanet").unwrap();
     let links = g.web_links("I1");
     assert_eq!(links.len(), 1);
-    let WebLinkKind::Media(m) = links[0].kind.clone() else { panic!("lien multimédia attendu") };
+    let WebLinkKind::Media(m) = links[0].kind.clone() else { panic!("multimedia link expected") };
     assert_eq!(links[0].url, "https://geneanet.org/fiche/jean");
     assert_eq!(links[0].label(), "Fiche Geneanet");
 
-    // Écrit en GEDCOM 7 standard : lien OBJE vers un média dont le FILE est l'URL.
+    // Written in standard GEDCOM 7: OBJE link to a media whose FILE is the URL.
     let text = g.to_gedcom_string();
     assert!(text.contains(&format!("1 OBJE @{m}@\n")));
     assert!(text.contains(&format!(
@@ -51,7 +51,7 @@ fn add_edit_remove_a_web_link() {
     let l = &g.web_links("I1")[0];
     assert_eq!((l.url.as_str(), l.label()), ("https://geneanet.org/fiche/jean2", "geneanet.org".to_string()));
 
-    // Retirer le lien supprime le média web devenu orphelin.
+    // Removing the link deletes the web media left orphaned.
     g.remove_web_link("I1", &l.kind.clone());
     assert!(g.web_links("I1").is_empty());
     assert!(g.get(&m).is_none());
@@ -81,19 +81,19 @@ fn migrate_legacy_url_tags() {
 
     let text = g.to_gedcom_string();
     assert!(!text.contains("_URL"), "{text}");
-    // Même URL sur deux sources : un seul média, lié deux fois, titré comme la première source.
+    // Same URL on two sources: a single media, linked twice, titled like the first source.
     let s1 = g.web_links("S1");
     let s2 = g.web_links("S2");
     assert_eq!(s1.len(), 1);
     assert_eq!(s1[0].kind, s2[0].kind);
     assert_eq!(s1[0].label(), "Mariage Guyot × Martin");
-    // Le lien prend la place du `_URL` (avant CREA).
+    // The link takes the place of the `_URL` (before CREA).
     assert!(text.contains("1 TITL Mariage Guyot × Martin\n1 OBJE @M"), "{text}");
-    // `_URL` sous un événement : lien multimédia de l'événement (permis par GEDCOM 7).
+    // `_URL` under an event: multimedia link of the event (allowed by GEDCOM 7).
     assert!(text.contains("1 BIRT\n2 DATE 1850\n2 OBJE @M"), "{text}");
-    // Dépôt : pas de lien multimédia permis, l'adresse devient un `WWW` complété.
+    // Repository: no multimedia link allowed, the address becomes a completed `WWW`.
     assert!(text.contains("1 NAME Archives\n1 WWW https://archives.example.fr\n"), "{text}");
-    // Relu sans perte.
+    // Read back without loss.
     let again = Gedcom::parse(&text).unwrap();
     assert_eq!(again.to_gedcom_string(), text);
 }

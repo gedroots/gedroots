@@ -222,3 +222,6 @@ act.reason.parent_of:
 act.reason.child_of:
   en: "child of %{name}"
   fr: "enfant de %{name}"
+act.suggestion.born:
+  en: "born %{date}"
+  fr: "né(e) %{date}"

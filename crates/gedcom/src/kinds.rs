@@ -1,13 +1,12 @@
-//! Types des sources et des médias, en GEDCOM 7 standard.
+//! Types of sources and media, in standard GEDCOM 7.
 //!
-//! - **Contenu d'une source** : `SOUR` / `DATA` / `EVEN <types>` (+ `DATE` période,
-//!   `PLAC`), « ce registre contient des naissances et des décès, de 1793 à 1802 ».
-//!   La saisie d'un acte le complète toute seule ([`record_in_source`]).
-//! - **Support d'un média** : `OBJE` / `FILE` / `FORM` / `MEDI` (`PHOTO`,
-//!   `MANUSCRIPT`…), une liste fermée définie par la norme.
-//! - **Portrait** d'un individu : son premier lien vers une photo (voir
-//!   [`Gedcom::set_portrait`]) ; `_PRIM Y` des autres logiciels est converti à
-//!   l'import ([`Gedcom::migrate_prim_tags`]).
+//! - **Contents of a source**: `SOUR` / `DATA` / `EVEN <types>` (+ `DATE` period, `PLAC`), “this
+//!   register contains births and deaths, from 1793 to 1802”. Entering a record completes it on its
+//!   own ([`record_in_source`]).
+//! - **Medium of a media**: `OBJE` / `FILE` / `FORM` / `MEDI` (`PHOTO`, `MANUSCRIPT`…), a closed
+//!   list defined by the standard.
+//! - **Portrait** of an individual: their first link to a photo (see [`Gedcom::set_portrait`]);
+//!   other software's `_PRIM Y` is converted on import ([`Gedcom::migrate_prim_tags`]).
 
 use crate::date::Date;
 use crate::document::Gedcom;
@@ -61,13 +60,13 @@ pub fn mediums() -> Vec<(&'static str, Cow<'static, str>)> {
     MEDIUMS.iter().filter_map(|m| Some((*m, medium_label(m)?))).collect()
 }
 
-/// Support d'un média (`MEDI` de son premier fichier).
+/// Medium of a media (`MEDI` of its first file).
 pub fn medium(media: &Node) -> Option<&str> {
     media.children_with("FILE").find_map(|f| f.child("FORM").and_then(|f| f.child_val("MEDI")))
 }
 
-/// Définit (ou retire si vide) le support de tous les fichiers du média.
-/// `FORM` est obligatoire au-dessus de `MEDI` : déduit du fichier s'il manque.
+/// Sets (or removes if empty) the medium of every file of the media. `FORM` is required above
+/// `MEDI`: inferred from the file if missing.
 pub fn set_medium(media: &mut Node, medi: &str) {
     let medi = medi.trim();
     for f in media.children.iter_mut().filter(|c| c.tag == "FILE") {
@@ -81,7 +80,7 @@ pub fn set_medium(media: &mut Node, medi: &str) {
         let form = f.child_mut("FORM").unwrap();
         form.set_child_val("MEDI", medi);
         if medi != "OTHER" {
-            // PHRASE ne précise que « Autre ».
+            // PHRASE only details “Other”.
             if let Some(m) = form.child_mut("MEDI") {
                 m.children.retain(|c| c.tag != "PHRASE");
             }
@@ -89,7 +88,7 @@ pub fn set_medium(media: &mut Node, medi: &str) {
     }
 }
 
-/// Types d'événements que la norme permet sous `SOUR` / `DATA` / `EVEN`.
+/// Event types the standard allows under `SOUR` / `DATA` / `EVEN`.
 fn data_event_tags() -> &'static [&'static str] {
     const FALLBACK: &[&str] = &[];
     crate::schema::record("SOUR")
@@ -102,12 +101,12 @@ fn data_event_tags() -> &'static [&'static str] {
         .unwrap_or(FALLBACK)
 }
 
-/// Ce qu'une source contient : types d'actes, période et lieu (`DATA` / `EVEN`).
+/// What a source contains: record types, period and place (`DATA` / `EVEN`).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SourceContent {
-    /// Balises (`BIRT`, `DEAT`…), sans doublon, dans l'ordre du fichier.
+    /// Tags (`BIRT`, `DEAT`…), without duplicates, in file order.
     pub events: Vec<String>,
-    /// Période (`DATE` GEDCOM brut, ex. `FROM 1793 TO 1802`).
+    /// Period (raw GEDCOM `DATE`, e.g. `FROM 1793 TO 1802`).
     pub period: String,
     pub place: String,
 }
@@ -135,7 +134,7 @@ impl SourceContent {
         self.events.is_empty() && self.period.trim().is_empty() && self.place.trim().is_empty()
     }
 
-    /// Réécrit `DATA` / `EVEN` (une seule ligne). Laisse `DATA` / `AGNC` et les notes.
+    /// Rewrites `DATA` / `EVEN` (a single line). Leaves `DATA` / `AGNC` and the notes.
     pub fn apply(&self, source: &mut Node) {
         if let Some(d) = source.child_mut("DATA") {
             d.children.retain(|c| c.tag != "EVEN");
@@ -157,7 +156,7 @@ impl SourceContent {
         }
     }
 
-    /// Types d'actes en français : « Naissance, décès ».
+    /// Record types in words: “Birth, death”.
     pub fn events_label(&self) -> String {
         let labels: Vec<String> = self.events.iter().map(|t| crate::model::event_name(t)).collect();
         let s = labels.join(", ");
@@ -168,7 +167,7 @@ impl SourceContent {
         }
     }
 
-    /// Résumé d'une ligne : « Naissance, décès · de 1793 à 1802 ».
+    /// One-line summary: “Birth, death · from 1793 to 1802”.
     pub fn summary(&self) -> String {
         let mut parts = vec![];
         if !self.events.is_empty() {
@@ -188,8 +187,8 @@ fn split_list(v: &str) -> Vec<String> {
     v.split(',').map(|s| s.trim().to_uppercase()).filter(|s| !s.is_empty()).collect()
 }
 
-/// Lit une liste de types d'actes saisie en français ou en anglais (« naissances, décès »,
-/// “births, deaths”, « BIRT, DEAT »). Renvoie l'élément non compris en cas d'erreur.
+/// Reads a list of record types typed in French or in English (“naissances, décès”, “births,
+/// deaths”, “BIRT, DEAT”). Returns the item not understood on error.
 pub fn parse_event_list(text: &str) -> Result<Vec<String>, String> {
     let allowed = data_event_tags();
     let mut out: Vec<String> = Vec::new();
@@ -204,7 +203,7 @@ pub fn parse_event_list(text: &str) -> Result<Vec<String>, String> {
                 .iter()
                 .find_map(|p| k.strip_prefix(p))
                 .unwrap_or(k);
-            // « Baptême » désigne BAPM dans les modèles d'actes (CHR vient avant dans la liste).
+            // “Baptême” means BAPM in record templates (CHR comes before in the list).
             if matches!(k, "bapteme" | "baptism") {
                 Some("BAPM".to_string())
             } else {
@@ -225,16 +224,16 @@ pub fn parse_event_list(text: &str) -> Result<Vec<String>, String> {
     Ok(out)
 }
 
-/// Années grégoriennes couvertes par une date (`None` si elle n'en a pas).
+/// Gregorian years covered by a date (`None` if it has none).
 fn year_bounds(raw: &str) -> Option<(i32, i32)> {
     let d = Date::parse(raw);
     let years: Vec<i32> = d.dates().iter().filter_map(|s| s.gregorian_year()).collect();
     Some((*years.iter().min()?, *years.iter().max()?))
 }
 
-/// Saisie d'un acte de type `tag` daté `date` (GEDCOM brut, peut être vide) :
-/// ajoute le type au contenu de la source et élargit sa période à l'année de
-/// l'acte. Renvoie `true` si la source a changé.
+/// Entering a record of type `tag` dated `date` (raw GEDCOM, can be empty): adds the type to the
+/// source's contents and widens its period to the record's year. Returns `true` if the source
+/// changed.
 pub fn record_in_source(source: &mut Node, tag: &str, date: &str) -> bool {
     if !data_event_tags().contains(&tag) {
         return false;
@@ -274,8 +273,8 @@ pub fn record_in_source(source: &mut Node, tag: &str, date: &str) -> bool {
     changed
 }
 
-/// Années hors de la période déclarée par la source pour ce type d'acte :
-/// `Some((période, date))` quand la date est certainement en dehors.
+/// Years outside the period declared by the source for this record type: `Some((period, date))`
+/// when the date is certainly outside.
 pub fn outside_period<'a>(source: &'a Node, tag: &str, date: &str) -> Option<&'a str> {
     use crate::analysis::span::Span;
     let ev = source
@@ -288,14 +287,14 @@ pub fn outside_period<'a>(source: &'a Node, tag: &str, date: &str) -> Option<&'a
     (at.surely_before(&period) || period.surely_before(&at)).then_some(period_raw)
 }
 
-/// Balise des autres logiciels (Family Tree Maker, Legacy, MyHeritage…) qui
-/// désigne la photo principale d'un individu.
+/// Tag of other software (Family Tree Maker, Legacy, MyHeritage…) that designates an individual's
+/// main photo.
 pub const PRIM_TAG: &str = "_PRIM";
 
 impl Gedcom {
-    /// Fait de ce média le portrait de l'individu : son lien passe en tête des
-    /// médias de l'individu (le lien est créé s'il n'existait pas) et le média,
-    /// s'il n'a pas de support, devient une photo. Renvoie `false` si rien n'a changé.
+    /// Makes this media the individual's portrait: its link moves to the top of the individual's
+    /// media (the link is created if it did not exist) and the media, if it has no medium, becomes
+    /// a photo. Returns `false` if nothing changed.
     pub fn set_portrait(&mut self, indi: &str, media: &str) -> bool {
         if self.get(media).is_none_or(|m| m.tag != "OBJE") {
             return false;
@@ -333,7 +332,7 @@ impl Gedcom {
         changed
     }
 
-    /// Nombre de liens `_PRIM Y` (photo principale d'un autre logiciel).
+    /// Number of `_PRIM Y` links (main photo of other software).
     pub fn prim_count(&self) -> usize {
         let mut n = 0;
         for r in &self.records {
@@ -344,9 +343,8 @@ impl Gedcom {
         n
     }
 
-    /// Convertit `_PRIM Y` en GEDCOM 7 : le lien marqué passe en tête des
-    /// médias de l'enregistrement, et la balise est retirée. Renvoie le nombre
-    /// de balises retirées.
+    /// Converts `_PRIM Y` to GEDCOM 7: the marked link moves to the top of the record's media, and
+    /// the tag is removed. Returns the number of tags removed.
     pub fn migrate_prim_tags(&mut self) -> usize {
         let mut n = 0;
         let has_prim = |r: &Node| r.children.iter().any(|c| c.tag == "OBJE" && c.child(PRIM_TAG).is_some());

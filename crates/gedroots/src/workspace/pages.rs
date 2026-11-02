@@ -1,17 +1,17 @@
-//! Médias à plusieurs pages : visionneuse page par page, ajout, retrait et
-//! réordonnancement des pages, fusion de médias et séparation d'une page.
+//! Multi-page media: page-by-page viewer, adding, removing and reordering pages, merging media and
+//! splitting off a page.
 //!
-//! Le modèle est dans `gedcom::multipage` (un `OBJE` avec plusieurs `FILE`).
+//! The model is in `gedcom::multipage` (an `OBJE` with several `FILE`).
 
 use super::relatives::PickPurpose;
 use super::*;
 use rust_i18n::t;
 
-/// Taille des miniatures de pages.
+/// Size of the page thumbnails.
 const THUMB_W: f32 = 64.;
 const THUMB_H: f32 = 84.;
 
-/// Page glissée dans la bande de miniatures, pour la déplacer.
+/// Page dragged in the thumbnail strip, to move it.
 #[derive(Clone)]
 pub struct DraggedPage {
     media: String,
@@ -19,7 +19,7 @@ pub struct DraggedPage {
     path: Option<PathBuf>,
 }
 
-/// Aperçu sous le pointeur pendant le glisser.
+/// Preview under the pointer while dragging.
 struct PagePreview(Option<PathBuf>);
 
 impl Render for PagePreview {
@@ -40,7 +40,7 @@ impl Render for PagePreview {
     }
 }
 
-/// Chemin absolu d'un fichier de média (`FILE` est relatif au dossier du .ged).
+/// Absolute path of a media file (`FILE` is relative to the .ged folder).
 pub(super) fn file_path(doc: &Document, f: &str) -> Option<PathBuf> {
     if f.is_empty() || (f.contains("://") && !f.starts_with("file://")) {
         return None;
@@ -52,12 +52,12 @@ pub(super) fn file_path(doc: &Document, f: &str) -> Option<PathBuf> {
     Some(doc.path.as_ref()?.parent()?.join(p))
 }
 
-/// Chemin de la page `page` (à partir de 1) d'un média.
+/// Path of page `page` (from 1) of a media.
 pub(super) fn page_path(doc: &Document, m: &Media, page: usize) -> Option<PathBuf> {
     file_path(doc, m.page_file(page)?)
 }
 
-/// Le fichier est-il une image (d'après `FORM` ou l'extension) ?
+/// Is the file an image (according to `FORM` or the extension)?
 fn is_image_file(path: &str, form: Option<&str>) -> bool {
     form.is_some_and(|f| f.starts_with("image/"))
         || mime_for(path).starts_with("image/")
@@ -65,7 +65,7 @@ fn is_image_file(path: &str, form: Option<&str>) -> bool {
 }
 
 impl Workspace {
-    /// Page affichée du média sélectionné (à partir de 1), bornée au nombre de pages.
+    /// Displayed page of the selected media (from 1), bounded by the number of pages.
     pub(super) fn current_page(&self, media: &str) -> usize {
         let n = self.doc.as_ref().and_then(|d| d.ged.get(media)).map(|n| Media::new(n).page_count()).unwrap_or(1);
         self.media_page.clamp(1, n.max(1))
@@ -92,7 +92,7 @@ impl Workspace {
         self.show_page(next, cx);
     }
 
-    /// Ajoute des fichiers comme pages du média, puis affiche la première ajoutée.
+    /// Adds files as pages of the media, then shows the first one added.
     pub(super) fn add_pages(&mut self, media: String, files: Vec<String>, window: &mut Window, cx: &mut Context<Self>) {
         if files.is_empty() {
             return;
@@ -154,7 +154,7 @@ impl Workspace {
         });
     }
 
-    /// Sépare la page en un nouveau média, et l'ouvre.
+    /// Splits the page into a new media, and opens it.
     pub(super) fn split_page(&mut self, media: String, page: usize, window: &mut Window, cx: &mut Context<Self>) {
         self.mutate(window, cx, |g| {
             let new = g.split_media_page(&media, page)?;
@@ -162,7 +162,7 @@ impl Workspace {
         });
     }
 
-    /// Fusionne les médias (dans cet ordre) en un média multipage, et l'ouvre.
+    /// Merges the media (in this order) into a multi-page media, and opens it.
     pub(super) fn merge_media(&mut self, list: Vec<String>, window: &mut Window, cx: &mut Context<Self>) {
         self.mutate(window, cx, |g| {
             let target = g.merge_media(&list)?;
@@ -172,8 +172,8 @@ impl Workspace {
         self.media_marked.clear();
     }
 
-    /// Clic sur une ligne de la liste des médias avec ⌘ / Ctrl (ajouter à la
-    /// sélection) ou Maj (sélectionner jusqu'à cette ligne).
+    /// Click on a row of the media list with ⌘ / Ctrl (add to the selection) or Shift (select up to
+    /// this row).
     pub(super) fn mark_media(&mut self, key: String, range: bool, cx: &mut Context<Self>) {
         if self.media_marked.is_empty()
             && let Some(cur) = self.selected.clone()
@@ -205,7 +205,7 @@ impl Workspace {
         cx.notify();
     }
 
-    /// Ordre des médias à fusionner : on déplace un média d'un cran.
+    /// Order of the media to merge: a media is moved one step.
     fn shift_marked(&mut self, i: usize, delta: isize, cx: &mut Context<Self>) {
         let j = i as isize + delta;
         if j >= 0 && (j as usize) < self.media_marked.len() {
@@ -218,7 +218,7 @@ impl Workspace {
     // Rendu
     // ------------------------------------------------------------------
 
-    /// Miniature d'une page (ou d'un média), `w × h`.
+    /// Thumbnail of a page (or of a media), `w × h`.
     fn page_thumb(path: Option<PathBuf>, image: bool, w: f32, h: f32) -> Div {
         let tile = div()
             .w(px(w))
@@ -238,8 +238,8 @@ impl Workspace {
         }
     }
 
-    /// Bande des pages d'un média : précédente / suivante et miniatures, que
-    /// l'on glisse pour les réordonner. Rien pour un média d'une seule page.
+    /// Strip of a media’s pages: previous / next and thumbnails, dragged to reorder them. Nothing
+    /// for a single-page media.
     pub(super) fn render_page_strip(&self, media: &str, cx: &mut Context<Self>) -> Option<AnyElement> {
         let doc = self.doc.as_ref()?;
         let m = Media::new(doc.ged.get(media)?);
@@ -312,8 +312,8 @@ impl Workspace {
         )
     }
 
-    /// Zone centrale quand plusieurs médias sont sélectionnés : aperçu des pages
-    /// du futur média, ordre modifiable, et fusion.
+    /// Central area when several media are selected: preview of the pages of the future media,
+    /// editable order, and merge.
     pub(super) fn render_merge_panel(&self, cx: &mut Context<Self>) -> AnyElement {
         let Some(doc) = self.doc.as_ref() else { return div().into_any_element() };
         let g = &doc.ged;
@@ -423,7 +423,7 @@ impl Workspace {
             .into_any_element()
     }
 
-    /// Commandes du menu Média liées aux pages, selon le média sélectionné.
+    /// Media menu commands related to pages, according to the selected media.
     pub(super) fn bind_page_actions(&self, d: Div, cx: &mut Context<Self>) -> Div {
         let media = self
             .selected

@@ -1,19 +1,18 @@
-//! Agents IA : serveur MCP local de GEDRoots.
+//! AI agents: GEDRoots' local MCP server.
 //!
-//! Quand le réglage est activé (File › Connect an AI Agent…), l'app sert le protocole
-//! MCP en HTTP sur `127.0.0.1` : un agent comme Claude Code lit le fichier ouvert (fiches,
-//! recherche, lacunes), sans jamais l'écrire : ses actes trouvés deviennent des
-//! propositions, relues dans la page « À relire » avant d'être enregistrées. Les personnes
-//! vivantes sont masquées.
+//! When the setting is on (File › Connect an AI Agent…), the app serves the MCP protocol over HTTP
+//! on `127.0.0.1`: an agent such as Claude Code reads the open file (records, search, gaps),
+//! without ever writing to it: the records it finds become proposals, reviewed in the “To Review”
+//! page before being saved. Living people are hidden.
 //!
-//! - le serveur tourne sur un fil à part (runtime tokio) ;
-//! - chaque appel d'outil demande à la boucle de l'app une copie du document affiché
-//!   (copie peu coûteuse : les enregistrements sont partagés) ;
-//! - un jeton est exigé dans l'en-tête `Authorization`, et les requêtes venues d'une page
-//!   web (en-tête `Origin`) sont refusées.
+//! - the server runs on its own thread (tokio runtime);
+//! - each tool call asks the app's loop for a copy of the displayed document (a cheap copy: records
+//!   are shared);
+//! - a token is required in the `Authorization` header, and requests coming from a web page
+//!   (`Origin` header) are refused.
 //!
-//! Le réglage et le jeton sont propres à la machine : ils vivent dans le dossier de
-//! configuration de la plateforme, jamais dans le `.ged`.
+//! The setting and the token belong to the machine: they live in the platform's configuration
+//! folder, never in the `.ged`.
 
 pub mod clients;
 mod prompts;
@@ -26,50 +25,50 @@ use std::hash::{BuildHasher, Hasher};
 use std::path::PathBuf;
 use std::sync::Mutex;
 
-/// Port d'écoute, fixe pour que la commande copiée dans l'agent reste valable.
+/// Listening port, fixed so that the command copied into the agent stays valid.
 pub const PORT: u16 = 47_280;
 
-/// Adresse du serveur MCP.
+/// Address of the MCP server.
 pub fn url() -> String {
     format!("http://127.0.0.1:{PORT}/mcp")
 }
 
-/// Ce que l'app demande au document affiché, depuis le fil du serveur.
+/// What the app asks of the displayed document, from the server's thread.
 pub enum Request {
     Snapshot(tokio::sync::oneshot::Sender<Option<Snapshot>>),
-    /// Proposition d'acte : ajoutée à la page « À relire » de la fenêtre, ou refusée.
+    /// Record proposal: added to the window's “To Review” page, or refused.
     Propose(Box<propose::Pending>, tokio::sync::oneshot::Sender<Result<usize, String>>),
-    /// Un agent vient d'ouvrir une session : la fenêtre « Agents IA » se met à jour.
+    /// An agent has just opened a session: the “AI Agents” window updates.
     Connected,
 }
 
-/// Copie du document de la fenêtre active.
+/// Copy of the active window's document.
 pub struct Snapshot {
     pub path: Option<PathBuf>,
     pub ged: Gedcom,
 }
 
-/// Fenêtre dont l'agent lit le fichier : la dernière activée.
+/// Window whose file the agent reads: the last one activated.
 #[derive(Default)]
 pub struct Target(pub Option<WeakEntity<crate::workspace::Workspace>>);
 
 impl Global for Target {}
 
-/// Réglage enregistré.
+/// Saved setting.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Settings {
     pub enabled: bool,
     pub token: String,
-    /// Agent choisi dans la fenêtre « Agents IA » (`clients::Client::id`).
+    /// Agent chosen in the “AI Agents” window (`clients::Client::id`).
     pub client: String,
 }
 
-/// État du serveur, pour la fenêtre de connexion.
+/// State of the server, for the connection window.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Status {
     Off,
     Running,
-    /// Le port est pris ou le serveur s'est arrêté.
+    /// The port is taken or the server stopped.
     Failed(String),
 }
 
@@ -79,17 +78,17 @@ struct Running {
 
 static SERVER: Mutex<Option<Running>> = Mutex::new(None);
 static STATUS: Mutex<Status> = Mutex::new(Status::Off);
-/// File vers la boucle de l'app, créée au démarrage.
+/// Queue to the app's loop, created at startup.
 static BRIDGE: Mutex<Option<async_channel::Sender<Request>>> = Mutex::new(None);
-/// Dernier agent connecté depuis le lancement : nom donné par le client, et quand.
+/// Last agent connected since launch: name given by the client, and when.
 static LAST: Mutex<Option<(String, std::time::Instant)>> = Mutex::new(None);
 
-/// Dernier agent connecté (`clientInfo` de la session MCP) et depuis combien de temps.
+/// Last agent connected (`clientInfo` of the MCP session) and how long ago.
 pub fn last_client() -> Option<(String, std::time::Duration)> {
     LAST.lock().unwrap_or_else(|e| e.into_inner()).as_ref().map(|(n, t)| (n.clone(), t.elapsed()))
 }
 
-/// Note l'agent qui ouvre une session (fil du serveur).
+/// Records the agent that opens a session (server thread).
 pub(crate) fn note_client(name: &str) {
     *LAST.lock().unwrap_or_else(|e| e.into_inner()) = Some((name.to_string(), std::time::Instant::now()));
     if let Some(tx) = BRIDGE.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
@@ -105,7 +104,7 @@ fn set_status(s: Status) {
     *STATUS.lock().unwrap_or_else(|e| e.into_inner()) = s;
 }
 
-/// Branche la file des requêtes sur la boucle de l'app et démarre le serveur s'il est activé.
+/// Connects the request queue to the app's loop and starts the server if it is enabled.
 pub fn install(cx: &mut App) {
     cx.set_global(Target::default());
     let (tx, rx) = async_channel::unbounded::<Request>();
@@ -141,19 +140,19 @@ pub fn install(cx: &mut App) {
     }
 }
 
-/// Note la fenêtre que l'agent doit lire.
+/// Records the window the agent must read.
 pub fn set_target(ws: WeakEntity<crate::workspace::Workspace>, cx: &mut App) {
     cx.set_global(Target(Some(ws)));
 }
 
-/// Retient l'agent choisi dans la fenêtre.
+/// Remembers the agent chosen in the window.
 pub fn set_client(client: clients::Client) {
     let mut s = load();
     s.client = client.id().to_string();
     save(&s);
 }
 
-/// Active ou désactive le serveur, et enregistre le choix.
+/// Turns the server on or off, and saves the choice.
 pub fn set_enabled(enabled: bool) -> Settings {
     let mut s = load();
     s.enabled = enabled;
@@ -179,7 +178,7 @@ fn start(token: &str) {
             Err(e) => return set_status(Status::Failed(e.to_string())),
         };
         if let Err(e) = rt.block_on(tools::serve(bridge, token, PORT, cancel.clone())) {
-            // Arrêt demandé : pas une erreur.
+            // Stop requested: not an error.
             if !cancel.is_cancelled() {
                 set_status(Status::Failed(e));
             }
@@ -198,14 +197,14 @@ fn stop() {
 }
 
 // ----------------------------------------------------------------------
-// Réglage : `<config>/GEDRoots/agents`, lignes `cle=valeur`
+// Setting: `<config>/GEDRoots/agents`, `key=value` lines
 // ----------------------------------------------------------------------
 
 fn settings_path() -> Option<PathBuf> {
     Some(dirs::config_dir()?.join("GEDRoots").join("agents"))
 }
 
-/// Réglage enregistré ; un jeton est créé (et enregistré) s'il n'y en a pas.
+/// Saved setting; a token is created (and saved) if there is none.
 pub fn load() -> Settings {
     let text = settings_path().and_then(|p| std::fs::read_to_string(p).ok()).unwrap_or_default();
     let mut s = parse(&text);
@@ -237,7 +236,7 @@ fn save(s: &Settings) {
     let _ = std::fs::write(&path, format!("enabled={}\ntoken={}\nclient={}\n", u8::from(s.enabled), s.token, s.client));
 }
 
-/// Jeton aléatoire de 128 bits (clés aléatoires du système, via `RandomState`).
+/// Random 128-bit token (the system's random keys, through `RandomState`).
 fn new_token() -> String {
     (0..2)
         .map(|i| {

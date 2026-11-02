@@ -1,11 +1,11 @@
-//! Agents connus et la façon la plus courte de brancher chacun sur le serveur MCP :
-//! commande de terminal, lien d'installation de l'éditeur, bloc à coller dans un fichier
-//! de configuration, ou adresse et en-tête pour un autre client.
+//! Known agents and the shortest way to connect each one to the MCP server: terminal command,
+//! editor install link, block to paste into a configuration file, or address and header for another
+//! client.
 
 use base64::Engine;
 use std::path::PathBuf;
 
-/// Nom du serveur dans la configuration des agents.
+/// Name of the server in the agents' configuration.
 const NAME: &str = "gedroots";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -19,7 +19,7 @@ pub enum Client {
     Other,
 }
 
-/// Famille d'agents, pour grouper la liste.
+/// Family of agents, to group the list.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Kind {
     Terminal,
@@ -31,13 +31,13 @@ pub enum Kind {
 /// Comment brancher l'agent.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Setup {
-    /// Commande à lancer dans un terminal.
+    /// Command to run in a terminal.
     Command(String),
-    /// Bloc à ajouter au fichier de configuration `file`.
+    /// Block to add to the `file` configuration file.
     Config { file: String, text: String },
-    /// Lien qui ouvre l'éditeur sur son installation, avec la configuration en repli.
+    /// Link that opens the editor on its install, with the configuration as a fallback.
     Link { url: String, file: String, text: String },
-    /// Adresse et en-tête à saisir dans le client.
+    /// Address and header to enter in the client.
     Generic,
 }
 
@@ -52,7 +52,7 @@ impl Client {
         Client::Other,
     ];
 
-    /// Identifiant enregistré dans le réglage de la machine.
+    /// Identifier saved in the machine's setting.
     pub fn id(self) -> &'static str {
         match self {
             Client::ClaudeCode => "claude-code",
@@ -69,7 +69,7 @@ impl Client {
         Client::ALL.into_iter().find(|c| c.id() == id)
     }
 
-    /// Nom de produit (pas traduit), sauf « Autre client MCP », traduit par l'appelant.
+    /// Product name (not translated), except “Other MCP Client”, translated by the caller.
     pub fn product(self) -> Option<&'static str> {
         Some(match self {
             Client::ClaudeCode => "Claude Code",
@@ -91,12 +91,12 @@ impl Client {
         }
     }
 
-    /// L'agent montre-t-il les prompts MCP comme commandes `/mcp__gedroots__…` ?
+    /// Does the agent show MCP prompts as `/mcp__gedroots__…` commands?
     pub fn shows_prompts(self) -> bool {
         self == Client::ClaudeCode
     }
 
-    /// Agent d'après le nom qu'il donne à l'ouverture de session MCP (`clientInfo.name`).
+    /// Agent from the name it gives when opening the MCP session (`clientInfo.name`).
     pub fn from_client_info(name: &str) -> Client {
         let n = name.to_lowercase();
         if n.contains("claude-code") || n.contains("claude code") {
@@ -116,7 +116,7 @@ impl Client {
         }
     }
 
-    /// Marche à suivre, avec le vrai jeton (l'affichage le masque).
+    /// Steps to follow, with the real token (the display masks it).
     pub fn setup(self, url: &str, token: &str) -> Setup {
         let auth = format!("Bearer {token}");
         let header = format!("Authorization: {auth}");
@@ -166,8 +166,8 @@ impl Client {
         }
     }
 
-    /// Fichier de configuration à montrer dans le gestionnaire de fichiers, s'il existe
-    /// (Claude Desktop : macOS et Windows).
+    /// Configuration file to show in the file manager, if it exists (Claude Desktop: macOS and
+    /// Windows).
     pub fn config_file(self) -> Option<PathBuf> {
         match self {
             Client::ClaudeDesktop => {
@@ -183,7 +183,7 @@ fn pretty(v: &serde_json::Value) -> String {
     serde_json::to_string_pretty(v).unwrap_or_default()
 }
 
-/// Encodage d'URL (RFC 3986) : tout sauf les caractères non réservés.
+/// URL encoding (RFC 3986): everything except unreserved characters.
 fn percent(s: &str) -> String {
     let mut out = String::with_capacity(s.len() * 3);
     for b in s.bytes() {
@@ -196,7 +196,7 @@ fn percent(s: &str) -> String {
     out
 }
 
-/// Remplace le jeton par des points pour l'affichage.
+/// Replaces the token with dots for display.
 pub fn mask(text: &str, token: &str) -> String {
     if token.is_empty() { text.to_string() } else { text.replace(token, "••••••••") }
 }

@@ -1,15 +1,14 @@
-//! Recherches enregistrées : section « Recherches » de la barre latérale.
+//! Saved searches: “Searches” section of the sidebar.
 //!
-//! Une recherche s'enregistre avec le « + » de la section ou Affichage ›
-//! Enregistrer la recherche : elle prend le nom de ses jetons, que l'on peut
-//! retaper aussitôt (↵ valide, Échap garde le nom proposé). Elle vit dans le
-//! `.ged` (`HEAD._GR_FIND`) et affiche son nombre de résultats.
+//! A search is saved with the section’s “+” or View › Save Search: it takes the name of its tokens,
+//! which can be retyped right away (↵ confirms, Esc keeps the suggested name). It lives in the
+//! `.ged` (`HEAD._GR_FIND`) and shows its number of results.
 
 use super::*;
 use gedcom::saved::{SavedSearch, default_name};
 use rust_i18n::t;
 
-/// Renommage en cours dans la barre latérale.
+/// Renaming in progress in the sidebar.
 pub(super) struct SavedRename {
     index: usize,
     input: Entity<InputState>,
@@ -26,7 +25,7 @@ fn view_of(scope: Scope) -> View {
 }
 
 impl Workspace {
-    /// Recalcule les recherches enregistrées et leur nombre de résultats.
+    /// Recomputes the saved searches and their number of results.
     pub(super) fn refresh_saved(&mut self) {
         let Some(doc) = &self.doc else {
             self.saved = Rc::new(Vec::new());
@@ -48,7 +47,7 @@ impl Workspace {
         );
     }
 
-    /// Recherche affichée : zone, critères validés, type de média. `None` sans recherche.
+    /// Displayed search: zone, confirmed criteria, media type. `None` without a search.
     fn current_search(&self, cx: &App) -> Option<(Scope, String, Option<String>)> {
         let scope = self.view.scope()?;
         let query = Self::committed_query(&self.filter.read(cx).value()).trim().to_string();
@@ -56,13 +55,13 @@ impl Workspace {
         (!query.is_empty() || media_type.is_some()).then_some((scope, query, media_type))
     }
 
-    /// Position de la recherche enregistrée affichée, s'il y en a une.
+    /// Position of the displayed saved search, if there is one.
     pub(super) fn active_saved(&self, cx: &App) -> Option<usize> {
         let (scope, query, media_type) = self.current_search(cx)?;
         self.saved.iter().position(|(s, _)| s.same(scope, &query, media_type.as_deref()))
     }
 
-    /// La recherche affichée peut être enregistrée (et ne l'est pas déjà).
+    /// The displayed search can be saved (and is not already).
     pub(super) fn can_save_search(&self, cx: &App) -> bool {
         self.current_search(cx).is_some() && self.active_saved(cx).is_none()
     }
@@ -93,7 +92,7 @@ impl Workspace {
         cx.notify();
     }
 
-    /// Champ de renommage à la place de la ligne, texte sélectionné.
+    /// Rename field in place of the row, text selected.
     pub(super) fn start_rename_search(&mut self, i: usize, window: &mut Window, cx: &mut Context<Self>) {
         let Some((s, _)) = self.saved.get(i) else { return };
         let name = s.name.clone();
@@ -140,7 +139,7 @@ impl Workspace {
         cx.notify();
     }
 
-    /// Menu d'une recherche enregistrée (clic droit).
+    /// Menu of a saved search (right-click).
     fn saved_menu(&self, i: usize, cx: &Context<Self>) -> menus::MenuBuilder {
         let ws = cx.entity().downgrade();
         Rc::new(move |menu, _, _| {
@@ -152,7 +151,7 @@ impl Workspace {
         })
     }
 
-    /// Section « Recherches » : cachée sans recherche enregistrée ni recherche à enregistrer.
+    /// “Searches” section: hidden with no saved search and no search to save.
     pub(super) fn render_saved(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let can_save = self.can_save_search(cx);
         if self.saved.is_empty() && !can_save {

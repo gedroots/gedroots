@@ -1,4 +1,4 @@
-//! Copies d'un fichier (historique d'annulation) : les enregistrements non modifiés sont partagés.
+//! Copies of a file (undo history): unchanged records are shared.
 
 use gedcom::*;
 use std::sync::Arc;
@@ -10,23 +10,23 @@ fn shared(a: &Gedcom, b: &Gedcom) -> usize {
 }
 
 #[test]
-fn une_modification_ne_copie_que_son_enregistrement() {
+fn a_change_only_copies_its_record() {
     let before = Gedcom::parse(SAMPLE).unwrap();
     let mut g = before.clone();
     assert_eq!(shared(&before, &g), before.records.len());
     g.get_mut("I00003").unwrap().set_child_val("SEX", "M");
     assert_eq!(shared(&before, &g), before.records.len() - 1);
-    // La copie gardée pour l'annulation n'a pas bougé.
+    // The copy kept for undo did not change.
     assert_eq!(before.get("I00003").unwrap().child("SEX").unwrap().val(), "F");
     assert_eq!(before.to_gedcom_string(), SAMPLE);
 }
 
 #[test]
-fn supprimer_ne_copie_que_les_enregistrements_qui_pointent() {
+fn delete_only_copies_the_records_pointing_to_it() {
     let before = Gedcom::parse(SAMPLE).unwrap();
     let mut g = before.clone();
     g.delete("I00003").unwrap();
-    // La famille perd son lien vers I00003 ; les autres enregistrements restent partagés.
+    // The family loses its link to I00003; the other records stay shared.
     let untouched = g.records.iter().filter(|r| before.records.iter().any(|b| Arc::ptr_eq(r, b))).count();
     let referrers = before.referrers("I00003").len();
     assert_eq!(untouched, g.records.len() - referrers);

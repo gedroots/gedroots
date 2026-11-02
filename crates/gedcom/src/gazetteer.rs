@@ -1,15 +1,15 @@
-//! Création de lieux : découpage d'un lieu trouvé dans un gazetteer (OpenStreetMap)
-//! selon le format des lieux du fichier (`HEAD.PLAC.FORM`), lieux-dits rattachés à un
-//! lieu existant, et écriture des coordonnées et de l'identifiant externe (`EXID`).
+//! Creating places: splitting a place found in a gazetteer (OpenStreetMap) according to the file's
+//! place format (`HEAD.PLAC.FORM`), localities attached to an existing place, and writing the
+//! coordinates and the external identifier (`EXID`).
 //!
-//! Tout reste en GEDCOM 7 standard : la chaîne `PLAC` suit le format, `MAP` porte les
-//! coordonnées, `EXID` + `TYPE` l'identifiant du lieu dans le gazetteer.
+//! Everything stays standard GEDCOM 7: the `PLAC` string follows the format, `MAP` holds the
+//! coordinates, `EXID` + `TYPE` the place's identifier in the gazetteer.
 
 use crate::document::Gedcom;
 use crate::model::{Place, sort_key};
 use crate::node::Node;
 
-/// Rôle d'une juridiction du format des lieux, reconnu à son nom.
+/// Role of a jurisdiction of the place format, recognized by its name.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Level {
     /// Lieu-dit, hameau, quartier.
@@ -17,17 +17,17 @@ pub enum Level {
     /// Commune, ville, paroisse.
     Municipality,
     PostCode,
-    /// Département, comté, province.
+    /// Department, county, province.
     County,
-    /// Région, état.
+    /// Region, state.
     State,
     Country,
-    /// Juridiction inconnue (code INSEE…) : laissée vide.
+    /// Unknown jurisdiction (INSEE code…): left empty.
     Other,
 }
 
 impl Level {
-    /// Rôle d'une juridiction d'après son nom (« Lieudit », « Code_Postal », « County »…).
+    /// Role of a jurisdiction from its name (“Lieudit”, “Code_Postal”, “County”…).
     pub fn of(label: &str) -> Level {
         let k = sort_key(label).replace(['_', '-'], " ");
         let has = |words: &[&str]| words.iter().any(|w| k.contains(w));
@@ -49,16 +49,16 @@ impl Level {
     }
 }
 
-/// Un lieu trouvé dans un gazetteer, avec son adresse découpée.
+/// A place found in a gazetteer, with its split address.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Candidate {
-    /// Nom du lieu lui-même (« Saint-Parres-aux-Tertres »).
+    /// Name of the place itself (“Saint-Parres-aux-Tertres”).
     pub name: String,
     pub lat: f64,
     pub lon: f64,
-    /// Adresse : clés du gazetteer (`village`, `county`, `state`, `country`, `postcode`…).
+    /// Address: gazetteer keys (`village`, `county`, `state`, `country`, `postcode`…).
     pub address: Vec<(String, String)>,
-    /// Identifiant externe : valeur et `TYPE` (URI) de l'`EXID`.
+    /// External identifier: value and `TYPE` (URI) of the `EXID`.
     pub exid: Option<(String, String)>,
 }
 
@@ -69,7 +69,7 @@ impl Candidate {
             .filter(|v| !v.trim().is_empty())
     }
 
-    /// Valeur pour une juridiction.
+    /// Value for a jurisdiction.
     pub fn level(&self, level: Level) -> Option<&str> {
         match level {
             Level::Locality => self.addr(&["hamlet", "isolated_dwelling", "locality", "neighbourhood", "quarter"]),
@@ -82,7 +82,7 @@ impl Candidate {
         }
     }
 
-    /// Libellé du lieu dans une liste : son nom.
+    /// Label of the place in a list: its name.
     pub fn title(&self) -> String {
         self.level(Level::Locality)
             .or_else(|| self.level(Level::Municipality))
@@ -90,7 +90,7 @@ impl Candidate {
             .unwrap_or_else(|| self.name.clone())
     }
 
-    /// Juridictions plus larges, pour situer le lieu : « Aube · Grand Est · France ».
+    /// Broader jurisdictions, to locate the place: “Aube · Grand Est · France”.
     pub fn context(&self) -> String {
         let title = self.title();
         let mut out: Vec<&str> = Vec::new();
@@ -107,8 +107,8 @@ impl Candidate {
         out.join(" · ")
     }
 
-    /// Juridictions du lieu selon le format des lieux. Sans format : commune,
-    /// département, région, pays (les vides en moins), en un seul champ.
+    /// Jurisdictions of the place according to the place format. Without a format: municipality,
+    /// department, region, country (without the empty ones), in a single field.
     pub fn parts(&self, form: &[String]) -> Vec<String> {
         if form.is_empty() {
             let v: Vec<&str> = [Level::Locality, Level::Municipality, Level::County, Level::State, Level::Country]
@@ -119,7 +119,7 @@ impl Candidate {
             return vec![joined];
         }
         let mut out: Vec<String> = form.iter().map(|f| self.level(Level::of(f)).unwrap_or("").to_string()).collect();
-        // Aucune juridiction reconnue pour le nom du lieu : il va dans la plus précise.
+        // No jurisdiction recognized for the place name: it goes into the most precise one.
         let title = self.title();
         if !out.contains(&title)
             && let Some(slot) = out.iter().position(|v| v.is_empty())
@@ -130,8 +130,8 @@ impl Candidate {
     }
 }
 
-/// Nom d'un lieu à partir de ses juridictions : `", Troyes, 10000, Aube, Grand Est, France"`.
-/// Les juridictions vides gardent leur place, pour suivre le format.
+/// Name of a place from its jurisdictions: `", Troyes, 10000, Aube, Grand Est, France"`. Empty
+/// jurisdictions keep their slot, to follow the format.
 pub fn join_parts(parts: &[String]) -> String {
     if parts.iter().all(|p| p.trim().is_empty()) {
         return String::new();
@@ -139,11 +139,12 @@ pub fn join_parts(parts: &[String]) -> String {
     parts.iter().map(|p| p.trim()).collect::<Vec<_>>().join(", ")
 }
 
-/// Lieu-dit d'un lieu existant : « La Borde, Troyes » → (juridictions du nouveau lieu, lieu parent).
+/// Locality of an existing place: “La Borde, Troyes” → (jurisdictions of the new place, parent
+/// place).
 ///
-/// Le parent est le lieu du fichier dont le nom (commune) correspond à ce qui suit la
-/// première virgule ; le nouveau lieu reprend toutes ses juridictions et place le
-/// lieu-dit dans la juridiction vide la plus précise, sinon en tête.
+/// The parent is the file's place whose name (municipality) matches what follows the first comma;
+/// the new place takes all its jurisdictions and puts the locality in the most precise empty
+/// jurisdiction, otherwise first.
 pub fn sub_place(input: &str, places: &[Place], form: &[String]) -> Option<(Vec<String>, String)> {
     let (name, rest) = input.split_once(',')?;
     let (name, rest) = (name.trim(), sort_key(rest.trim()));
@@ -155,7 +156,7 @@ pub fn sub_place(input: &str, places: &[Place], form: &[String]) -> Option<(Vec<
         let base = short.split(" (").next().unwrap_or(&short).to_string();
         sort_key(&base)
     };
-    // Une commune plutôt qu'un lieu-dit déjà rattaché, puis la plus citée.
+    // A municipality rather than an already attached locality, then the most cited.
     let parent = places
         .iter()
         .filter(|p| {
@@ -182,8 +183,8 @@ pub fn sub_place(input: &str, places: &[Place], form: &[String]) -> Option<(Vec<
 }
 
 impl Gedcom {
-    /// Écrit les coordonnées (et l'identifiant externe) d'un lieu sur toutes ses
-    /// occurrences. Renvoie le nombre d'occurrences modifiées.
+    /// Writes the coordinates (and the external identifier) of a place on all its occurrences.
+    /// Returns the number of occurrences changed.
     pub fn locate_place(&mut self, name: &str, lat: &str, lon: &str, exid: Option<&(String, String)>) -> usize {
         let n = self.update_place(name, name, lat, lon);
         if let Some((value, ty)) = exid {
@@ -278,7 +279,7 @@ mod tests {
         assert_eq!(parts, vec!["La Borde", "Troyes", "10000", "Aube", "Grand Est", "France"]);
         assert!(sub_place("La Borde, Lyon", &places, &ancestris()).is_none());
         assert!(sub_place("Troyes", &places, &ancestris()).is_none());
-        // Format sans lieu-dit : en tête, un seul champ.
+        // Format without a locality: first, in a single field.
         let places = vec![place("Troyes, Aube, France", 3)];
         let form = ["Commune", "Département", "Pays"].map(String::from).to_vec();
         let (parts, _) = sub_place("La Borde, troyes", &places, &form).unwrap();
@@ -294,7 +295,7 @@ mod tests {
         let c = parres();
         let name = join_parts(&c.parts(&ancestris()));
         assert_eq!(g.locate_place(&name, "N48.2978", "E4.1175", c.exid.as_ref()), 1);
-        // Une seconde fois : pas de doublon.
+        // A second time: no duplicate.
         g.locate_place(&name, "N48.2978", "E4.1175", c.exid.as_ref());
         let text = g.to_gedcom_string();
         assert!(text.contains("3 MAP\n4 LATI N48.2978\n4 LONG E4.1175\n3 EXID 415228\n4 TYPE https://www.openstreetmap.org/relation/\n"), "{text}");
@@ -311,7 +312,7 @@ mod tests {
         )
         .unwrap();
         let full = ", Troyes, 10000, Aube, Grand Est, France";
-        // Le libellé affiché redonne le lieu du fichier, juridictions vides comprises.
+        // The displayed label gives back the file's place, empty jurisdictions included.
         assert_eq!(g.place_value("Troyes, 10000, Aube, Grand Est, France ", &[]), full);
         assert_eq!(g.place_value(full, &[]), full);
         let created = ", Bayeux, 14400, Calvados, Normandie, France".to_string();

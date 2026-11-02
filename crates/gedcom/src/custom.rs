@@ -1,59 +1,57 @@
-//! Réglages du fichier qui touchent aux données : format des lieux et types
-//! d'événements personnalisés.
+//! File settings that affect the data: place format and custom event types.
 //!
-//! - Format des lieux : `HEAD.PLAC.FORM` (standard), liste des juridictions de
-//!   la plus précise à la plus large. Le changer peut réécrire tous les `PLAC`
-//!   du fichier (réordonner, ajouter, retirer, renommer une juridiction).
-//! - Types d'événements : un type personnalisé est un `EVEN` standard avec un
-//!   `TYPE`. Ils sont déduits du fichier ; l'en-tête (`HEAD._GR_EVEN`, voir
-//!   docs/extensions.md) ne déclare que ceux qu'on n'utilise pas encore et ceux
-//!   qui ont un libellé affiché différent de leur `TYPE`.
-//! - Import : les événements à balise d'extension d'autres logiciels (`_MILT`…)
-//!   deviennent des `EVEN` + `TYPE` (voir [`Gedcom::migrate_extension_events`]).
+//! - Place format: `HEAD.PLAC.FORM` (standard), list of jurisdictions from the most precise to the
+//!   broadest. Changing it can rewrite every `PLAC` in the file (reorder, add, remove, rename a
+//!   jurisdiction).
+//! - Event types: a custom type is a standard `EVEN` with a `TYPE`. They are inferred from the
+//!   file; the header (`HEAD._GR_EVEN`, see docs/extensions.md) only declares those not used yet
+//!   and those whose displayed label differs from their `TYPE`.
+//! - Import: events with an extension tag from other software (`_MILT`…) become `EVEN` + `TYPE`
+//!   (see [`Gedcom::migrate_extension_events`]).
 
 use crate::document::Gedcom;
 use crate::model::sort_key;
 use crate::node::Node;
 
-/// Une juridiction du nouveau format, et celle de l'ancien format dont elle reprend les valeurs.
+/// A jurisdiction of the new format, and the one of the old format whose values it takes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Jurisdiction {
     pub name: String,
-    /// Position dans l'ancien format (`None` : nouvelle juridiction, vide partout).
+    /// Position in the old format (`None`: new jurisdiction, empty everywhere).
     pub from: Option<usize>,
 }
 
-/// Ce que la réécriture des lieux a fait.
+/// What rewriting the places did.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct PlaceRewrite {
-    /// `PLAC` réécrits.
+    /// `PLAC` rewritten.
     pub rewritten: usize,
-    /// `PLAC` laissés tels quels : nombre de juridictions différent de l'ancien format,
-    /// ou format propre (`PLAC.FORM`).
+    /// `PLAC` left as is: different number of jurisdictions from the old format, or their own
+    /// format (`PLAC.FORM`).
     pub skipped: usize,
 }
 
-/// Un type d'événement personnalisé (`EVEN` + `TYPE`).
+/// A custom event type (`EVEN` + `TYPE`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EventType {
-    /// Valeur du `TYPE` des événements, telle qu'écrite dans le fichier.
+    /// Value of the events' `TYPE`, as written in the file.
     pub ty: String,
-    /// Libellé affiché (`_GR_LABEL`), sinon le `TYPE`.
+    /// Displayed label (`_GR_LABEL`), otherwise the `TYPE`.
     pub label: String,
-    /// Événement familial (sous `FAM`) ou individuel (sous `INDI`).
+    /// Family event (under `FAM`) or individual event (under `INDI`).
     pub family: bool,
-    /// Nombre d'événements de ce type dans le fichier.
+    /// Number of events of this type in the file.
     pub uses: usize,
-    /// Déclaré dans l'en-tête (`HEAD._GR_EVEN`).
+    /// Declared in the header (`HEAD._GR_EVEN`).
     pub declared: bool,
 }
 
-/// Déclaration d'un type d'événement (dans `HEAD`).
+/// Declaration of an event type (in `HEAD`).
 pub const EVENT_TYPE_TAG: &str = "_GR_EVEN";
 pub const EVENT_TYPE_URI: &str = extension_uri!("_gr_even");
-/// Sous `_GR_EVEN` : type réservé aux familles (`FAM`).
+/// Under `_GR_EVEN`: type reserved for families (`FAM`).
 const RECORD_TAG: &str = "_GR_REC";
-/// Sous `_GR_EVEN` : libellé affiché, quand il diffère du `TYPE`.
+/// Under `_GR_EVEN`: displayed label, when it differs from the `TYPE`.
 const LABEL_TAG: &str = "_GR_LABEL";
 
 fn split_place(v: &str) -> Vec<&str> {
@@ -61,8 +59,8 @@ fn split_place(v: &str) -> Vec<&str> {
 }
 
 impl Gedcom {
-    /// Réécrit le format des lieux. Sans changement de l'ordre ni des juridictions
-    /// reprises, seul l'en-tête change.
+    /// Rewrites the place format. If neither the order nor the kept jurisdictions change, only the
+    /// header changes.
     pub fn set_place_format(&mut self, new: &[Jurisdiction]) -> PlaceRewrite {
         let old_len = self.place_form().len();
         let names: Vec<String> = new.iter().map(|j| j.name.trim().to_string()).collect();
@@ -98,7 +96,7 @@ impl Gedcom {
         out
     }
 
-    /// Types d'événements personnalisés : ceux du fichier et ceux déclarés, triés par libellé.
+    /// Custom event types: those of the file and those declared, sorted by label.
     pub fn event_types(&self) -> Vec<EventType> {
         let mut out: Vec<EventType> = Vec::new();
         let mut add = |ty: &str, family: bool, used: bool, label: Option<&str>| {
@@ -141,14 +139,14 @@ impl Gedcom {
         out
     }
 
-    /// Libellés affichés des types qui en ont un (`(TYPE, libellé)`) : à passer à
-    /// [`crate::set_event_labels`] pour que les événements s'affichent sous ce libellé.
+    /// Displayed labels of the types that have one (`(TYPE, label)`): to pass to
+    /// [`crate::set_event_labels`] so that events are displayed under this label.
     pub fn event_labels(&self) -> Vec<(String, String)> {
         self.event_types().into_iter().filter(|t| t.label != t.ty).map(|t| (t.ty, t.label)).collect()
     }
 
-    /// Renomme un type d'événement partout (`TYPE` des événements et déclaration).
-    /// Renommer vers un type existant les fusionne. Renvoie le nombre d'événements modifiés.
+    /// Renames an event type everywhere (`TYPE` of the events and declaration). Renaming to an
+    /// existing type merges them. Returns the number of events changed.
     pub fn rename_event_type(&mut self, family: bool, old: &str, new: &str) -> usize {
         let new = new.trim();
         if new.is_empty() || new == old {
@@ -177,8 +175,8 @@ impl Gedcom {
         count
     }
 
-    /// Change le libellé affiché d'un type (vide ou égal au `TYPE` : le `TYPE` est affiché).
-    /// Les événements ne changent pas : le libellé est rangé dans `HEAD._GR_EVEN`.
+    /// Changes the displayed label of a type (empty or equal to the `TYPE`: the `TYPE` is
+    /// displayed). Events do not change: the label is stored in `HEAD._GR_EVEN`.
     pub fn set_event_type_label(&mut self, family: bool, ty: &str, label: &str) {
         let label = label.trim();
         let label = if label == ty.trim() { "" } else { label };
@@ -209,8 +207,8 @@ impl Gedcom {
         self.header.insert_child(n);
     }
 
-    /// Déclare un type d'événement pour pouvoir le choisir avant de s'en servir.
-    /// Renvoie `false` s'il existait déjà (dans le fichier ou l'en-tête).
+    /// Declares an event type so it can be picked before it is used. Returns `false` if it already
+    /// existed (in the file or the header).
     pub fn declare_event_type(&mut self, family: bool, ty: &str) -> bool {
         let ty = ty.trim();
         if ty.is_empty() || self.event_types().iter().any(|t| t.family == family && t.ty == ty) {
@@ -221,7 +219,7 @@ impl Gedcom {
         true
     }
 
-    /// Retire la déclaration d'un type (les événements du fichier ne changent pas).
+    /// Removes the declaration of a type (the file's events do not change).
     pub fn undeclare_event_type(&mut self, family: bool, ty: &str) {
         if let Some(i) = self.declared_index(family, ty) {
             self.header.children.remove(i);
@@ -229,8 +227,8 @@ impl Gedcom {
         self.tidy_event_types();
     }
 
-    /// Retire les déclarations devenues inutiles (type utilisé, sans libellé propre)
-    /// et ne garde dans `SCHMA` que les balises `_GR_EVEN` utilisées.
+    /// Removes declarations that became useless (type in use, no label of its own) and keeps only
+    /// the `_GR_EVEN` tags in use in `SCHMA`.
     fn tidy_event_types(&mut self) {
         let used: Vec<(bool, String)> =
             self.event_types().into_iter().filter(|t| t.uses > 0).map(|t| (t.family, t.ty)).collect();
@@ -250,8 +248,7 @@ impl Gedcom {
         }
     }
 
-    /// Événements à balise d'extension venus d'autres logiciels (`_MILT`, `_MILI`…),
-    /// à convertir à l'import.
+    /// Events with an extension tag from other software (`_MILT`, `_MILI`…), to convert on import.
     pub fn extension_event_count(&self) -> usize {
         self.records
             .iter()
@@ -260,9 +257,9 @@ impl Gedcom {
             .sum()
     }
 
-    /// Convertit les événements à balise d'extension en `EVEN` + `TYPE` standard :
-    /// `1 _MILT` → `1 EVEN` / `2 TYPE Service militaire`. Un `TYPE` d'origine (la
-    /// précision : « Infanterie ») passe dans une note. Renvoie le nombre d'événements convertis.
+    /// Converts events with an extension tag into standard `EVEN` + `TYPE`: `1 _MILT` → `1 EVEN` /
+    /// `2 TYPE Military Service`. An original `TYPE` (the detail: “Infantry”) goes into a note.
+    /// Returns the number of events converted.
     pub fn migrate_extension_events(&mut self) -> usize {
         let mut count = 0;
         let has = |r: &Node| r.children.iter().any(|c| extension_event_type(c).is_some());
@@ -288,8 +285,8 @@ impl Gedcom {
     }
 }
 
-/// Balises d'extension d'événements connues (Legacy, RootsMagic, Family Tree Maker,
-/// Ancestry, Heredis…) et le `TYPE` qu'elles deviennent (voir [`extension_type`]).
+/// Known event extension tags (Legacy, RootsMagic, Family Tree Maker, Ancestry, Heredis…) and the
+/// `TYPE` they become (see [`extension_type`]).
 const EXTENSION_EVENTS: &[(&str, &str)] = &[
     ("_MILT", "military"),
     ("_MILI", "military"),
@@ -316,7 +313,7 @@ const EXTENSION_EVENTS: &[(&str, &str)] = &[
     ("_DEPA", "departure"),
 ];
 
-/// `TYPE` donné à un événement d'extension, dans la langue de l'interface.
+/// `TYPE` given to an extension event, in the interface language.
 fn extension_type(code: &str) -> std::borrow::Cow<'static, str> {
     match code {
         "military" => rust_i18n::t!("custom.event.military"),
@@ -337,11 +334,11 @@ fn extension_type(code: &str) -> std::borrow::Cow<'static, str> {
     }
 }
 
-/// Balises d'extension qui ne sont jamais des événements, même datées.
+/// Extension tags that are never events, even with a date.
 const NOT_EVENTS: &[&str] = &["_TODO", "_LINT", "_UID", "_PRIM", "_URL", "_PHOTO", "_VALID", "_UPD", "_SOSADABOVILLE"];
 
-/// `TYPE` d'un événement à balise d'extension : balise connue, ou balise inconnue
-/// qui a une date ou un lieu (son nom, sans le `_`).
+/// `TYPE` of an event with an extension tag: a known tag, or an unknown tag that has a date or a
+/// place (its name, without the `_`).
 fn extension_event_type(n: &Node) -> Option<String> {
     if !n.tag.starts_with('_') || n.tag.starts_with("_GR_") || NOT_EVENTS.contains(&n.tag.as_str()) {
         return None;
@@ -369,7 +366,7 @@ mod tests {
     #[test]
     fn rewrites_places_when_format_changes() {
         let mut g = Gedcom::parse(G).unwrap();
-        // Sans lieu-dit ni région, et le code postal après le département.
+        // Without locality or region, and the postal code after the department.
         let r = g.set_place_format(&[
             j("Commune", Some(1)),
             j("Département", Some(3)),
@@ -393,7 +390,7 @@ mod tests {
         assert_eq!(short_place_in("Troyes, , 10000, France", &form), "Troyes (France)");
         let form = f(&["Lieu-dit", "Ville", "County", "Country"]);
         assert_eq!(short_place_in("Mill Farm, Leeds, Yorkshire, England", &form), "Mill Farm, Leeds (Yorkshire)");
-        // Format Ancestris, ou lieu qui ne suit pas le format : comme avant.
+        // Ancestris format, or a place that does not follow the format: unchanged.
         let ancestris = f(&["Lieudit", "Commune", "Code_Postal", "Département", "Région", "Pays"]);
         assert_eq!(short_place_in(", Troyes, 10000, Aube, Grand Est, France", &ancestris), "Troyes (Aube)");
         assert_eq!(short_place_in("Paris, France", &form), "Paris, France");
@@ -453,10 +450,10 @@ mod tests {
         let b = t.iter().find(|t| t.ty == "Baptême protestant").unwrap();
         assert_eq!((b.label.as_str(), b.uses), ("Baptême réformé", 1));
         assert_eq!(g.event_labels(), vec![("Baptême protestant".to_string(), "Baptême réformé".to_string())]);
-        // Renommer le TYPE garde le libellé.
+        // Renaming the TYPE keeps the label.
         g.rename_event_type(false, "Baptême protestant", "baptism (protestant)");
         assert!(g.to_gedcom_string().contains("1 _GR_EVEN baptism (protestant)\n2 _GR_LABEL Baptême réformé\n"));
-        // Libellé effacé : le type est utilisé, la déclaration n'a plus lieu d'être.
+        // Label cleared: the type is in use, the declaration is no longer needed.
         g.set_event_type_label(false, "baptism (protestant)", "");
         let out = g.to_gedcom_string();
         assert!(!out.contains("_GR_EVEN"), "{out}");

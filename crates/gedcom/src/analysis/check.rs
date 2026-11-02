@@ -1,10 +1,8 @@
-//! Contrôle de cohérence de l'arbre, à la manière de l'outil « Vérifier les
-//! données » de Gramps, du « Problem Search » de RootsMagic ou des
-//! « incohérences » de Heredis.
+//! Consistency check of the tree, like Gramps' “Verify the Data” tool, RootsMagic's “Problem
+//! Search” or Heredis' “inconsistencies”.
 //!
-//! Les anomalies ne sont signalées que lorsqu'elles sont certaines compte tenu
-//! de l'imprécision des dates (voir [`Span`]). Une anomalie vérifiée peut être
-//! masquée en ajoutant `_GR_IGNORE <code>` sous l'enregistrement concerné.
+//! Problems are only reported when they are certain given how imprecise the dates are (see
+//! [`Span`]). A checked problem can be hidden by adding `_GR_IGNORE <code>` under the record.
 
 use super::span::{Age, Span};
 use crate::document::{Gedcom, RecordKind};
@@ -14,7 +12,7 @@ use rust_i18n::t;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 
-/// Balise d'extension qui masque une anomalie (valeur = code de l'anomalie).
+/// Extension tag that hides a problem (value = problem code).
 pub const IGNORE_TAG: &str = "_GR_IGNORE";
 pub const IGNORE_URI: &str = extension_uri!("_gr_ignore");
 
@@ -35,25 +33,25 @@ impl Severity {
     }
 }
 
-/// Une anomalie détectée.
+/// A problem found.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Issue {
     pub severity: Severity,
-    /// Identifiant stable du type d'anomalie (sert à `_GR_IGNORE`).
+    /// Stable identifier of the kind of problem (used by `_GR_IGNORE`).
     pub code: &'static str,
-    /// Enregistrement principal (celui qu'on ouvre en cliquant).
+    /// Main record (the one opened on click).
     pub xref: String,
-    /// Autres enregistrements concernés.
+    /// Other records involved.
     pub related: Vec<String>,
     pub message: String,
-    /// Position de la structure fautive dans l'enregistrement (indices des
-    /// sous-structures depuis l'enregistrement) ; vide pour l'enregistrement entier.
+    /// Position of the faulty structure in the record (indices of the substructures from the
+    /// record); empty for the whole record.
     pub path: Vec<usize>,
-    /// Anomalie masquée par `_GR_IGNORE`.
+    /// Problem hidden by `_GR_IGNORE`.
     pub ignored: bool,
 }
 
-/// Seuils utilisés par le contrôle (valeurs par défaut proches de Gramps).
+/// Thresholds used by the check (defaults close to Gramps').
 #[derive(Debug, Clone)]
 pub struct Thresholds {
     pub max_lifespan: f64,
@@ -62,7 +60,7 @@ pub struct Thresholds {
     pub max_mother_age: f64,
     pub min_marriage_age: f64,
     pub max_marriage_age_gap: f64,
-    /// Événements individuels sans source : signalés en simple information.
+    /// Individual events without a source: reported as information only.
     pub report_unsourced: bool,
 }
 
@@ -80,7 +78,7 @@ impl Default for Thresholds {
     }
 }
 
-/// Libellé d'un code d'anomalie.
+/// Label of a problem code.
 pub fn code_label(code: &str) -> Cow<'static, str> {
     match code {
         "death_before_birth" => t!("check.code.death_before_birth"),
@@ -129,9 +127,9 @@ pub fn code_label(code: &str) -> Cow<'static, str> {
     }
 }
 
-/// Événements qui peuvent légitimement suivre le décès.
+/// Events that can legitimately follow death.
 const POST_MORTEM: &[&str] = &["BURI", "CREM", "PROB", "WILL", "EVEN", "FACT", "RESI", "OCCU", "TITL", "RELI", "NATI"];
-/// Attributs (pas des événements datés au sens strict).
+/// Attributes (not dated events in the strict sense).
 const ATTRIBUTES: &[&str] = &["OCCU", "RESI", "EDUC", "RELI", "TITL", "NATI", "FACT"];
 
 fn ignored(node: &Node) -> HashSet<String> {
@@ -164,14 +162,14 @@ fn years(x: f64) -> String {
     if x < 1. { t!("check.less_than_a_year").into() } else { tn!("check.years", x.floor() as usize).into() }
 }
 
-/// Lance tous les contrôles de cohérence, sans les anomalies masquées.
+/// Runs every consistency check, without the hidden problems.
 pub fn check(g: &Gedcom, t: &Thresholds) -> Vec<Issue> {
     let mut issues = check_all(g, t);
     issues.retain(|i| !i.ignored);
     issues
 }
 
-/// Marque les anomalies masquées par `_GR_IGNORE` sous leur enregistrement.
+/// Marks the problems hidden by `_GR_IGNORE` under their record.
 pub(crate) fn mark_ignored(g: &Gedcom, issues: &mut [Issue]) {
     let mut cache: HashMap<String, HashSet<String>> = HashMap::new();
     for i in issues {
@@ -180,7 +178,7 @@ pub(crate) fn mark_ignored(g: &Gedcom, issues: &mut [Issue]) {
     }
 }
 
-/// Contrôles de cohérence, anomalies masquées comprises (marquées `ignored`).
+/// Consistency checks, hidden problems included (marked `ignored`).
 pub(crate) fn check_all(g: &Gedcom, t: &Thresholds) -> Vec<Issue> {
     let mut issues: Vec<Issue> = Vec::new();
     let name = |x: &str| g.record_label(x);
@@ -198,7 +196,7 @@ pub(crate) fn check_all(g: &Gedcom, t: &Thresholds) -> Vec<Issue> {
         });
     };
 
-    // Liens cassés (tous enregistrements).
+    // Broken links (every record).
     for r in &g.records {
         let Some(x) = r.xref.as_deref() else { continue };
         let mut seen = HashSet::new();
@@ -304,7 +302,7 @@ pub(crate) fn check_all(g: &Gedcom, t: &Thresholds) -> Vec<Issue> {
                 }
             }
         }
-        // FAMC/FAMS sans réciproque.
+        // FAMC/FAMS without their counterpart.
         for (tag, back) in [("FAMC", "CHIL"), ("FAMS", "HUSB")] {
             for f in r.children_with(tag).filter_map(|n| n.pointer()) {
                 let Some(fam) = g.get(f) else { continue };
@@ -390,7 +388,7 @@ pub(crate) fn check_all(g: &Gedcom, t: &Thresholds) -> Vec<Issue> {
         if let (Some(h), Some(w)) = (husb, wife)
             && let (Some(bh), Some(bw)) = (&lives[h].birth, &lives[w].birth)
         {
-            // Écart minimal certain entre les deux naissances.
+            // Certain minimal gap between the two births.
             let a = Age::between(bh, bw);
             let gap = match (a.min_years(), a.max_years()) {
                 (Some(min), _) if min > 0. => min,
@@ -452,7 +450,7 @@ pub(crate) fn check_all(g: &Gedcom, t: &Thresholds) -> Vec<Issue> {
                     }
                 }
                 if let Some(pd) = &pl.death {
-                    // La mère doit être vivante ; le père peut être mort jusqu'à ~10 mois avant.
+                    // The mother must be alive; the father can have died up to ~10 months before.
                     let late =
                         if is_father { Span { lo: pd.lo.map(|d| d + 300), hi: pd.hi.map(|d| d + 300) } } else { *pd };
                     if late.surely_before(&cb) {
@@ -468,7 +466,7 @@ pub(crate) fn check_all(g: &Gedcom, t: &Thresholds) -> Vec<Issue> {
                 }
             }
         }
-        // Naissances trop rapprochées (hors jumeaux) chez une même mère.
+        // Births too close together (twins excepted) for the same mother.
         let mut births: Vec<(&str, i64)> = children
             .iter()
             .filter_map(|c| {
@@ -491,7 +489,7 @@ pub(crate) fn check_all(g: &Gedcom, t: &Thresholds) -> Vec<Issue> {
         }
     }
 
-    // Citations : rôle et sexe, période déclarée par la source (`DATA` / `EVEN` / `DATE`).
+    // Citations: role and sex, period declared by the source (`DATA` / `EVEN` / `DATE`).
     for r in g.records_of(RecordKind::Individual).chain(g.records_of(RecordKind::Family)) {
         let Some(x) = r.xref.as_deref() else { continue };
         let sex = (r.tag == "INDI").then(|| Individual::new(r).sex().to_string());
@@ -554,7 +552,7 @@ pub(crate) fn check_all(g: &Gedcom, t: &Thresholds) -> Vec<Issue> {
         }
     }
 
-    // Boucles dans l'ascendance.
+    // Loops in the ancestry.
     for x in lives.keys() {
         if is_own_ancestor(g, x) {
             push(Severity::Error, "own_ancestor", x, vec![], t!("check.msg.own_ancestor", who = name(x)).into());
@@ -602,8 +600,8 @@ pub(crate) fn parents_of<'a>(g: &'a Gedcom, x: &str) -> Vec<&'a str> {
 }
 
 impl Gedcom {
-    /// Masque une anomalie : ajoute `_GR_IGNORE <code>` à l'enregistrement et
-    /// déclare l'extension dans l'en-tête. Renvoie `false` si rien n'a changé.
+    /// Hides a problem: adds `_GR_IGNORE <code>` to the record and declares the extension in the
+    /// header. Returns `false` if nothing changed.
     pub fn ignore_issue(&mut self, xref: &str, code: &str) -> bool {
         let Some(r) = self.get_mut(xref) else { return false };
         if r.children_with(IGNORE_TAG).any(|n| n.val() == code) {

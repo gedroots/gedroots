@@ -1,6 +1,6 @@
-//! Outils d'analyse de l'arbre : contrôle de cohérence, lien de parenté,
-//! chronologie avec âges et statistiques. Ces outils ne font que lire le
-//! fichier, sauf [`crate::Gedcom::ignore_issue`] qui ajoute une extension `_GR_IGNORE`.
+//! Tree analysis tools: consistency check, relationship, timeline with ages and statistics. These
+//! tools only read the file, except [`crate::Gedcom::ignore_issue`], which adds a `_GR_IGNORE`
+//! extension.
 
 pub mod check;
 pub mod kinship;

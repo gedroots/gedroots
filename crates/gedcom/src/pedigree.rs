@@ -1,8 +1,8 @@
-//! Structures pour les vues en arbre (descendance, éventail).
+//! Structures for the chart views (descendants, fan chart).
 
 use crate::document::Gedcom;
 
-/// Une union dans un arbre de descendance : le conjoint et les enfants.
+/// A union in a descendant chart: the spouse and the children.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DescUnion {
     pub family: String,
@@ -10,24 +10,24 @@ pub struct DescUnion {
     pub children: Vec<DescNode>,
 }
 
-/// Une personne et ses unions, jusqu'à la profondeur demandée.
+/// A person and their unions, down to the requested depth.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DescNode {
     pub xref: String,
     pub unions: Vec<DescUnion>,
-    /// Vrai si la personne a des descendants au-delà de la profondeur affichée.
+    /// True if the person has descendants beyond the displayed depth.
     pub truncated: bool,
 }
 
 impl DescNode {
-    /// Nombre de personnes dans l'arbre (la racine comprise, sans les conjoints).
+    /// Number of people in the tree (the root included, without the spouses).
     pub fn count(&self) -> usize {
         1 + self.unions.iter().flat_map(|u| &u.children).map(DescNode::count).sum::<usize>()
     }
 }
 
 impl Gedcom {
-    /// Descendance de `xref` sur `generations` générations (1 = la personne seule).
+    /// Descendants of `xref` over `generations` generations (1 = the person alone).
     pub fn descendants(&self, xref: &str, generations: u32) -> Option<DescNode> {
         let mut seen = std::collections::HashSet::new();
         self.desc_rec(xref, generations, &mut seen)
@@ -35,7 +35,7 @@ impl Gedcom {
 
     fn desc_rec(&self, xref: &str, generations: u32, seen: &mut std::collections::HashSet<String>) -> Option<DescNode> {
         let i = self.individual(xref)?;
-        // Protège contre les boucles dans un fichier incohérent.
+        // Guards against loops in an inconsistent file.
         if !seen.insert(xref.to_string()) {
             return Some(DescNode { xref: xref.to_string(), unions: vec![], truncated: false });
         }
@@ -58,7 +58,7 @@ impl Gedcom {
         Some(DescNode { xref: xref.to_string(), unions, truncated })
     }
 
-    /// Nombre total de descendants connus (toutes générations).
+    /// Total number of known descendants (every generation).
     pub fn descendant_count(&self, xref: &str) -> usize {
         self.descendants(xref, u32::MAX).map(|d| d.count() - 1).unwrap_or(0)
     }

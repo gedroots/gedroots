@@ -1,11 +1,11 @@
-//! Lance les outils d'analyse sur un fichier : `cargo run --example analyse -- arbre.ged [@I1@]`.
+//! Runs the analysis tools on a file: `cargo run --example analyse -- tree.ged [@I1@]`.
 
 use gedcom::analysis::{check, stats};
 
 fn main() {
     let mut args = std::env::args().skip(1);
-    let path = args.next().expect("usage : analyse fichier.ged [xref-racine]");
-    let g = gedcom::load(&path).expect("lecture impossible");
+    let path = args.next().expect("usage: analyse file.ged [root-xref]");
+    let g = gedcom::load(&path).expect("cannot read the file");
     let t0 = std::time::Instant::now();
     let issues = check::check(&g, &check::Thresholds::default());
     println!("{} anomalies en {:?}", issues.len(), t0.elapsed());

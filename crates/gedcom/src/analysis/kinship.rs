@@ -1,24 +1,24 @@
-//! Calculateur de lien de parenté (« cousin issu de germain », « grand-oncle »…),
-//! comme Heredis, Gramps ou MacFamilyTree.
+//! Relationship calculator (“second cousin”, “great-uncle”…), like Heredis, Gramps or
+//! MacFamilyTree.
 
 use super::check::parents_of;
 use crate::document::Gedcom;
 use std::collections::{HashMap, VecDeque};
 
-/// Résultat du calcul : « B est le … de A ».
+/// Result of the calculation: “B is the … of A”.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Kinship {
-    /// Libellé du lien, au genre de B (ex. « cousine issue de germain »).
+    /// Label of the relationship, in B's gender (e.g. “cousine issue de germain”).
     pub label: String,
-    /// Degré civil (nombre de générations du chemin), si lien de sang.
+    /// Civil degree (number of generations in the path), for a blood relationship.
     pub degree: Option<u32>,
-    /// Chemin de A à B en passant par l'ancêtre commun (ou le conjoint).
+    /// Path from A to B through the common ancestor (or the spouse).
     pub path: Vec<String>,
-    /// Ancêtres communs les plus proches.
+    /// Closest common ancestors.
     pub common: Vec<String>,
 }
 
-/// Ancêtres de `x` avec leur distance et le maillon suivant vers `x`.
+/// Ancestors of `x` with their distance and the next link towards `x`.
 fn ancestors(g: &Gedcom, x: &str) -> HashMap<String, (u32, Option<String>)> {
     let mut out = HashMap::new();
     out.insert(x.to_string(), (0, None));
@@ -45,7 +45,7 @@ fn chain(map: &HashMap<String, (u32, Option<String>)>, from: &str) -> Vec<String
     v
 }
 
-/// Famille dont `parent` est un des époux et `child` un enfant.
+/// Family where `parent` is one of the spouses and `child` a child.
 fn family_of(g: &Gedcom, child: &str, parent: &str) -> Option<String> {
     let c = g.get(child)?;
     c.children_with("FAMC").filter_map(|n| n.pointer()).find_map(|f| {
@@ -72,7 +72,7 @@ fn sex_of(g: &Gedcom, x: &str) -> Sex {
     }
 }
 
-/// Mot au genre de la personne, lu dans le catalogue (`kin.father`, `kin.mother`, `kin.parent`).
+/// Word in the person's gender, read from the catalogue (`kin.father`, `kin.mother`, `kin.parent`).
 macro_rules! word {
     ($lang:expr, $s:expr, $m:literal, $f:literal, $u:literal) => {
         match $s {
@@ -84,17 +84,17 @@ macro_rules! word {
     };
 }
 
-/// « arrière- » / « great- », répété.
+/// “arrière-” / “great-”, repeated.
 fn great(lang: &str, n: u32) -> String {
     rust_i18n::t!("kin.great", locale = lang).repeat(n as usize)
 }
 
-/// « demi- » / « half- ».
+/// “demi-” / “half-”.
 fn half_prefix(lang: &str, half: bool) -> String {
     if half { rust_i18n::t!("kin.half", locale = lang).into_owned() } else { String::new() }
 }
 
-/// Ascendant à `n` générations : père, grand-mère, arrière-grand-père…
+/// Ancestor `n` generations up: father, grandmother, great-grandfather…
 fn ancestor_name(lang: &str, n: u32, s: Sex) -> String {
     match n {
         1 => word!(lang, s, "kin.father", "kin.mother", "kin.parent"),
@@ -112,7 +112,7 @@ fn descendant_name(lang: &str, n: u32, s: Sex) -> String {
     }
 }
 
-/// Cousin de même génération (`n` générations jusqu'à l'ancêtre commun), en français.
+/// Cousin of the same generation (`n` generations up to the common ancestor), in French.
 fn cousin_fr(lang: &str, n: u32, s: Sex) -> String {
     match n {
         2 => word!(lang, s, "kin.fr.first_cousin.m", "kin.fr.first_cousin.f", "kin.fr.first_cousin.u"),
@@ -124,7 +124,7 @@ fn cousin_fr(lang: &str, n: u32, s: Sex) -> String {
     }
 }
 
-/// Cousins, en anglais : « second cousin twice removed ».
+/// Cousins, in English: “second cousin twice removed”.
 fn cousin_en(lang: &str, a: u32, b: u32, s: Sex, half: bool) -> String {
     let degree = a.min(b) - 1;
     let ordinal = match degree {
@@ -149,7 +149,7 @@ fn cousin_en(lang: &str, a: u32, b: u32, s: Sex, half: bool) -> String {
     out
 }
 
-/// Nom du lien de sang, `a` = générations de A à l'ancêtre commun, `b` = de B.
+/// Name of the blood relationship, `a` = generations from A to the common ancestor, `b` = from B.
 fn blood_label(a: u32, b: u32, s: Sex, half: bool) -> String {
     blood_label_in(&crate::i18n::language(), a, b, s, half)
 }
@@ -192,7 +192,7 @@ fn blood_label_in(lang: &str, a: u32, b: u32, s: Sex, half: bool) -> String {
     }
 }
 
-/// Lien de sang et générations de A et de B jusqu'à l'ancêtre commun.
+/// Blood relationship and generations from A and from B up to the common ancestor.
 fn blood(g: &Gedcom, a: &str, b: &str) -> Option<(Kinship, u32, u32)> {
     let ma = ancestors(g, a);
     let mb = ancestors(g, b);
@@ -232,7 +232,7 @@ fn spouses(g: &Gedcom, x: &str) -> Vec<String> {
         .collect()
 }
 
-/// Lien de B par rapport à A (« B est le … de A »), par le sang ou par alliance.
+/// Relationship of B to A (“B is the … of A”), by blood or by marriage.
 pub fn relationship(g: &Gedcom, a: &str, b: &str) -> Option<Kinship> {
     g.individual(a)?;
     g.individual(b)?;
@@ -251,7 +251,7 @@ pub fn relationship(g: &Gedcom, a: &str, b: &str) -> Option<Kinship> {
             common: vec![],
         });
     }
-    // Parent par alliance du côté du conjoint de A.
+    // Relative by marriage on the side of A's spouse.
     for s in spouses(g, a) {
         if let Some((k, da, db)) = blood(g, &s, b) {
             let label = match (da, db) {
@@ -264,7 +264,7 @@ pub fn relationship(g: &Gedcom, a: &str, b: &str) -> Option<Kinship> {
             return Some(Kinship { label, degree: None, path, common: k.common });
         }
     }
-    // Conjoint d'un parent de sang de A.
+    // Spouse of a blood relative of A.
     for s in spouses(g, b) {
         if let Some((k, da, db)) = blood(g, a, &s) {
             let label = match (da, db) {

@@ -1,5 +1,5 @@
-//! Chronologie d'une personne avec son âge à chaque événement, enrichie des
-//! événements de ses proches (comme MacFamilyTree et Heredis).
+//! Timeline of a person with their age at each event, enriched with their relatives' events (like
+//! MacFamilyTree and Heredis).
 
 use super::span::{Age, Span};
 use crate::date::Date;
@@ -8,11 +8,11 @@ use crate::model::Individual;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EntryKind {
-    /// Événement de la personne.
+    /// Event of the person.
     Own,
-    /// Événement de son couple (mariage, divorce…).
+    /// Event of their union (marriage, divorce…).
     Family,
-    /// Événement d'un proche (naissance d'un enfant, décès d'un parent…).
+    /// Event of a relative (birth of a child, death of a parent…).
     Relative,
 }
 
@@ -22,15 +22,15 @@ pub struct Entry {
     pub label: String,
     pub date: Option<Date>,
     pub place: Option<String>,
-    /// Âge de la personne à cette date.
+    /// Age of the person on this date.
     pub age: Option<String>,
-    /// Personne liée à l'événement (conjoint, enfant…).
+    /// Person linked to the event (spouse, child…).
     pub related: Option<String>,
     pub sourced: bool,
     sort: (i32, u8, u8),
 }
 
-/// Texte au genre du proche : la clé donnée suivie de `.m`, `.f` ou `.u`.
+/// Text in the relative's gender: the given key followed by `.m`, `.f` or `.u`.
 macro_rules! pick {
     ($sex:expr, $key:literal, $name:expr) => {
         match $sex {
@@ -42,7 +42,7 @@ macro_rules! pick {
     };
 }
 
-/// Construit la chronologie de `xref`, triée par date.
+/// Builds the timeline of `xref`, sorted by date.
 pub fn timeline(g: &Gedcom, xref: &str) -> Vec<Entry> {
     let Some(me) = g.individual(xref) else { return vec![] };
     let birth = me.birth().and_then(|e| e.date_raw().and_then(Span::parse));
@@ -51,7 +51,7 @@ pub fn timeline(g: &Gedcom, xref: &str) -> Vec<Entry> {
     let mut add = |kind, label: String, node: &crate::node::Node, related: Option<String>| {
         let date = node.child_val("DATE").map(Date::parse);
         let span = date.as_ref().and_then(Span::of);
-        // Événements des proches : seulement pendant la vie de la personne.
+        // Relatives' events: only during the person's life.
         if kind == EntryKind::Relative {
             match &span {
                 None => return,
@@ -101,7 +101,7 @@ pub fn timeline(g: &Gedcom, xref: &str) -> Vec<Entry> {
             );
         }
     }
-    // Frères et sœurs.
+    // Brothers and sisters.
     if let Some(fam) = me.famc().first().and_then(|f| g.family(f)) {
         for s in fam.children().into_iter().filter(|s| *s != xref).filter_map(|s| g.individual(s)) {
             if let Some(b) = s.event("BIRT") {
@@ -122,7 +122,7 @@ pub fn timeline(g: &Gedcom, xref: &str) -> Vec<Entry> {
             }
         }
     }
-    // Couples et enfants.
+    // Unions and children.
     for f in me.fams() {
         let Some(fam) = g.family(f) else { continue };
         let spouse = [fam.husband(), fam.wife()].into_iter().flatten().find(|x| *x != xref);
@@ -179,7 +179,7 @@ pub fn timeline(g: &Gedcom, xref: &str) -> Vec<Entry> {
     out
 }
 
-/// Âge de la personne à une date GEDCOM donnée.
+/// Age of the person on a given GEDCOM date.
 pub fn age_at(ind: &Individual<'_>, date: &str) -> Option<String> {
     let b = ind.birth().and_then(|e| e.date_raw().and_then(Span::parse))?;
     Age::between(&b, &Span::parse(date)?).display()

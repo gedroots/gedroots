@@ -1,29 +1,27 @@
-//! Recherche en ligne (Individu › Rechercher sur ▸) : des sites de recherche
-//! décrits par un modèle d'URL dont les variables (`{surname}`, `{given}`,
-//! `{birth}`…) sont remplacées par les données de la personne.
+//! Online search (Person › Search On ▸): search websites described by a URL template whose
+//! variables (`{surname}`, `{given}`, `{birth}`…) are replaced with the person's data.
 //!
-//! Les sites sont propres au fichier, rangés dans l'en-tête par l'extension
-//! `_GR_WEB` (voir docs/extensions.md) et réglés dans Réglages du fichier ›
-//! Recherche :
+//! The sites belong to the file, stored in the header with the `_GR_WEB` extension (see
+//! docs/extensions.md) and set in File Settings › Search:
 //!
 //! ```text
 //! 1 _GR_WEB Geneanet
 //! 2 _GR_URL https://www.geneanet.org/fonds/individus/?go=1&nom={surname}&prenom={given}
 //! ```
 //!
-//! Sans `_GR_WEB`, GEDRoots propose [`DEFAULT_SITES`] ; un `_GR_WEB` vide (sans
-//! `_GR_URL`) indique qu'aucun site n'est voulu.
+//! Without `_GR_WEB`, GEDRoots offers [`DEFAULT_SITES`]; an empty `_GR_WEB` (without `_GR_URL`)
+//! says that no site is wanted.
 
 use crate::document::Gedcom;
 use crate::model::Individual;
 use crate::node::Node;
 
 pub const WEB_TAG: &str = "_GR_WEB";
-/// Sous `_GR_WEB` : modèle d'URL.
+/// Under `_GR_WEB`: URL template.
 const URL_TAG: &str = "_GR_URL";
 pub const WEB_URI: &str = extension_uri!("_gr_web");
 
-/// Variables proposées par le panneau, dans l'ordre.
+/// Variables offered by the panel, in order.
 pub const WEB_TOKENS: &[&str] = &[
     "surname",
     "given",
@@ -38,15 +36,15 @@ pub const WEB_TOKENS: &[&str] = &[
     "spouse_given",
 ];
 
-/// Un site de recherche.
+/// A search website.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SearchSite {
     pub name: String,
-    /// Modèle d'URL avec ses variables (`{surname}`…).
+    /// URL template with its variables (`{surname}`…).
     pub url: String,
 }
 
-/// Sites proposés tant que le fichier n'en déclare aucun.
+/// Sites offered as long as the file declares none.
 pub const DEFAULT_SITES: &[(&str, &str)] = &[
     (
         "Geneanet",
@@ -59,7 +57,7 @@ pub const DEFAULT_SITES: &[(&str, &str)] = &[
 ];
 
 impl Gedcom {
-    /// Sites de recherche du fichier, sinon [`DEFAULT_SITES`].
+    /// Search sites of the file, otherwise [`DEFAULT_SITES`].
     pub fn search_sites(&self) -> Vec<SearchSite> {
         if !self.header.children.iter().any(|c| c.tag == WEB_TAG) {
             return DEFAULT_SITES.iter().map(|(n, u)| SearchSite { name: n.to_string(), url: u.to_string() }).collect();
@@ -71,8 +69,8 @@ impl Gedcom {
             .collect()
     }
 
-    /// Enregistre les sites. Les sites sans URL sont ignorés ; une liste égale
-    /// aux sites par défaut n'écrit rien. Renvoie `false` si rien n'a changé.
+    /// Saves the sites. Sites without a URL are ignored; a list equal to the default sites writes
+    /// nothing. Returns `false` if nothing changed.
     pub fn set_search_sites(&mut self, sites: &[SearchSite]) -> bool {
         let sites: Vec<SearchSite> = sites
             .iter()
@@ -100,7 +98,7 @@ impl Gedcom {
         }
         self.declare_extension(WEB_TAG, WEB_URI);
         if sites.is_empty() {
-            // Aucun site : un `_GR_WEB` vide, pour ne pas retomber sur les sites par défaut.
+            // No site: an empty `_GR_WEB`, so as not to fall back on the default sites.
             self.header.insert_child(Node::new(WEB_TAG));
             return true;
         }
@@ -111,9 +109,8 @@ impl Gedcom {
         true
     }
 
-    /// URL de recherche de l'individu `xref` sur un site : chaque variable est
-    /// remplacée par sa valeur encodée (vide si inconnue). Les accolades qui ne
-    /// sont pas une variable connue restent telles quelles.
+    /// Search URL of individual `xref` on a site: each variable is replaced with its encoded value
+    /// (empty if unknown). Braces that are not a known variable stay as they are.
     pub fn search_url(&self, template: &str, xref: &str) -> String {
         let values = self.search_values(xref);
         let mut out = String::with_capacity(template.len());
@@ -137,7 +134,7 @@ impl Gedcom {
         out
     }
 
-    /// Valeur de chaque variable pour l'individu `xref`.
+    /// Value of each variable for individual `xref`.
     fn search_values(&self, xref: &str) -> Vec<(&'static str, String)> {
         let Some(node) = self.get(xref) else { return Vec::new() };
         let p = Individual::new(node);
@@ -164,8 +161,8 @@ impl Gedcom {
         ]
     }
 
-    /// Commune d'un lieu : la juridiction « Commune » (ou « Ville ») du format
-    /// des lieux, sinon la première partie non vide.
+    /// Municipality of a place: the “Commune” (or “Ville”) jurisdiction of the place format,
+    /// otherwise the first non-empty part.
     fn commune(&self, place: &str) -> String {
         let parts: Vec<&str> = place.split(',').map(str::trim).collect();
         let form = self.place_form();
@@ -180,7 +177,7 @@ impl Gedcom {
     }
 }
 
-/// Encodage d'une valeur dans une URL (UTF-8, `%20` pour les espaces).
+/// Encoding of a value in a URL (UTF-8, `%20` for spaces).
 fn encode(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for b in s.bytes() {
@@ -236,7 +233,7 @@ mod tests {
             url,
             "https://x.org/?n=D%27%C3%89T%C3%89&p=Jean%20Marie&b=1850&d=1912&l=Sury-le-Comtal&pp=Pierre&m=&c=Anne&k={inconnu}"
         );
-        // Accolade isolée et individu absent.
+        // Lone brace and missing individual.
         assert_eq!(g.search_url("a{b", "I1"), "a{b");
         assert_eq!(g.search_url("https://x.org/?n={surname}", "I9"), "https://x.org/?n=");
     }
@@ -246,7 +243,7 @@ mod tests {
         let mut g = Gedcom::parse(SAMPLE).unwrap();
         let defaults = g.search_sites();
         assert_eq!(defaults.iter().map(|s| s.name.as_str()).collect::<Vec<_>>(), ["Geneanet", "FamilySearch"]);
-        // Rien ne change : rien n'est écrit.
+        // Nothing changes: nothing is written.
         assert!(!g.set_search_sites(&defaults));
         assert!(g.header.child(WEB_TAG).is_none());
 
@@ -263,13 +260,13 @@ mod tests {
         assert!(text.contains("2 TAG _GR_WEB "));
         assert!(text.contains("1 _GR_WEB memoiredeshommes.fr\n2 _GR_URL https://memoiredeshommes.fr/?nom={surname}"));
 
-        // Plus aucun site : le menu disparaît.
+        // No site left: the menu disappears.
         assert!(g.set_search_sites(&[]));
         assert!(g.search_sites().is_empty());
         assert!(g.to_gedcom_string().contains("\n1 _GR_WEB\n"));
         assert!(!g.set_search_sites(&[]));
 
-        // Retour aux sites par défaut : les balises et leur déclaration disparaissent.
+        // Back to the default sites: the tags and their declaration disappear.
         assert!(g.set_search_sites(&defaults));
         let text = g.to_gedcom_string();
         assert!(!text.contains("_GR_WEB") && !text.contains("_GR_URL"));

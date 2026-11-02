@@ -1,7 +1,6 @@
-//! Recherche de lieux réels dans OpenStreetMap, à la demande : saisie d'un nouveau lieu
-//! et « Localiser » sur la fiche d'un lieu. Le service est Photon (komoot), fait pour la
-//! recherche pendant la saisie, limité aux lieux habités (`osm_tag=place`). Une requête
-//! à la fois, après une pause de saisie ; jamais en masse.
+//! Searching real places in OpenStreetMap, on demand: entering a new place and “Locate” on a
+//! place's page. The service is Photon (komoot), made for search as you type, limited to inhabited
+//! places (`osm_tag=place`). One request at a time, after a pause in typing; never in bulk.
 
 use gedcom::gazetteer::Candidate;
 use std::sync::OnceLock;
@@ -13,10 +12,10 @@ pub const USER_AGENT: &str = concat!("GEDRoots/", env!("CARGO_PKG_VERSION"), " (
 
 /// Pause de saisie avant de chercher.
 pub const TYPING_PAUSE: Duration = Duration::from_millis(450);
-/// Délai entre deux requêtes d'une même recherche.
+/// Delay between two requests of the same search.
 pub const PAUSE: Duration = Duration::from_millis(1100);
 
-/// Recherche désactivée (`GEDROOTS_OFFLINE`).
+/// Search disabled (`GEDROOTS_OFFLINE`).
 pub fn offline() -> bool {
     std::env::var_os("GEDROOTS_OFFLINE").is_some()
 }
@@ -32,8 +31,8 @@ fn agent() -> &'static ureq::Agent {
     })
 }
 
-/// Lieux habités (communes, hameaux, villes…) qui correspondent à la recherche, du plus
-/// probable au moins probable. Bloquant : à appeler hors du fil de l'interface.
+/// Inhabited places (municipalities, hamlets, towns…) matching the search, most likely first.
+/// Blocking: call it off the interface thread.
 pub fn search(q: &str, limit: usize) -> Result<Vec<Candidate>, String> {
     let url = std::env::var("GEDROOTS_GEOCODER").unwrap_or_else(|_| DEFAULT_GEOCODER.into());
     let resp = agent()
@@ -48,7 +47,7 @@ pub fn search(q: &str, limit: usize) -> Result<Vec<Candidate>, String> {
     Ok(parse(&v))
 }
 
-/// Réponse GeoJSON de Photon.
+/// Photon's GeoJSON response.
 fn parse(v: &serde_json::Value) -> Vec<Candidate> {
     let Some(features) = v.get("features").and_then(|f| f.as_array()) else { return Vec::new() };
     features
@@ -59,7 +58,7 @@ fn parse(v: &serde_json::Value) -> Vec<Candidate> {
             let p = f.get("properties")?;
             let s = |k: &str| p.get(k).and_then(|x| x.as_str()).filter(|x| !x.trim().is_empty());
             let name = s("name")?.trim().to_string();
-            // Le lieu lui-même, rangé à son niveau : commune, ou lieu-dit dans sa commune.
+            // The place itself, filed at its level: municipality, or locality in its municipality.
             let kind = match s("osm_value").unwrap_or("") {
                 k @ ("city" | "town" | "village" | "municipality") => k,
                 k @ ("hamlet" | "isolated_dwelling" | "locality" | "neighbourhood" | "quarter") => k,

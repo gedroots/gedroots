@@ -40,7 +40,7 @@ fn toggle_tokens() {
 }
 
 fn consistent(g: &Gedcom) {
-    // Chaque pointeur famille ↔ personne existe dans les deux sens.
+    // Each family ↔ person pointer exists in both directions.
     for f in g.records_of(RecordKind::Family) {
         let fam = Family::new(f);
         let x = format!("@{}@", fam.xref());
@@ -66,7 +66,7 @@ fn consistent(g: &Gedcom) {
 #[test]
 fn add_relatives() {
     let mut g = Gedcom::parse(SAMPLE).unwrap();
-    // Jeanne n'a pas de parents : on crée son père.
+    // Jeanne has no parents: her father is created.
     let father = g.add_relative("I00003", Relation::Father, None).unwrap();
     assert_eq!(g.individual(&father).unwrap().surname(), "ROUSSEL");
     assert_eq!(g.individual(&father).unwrap().sex(), "M");
@@ -74,18 +74,18 @@ fn add_relatives() {
     assert!(g.add_relative("I00003", Relation::Father, None).is_err());
     let mother = g.add_relative("I00003", Relation::Mother, None).unwrap();
     assert_eq!(g.parents("I00003").1.unwrap().xref(), mother);
-    // Les deux parents sont dans la même famille.
+    // Both parents are in the same family.
     assert_eq!(g.individual(&father).unwrap().fams(), g.individual(&mother).unwrap().fams());
     let sib = g.add_relative("I00003", Relation::Sibling, None).unwrap();
     assert_eq!(g.parents(&sib).0.unwrap().xref(), father);
-    // Paul : un conjoint puis un enfant qui prend le nom du père.
+    // Paul: a spouse, then a child who takes the father's surname.
     let wife = g.add_relative("I00001", Relation::Spouse, None).unwrap();
     assert_eq!(g.individual(&wife).unwrap().sex(), "F");
     let kid = g.add_relative("I00001", Relation::Child, None).unwrap();
     assert_eq!(g.individual(&kid).unwrap().surname(), "MARCHAND");
     assert_eq!(g.parents(&kid).1.unwrap().xref(), wife);
     consistent(&g);
-    // Le fichier reste relisible.
+    // The file stays readable.
     let again = Gedcom::parse(&g.to_gedcom_string()).unwrap();
     assert_eq!(again.count(RecordKind::Individual), g.count(RecordKind::Individual));
 }
@@ -97,7 +97,7 @@ fn link_and_unlink() {
     g.link_relative("I00001", Relation::Spouse, &x).unwrap();
     assert!(g.link_relative("I00001", Relation::Spouse, &x).is_err());
     assert!(g.link_relative("I00001", Relation::Father, "I00003").is_err(), "a déjà un père");
-    // Un homme ne peut pas devenir la mère, et rien n'est laissé derrière.
+    // A man cannot become the mother, and nothing is left behind.
     let families = g.count(RecordKind::Family);
     let man = g.create_individual("Henri", "LAMY", "M");
     let orphan = g.create_individual("Lucie", "LAMY", "F");
@@ -105,7 +105,7 @@ fn link_and_unlink() {
     assert_eq!(g.count(RecordKind::Family), families);
     g.link_relative(&orphan, Relation::Father, &man).unwrap();
     assert_eq!(g.parents(&orphan).0.unwrap().xref(), man);
-    // Un ascendant ne peut pas devenir enfant.
+    // An ancestor cannot become a child.
     assert!(g.link_relative("I00001", Relation::Child, "I00002").is_err());
     let kid = g.create_individual("Marc", "MARCHAND", "M");
     g.link_relative("I00001", Relation::Child, &kid).unwrap();
@@ -115,7 +115,7 @@ fn link_and_unlink() {
     g.unlink_from_family(&kid, &fam);
     assert!(g.parents(&kid).0.is_none());
     consistent(&g);
-    // Séparer le couple vide la famille, qui disparaît.
+    // Separating the couple empties the family, which disappears.
     g.unlink_from_family(&x, &fam);
     assert!(g.family(&fam).is_none());
     consistent(&g);
@@ -126,7 +126,7 @@ fn marriage_criterion() {
     let mut g = Gedcom::parse(SAMPLE).unwrap();
     assert!(names(&g, "without:marriage").is_empty());
     assert_eq!(names(&g, "with:marriage"), vec!["Jeanne", "Émile"]);
-    // Une union sans mariage ; une personne sans union ne compte pas.
+    // A union without a marriage; a person without a union does not count.
     g.add_relative("I00001", Relation::Spouse, None).unwrap();
     let mut without = names(&g, "without:marriage");
     without.retain(|n| !n.is_empty());
@@ -136,14 +136,14 @@ fn marriage_criterion() {
 #[test]
 fn spouse_joins_single_parent_union() {
     let mut g = Gedcom::parse(SAMPLE).unwrap();
-    // Paul a un enfant sans conjoint connu : l'union n'a qu'un parent.
+    // Paul has a child with no known spouse: the union has only one parent.
     let kid = g.add_relative("I00001", Relation::Child, None).unwrap();
     let families = g.count(RecordKind::Family);
-    // Le conjoint ajouté ensuite complète cette union au lieu d'en créer une autre.
+    // The spouse added next completes this union instead of creating another one.
     let wife = g.add_relative("I00001", Relation::Spouse, None).unwrap();
     assert_eq!(g.count(RecordKind::Family), families);
     assert_eq!(g.parents(&kid).1.unwrap().xref(), wife);
-    // Union complète : un second conjoint ouvre une nouvelle union.
+    // Complete union: a second spouse opens a new union.
     let x = g.create_individual("Louise", "BERTIN", "F");
     g.link_relative("I00001", Relation::Spouse, &x).unwrap();
     assert_eq!(g.count(RecordKind::Family), families + 1);
@@ -159,7 +159,7 @@ fn delete_cleans_up() {
     g.delete_individual(&wife);
     assert!(g.family(&fam).is_none(), "la famille d'un seul membre est supprimée");
     assert!(g.individual("I00001").unwrap().fams().is_empty());
-    // Supprimer Paul garde la famille F00001 (les deux parents restent).
+    // Deleting Paul keeps family F00001 (both parents stay).
     g.delete_record("I00001");
     assert!(g.family("F00001").is_some());
     assert!(g.family("F00001").unwrap().children().is_empty());

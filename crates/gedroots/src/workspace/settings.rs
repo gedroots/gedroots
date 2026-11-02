@@ -1,15 +1,12 @@
-//! Réglages du fichier (Fichier › Réglages du fichier…), en cinq pages :
-//! - Général : auteur, droits, description, langue et individu racine
-//!   (voir `gedcom::settings`) ;
-//! - Lieux : format des lieux (`HEAD.PLAC.FORM`), avec réécriture des lieux ;
-//! - Événements : types d'événements personnalisés (`EVEN` + `TYPE`), avec
-//!   leur libellé affiché ;
-//! - Médias : dossier des médias, sous-dossiers par type et modèles de nom
-//!   (`gedcom::media_naming`) ;
-//! - Recherche : sites d'Individu › Rechercher sur, avec leur modèle d'URL
-//!   (`gedcom::websearch`).
+//! File settings (File › File Settings…), in five pages:
+//! - General: author, copyright, description, language and root individual (see
+//!   `gedcom::settings`);
+//! - Places: place format (`HEAD.PLAC.FORM`), with rewriting of places;
+//! - Events: custom event types (`EVEN` + `TYPE`), with their displayed label;
+//! - Media: media folder, subfolders by type and name templates (`gedcom::media_naming`);
+//! - Search: sites of Individual › Search On, with their URL template (`gedcom::websearch`).
 //!
-//! Tout est rangé dans le .ged et s'annule comme toute modification.
+//! Everything is stored in the .ged and can be undone like any change.
 
 use super::add::{AddDialog, plus_button};
 use super::*;
@@ -27,7 +24,7 @@ pub(super) enum SettingsPage {
     Search,
 }
 
-/// Un site de recherche en cours de modification.
+/// A search site being edited.
 struct SiteRow {
     name: Entity<InputState>,
     url: Entity<InputState>,
@@ -44,22 +41,22 @@ impl SiteRow {
     }
 }
 
-/// Une juridiction du format des lieux en cours de modification.
+/// A jurisdiction of the place format being edited.
 struct PlaceRow {
     name: Entity<InputState>,
-    /// Position dans le format actuel (`None` : ajoutée).
+    /// Position in the current format (`None`: added).
     from: Option<usize>,
 }
 
-/// Un type d'événement personnalisé en cours de modification.
+/// A custom event type being edited.
 struct EventRow {
-    /// Libellé affiché (vide : le `TYPE`).
+    /// Displayed label (empty: the `TYPE`).
     label: Entity<InputState>,
-    /// Valeur du `TYPE`.
+    /// Value of the `TYPE`.
     ty: Entity<InputState>,
-    /// `TYPE` actuel (`None` : type ajouté).
+    /// Current `TYPE` (`None`: type added).
     original: Option<String>,
-    /// Libellé actuel (vide : le `TYPE`).
+    /// Current label (empty: the `TYPE`).
     original_label: String,
     family: bool,
     uses: usize,
@@ -75,24 +72,24 @@ pub(super) struct SettingsDialog {
     root: Entity<PickerState>,
     places: Vec<PlaceRow>,
     events: Vec<EventRow>,
-    /// Types déclarés retirés de la liste.
+    /// Declared types removed from the list.
     removed_events: Vec<(bool, String)>,
     media_root: Entity<InputState>,
     media: Vec<MediaRow>,
-    /// Dossier dont le modèle reçoit les variables cliquées.
+    /// Folder whose template receives the clicked variables.
     media_active: usize,
-    /// Contexte de chaque média du fichier (calculé à l'ouverture), pour les exemples.
+    /// Context of each media of the file (computed on opening), for the examples.
     media_samples: Vec<(MediaContext, String)>,
     sites: Vec<SiteRow>,
-    /// Site dont le modèle reçoit les variables cliquées.
+    /// Site whose template receives the clicked variables.
     sites_active: usize,
     _subs: Vec<Subscription>,
 }
 
-/// Un sous-dossier des médias en cours de modification.
+/// A media subfolder being edited.
 struct MediaRow {
     dir: Entity<InputState>,
-    /// Ce qu'il reçoit (vide : tout le reste), choisi dans un menu.
+    /// What it receives (empty: everything else), chosen in a menu.
     types: Vec<String>,
     template: Entity<InputState>,
 }
@@ -109,12 +106,12 @@ impl MediaRow {
     }
 }
 
-/// Redessine le panneau pendant la saisie (exemples).
+/// Redraws the panel while typing (examples).
 fn refresh_on_change(e: &Entity<InputState>, cx: &mut Context<Workspace>) -> Subscription {
     let input = e.clone();
     cx.subscribe(e, move |this, _, ev: &InputEvent, cx| match ev {
         InputEvent::Change => cx.notify(),
-        // Les variables cliquées vont dans le dernier modèle touché.
+        // Clicked variables go into the last template touched.
         InputEvent::Focus => {
             if let Some(d) = this.settings_dialog() {
                 if let Some(i) = d.media.iter().position(|r| r.template == input) {
@@ -253,14 +250,14 @@ impl Workspace {
             .map(|r| Jurisdiction { name: r.name.read(cx).value().trim().to_string(), from: r.from })
             .filter(|j| !j.name.is_empty() || j.from.is_some())
             .collect();
-        // (famille, ancien TYPE, nouveau TYPE, libellé s'il change)
+        // (family, old TYPE, new TYPE, label if it changes)
         let events: Vec<(bool, Option<String>, String, Option<String>)> = d
             .events
             .iter()
             .map(|r| {
                 let label = r.label.read(cx).value().trim().to_string();
                 let ty = r.ty.read(cx).value().trim().to_string();
-                // Nouveau type sans TYPE : le libellé sert de TYPE.
+                // New type without TYPE: the label serves as TYPE.
                 if r.original.is_none() && ty.is_empty() {
                     return (r.family, None, label, None);
                 }
@@ -322,7 +319,7 @@ impl Workspace {
                 }
                 Ok((msg, None))
             });
-            // Rangement modifié depuis l'aperçu d'import : les noms prévus suivent.
+            // Organization changed from the import preview: the planned names follow.
             self.refresh_import_plan(cx);
         }
         window.focus(&self.focus, cx);
@@ -377,7 +374,7 @@ impl Workspace {
         let g = &self.doc.as_ref().unwrap().ged;
         let info = g.file_info();
 
-        // Informations : « GEDCOM 7.0.13 · Ancestris 13, le 1 novembre 2026 ».
+        // Information: “GEDCOM 7.0.13 · Ancestris 13, on 1 November 2026”.
         let mut about = format!("GEDCOM {}", info.version);
         if !info.software.is_empty() {
             about.push_str(&format!(" · {}", info.software));
@@ -438,7 +435,7 @@ impl Workspace {
     fn settings_places(&self, d: &SettingsDialog, cx: &mut Context<Self>) -> AnyElement {
         let g = &self.doc.as_ref().unwrap().ged;
         let n = d.places.len();
-        // Aperçu : un lieu du fichier dans le nouveau format.
+        // Preview: a place of the file in the new format.
         let old_len = g.place_form().len();
         let sample = g.places().into_iter().map(|p| p.name).find(|name| {
             let parts: Vec<&str> = name.split(',').map(str::trim).collect();
@@ -587,7 +584,7 @@ impl Workspace {
         let n = d.media.len();
         let rows = d.media.iter().enumerate().map(|(i, r)| {
             let id = |what: &str| SharedString::from(format!("media-{what}-{i}"));
-            // Exemple : le premier média du fichier rangé dans ce sous-dossier.
+            // Example: the first media of the file stored in this subfolder.
             let f = folder(r, cx);
             let example = d
                 .media_samples
@@ -628,8 +625,8 @@ impl Workspace {
                         menu = menu.item(PopupMenuItem::new(label.clone()).checked(on).on_click(move |_, _, cx| {
                             let _ = ws.update(cx, |this, cx| {
                                 if let Some(d) = this.settings_dialog() {
-                                    // Un type ne va que dans un sous-dossier : le cocher
-                                    // ici le retire des autres.
+                                    // A type only goes into one subfolder: checking it here removes
+                                    // it from the others.
                                     if !on {
                                         for (j, other) in d.media.iter_mut().enumerate() {
                                             if j != i {
@@ -750,7 +747,7 @@ impl Workspace {
 impl Workspace {
     fn settings_search(&self, d: &SettingsDialog, cx: &mut Context<Self>) -> AnyElement {
         let g = &self.doc.as_ref().unwrap().ged;
-        // Exemple : la personne affichée, sinon l'individu racine.
+        // Example: the displayed person, otherwise the root individual.
         let person = self.selected.clone().filter(|x| g.get(x).is_some_and(|n| n.tag == "INDI")).or_else(|| g.root());
         let n = d.sites.len();
         let rows = d.sites.iter().enumerate().map(|(i, r)| {
@@ -843,7 +840,7 @@ impl Workspace {
     }
 }
 
-/// Les sites saisis, dans l'ordre (ceux sans URL sont ignorés).
+/// The entered sites, in order (those without a URL are ignored).
 fn search_sites(d: &SettingsDialog, cx: &App) -> Vec<SearchSite> {
     d.sites
         .iter()
@@ -851,8 +848,8 @@ fn search_sites(d: &SettingsDialog, cx: &App) -> Vec<SearchSite> {
         .collect()
 }
 
-/// Choix du menu des types : libellé, balises. Les événements courants, les
-/// types personnalisés du fichier, puis « Portrait » (média rattaché à une personne).
+/// Choices of the types menu: label, tags. The common events, the file’s custom types, then
+/// “Portrait” (media attached to a person).
 fn type_options(g: &Gedcom) -> Vec<(String, Vec<String>)> {
     const ATTRIBUTES: &[&str] = &["RESI", "OCCU", "EDUC", "RELI", "TITL", "NATI", "FACT", "EVEN", "CHR"];
     let mut out: Vec<(String, Vec<String>)> = gedcom::EVENT_TAGS
@@ -863,7 +860,7 @@ fn type_options(g: &Gedcom) -> Vec<(String, Vec<String>)> {
             (gedcom::event_name(t), tags)
         })
         .collect();
-    // Les actes d'état civil d'abord.
+    // Civil registration records first.
     const FIRST: &[&str] = &["BIRT", "BAPM", "MARR", "DEAT", "BURI", "CENS"];
     out.sort_by_key(|(_, tags)| FIRST.iter().position(|t| *t == tags[0]).unwrap_or(FIRST.len()));
     for t in g.event_types() {
@@ -883,7 +880,7 @@ fn folder(r: &MediaRow, cx: &App) -> MediaFolder {
     }
 }
 
-/// Le réglage saisi (les sous-dossiers laissés vides sont ignorés).
+/// The entered setting (subfolders left empty are ignored).
 fn media_naming(d: &SettingsDialog, cx: &App) -> MediaNaming {
     let folders = d
         .media

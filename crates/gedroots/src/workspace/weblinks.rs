@@ -1,8 +1,7 @@
-//! Liens web des fiches : liste cliquable (ouverture dans le navigateur),
-//! et fenêtre d'ajout / de modification.
+//! Web links of records: clickable list (opened in the browser), and add / edit window.
 //!
-//! Stockage en GEDCOM 7 standard, voir `gedcom::weblink` : lien multimédia
-//! vers un `OBJE` dont le `FILE` est l'URL (`WWW` pour les dépôts).
+//! Stored in standard GEDCOM 7, see `gedcom::weblink`: multimedia link to an `OBJE` whose `FILE` is
+//! the URL (`WWW` for repositories).
 
 use super::add::{AddDialog, plus_button};
 use super::*;
@@ -11,17 +10,17 @@ use rust_i18n::t;
 
 pub(super) struct WebLinkDialog {
     owner: String,
-    /// Lien modifié (`None` : nouveau lien).
+    /// Edited link (`None`: new link).
     editing: Option<WebLinkKind>,
     url: Entity<InputState>,
     title: Entity<InputState>,
-    /// Les dépôts n'ont pas de titre de lien (`WWW` porte seulement l'adresse).
+    /// Repositories have no link title (`WWW` only holds the address).
     titled: bool,
     error: Option<SharedString>,
 }
 
 impl Workspace {
-    /// Ouvre la fenêtre d'ajout (ou de modification) d'un lien web.
+    /// Opens the window for adding (or editing) a web link.
     pub(super) fn open_weblink_dialog(
         &mut self,
         owner: String,
@@ -59,7 +58,7 @@ impl Workspace {
             Some(k) => g.update_web_link(&owner, k, &url, &title),
             None => g.add_web_link(&owner, &url, &title),
         };
-        // Vérification avant la modification, pour garder la fenêtre ouverte en cas d'erreur.
+        // Check before the change, to keep the window open on error.
         let mut probe = self.doc.as_ref().unwrap().ged.clone();
         if let Err(e) = apply(&mut probe) {
             d.error = Some(e.into());
@@ -112,7 +111,7 @@ impl Workspace {
             .into_any_element()
     }
 
-    /// Section « Liens web » du panneau de détail (masquée s'il n'y en a pas).
+    /// “Web Links” section of the detail panel (hidden if there are none).
     pub(super) fn render_web_links(&self, record: &str, cx: &mut Context<Self>) -> Option<AnyElement> {
         let g = &self.doc.as_ref()?.ged;
         let links = g.web_links(record);
@@ -143,7 +142,7 @@ impl Workspace {
                 .cursor_pointer()
                 .hover(|d| d.bg(theme::hover()))
                 .tooltip({
-                    // Les adresses d'archives font parfois plusieurs centaines de caractères.
+                    // Archive addresses are sometimes several hundred characters long.
                     let href = l.href();
                     let tip = match href.char_indices().nth(90) {
                         Some((i, _)) => SharedString::from(format!("{}…", &href[..i])),
@@ -218,7 +217,7 @@ impl Workspace {
     }
 }
 
-/// Le média est-il une page web (affichée dans « Liens web » plutôt que dans les médias) ?
+/// Is the media a web page (shown in “Web Links” rather than in the media)?
 pub(super) fn is_web_media(g: &Gedcom, xref: &str) -> bool {
     g.get(xref).filter(|n| n.tag == "OBJE").map(Media::new).is_some_and(|m| m.is_web())
 }

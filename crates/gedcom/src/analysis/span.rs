@@ -1,19 +1,18 @@
-//! Intervalles de dates et calcul d'âges.
+//! Date intervals and age calculation.
 //!
-//! Une date GEDCOM est souvent imprécise (`1850`, `ABT 1850`, `BEF 1809`…).
-//! Pour comparer deux dates sans fausses alertes, on la convertit en un
-//! intervalle de jours `[lo, hi]` (bornes éventuellement ouvertes) : « A est
-//! avant B » n'est affirmé que si c'est vrai pour toutes les valeurs possibles.
+//! A GEDCOM date is often imprecise (`1850`, `ABT 1850`, `BEF 1809`…). To compare two dates without
+//! false alarms, it is turned into an interval of days `[lo, hi]` (bounds possibly open): “A is
+//! before B” is only asserted if it holds for every possible value.
 
 use crate::date::calendar::UNIX_EPOCH_RD;
 use crate::date::{Date, SimpleDate};
 use rust_i18n::t;
 
-/// Marge appliquée aux dates « vers », « estimée » et « calculée ».
+/// Margin applied to “about”, “estimated” and “calculated” dates.
 pub const FUZZ_YEARS: i64 = 5;
 const DAYS_PER_YEAR: f64 = 365.2425;
 
-/// Nombre de jours depuis le 1er janvier 1970 (calendrier grégorien proleptique).
+/// Number of days since 1 January 1970 (proleptic Gregorian calendar).
 pub fn days_from_civil(y: i64, m: u32, d: u32) -> i64 {
     let y = if m <= 2 { y - 1 } else { y };
     let era = y.div_euclid(400);
@@ -24,13 +23,13 @@ pub fn days_from_civil(y: i64, m: u32, d: u32) -> i64 {
     era * 146_097 + doe - 719_468
 }
 
-/// Intervalle de jours couvert par une date simple (conversions exactes entre calendriers).
+/// Interval of days covered by a simple date (exact conversions between calendars).
 pub fn simple_range(d: &SimpleDate) -> Option<(i64, i64)> {
     let (lo, hi) = d.rd_range()?;
     Some((lo - UNIX_EPOCH_RD, hi - UNIX_EPOCH_RD))
 }
 
-/// Intervalle de jours possible pour une date ; `None` = borne ouverte.
+/// Possible interval of days for a date; `None` = open bound.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Span {
     pub lo: Option<i64>,
@@ -61,18 +60,18 @@ impl Span {
         Span::of(&Date::parse(raw))
     }
 
-    /// Vrai si toute valeur possible de `self` précède strictement toute valeur de `other`.
+    /// True if every possible value of `self` is strictly before every value of `other`.
     pub fn surely_before(&self, other: &Span) -> bool {
         matches!((self.hi, other.lo), (Some(a), Some(b)) if a < b)
     }
 
-    /// Milieu de l'intervalle, si les deux bornes sont connues.
+    /// Middle of the interval, if both bounds are known.
     pub fn mid(&self) -> Option<i64> {
         Some((self.lo? + self.hi?) / 2)
     }
 }
 
-/// Écart possible entre deux dates, en jours.
+/// Possible gap between two dates, in days.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Age {
     pub min: Option<i64>,
@@ -80,7 +79,7 @@ pub struct Age {
 }
 
 impl Age {
-    /// Âge à la date `at` d'une personne née à `birth`.
+    /// Age at date `at` of a person born at `birth`.
     pub fn between(birth: &Span, at: &Span) -> Age {
         Age {
             min: match (birth.hi, at.lo) {
@@ -102,7 +101,7 @@ impl Age {
         self.max.map(|d| d as f64 / DAYS_PER_YEAR)
     }
 
-    /// Âge le plus probable, en années (milieu de l'intervalle).
+    /// Most likely age, in years (middle of the interval).
     pub fn mid_years(&self) -> Option<f64> {
         Some((self.min? + self.max?) as f64 / 2. / DAYS_PER_YEAR)
     }

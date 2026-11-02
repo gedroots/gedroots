@@ -1,11 +1,10 @@
-//! Éditeur d'acte, ouvert dans la fiche d'une source : à gauche l'image de
-//! l'acte, à droite l'événement (n'importe quel événement GEDCOM), sa référence
-//! et les personnes citées avec leur rôle (lier à un individu existant, créer,
-//! ou mentionner seulement). Il n'y a pas de modèles : les champs de chaque
-//! personne et les liens familiaux découlent de son rôle.
+//! Record editor, opened in a source's page: on the left the record's image, on the right the event
+//! (any GEDCOM event), its reference and the people named with their role (link to an existing
+//! individual, create, or only mention). There are no templates: each person's fields and the
+//! family links follow from their role.
 //!
-//! L'éditeur travaille sur une copie du document ; l'écriture réelle est faite
-//! par l'espace de travail quand il reçoit [`ActEditorEvent::Save`].
+//! The editor works on a copy of the document; the actual write is done by the workspace when it
+//! receives [`ActEditorEvent::Save`].
 
 use crate::date_field::DateField;
 use crate::editor::{PickerState, choice_with_search, picker};
@@ -26,30 +25,30 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 pub enum ActEditorEvent {
-    /// Écrire l'acte ; `next` : enchaîner sur l'acte suivant du même registre.
+    /// Write the record; `next`: move on to the next record of the same register.
     Save {
         act: Box<Act>,
         next: bool,
     },
     Close,
-    /// Saisie dans un champ de lieu (`changed` : le texte a changé) : l'espace de travail
-    /// tient le menu des lieux, commun à tous les champs Lieu.
+    /// Typing in a place field (`changed`: the text changed): the workspace holds the place menu,
+    /// shared by every Place field.
     PlaceInput {
         input: Entity<InputState>,
         changed: bool,
     },
 }
 
-/// Menu des lieux sous un champ Lieu, fourni par l'espace de travail.
+/// Place menu under a Place field, provided by the workspace.
 pub type PlaceMenu = Rc<dyn Fn(&Entity<InputState>, &mut App) -> Option<AnyElement>>;
 
-/// Rôle d'un champ de saisie, pour savoir quoi recalculer quand il change.
+/// Role of an input field, to know what to recompute when it changes.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Kind {
     Plain,
-    /// Lieu : propose les lieux du fichier.
+    /// Place: suggests the file's places.
     Place,
-    /// Nom, prénom, âge ou date : relance les suggestions.
+    /// Surname, given name, age or date: refreshes the suggestions.
     Name,
 }
 
@@ -57,7 +56,7 @@ struct PersonRow {
     role: ActRole,
     of: usize,
     inputs: Vec<(PersonField, Entity<InputState>)>,
-    /// Sexe choisi par boutons ; `None` : fixé par le rôle ou sans objet.
+    /// Sex chosen with buttons; `None`: set by the role or not applicable.
     sex: Option<String>,
     choice: PersonChoice,
     suggestions: Vec<Suggestion>,
@@ -67,7 +66,7 @@ struct PersonRow {
 pub struct ActEditor {
     ged: Gedcom,
     base_dir: Option<PathBuf>,
-    /// L'acte ouvert : source, version d'origine, note gardée telle quelle.
+    /// The open record: source, original version, note kept as is.
     base: Act,
     event: Entity<PickerState>,
     event_type: Entity<InputState>,
@@ -78,13 +77,13 @@ pub struct ActEditor {
     transcription: Entity<TextareaState>,
     quality: Option<u8>,
     media: MediaChoice,
-    /// Page affichée de l'image de l'acte (à partir de 0).
+    /// Displayed page of the record's image (from 0).
     media_page: usize,
-    /// N'importe quel média du fichier, pour lier un fichier déjà importé.
+    /// Any media of the file, to link a file already imported.
     media_picker: Entity<PickerState>,
     estimate_births: bool,
     rows: Vec<PersonRow>,
-    /// Champ de lieu actif (pour afficher les lieux proposés sous ce champ).
+    /// Active place field (to show the suggested places under this field).
     place_focus: Option<EntityId>,
     place_menu: Option<PlaceMenu>,
     preview: Option<Result<String, String>>,
@@ -101,13 +100,13 @@ fn quality_labels() -> [std::borrow::Cow<'static, str>; 4] {
     [t!("act.quality_0"), t!("act.quality_1"), t!("act.quality_2"), t!("act.quality_3")]
 }
 
-/// Événements individuels proposés (les familiaux viennent de [`gedcom::act::FAMILY_ACT_EVENTS`]).
+/// Individual events offered (family events come from [`gedcom::act::FAMILY_ACT_EVENTS`]).
 const INDIVIDUAL_ACT_EVENTS: &[&str] = &[
     "BIRT", "BAPM", "DEAT", "BURI", "CREM", "CENS", "CONF", "FCOM", "ADOP", "NATU", "EMIG", "IMMI", "EDUC", "GRAD",
     "RETI", "WILL", "PROB",
 ];
 
-/// Valeur de la liste des événements → (balise, type, événement familial).
+/// Value of the event list → (tag, type, family event).
 fn parse_event(v: &str) -> (String, String, bool) {
     let (family, rest) = match v.strip_prefix("FAM:") {
         Some(r) => (true, r),
@@ -119,7 +118,7 @@ fn parse_event(v: &str) -> (String, String, bool) {
     }
 }
 
-/// Valeur de la liste des événements pour un acte.
+/// Value of the event list for a record.
 fn event_value(act: &Act, custom: &[EventType]) -> String {
     if act.event == "EVEN" {
         let fam = if act.family_even { "FAM:" } else { "" };
@@ -131,7 +130,7 @@ fn event_value(act: &Act, custom: &[EventType]) -> String {
 
 impl ActEditor {
     pub fn new(ged: Gedcom, ged_path: Option<PathBuf>, act: Act, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        // Événements : individuels, familiaux, types personnalisés du fichier, puis « Autre… ».
+        // Events: individual, family, custom types of the file, then “Other…”.
         let custom = ged.event_types();
         let mut options: Vec<(String, String)> = INDIVIDUAL_ACT_EVENTS
             .iter()
@@ -159,7 +158,7 @@ impl ActEditor {
         let event_type = mk(cx, window, &t!("act.type_placeholder"), &custom_type);
         let page = mk(cx, window, &t!("act.page_placeholder"), &act.page);
         let place = mk(cx, window, &t!("event_dialog.town"), &place_label(&act.place));
-        // Colonnes étroites (grille à 4) : exemple sans « ex. » pour qu'il ne soit pas tronqué.
+        // Narrow columns (4-column grid): example without “e.g.” so it is not truncated.
         let short = |value: &str, phrase: &str, window: &mut Window, cx: &mut Context<Self>| {
             cx.new(|cx| {
                 DateField::new(value, phrase, window, cx).with_placeholder(t!("act.date_placeholder"), window, cx)
@@ -265,7 +264,7 @@ impl ActEditor {
         })
     }
 
-    /// Événement choisi : (balise, type, familial).
+    /// Chosen event: (tag, type, family).
     fn event(&self, cx: &App) -> (String, String, bool) {
         let v = self.event.read(cx).selected_value().cloned().unwrap_or_default();
         let (tag, ty, family) = parse_event(&v);
@@ -275,7 +274,7 @@ impl ActEditor {
         (tag, ty, family)
     }
 
-    /// Recrée les lignes des personnes (les champs dépendent du rôle et de l'événement).
+    /// Rebuilds the people's rows (the fields depend on the role and the event).
     fn set_rows(&mut self, people: Vec<Participant>, window: &mut Window, cx: &mut Context<Self>) {
         let mut act = self.collect(cx);
         act.participants = people;
@@ -335,12 +334,12 @@ impl ActEditor {
             .unwrap_or(MediaChoice::None)
     }
 
-    /// Construit l'acte à partir des champs.
+    /// Builds the record from the fields.
     fn collect(&self, cx: &App) -> Act {
         let v = |e: &Entity<InputState>| e.read(cx).value().trim().to_string();
         let mut a = self.base.clone();
         (a.event, a.event_type, a.family_even) = self.event(cx);
-        // Date impossible : le texte saisi est gardé, `save` signale l'erreur.
+        // Impossible date: the typed text is kept, `save` reports the error.
         let date = |d: &Entity<DateField>| {
             let f = d.read(cx);
             f.value(cx).unwrap_or_else(|_| (f.input().read(cx).value().trim().to_string(), String::new()))
@@ -382,7 +381,7 @@ impl ActEditor {
         let act = self.collect(cx);
         let mut people = act.participants.clone();
         if people.iter().all(|p| p.is_blank() && p.choice == PersonChoice::Create) {
-            // Rien de saisi : les personnes attendues pour ce nouvel événement.
+            // Nothing entered: the people expected for this new event.
             people = act.default_participants();
         } else if act.is_family() {
             while people.iter().filter(|p| p.role == ActRole::Principal).count() < 2 {
@@ -396,7 +395,7 @@ impl ActEditor {
 
     fn add_person(&mut self, role: ActRole, window: &mut Window, cx: &mut Context<Self>) {
         let mut people = self.collect(cx).participants;
-        // Une personne principale de plus va après les autres personnes principales.
+        // One more principal person goes after the other principal people.
         let at = match role {
             ActRole::Principal => people.iter().rposition(|p| p.role == ActRole::Principal).map_or(0, |i| i + 1),
             _ => people.len(),
@@ -418,7 +417,7 @@ impl ActEditor {
     fn set_choice(&mut self, idx: usize, choice: PersonChoice, window: &mut Window, cx: &mut Context<Self>) {
         let mut people = self.collect(cx).participants;
         let Some(p) = people.get_mut(idx) else { return };
-        // En liant, on complète les champs vides avec l'individu choisi.
+        // When linking, empty fields are filled from the chosen individual.
         if let PersonChoice::Link(x) = &choice
             && let Some(ind) = self.ged.individual(x)
         {
@@ -462,7 +461,7 @@ impl ActEditor {
         .detach();
     }
 
-    /// Chemin à enregistrer : relatif au dossier du .ged si le fichier s'y trouve.
+    /// Path to save: relative to the .ged folder if the file is in it.
     fn file_value(&self, p: &Path) -> String {
         self.base_dir
             .as_ref()
@@ -471,9 +470,9 @@ impl ActEditor {
             .unwrap_or_else(|| p.to_string_lossy().to_string())
     }
 
-    /// Fichiers choisis ou déposés pour l'acte (images et PDF, une page chacun).
-    /// `append` : s'ajoutent aux nouveaux fichiers déjà choisis au lieu de les remplacer.
-    /// Ils seront copiés et nommés selon Réglages du fichier › Médias à l'enregistrement.
+    /// Files chosen or dropped for the record (images and PDFs, one page each). `append`: added to
+    /// the new files already chosen instead of replacing them. They are copied and named according
+    /// to File Settings › Media on save.
     pub(crate) fn add_files(&mut self, paths: &[PathBuf], append: bool, cx: &mut Context<Self>) {
         let (ok, rejected): (Vec<&PathBuf>, Vec<&PathBuf>) = paths.iter().filter(|p| p.is_file()).partition(|p| {
             let mime = mime_for(&p.to_string_lossy());
@@ -493,7 +492,7 @@ impl ActEditor {
                 }
             }
             self.media_page = first.min(all.len().saturating_sub(1));
-            // Fichiers déjà importés (tous dans le même média) : on lie ce média, sans doublon.
+            // Files already imported (all in the same media): link that media, without duplicates.
             let known: Vec<Option<String>> = all.iter().map(|f| self.ged.media_by_file(f)).collect();
             self.media = match known.first() {
                 Some(Some(x)) if known.iter().all(|k| k.as_ref() == Some(x)) => {
@@ -511,7 +510,7 @@ impl ActEditor {
         cx.subscribe_in(&self.media_picker, window, |this, picker, ev: &SelectEvent<_>, window, cx| {
             if let SelectEvent::Confirm(Some(x)) = ev {
                 this.set_media(MediaChoice::Existing(x.clone()), cx);
-                // Le sélecteur sert d'action : il revient à « Média existant… ».
+                // The picker acts as an action: it goes back to “Existing Media…”.
                 picker.update(cx, |p, cx| p.set_selected_index(None, window, cx));
             }
         })
@@ -550,15 +549,15 @@ impl ActEditor {
         }
     }
 
-    /// Appelé par l'espace de travail après un enregistrement réussi, pour enchaîner
-    /// sur l'acte suivant du même registre.
+    /// Called by the workspace after a successful save, to move on to the next record of the same
+    /// register.
     pub fn saved(&mut self, ged: Gedcom, result: &ActResult, window: &mut Window, cx: &mut Context<Self>) {
         let mut n = self.collect(cx).next();
         if let MediaChoice::NewFiles(_) = n.media {
             n.media = result.media.clone().map(MediaChoice::Existing).unwrap_or_default();
         }
         self.ged = ged;
-        // Le média créé par cet acte devient proposable.
+        // The media created by this record can now be offered.
         self.media_picker = picker(&self.ged, RecordKind::Media, "", window, cx);
         let sub = self.watch_media_picker(window, cx);
         self._subs.push(sub);
@@ -572,7 +571,7 @@ impl ActEditor {
         self.transcription.update(cx, |s, cx| s.set_value("", window, cx));
         self.set_rows(n.participants, window, cx);
         self.error = None;
-        // Retour en haut du formulaire, curseur sur la première personne.
+        // Back to the top of the form, cursor on the first person.
         self.scroll.set_offset(point(px(0.), px(0.)));
         if let Some((_, first)) = self.rows.first().and_then(|r| r.inputs.first()) {
             first.update(cx, |s, cx| s.focus(window, cx));
@@ -585,7 +584,7 @@ impl ActEditor {
         cx.notify();
     }
 
-    /// Pages de l'image de l'acte : chemins absolus, dans l'ordre.
+    /// Pages of the record's image: absolute paths, in order.
     fn media_pages(&self) -> Vec<PathBuf> {
         let files: Vec<String> = match &self.media {
             MediaChoice::None => Vec::new(),
@@ -618,12 +617,12 @@ fn mono(s: impl Into<SharedString>) -> Div {
     div().font_family("monospace").text_xs().text_color(theme::muted()).child(s.into())
 }
 
-/// Colonnes de la grille commune aux sections « Acte » et « Personnes ».
+/// Columns of the grid shared by the “Record” and “People” sections.
 const GRID: u16 = 4;
 
-/// Largeur (en colonnes) de chaque champ d'une personne : le nom et les prénoms
-/// occupent chacun une demi-ligne, la note une ligne entière, les autres une colonne ;
-/// le dernier champ d'une ligne incomplète s'étire jusqu'au bord pour ne pas laisser de trou.
+/// Width (in columns) of each field of a person: the surname and given names each take half a row,
+/// the note a full row, the others one column; the last field of an incomplete row stretches to the
+/// edge so as not to leave a gap.
 fn grid_spans(fields: impl Iterator<Item = PersonField>) -> Vec<u16> {
     let mut spans: Vec<u16> = fields
         .map(|f| match f {
@@ -687,12 +686,12 @@ fn section(title: impl Into<SharedString>) -> Div {
 }
 
 impl ActEditor {
-    /// Branche le menu des lieux de l'espace de travail.
+    /// Connects the workspace's place menu.
     pub fn set_place_menu(&mut self, menu: PlaceMenu) {
         self.place_menu = Some(menu);
     }
 
-    /// Menu des lieux sous le champ de lieu actif.
+    /// Place menu under the active place field.
     fn place_suggestions(&self, input: &Entity<InputState>, cx: &mut Context<Self>) -> Option<AnyElement> {
         if self.place_focus != Some(input.entity_id()) {
             return None;
@@ -713,7 +712,7 @@ impl ActEditor {
                     .collect()
             })
             .unwrap_or_default();
-        // Média lié par « Média existant… » sans être encore dans la source : affiché aussi.
+        // Media linked with “Existing Media…” without being in the source yet: shown too.
         let mut candidates = candidates;
         if let MediaChoice::Existing(x) = &self.media
             && !candidates.iter().any(|(c, _)| c == x)
@@ -741,17 +740,17 @@ impl ActEditor {
                 .overflow_scroll()
                 .bg(theme::viewer())
                 .child({
-                    // À 100 % l'image tient dans le panneau ; au-delà on la grossit et on fait défiler.
+                    // At 100 % the image fits in the panel; beyond that it is enlarged and scrolls.
                     let (w, h) =
                         imagesize::size(p).map(|s| (s.width as f32, s.height as f32)).unwrap_or((1000., 1400.));
                     let width = 460. * zoom;
-                    // Décodée pour la largeur affichée (le panneau fait rarement plus de 900 px).
+                    // Decoded for the displayed width (the panel is rarely wider than 900 px).
                     let shown = width.max(900.);
                     let i = picture(p.clone(), shown, shown * h / w.max(1.), ObjectFit::Contain);
                     if zoom <= 1.0 { i.size_full() } else { i.w(px(width)).h(px(width * h / w.max(1.))) }
                 })
                 .into_any_element(),
-            // PDF : pas d'aperçu intégré, on l'ouvre avec l'application du système.
+            // PDF: no built-in preview, open it with the system's application.
             Some(p) if p.exists() => {
                 let target = p.clone();
                 v_flex()
@@ -792,8 +791,8 @@ impl ActEditor {
             MediaChoice::NewFiles(f) if !f.is_empty() => Some(f.clone()),
             _ => None,
         };
-        // Pendant un glisser depuis le Finder / l'Explorateur : la zone de dépôt
-        // se signale ; elle s'accentue quand le pointeur la survole.
+        // While dragging from the Finder / Explorer: the drop zone shows itself; it is emphasized
+        // when the pointer hovers it.
         let dragging = cx.has_active_drag();
         v_flex()
             .relative()
@@ -986,7 +985,7 @@ impl ActEditor {
                 .child(crate::tn!("act.matches", row.suggestions.len()))
                 .into_any_element(),
         };
-        // Père, mère ou conjoint de quelle personne principale ?
+        // Father, mother or spouse of which principal person?
         let principals = act.principal_count();
         let of_chips: Vec<Stateful<Div>> = if row.role.relative() && principals > 1 {
             (0..principals)
@@ -1059,7 +1058,7 @@ impl ActEditor {
                         chip(format!("sex-{idx}-{v}"), label, current == v).on_click(cx.listener(
                             move |this, _, _, cx| {
                                 if let Some(r) = this.rows.get_mut(idx) {
-                                    // Second clic : on désélectionne.
+                                    // Second click: deselect.
                                     r.sex = Some(if r.sex.as_deref() == Some(v) { String::new() } else { v.into() });
                                 }
                                 this.preview = None;
@@ -1103,7 +1102,7 @@ impl ActEditor {
     fn render_people(&self, act: &Act, cx: &mut Context<Self>) -> Div {
         let rows: Vec<AnyElement> =
             self.rows.iter().enumerate().map(|(i, r)| self.render_person(act, i, r, cx).into_any_element()).collect();
-        // « + » : une personne de plus, avec son rôle.
+        // “+”: one more person, with their role.
         let family = act.is_family();
         let event = act.event.clone();
         let next_principal = act.principal_count();
@@ -1260,8 +1259,8 @@ impl Render for ActEditor {
                 }),
         );
 
-        // Des images ou PDF déposés n'importe où sur l'éditeur deviennent l'image
-        // de l'acte (les suivants s'ajoutent comme pages).
+        // Images or PDFs dropped anywhere on the editor become the record's image (the next ones
+        // are added as pages).
         v_flex()
             .id("act-editor")
             .flex_1()

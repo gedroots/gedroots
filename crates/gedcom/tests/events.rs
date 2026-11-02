@@ -34,7 +34,7 @@ fn idx(g: &Gedcom, tag: &str) -> usize {
     g.events_of("I1").iter().find(|(_, e)| e.tag() == tag).unwrap().0
 }
 
-/// Ces tests vérifient les textes écrits par l'app en français, la langue des fichiers d'exemple.
+/// These tests check the texts the app writes in French, the language of the sample files.
 fn french() {
     rust_i18n::set_locale("fr");
 }
@@ -50,7 +50,7 @@ fn read_event_fields() {
     assert_eq!(ev.source.as_deref(), Some("S1"));
     let occu = g.read_event("I1", idx(&g, "OCCU")).unwrap();
     assert_eq!(occu.detail, "Meunier");
-    // Pas un événement : refusé.
+    // Not an event: refused.
     assert!(g.read_event("I1", 0).is_none());
 }
 
@@ -64,7 +64,7 @@ fn update_keeps_other_substructures() {
     g.update_event("I1", i, &ev).unwrap();
     let n = &g.get("I1").unwrap().children[i];
     assert_eq!(n.child_val("DATE"), Some("ABT 1851"));
-    // Lieu inchangé : coordonnées, page de la source et note conservées.
+    // Place unchanged: coordinates, source page and note kept.
     assert!(n.child("PLAC").unwrap().child("MAP").is_some());
     assert_eq!(n.child("SOUR").unwrap().child_val("PAGE"), Some("folio 12"));
     assert_eq!(n.child_val("NOTE"), Some("né à la ferme"));
@@ -80,14 +80,14 @@ fn update_place_and_source() {
     ev.source = Some("S2".into());
     g.update_event("I1", i, &ev).unwrap();
     let n = &g.get("I1").unwrap().children[i];
-    // Nouveau lieu : on reprend les coordonnées connues ailleurs.
+    // New place: reuse the coordinates known elsewhere.
     assert_eq!(n.child("PLAC").unwrap().path_val(&["MAP", "LATI"]), Some("N49.25"));
-    // Nouvelle source : l'ancienne page ne suit pas.
+    // New source: the old page does not follow.
     let sour = n.child("SOUR").unwrap();
     assert_eq!(sour.pointer(), Some("S2"));
     assert!(sour.child("PAGE").is_none());
 
-    // Retirer lieu et source.
+    // Remove the place and the source.
     ev.place.clear();
     ev.source = None;
     g.update_event("I1", i, &ev).unwrap();
@@ -100,7 +100,7 @@ fn update_place_and_source() {
 fn change_type_and_detail() {
     french();
     let mut g = Gedcom::parse(GED).unwrap();
-    // Profession → événement libre : la précision passe dans TYPE.
+    // Occupation → free event: the detail goes into TYPE.
     let i = idx(&g, "OCCU");
     g.update_event("I1", i, &NewEvent { tag: "EVEN".into(), detail: "Service militaire".into(), ..Default::default() })
         .unwrap();
@@ -109,14 +109,14 @@ fn change_type_and_detail() {
     assert_eq!(n.child_val("TYPE"), Some("Service militaire"));
     assert!(g.update_event("I1", i, &NewEvent { tag: "EVEN".into(), ..Default::default() }).is_err());
 
-    // Résidence : la valeur d'origine reste.
+    // Residence: the original value stays.
     let r = idx(&g, "RESI");
     let mut ev = g.read_event("I1", r).unwrap();
     ev.date = "1901".into();
     g.update_event("I1", r, &ev).unwrap();
     assert_eq!(g.get("I1").unwrap().children[r].val(), "Paris");
 
-    // Décès « Y » : daté, la marque disparaît ; sans rien, elle revient.
+    // Death “Y”: dated, the mark disappears; with nothing, it comes back.
     let d = idx(&g, "DEAT");
     let mut ev = g.read_event("I1", d).unwrap();
     ev.date = "1912".into();
@@ -184,12 +184,12 @@ fn person_events_merge_unions_chronologically() {
             ("F1", "MARR", true),
             ("F2", "MARR", true),
             ("I1", "DEAT", false),
-            ("F1", "DIV", true), // sans date : à la fin
+            ("F1", "DIV", true), // undated: at the end
         ]
     );
     assert_eq!(ev[1].spouse.as_deref(), Some("I2"));
     assert_eq!(ev[2].spouse, None);
-    // Le conjoint voit le même mariage, porté par la même famille.
+    // The spouse sees the same marriage, held by the same family.
     let other = g.person_events("I2");
     assert_eq!(other.len(), 2);
     assert_eq!(other[0].owner, "F1");
@@ -202,14 +202,14 @@ fn media_on_family_event() {
     let mut g = Gedcom::parse(COUPLE).unwrap();
     let marr = g.events_of("F1").iter().find(|(_, e)| e.tag() == "MARR").unwrap().0;
     g.attach_media_to_event("F1", marr, "M1").unwrap();
-    g.attach_media_to_event("F1", marr, "M1").unwrap(); // pas de doublon
+    g.attach_media_to_event("F1", marr, "M1").unwrap(); // no duplicate
     assert_eq!(g.event_media("F1", marr), vec!["M1"]);
     let out = g.to_gedcom_string();
     assert!(out.contains("1 MARR\n2 DATE 12 JUN 1875\n2 SOUR @S1@\n2 OBJE @M1@\n"), "{out}");
-    // Le média est « utilisé par » la famille.
+    // The media is “used by” the family.
     assert!(g.referrers("M1").iter().any(|r| r.xref.as_deref() == Some("F1")));
 
-    // « 1 DIV Y » prend le média et perd son Y ; le retirer le remet.
+    // “1 DIV Y” takes the media and loses its Y; removing it puts it back.
     let div = g.events_of("F1").iter().find(|(_, e)| e.tag() == "DIV").unwrap().0;
     g.attach_media_to_event("F1", div, "M1").unwrap();
     assert!(g.to_gedcom_string().contains("1 DIV\n2 OBJE @M1@\n"));

@@ -1,5 +1,4 @@
-//! Page « Statistiques » et lien de parenté entre deux individus
-//! (anciennement la fenêtre Analyses).
+//! “Statistics” page and relationship between two individuals (formerly the Analyses window).
 
 use super::*;
 use gedcom::analysis::kinship;
@@ -33,7 +32,7 @@ fn bar_row(label: String, value: f64, right: String) -> impl IntoElement {
 }
 
 impl Workspace {
-    /// Lien cliquable vers un individu.
+    /// Clickable link to an individual.
     fn person_link(&self, id: impl Into<ElementId>, x: &str, cx: &mut Context<Self>) -> Stateful<Div> {
         let name = self.doc.as_ref().map(|d| d.ged.record_label(x)).unwrap_or_default();
         let target = x.to_string();
@@ -47,17 +46,17 @@ impl Workspace {
     }
 
     // ------------------------------------------------------------------
-    // Lien de parenté
+    // Relationship
     // ------------------------------------------------------------------
 
-    /// Individu › Lien de parenté avec… : choisir l'autre personne.
+    /// Individual › Relationship with…: choose the other person.
     pub(super) fn ask_kinship(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(indi) = self.selected_individual() {
             self.open_picker(relatives::PickPurpose::Kinship { indi }, window, cx);
         }
     }
 
-    /// Lien vers une personne dans la fenêtre du lien de parenté : la ferme et ouvre sa fiche.
+    /// Link to a person in the relationship window: closes it and opens their record.
     fn kinship_link(&self, id: impl Into<ElementId>, x: &str, cx: &mut Context<Self>) -> Stateful<Div> {
         let name = self.doc.as_ref().map(|d| d.ged.record_label(x)).unwrap_or_default();
         let target = x.to_string();
@@ -69,7 +68,7 @@ impl Workspace {
         )
     }
 
-    /// Fenêtre modale du lien de parenté entre A et B (Échap, × ou clic à côté la ferment).
+    /// Modal window of the relationship between A and B (Esc, × or a click outside close it).
     pub(super) fn render_kinship(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let (a, b) = self.kinship.as_ref()?;
         let g = &self.doc.as_ref()?.ged;
@@ -155,7 +154,7 @@ impl Workspace {
     // Statistiques
     // ------------------------------------------------------------------
 
-    /// Recalcule les statistiques (ascendance de l'individu racine).
+    /// Recomputes the statistics (ancestry of the root individual).
     pub(super) fn refresh_stats(&mut self) {
         self.stats = self.doc.as_ref().map(|d| Rc::new(stats::stats(&d.ged, d.ged.root().as_deref())));
     }

@@ -1,36 +1,34 @@
-//! Disposition de l'arbre libre, en colonnes comme l'ancienne vue
-//! d'ascendance : ascendants à droite de la personne centrale, descendants à
-//! gauche, conjoints sous chaque personne, frères et sœurs au-dessus.
+//! Layout of the free chart, in columns like the old ancestry view: ancestors on the right of the
+//! central person, descendants on the left, spouses under each person, brothers and sisters above.
 //!
-//! Les coordonnées sont en pixels : la case de la personne centrale a son
-//! coin haut gauche en (0, 0) ; la génération `g` des ascendants est dans la
-//! colonne `g`, celle des descendants dans la colonne `-g`. Seules les
-//! générations demandées (`up`, `down`) sont parcourues : les suivantes sont
-//! chargées quand on s'en approche.
+//! Coordinates are in pixels: the central person's box has its top left corner at (0, 0);
+//! generation `g` of the ancestors is in column `g`, that of the descendants in column `-g`. Only
+//! the requested generations (`up`, `down`) are walked: the next ones are loaded when the view gets
+//! close.
 
 use gedcom::{Gedcom, Relation};
 use std::collections::HashSet;
 
 pub const CARD_W: f32 = 184.;
 pub const CARD_H: f32 = 48.;
-/// Écart vertical entre deux cases d'une même colonne.
+/// Vertical gap between two boxes of the same column.
 pub const GAP: f32 = 10.;
-/// Largeur d'une génération (case + liaisons).
+/// Width of a generation (box + connectors).
 pub const COL: f32 = CARD_W + 56.;
-/// Générations au-dessus de la personne centrale où un parent inconnu
-/// laisse un emplacement « + Père » / « + Mère ».
+/// Generations above the central person where an unknown parent leaves a “+ Father” / “+ Mother”
+/// slot.
 const SLOT_DEPTH: u32 = 3;
 
-/// Ce qu'affiche une case.
+/// What a box shows.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Slot {
-    /// Une personne. `side` : 1 pour la personne centrale, 2 côté paternel,
-    /// 3 côté maternel, 0 hors ascendance (descendants, conjoints, fratrie).
+    /// A person. `side`: 1 for the central person, 2 paternal side, 3 maternal side, 0 outside the
+    /// ancestry (descendants, spouses, siblings).
     Person {
         xref: String,
         side: u8,
     },
-    /// Parent inconnu : un clic le crée.
+    /// Unknown parent: a click creates them.
     AddParent {
         child: String,
         rel: Relation,
@@ -60,44 +58,43 @@ impl Card {
     }
 }
 
-/// Extrémité d'une liaison. Les colonnes ne bougent pas quand une génération
-/// s'ajoute, seules les ordonnées : l'abscisse est fixe et l'ordonnée suit une
-/// case, pour que les liaisons accompagnent les cases quand elles glissent.
+/// End of a connector. Columns do not move when a generation is added, only the y coordinates: x is
+/// fixed and y follows a box, so that connectors move with the boxes when they slide.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct End {
     pub x: f32,
-    /// Indice de la case dans [`Layout::cards`].
+    /// Index of the box in [`Layout::cards`].
     pub card: usize,
-    /// Écart vertical depuis le haut de cette case.
+    /// Vertical offset from the top of this box.
     pub dy: f32,
 }
 
 #[derive(Debug, Default)]
 pub struct Layout {
     pub cards: Vec<Card>,
-    /// Segments de liaison, d'une extrémité à l'autre.
+    /// Connector segments, from one end to the other.
     pub lines: Vec<[End; 2]>,
-    /// Des ascendants existent au-delà de la dernière génération chargée.
+    /// Ancestors exist beyond the last loaded generation.
     pub more_up: bool,
-    /// Des descendants existent au-delà de la dernière génération chargée.
+    /// Descendants exist beyond the last loaded generation.
     pub more_down: bool,
     /// Rectangle englobant (x0, y0, x1, y1).
     pub bounds: [f32; 4],
 }
 
 impl Layout {
-    /// Première case de la personne (la personne centrale avant tout).
+    /// First box of the person (the central person above all).
     pub fn find(&self, xref: &str) -> Option<&Card> {
         self.cards.iter().find(|c| c.xref() == Some(xref))
     }
 
-    /// Segments de liaison (x0, y0, x1, y1), les cases étant aux ordonnées `ys`
-    /// (une par case, dans l'ordre de [`Layout::cards`]).
+    /// Connector segments (x0, y0, x1, y1), the boxes being at y coordinates `ys` (one per box, in
+    /// the order of [`Layout::cards`]).
     pub fn segments<'a>(&'a self, ys: &'a [f32]) -> impl Iterator<Item = [f32; 4]> + 'a {
         self.lines.iter().map(move |[a, b]| [a.x, ys[a.card] + a.dy, b.x, ys[b.card] + b.dy])
     }
 
-    /// Case de personne la plus proche du point donné.
+    /// Person box closest to the given point.
     pub fn nearest(&self, x: f32, y: f32) -> Option<&Card> {
         self.cards.iter().filter(|c| c.xref().is_some()).min_by(|a, b| {
             let d = |c: &Card| {
@@ -109,16 +106,15 @@ impl Layout {
     }
 }
 
-/// Nœud de la disposition « en arbre bien rangé » : une largeur et des enfants.
+/// Node of the “tidy tree” layout: a width and children.
 struct TNode {
     w: f32,
     kids: Vec<usize>,
 }
 
-/// Disposition compacte (à la Reingold-Tilford) : chaque sous-arbre est
-/// rapproché de son voisin autant que le permettent leurs contours, et chaque
-/// nœud est centré au-dessus de ses enfants. Renvoie le centre de chaque nœud,
-/// la racine étant en 0.
+/// Compact layout (Reingold-Tilford style): each subtree is moved as close to its neighbour as
+/// their contours allow, and each node is centered above its children. Returns the center of each
+/// node, the root being at 0.
 fn tidy(nodes: &[TNode], root: usize) -> Vec<f32> {
     fn shape(nodes: &[TNode], n: usize, rel: &mut [f32]) -> Vec<(f32, f32)> {
         let half = nodes[n].w / 2.;
@@ -152,8 +148,8 @@ fn tidy(nodes: &[TNode], root: usize) -> Vec<f32> {
     }
     let mut rel = vec![0.; nodes.len()];
     shape(nodes, root, &mut rel);
-    // Positions absolues, des parents vers les enfants (les enfants sont
-    // toujours créés après leur parent).
+    // Absolute positions, from parents to children (children are always created after their
+    // parent).
     let mut abs = vec![0.; nodes.len()];
     let mut stack = vec![root];
     while let Some(n) = stack.pop() {
@@ -187,7 +183,7 @@ impl AncBuilder<'_> {
     fn person(&mut self, xref: &str, depth: u32, side: u8) -> usize {
         let id = self.nodes.len();
         self.nodes.push(Anc { slot: Slot::Person { xref: xref.to_string(), side }, depth, kids: vec![] });
-        // Implexe : un ancêtre déjà affiché n'est pas développé une seconde fois.
+        // Pedigree collapse: an ancestor already shown is not expanded a second time.
         if !self.seen.insert(xref.to_string()) {
             return id;
         }
@@ -224,16 +220,16 @@ impl AncBuilder<'_> {
 struct Desc {
     slot: Slot,
     depth: u32,
-    /// Conjoints connus, dans l'ordre des unions (cases à droite de la personne).
+    /// Known spouses, in union order (boxes on the right of the person).
     spouses: Vec<String>,
-    /// Enfants de chaque union, avec l'indice du conjoint (s'il est connu).
+    /// Children of each union, with the index of the spouse (if known).
     unions: Vec<(Option<usize>, Vec<usize>)>,
-    /// Emplacement « + Enfant » éventuel.
+    /// “+ Child” slot, if any.
     slot_kid: Option<usize>,
 }
 
 impl Desc {
-    /// Hauteur du bloc : la personne, puis ses conjoints en dessous.
+    /// Height of the block: the person, then their spouses below.
     fn height(&self) -> f32 {
         let n = self.spouses.len() as f32;
         CARD_H * (1. + n) + GAP * n
@@ -302,20 +298,20 @@ impl DescBuilder<'_> {
 // Assemblage
 // ----------------------------------------------------------------------
 
-/// Extrémité en `(x, y)`, rattachée à la case `card`.
+/// End at `(x, y)`, attached to box `card`.
 fn end(cards: &[Card], card: usize, x: f32, y: f32) -> End {
     End { x, card, dy: y - cards[card].y }
 }
 
-/// Barre verticale couvrant toutes les ordonnées données, chacune rattachée à sa case.
+/// Vertical bar covering every given y coordinate, each one attached to its box.
 fn bar(cards: &[Card], x: f32, ys: impl IntoIterator<Item = (usize, f32)>) -> [End; 2] {
     let mut ys = ys.into_iter();
-    let first = ys.next().expect("au moins une extrémité");
+    let first = ys.next().expect("at least one end");
     let (t, b) = ys.fold((first, first), |(t, b), p| (if p.1 < t.1 { p } else { t }, if p.1 > b.1 { p } else { b }));
     [end(cards, t.0, x, t.1), end(cards, b.0, x, b.1)]
 }
 
-/// Arbre autour de `anchor` : `up` générations d'ascendants, `down` de descendants.
+/// Chart around `anchor`: `up` generations of ancestors, `down` of descendants.
 pub fn build(g: &Gedcom, anchor: &str, up: u32, down: u32) -> Layout {
     let mut out = Layout::default();
     if g.individual(anchor).is_none() {
@@ -324,18 +320,18 @@ pub fn build(g: &Gedcom, anchor: &str, up: u32, down: u32) -> Layout {
     let mid_gap = (COL - CARD_W) / 2.;
     let step = CARD_H + GAP;
 
-    // Ascendants, vers la droite : la racine est la personne centrale.
+    // Ancestors, to the right: the root is the central person.
     let mut ab = AncBuilder { g, up, nodes: vec![], seen: HashSet::new(), more: false };
     ab.person(anchor, 0, 1);
     let tn: Vec<TNode> = ab.nodes.iter().map(|n| TNode { w: CARD_H, kids: n.kids.clone() }).collect();
     let ay = tidy(&tn, 0);
-    // Les cases d'abord (le nœud `i` est la case `i`), puis leurs liaisons.
+    // Boxes first (node `i` is box `i`), then their connectors.
     for (n, a) in ab.nodes.iter().zip(&ay) {
         out.cards.push(Card { slot: n.slot.clone(), x: n.depth as f32 * COL, y: *a });
     }
     for (i, n) in ab.nodes.iter().enumerate() {
         if !n.kids.is_empty() {
-            // De la case vers la droite, puis une barre jusqu'en face des parents.
+            // From the box to the right, then a bar up to the parents.
             let x = out.cards[i].x;
             let cy = |k: usize| out.cards[k].y + CARD_H / 2.;
             let bx = x + CARD_W + mid_gap;
@@ -349,7 +345,7 @@ pub fn build(g: &Gedcom, anchor: &str, up: u32, down: u32) -> Layout {
     }
     out.more_up = ab.more;
 
-    // Descendants, vers la gauche : la racine est la personne centrale et ses conjoints.
+    // Descendants, to the left: the root is the central person and their spouses.
     let mut db = DescBuilder { g, down, nodes: vec![], seen: HashSet::new(), more: false };
     db.person(anchor, 0);
     if down > 0 {
@@ -365,11 +361,11 @@ pub fn build(g: &Gedcom, anchor: &str, up: u32, down: u32) -> Layout {
     }
     let tn: Vec<TNode> = db.nodes.iter().map(|n| TNode { w: n.height(), kids: n.kids() }).collect();
     let dy = tidy(&tn, 0);
-    // La case de la personne centrale (en haut de son bloc) doit être en y = 0.
+    // The central person's box (at the top of their block) must be at y = 0.
     let shift = db.nodes[0].height() / 2.;
     let top = |n: usize| dy[n] + shift - db.nodes[n].height() / 2.;
-    // Les cases d'abord : `card[ix]` est la case du nœud `ix` (la personne
-    // centrale est la case 0, déjà posée), ses conjoints suivent.
+    // Boxes first: `card[ix]` is the box of node `ix` (the central person is box 0, already
+    // placed), their spouses follow.
     let mut card = vec![0; db.nodes.len()];
     for (ix, n) in db.nodes.iter().enumerate() {
         let x = -(n.depth as f32) * COL;
@@ -385,13 +381,13 @@ pub fn build(g: &Gedcom, anchor: &str, up: u32, down: u32) -> Layout {
     for (ix, n) in db.nodes.iter().enumerate() {
         let (x, y, me) = (-(n.depth as f32) * COL, top(ix), card[ix]);
         if !n.spouses.is_empty() {
-            // Trait d'union, visible entre les cases.
+            // Union line, visible between the boxes.
             let ux = x + CARD_W / 2.;
             let last = y + n.spouses.len() as f32 * step;
             out.lines.push([end(&out.cards, me, ux, y + CARD_H), end(&out.cards, me, ux, last)]);
         }
         let bx = x - mid_gap;
-        // Les enfants d'une union partent d'entre la personne et le conjoint.
+        // The children of a union start from between the person and the spouse.
         let from = |sp: Option<usize>| match sp {
             Some(j) => y + (j as f32 + 1.) * step - GAP / 2.,
             None => y + CARD_H / 2.,
@@ -412,7 +408,7 @@ pub fn build(g: &Gedcom, anchor: &str, up: u32, down: u32) -> Layout {
     }
     out.more_down = db.more;
 
-    // Frères et sœurs, au-dessus de la personne centrale, reliés aux mêmes parents.
+    // Brothers and sisters, above the central person, connected to the same parents.
     let siblings: Vec<String> = g
         .individual(anchor)
         .and_then(|i| i.famc().first().and_then(|f| g.family(f)))
@@ -432,7 +428,7 @@ pub fn build(g: &Gedcom, anchor: &str, up: u32, down: u32) -> Layout {
     }
     if !siblings.is_empty() {
         out.lines.push([end(&out.cards, first, bx, -n * step + CARD_H / 2.), end(&out.cards, 0, bx, CARD_H / 2.)]);
-        // Sans parents connus, la barre de la fratrie part quand même de la personne centrale.
+        // Without known parents, the siblings' bar still starts from the central person.
         out.lines.push([end(&out.cards, 0, CARD_W, CARD_H / 2.), end(&out.cards, 0, bx, CARD_H / 2.)]);
     }
     out.cards.push(Card { slot: Slot::AddSibling(anchor.to_string()), x: 0., y: -(n + 1.) * step });
@@ -450,7 +446,7 @@ mod tests {
     use super::*;
 
     fn ged() -> Gedcom {
-        // Grands-parents paternels, parents, deux enfants (dont @I1@), un petit-enfant.
+        // Paternal grandparents, parents, two children (including @I1@), a grandchild.
         let text = "0 HEAD\n1 GEDC\n2 VERS 7.0\n\
             0 @GF@ INDI\n1 NAME Jean /A/\n1 SEX M\n1 FAMS @F0@\n\
             0 @GM@ INDI\n1 NAME Marie /B/\n1 SEX F\n1 FAMS @F0@\n\
@@ -478,7 +474,7 @@ mod tests {
         assert_eq!(row("K"), Some(-1));
         assert_eq!(row("W"), Some(0));
         assert_eq!(row("I2"), Some(0));
-        // Conjointe en dessous, sœur au-dessus.
+        // Wife below, sister above.
         assert!(l.find("W").unwrap().y > 0.);
         assert!(l.find("I2").unwrap().y < 0.);
         assert!(!l.more_up && !l.more_down);
@@ -503,9 +499,9 @@ mod tests {
         let mut ys: Vec<f32> = l.cards.iter().map(|c| c.y).collect();
         let ip = l.cards.iter().position(|c| c.xref() == Some("P")).unwrap();
         let (px, py) = (l.cards[ip].x, l.cards[ip].y + CARD_H / 2.);
-        // Le père est relié à son fils par un trait qui arrive en son milieu…
+        // The father is connected to his son by a line that arrives at his middle…
         assert!(l.segments(&ys).any(|s| s[2] == px && s[3] == py));
-        // … et ce trait le suit quand il glisse.
+        // … and this line follows him when he slides.
         ys[ip] += 100.;
         assert!(l.segments(&ys).any(|s| s[2] == px && s[3] == py + 100.));
         assert!(!l.segments(&ys).any(|s| s[2] == px && s[3] == py));
@@ -513,7 +509,7 @@ mod tests {
 
     #[test]
     fn columns_stay_put() {
-        // Charger une génération ne déplace les cases que verticalement.
+        // Loading a generation only moves boxes vertically.
         let g = ged();
         let small = build(&g, "I1", 1, 0);
         let big = build(&g, "I1", 3, 2);

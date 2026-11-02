@@ -1,18 +1,17 @@
-//! Autocomplétion du texte GEDCOM brut.
+//! Autocompletion of raw GEDCOM text.
 //!
-//! À partir du texte d'un enregistrement et de la position du curseur, on
-//! retrouve la structure englobante grâce au [`schema`](crate::schema) GEDCOM 7
-//! et on propose, selon l'endroit où se trouve le curseur :
+//! From the text of a record and the cursor position, the enclosing structure is found with the
+//! GEDCOM 7 [`schema`](crate::schema), and depending on where the cursor is, the module suggests:
 //!
-//! - les balises permises à ce niveau (sans celles déjà présentes si elles
-//!   ne peuvent apparaître qu'une fois), avec leur libellé français ;
-//! - les enregistrements du bon type pour un pointeur (`FAMC @…`) ;
-//! - les valeurs d'une énumération (`SEX`, `PEDI`, `QUAY`…) ;
-//! - les mots-clés et mois d'une date (y compris le calendrier républicain) ;
-//! - les lieux déjà saisis dans le fichier pour `PLAC`.
+//! - the tags allowed at this level (without those already present if they can only appear once),
+//!   with their label;
+//! - records of the right type for a pointer (`FAMC @…`);
+//! - the values of an enumeration (`SEX`, `PEDI`, `QUAY`…);
+//! - the keywords and months of a date (French Republican calendar included);
+//! - the places already entered in the file for `PLAC`.
 //!
-//! Le module ne dépend pas de l'interface : il renvoie des plages en octets
-//! dans le texte et des suggestions que l'éditeur affiche comme il veut.
+//! The module does not depend on the interface: it returns byte ranges in the text and suggestions
+//! that the editor displays as it wants.
 
 use crate::document::{Gedcom, RecordKind};
 use crate::model::{Individual, sort_key};
@@ -21,12 +20,11 @@ use rust_i18n::t;
 use std::borrow::Cow;
 use std::ops::Range;
 
-/// Nombre maximal de suggestions renvoyées pour les listes longues
-/// (individus, lieux).
+/// Maximum number of suggestions returned for long lists (individuals, places).
 const MAX_ITEMS: usize = 80;
 
-/// Ce que le fichier contient et qu'on peut proposer : enregistrements
-/// (pour les pointeurs) et lieux. Construit une fois à l'ouverture de l'éditeur.
+/// What the file contains that can be suggested: records (for pointers) and places. Built once when
+/// the editor opens.
 #[derive(Debug, Clone, Default)]
 pub struct Catalog {
     pub records: Vec<RecordRef>,
@@ -38,7 +36,7 @@ pub struct RecordRef {
     pub xref: String,
     /// Balise de l'enregistrement (`INDI`, `FAM`…).
     pub tag: &'static str,
-    /// Libellé lisible (« Jean GUYOT (1850–1912) »).
+    /// Readable label (“Jean MARCHAND (1850–1912)”).
     pub label: String,
     key: String,
 }
@@ -65,7 +63,7 @@ impl Catalog {
     }
 }
 
-/// Nature d'une suggestion, pour choisir l'icône dans l'éditeur.
+/// Kind of suggestion, to pick the icon in the editor.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SuggestionKind {
     Tag,
@@ -77,26 +75,26 @@ pub enum SuggestionKind {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Suggestion {
-    /// Texte affiché dans la liste.
+    /// Text shown in the list.
     pub label: String,
-    /// Texte inséré à la place de [`Completion::replace`].
+    /// Text inserted in place of [`Completion::replace`].
     pub insert: String,
-    /// Précision affichée à droite (libellé français, identifiant…).
+    /// Detail shown on the right (label, identifier…).
     pub detail: String,
-    /// Longueur (en octets) du début de `label` qui correspond à la saisie,
-    /// pour la mise en évidence ; 0 si la correspondance est ailleurs.
+    /// Length (in bytes) of the start of `label` that matches the input, for highlighting; 0 if the
+    /// match is elsewhere.
     pub matched: usize,
     pub kind: SuggestionKind,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Completion {
-    /// Plage (octets) du texte remplacé par la suggestion choisie.
+    /// Range (bytes) of the text replaced by the chosen suggestion.
     pub replace: Range<usize>,
     pub items: Vec<Suggestion>,
 }
 
-/// Une ligne GEDCOM découpée : `niveau [@xref@] balise [valeur]`.
+/// A split GEDCOM line: `level [@xref@] tag [value]`.
 #[derive(Debug, Clone, Copy)]
 struct Line<'a> {
     level: usize,
@@ -118,8 +116,8 @@ fn parse_line(line: &str) -> Option<Line<'_>> {
     Some(Line { level, tag })
 }
 
-/// Résout la définition de chaque ligne (None pour les extensions et les
-/// balises inconnues, et pour tout ce qu'elles contiennent).
+/// Resolves the definition of each line (None for extensions and unknown tags, and for everything
+/// they contain).
 fn resolve<'a>(lines: &[Option<Line<'a>>]) -> Vec<Option<&'static StructDef>> {
     let mut stack: Vec<Option<&'static StructDef>> = Vec::new();
     let mut out = Vec::with_capacity(lines.len());
@@ -144,13 +142,13 @@ fn upper_ascii(s: &str) -> String {
     s.to_ascii_uppercase()
 }
 
-/// Un mot du libellé commence par la saisie (insensible à la casse et aux accents).
+/// A word of the label starts with the input (case and accent insensitive).
 fn label_matches(label: &str, query: &str) -> bool {
     let q = sort_key(query.trim());
     !q.is_empty() && sort_key(label).split(|c: char| !c.is_alphanumeric()).any(|w| w.starts_with(&q))
 }
 
-/// Calcule les suggestions pour le curseur à `offset` (octets) dans `text`.
+/// Computes the suggestions for the cursor at `offset` (bytes) in `text`.
 pub fn complete(text: &str, offset: usize, catalog: &Catalog) -> Option<Completion> {
     let offset = offset.min(text.len());
     if !text.is_char_boundary(offset) {
@@ -166,7 +164,7 @@ pub fn complete(text: &str, offset: usize, catalog: &Catalog) -> Option<Completi
     let before = &text[line_start..offset];
     let after = &text[offset..line_end];
 
-    // Découpe ce qui précède le curseur : niveau, identifiant, balise, valeur.
+    // Splits what comes before the cursor: level, identifier, tag, value.
     let lead = before.len() - before.trim_start().len();
     let body = &before[lead..];
     let digits = body.bytes().take_while(u8::is_ascii_digit).count();
@@ -177,7 +175,7 @@ pub fn complete(text: &str, offset: usize, catalog: &Catalog) -> Option<Completi
     let mut pos = line_start + lead + digits;
     let rest = &text[pos..offset];
 
-    // Parent du niveau saisi : la dernière ligne précédente de niveau inférieur.
+    // Parent of the level being typed: the last previous line with a lower level.
     let parent_idx = (0..cursor_line).rev().find(|&i| parsed[i].is_some_and(|l| l.level < level));
     let parent_def: Option<&'static StructDef> = if level == 0 {
         Some(schema::root())
@@ -188,7 +186,7 @@ pub fn complete(text: &str, offset: usize, catalog: &Catalog) -> Option<Completi
         }
     };
 
-    // « 1 » seul : on propose déjà les balises, en complétant l'espace.
+    // “1” alone: already suggest the tags, completing the space.
     if rest.is_empty() {
         let word_end = line_start + lead + digits;
         let items = tag_items(parent_def?, "", &siblings(&parsed, cursor_line, parent_idx, level), level, true);
@@ -200,7 +198,7 @@ pub fn complete(text: &str, offset: usize, catalog: &Catalog) -> Option<Completi
     pos += 1;
     let mut rest = &text[pos..offset];
 
-    // Identifiant d'enregistrement au niveau 0.
+    // Record identifier at level 0.
     if level == 0 && rest.starts_with('@') {
         match rest[1..].find('@') {
             Some(i) if rest[i + 2..].starts_with(' ') => {
@@ -212,7 +210,7 @@ pub fn complete(text: &str, offset: usize, catalog: &Catalog) -> Option<Completi
     }
 
     match rest.find(' ') {
-        // Curseur dans la balise.
+        // Cursor in the tag.
         None => {
             if rest.starts_with('_') {
                 return None;
@@ -221,7 +219,7 @@ pub fn complete(text: &str, offset: usize, catalog: &Catalog) -> Option<Completi
             let items = tag_items(parent_def?, rest, &siblings(&parsed, cursor_line, parent_idx, level), level, false);
             (!items.is_empty()).then_some(Completion { replace: pos..tag_end, items })
         }
-        // Curseur dans la valeur.
+        // Cursor in the value.
         Some(i) => {
             let tag = &rest[..i];
             let value_start = pos + i + 1;
@@ -232,7 +230,7 @@ pub fn complete(text: &str, offset: usize, catalog: &Catalog) -> Option<Completi
     }
 }
 
-/// Balises déjà présentes au même niveau sous le même parent (hors ligne du curseur).
+/// Tags already present at the same level under the same parent (except the cursor's line).
 fn siblings<'a>(
     parsed: &[Option<Line<'a>>],
     cursor_line: usize,
@@ -266,8 +264,7 @@ fn tag_items(parent: &StructDef, query: &str, present: &[&str], level: usize, wi
         if !prefix && !label_matches(&label, query) {
             continue;
         }
-        // Les balises obligatoires manquantes d'abord, puis les correspondances
-        // sur la balise, puis celles trouvées par le libellé français.
+        // Missing required tags first, then matches on the tag, then those found through the label.
         let rank = if sub.card.required() && !present.contains(&sub.tag) {
             0
         } else if prefix {
@@ -378,7 +375,7 @@ fn value_items(
     catalog: &Catalog,
 ) -> Option<Completion> {
     let value_end = offset + after.len();
-    // Le mot en cours de saisie (pour les valeurs à plusieurs mots), suite comprise.
+    // The word being typed (for values with several words), including what follows.
     let word_start = value.rfind([' ', ',']).map_or(value_start, |i| value_start + i + 1);
     let word = &value[word_start - value_start..];
     let word_end = offset + after.find([' ', ',']).unwrap_or(after.len());
@@ -429,7 +426,7 @@ fn value_items(
             let upper = upper_ascii(value);
             let (months, prefix) =
                 if upper.contains("FRENCH_R") { (MONTHS_FRENCH_R, "month") } else { (MONTHS, "month_name") };
-            // Les mois ne viennent qu'après un jour ou en début de date simple.
+            // Months only come after a day or at the start of a simple date.
             let after_day = value[..word_start - value_start]
                 .trim_end()
                 .rsplit(' ')
@@ -502,7 +499,7 @@ mod tests {
         Catalog::from_gedcom(&ged)
     }
 
-    /// `|` marque le curseur.
+    /// `|` marks the cursor.
     fn at(text_with_cursor: &str) -> Option<Completion> {
         let offset = text_with_cursor.find('|').unwrap();
         let text = text_with_cursor.replacen('|', "", 1);
@@ -514,7 +511,7 @@ mod tests {
     }
 
     #[test]
-    fn balises_d_un_individu() {
+    fn tags_of_an_individual() {
         let c = at("0 @I1@ INDI\n1 BI|").unwrap();
         assert_eq!(labels(&c), ["BIRT"]);
         assert_eq!(c.replace, 14..16);
@@ -523,7 +520,7 @@ mod tests {
     }
 
     #[test]
-    fn recherche_par_libelle() {
+    fn search_by_label() {
         let c = at("0 @I1@ INDI\n1 christening|").unwrap();
         assert!(labels(&c).contains(&"CHR"));
         let c = at("0 @I1@ INDI\n1 burial|").unwrap();
@@ -531,54 +528,54 @@ mod tests {
     }
 
     #[test]
-    fn balises_dans_un_evenement() {
+    fn tags_in_an_event() {
         let c = at("0 @I1@ INDI\n1 BIRT\n2 |").unwrap();
         let l = labels(&c);
         assert!(l.contains(&"DATE") && l.contains(&"PLAC") && l.contains(&"SOUR"));
         assert!(!l.contains(&"BIRT"));
-        // Ajoute l'espace après une balise qui attend une valeur.
+        // Adds the space after a tag that expects a value.
         assert_eq!(c.items.iter().find(|s| s.label == "DATE").unwrap().insert, "DATE ");
     }
 
     #[test]
-    fn niveau_seul() {
+    fn level_only() {
         let c = at("0 @I1@ INDI\n1 BIRT\n2|").unwrap();
         assert_eq!(c.items.iter().find(|s| s.label == "DATE").unwrap().insert, "2 DATE ");
         assert_eq!(c.replace, 19..20);
     }
 
     #[test]
-    fn cardinalite_respectee() {
+    fn cardinality_is_respected() {
         let c = at("0 @I1@ INDI\n1 BIRT\n2 DATE 1850\n2 |\n2 PLAC Troyes").unwrap();
         let l = labels(&c);
         assert!(!l.contains(&"DATE") && !l.contains(&"PLAC"));
         assert!(l.contains(&"NOTE"));
-        // SEX n'apparaît qu'une fois par individu.
+        // SEX appears only once per individual.
         let c = at("0 @I1@ INDI\n1 SEX M\n1 S|").unwrap();
         assert!(!labels(&c).contains(&"SEX"));
     }
 
     #[test]
-    fn pas_de_suggestion_sous_une_extension() {
+    fn no_suggestion_under_an_extension() {
         assert!(at("0 @I1@ INDI\n1 _MILT\n2 |").is_none());
         assert!(at("0 @I1@ INDI\n1 _MI|").is_none());
     }
 
     #[test]
-    fn balises_obligatoires_d_abord() {
+    fn required_tags_first() {
         let c = at("0 @I1@ INDI\n1 ASSO @I2@\n2 |").unwrap();
         assert_eq!(c.items[0].label, "ROLE");
     }
 
     #[test]
-    fn enregistrements_au_niveau_zero() {
+    fn records_at_level_zero() {
         let c = at("0 @X1@ |").unwrap();
         let l = labels(&c);
         assert!(l.contains(&"INDI") && l.contains(&"SOUR"));
     }
 
     #[test]
-    fn pointeurs_du_bon_type() {
+    fn pointers_of_the_right_type() {
         let c = at("0 @F1@ FAM\n1 WIFE |").unwrap();
         let l = labels(&c);
         assert!(l.contains(&"Marie DURAND") && l.contains(&"Jean GUYOT"));
@@ -592,7 +589,7 @@ mod tests {
     }
 
     #[test]
-    fn valeurs_enumerees() {
+    fn enumerated_values() {
         let c = at("0 @I1@ INDI\n1 SEX |").unwrap();
         assert_eq!(labels(&c), ["F", "M", "U", "X"]);
         let c = at("0 @I1@ INDI\n1 FAMC @F1@\n2 PEDI ad|").unwrap();
@@ -615,13 +612,13 @@ mod tests {
     }
 
     #[test]
-    fn lieux_existants() {
+    fn existing_places() {
         let c = at("0 @I1@ INDI\n1 DEAT\n2 PLAC troy|").unwrap();
         assert_eq!(labels(&c), [", Troyes, 10000, Aube, Grand Est, France"]);
     }
 
     #[test]
-    fn hors_contexte() {
+    fn out_of_context() {
         assert!(at("|").is_none());
         assert!(at("0 @I1@ INDI\n1 NAME Jean /GU|").is_none());
         assert!(at("0 @I1@ INDI\n1 NOTE texte libre|").is_none());

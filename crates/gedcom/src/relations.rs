@@ -1,12 +1,11 @@
-//! Création, liaison et suppression de personnes, familles, lieux et médias,
-//! en gardant les pointeurs dans les deux sens cohérents
-//! (`FAM.HUSB/WIFE/CHIL` ↔ `INDI.FAMS/FAMC`, `OBJE` ↔ enregistrements).
+//! Creating, linking and deleting people, families, places and media, keeping the pointers
+//! consistent in both directions (`FAM.HUSB/WIFE/CHIL` ↔ `INDI.FAMS/FAMC`, `OBJE` ↔ records).
 
 use crate::document::{Gedcom, RecordKind};
 use crate::model::{Family, Individual};
 use crate::node::Node;
 
-/// Lien de parenté à créer depuis une personne.
+/// Relationship to create from a person.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Relation {
     Father,
@@ -47,7 +46,7 @@ impl Gedcom {
         }
     }
 
-    /// Nouvelle personne avec ce nom et ce sexe.
+    /// New person with this name and sex.
     pub fn create_individual(&mut self, given: &str, surname: &str, sex: &str) -> String {
         let x = self.create(RecordKind::Individual);
         let node = self.get_mut(&x).unwrap();
@@ -59,19 +58,19 @@ impl Gedcom {
         x
     }
 
-    /// Nouvelle famille vide.
+    /// New empty family.
     pub fn create_family(&mut self) -> String {
         self.create(RecordKind::Family)
     }
 
-    /// Place `indi` comme époux (HUSB) ou épouse (WIFE) de la famille selon son sexe
-    /// (ou la place libre si le sexe est inconnu).
+    /// Puts `indi` as husband (HUSB) or wife (WIFE) of the family according to their sex (or in the
+    /// free slot if the sex is unknown).
     pub fn set_spouse(&mut self, fam: &str, indi: &str) -> Result<(), String> {
         self.set_parent_slot(fam, indi, None)
     }
 
-    /// Comme [`Gedcom::set_spouse`], en imposant la place (`HUSB` ou `WIFE`).
-    /// Refuse une personne dont le sexe connu contredit la place demandée.
+    /// Like [`Gedcom::set_spouse`], forcing the slot (`HUSB` or `WIFE`). Refuses a person whose
+    /// known sex contradicts the requested slot.
     pub fn set_parent_slot(&mut self, fam: &str, indi: &str, slot: Option<&str>) -> Result<(), String> {
         let f = self.family(fam).ok_or_else(|| rust_i18n::t!("error.family_not_found"))?;
         if f.husband() == Some(indi) || f.wife() == Some(indi) {
@@ -103,7 +102,7 @@ impl Gedcom {
             },
         };
         let node = self.get_mut(fam).unwrap();
-        // HUSB et WIFE se placent en tête, avant les enfants et les événements.
+        // HUSB and WIFE go first, before the children and the events.
         let at = node.children.iter().position(|c| c.tag != "HUSB" && c.tag != "WIFE").unwrap_or(node.children.len());
         node.children.insert(at, Node::with_value(tag, ptr(indi)));
         node.touch();
@@ -111,7 +110,7 @@ impl Gedcom {
         Ok(())
     }
 
-    /// Ajoute `child` aux enfants de la famille.
+    /// Adds `child` to the family's children.
     pub fn add_child_to_family(&mut self, fam: &str, child: &str) -> Result<(), String> {
         let f = self.family(fam).ok_or_else(|| rust_i18n::t!("error.family_not_found"))?;
         if f.husband() == Some(child) || f.wife() == Some(child) {
@@ -122,7 +121,7 @@ impl Gedcom {
         }
         if !f.children().contains(&child) {
             let node = self.get_mut(fam).unwrap();
-            // Après le dernier enfant (ou les parents), avant les événements.
+            // After the last child (or the parents), before the events.
             let at = node
                 .children
                 .iter()
@@ -136,7 +135,7 @@ impl Gedcom {
         Ok(())
     }
 
-    /// `x` figure-t-il parmi les parents (ou leurs ascendants) de la famille ?
+    /// Is `x` among the parents (or their ancestors) of the family?
     fn is_ancestor_of(&self, x: &str, fam: &str) -> bool {
         let mut stack = vec![fam.to_string()];
         let mut seen = std::collections::HashSet::new();
@@ -157,7 +156,7 @@ impl Gedcom {
         false
     }
 
-    /// Famille d'origine de la personne, créée si besoin.
+    /// Family of origin of the person, created if needed.
     fn ensure_parents_family(&mut self, indi: &str) -> Result<String, String> {
         let i = self.individual(indi).ok_or_else(|| rust_i18n::t!("error.person_not_found"))?;
         if let Some(f) = i.famc().first() {
@@ -168,9 +167,9 @@ impl Gedcom {
         Ok(fam)
     }
 
-    /// Ajoute un événement (ou attribut) à un individu ou une famille.
-    /// `detail` : la profession pour OCCU, le type pour un événement libre
-    /// (EVEN), sinon un complément (`TYPE`). La source est citée si donnée.
+    /// Adds an event (or attribute) to an individual or a family. `detail`: the occupation for
+    /// OCCU, the type for a free event (EVEN), otherwise a complement (`TYPE`). The source is cited
+    /// if given.
     pub fn add_event(&mut self, owner: &str, ev: &NewEvent) -> Result<(), String> {
         let node = self.get_mut(owner).ok_or_else(|| rust_i18n::t!("error.record_not_found"))?;
         let detail = ev.detail.trim();
@@ -193,7 +192,7 @@ impl Gedcom {
         if let Some(s) = ev.source.as_deref().filter(|s| !s.is_empty()) {
             e.children.push(Node::with_value("SOUR", format!("@{}@", s.trim_matches('@'))));
         }
-        // Événement sans aucun détail : « 1 DEAT Y » (il a eu lieu).
+        // Event without any detail: “1 DEAT Y” (it happened).
         if !attribute && e.children.is_empty() {
             e.value = Some("Y".into());
         }
@@ -201,8 +200,8 @@ impl Gedcom {
         Ok(())
     }
 
-    /// Crée une nouvelle personne liée à `indi` et renvoie son identifiant.
-    /// `family` choisit l'union pour un enfant quand il y en a plusieurs.
+    /// Creates a new person linked to `indi` and returns their identifier. `family` picks the union
+    /// for a child when there are several.
     pub fn add_relative(&mut self, indi: &str, rel: Relation, family: Option<&str>) -> Result<String, String> {
         let i = self.individual(indi).ok_or_else(|| rust_i18n::t!("error.person_not_found"))?;
         let surname = i.surname();
@@ -246,7 +245,7 @@ impl Gedcom {
                             self.set_spouse(&f, indi)?;
                             f
                         }
-                        // La dernière union par défaut.
+                        // The last union by default.
                         [.., last] => last.clone(),
                     },
                 };
@@ -269,7 +268,7 @@ impl Gedcom {
         }
     }
 
-    /// Lie deux personnes existantes : `other` devient le `rel` de `indi`.
+    /// Links two existing people: `other` becomes the `rel` of `indi`.
     pub fn link_relative(&mut self, indi: &str, rel: Relation, other: &str) -> Result<(), String> {
         if indi == other {
             return Err(rust_i18n::t!("error.link_self").into());
@@ -287,7 +286,8 @@ impl Gedcom {
                     }
                     .into());
                 }
-                // Le parent rejoint la famille d'origine existante (celle de l'autre parent), sinon une nouvelle.
+                // The parent joins the existing family of origin (the other parent's), otherwise a
+                // new one.
                 let place = if rel == Relation::Father { "HUSB" } else { "WIFE" };
                 let existing = self.individual(indi).and_then(|i| i.famc().first().map(|s| s.to_string()));
                 match existing {
@@ -333,8 +333,8 @@ impl Gedcom {
         }
     }
 
-    /// Retire une personne d'une famille (comme parent ou comme enfant).
-    /// La famille est supprimée si elle devient vide.
+    /// Removes a person from a family (as a parent or as a child). The family is deleted if it
+    /// becomes empty.
     pub fn unlink_from_family(&mut self, indi: &str, fam: &str) {
         let p = ptr(indi);
         if let Some(n) = self.get_mut(fam) {
@@ -346,8 +346,8 @@ impl Gedcom {
         self.prune_family(fam);
     }
 
-    /// Union où placer un nouveau conjoint de `indi` : son union encore sans
-    /// conjoint (parent seul avec ses enfants), sinon une nouvelle union.
+    /// Union where a new spouse of `indi` goes: their union still without a spouse (a single parent
+    /// with their children), otherwise a new union.
     fn union_for_spouse(&mut self, indi: &str) -> Result<String, String> {
         let open =
             self.individual(indi).ok_or_else(|| rust_i18n::t!("error.person_not_found"))?.fams().into_iter().find(
@@ -366,7 +366,7 @@ impl Gedcom {
         Ok(fam)
     }
 
-    /// Supprime la famille si elle ne relie plus personne (au plus un membre et aucun événement).
+    /// Deletes the family if it no longer connects anyone (at most one member and no event).
     fn prune_family(&mut self, fam: &str) -> bool {
         let Some(f) = self.family(fam) else { return false };
         let members = [f.husband(), f.wife()].into_iter().flatten().count() + f.children().len();
@@ -377,7 +377,7 @@ impl Gedcom {
         false
     }
 
-    /// Supprime une personne, ses liens, et les familles devenues vides.
+    /// Deletes a person, their links, and the families left empty.
     pub fn delete_individual(&mut self, xref: &str) -> Option<Node> {
         let fams: Vec<String> = self
             .individual(xref)
@@ -390,12 +390,12 @@ impl Gedcom {
         Some(removed)
     }
 
-    /// Supprime une famille et les liens `FAMS`/`FAMC` vers elle (les personnes restent).
+    /// Deletes a family and the `FAMS`/`FAMC` links to it (the people stay).
     pub fn delete_family(&mut self, xref: &str) -> Option<Node> {
         self.delete(xref)
     }
 
-    /// Supprime n'importe quel enregistrement, avec le nettoyage adapté à son type.
+    /// Deletes any record, with the cleanup suited to its type.
     pub fn delete_record(&mut self, xref: &str) -> Option<Node> {
         match self.get(xref).map(|n| n.tag.clone()).as_deref() {
             Some("INDI") => self.delete_individual(xref),
@@ -404,7 +404,7 @@ impl Gedcom {
         }
     }
 
-    /// Retire un lieu de tous les événements (les événements restent). Renvoie le nombre d'occurrences.
+    /// Removes a place from every event (the events stay). Returns the number of occurrences.
     pub fn delete_place(&mut self, name: &str) -> usize {
         let mut count = 0;
         let here = |n: &Node| n.tag == "PLAC" && n.val() == name;
@@ -424,15 +424,15 @@ impl Gedcom {
         count
     }
 
-    /// Média dont le fichier est `file` (chemin tel qu'écrit dans `FILE`).
+    /// Media whose file is `file` (path as written in `FILE`).
     pub fn media_by_file(&self, file: &str) -> Option<String> {
         self.records_of(RecordKind::Media)
             .find(|m| m.children_with("FILE").any(|f| f.val() == file))
             .and_then(|m| m.xref.clone())
     }
 
-    /// Crée (ou réutilise) le média pointant vers `file` et renvoie son identifiant.
-    /// Le titre est tiré du nom de fichier.
+    /// Creates (or reuses) the media pointing to `file` and returns its identifier. The title is
+    /// taken from the file name.
     pub fn media_for_file(&mut self, file: &str) -> String {
         if let Some(x) = self.media_by_file(file) {
             return x;
@@ -446,7 +446,7 @@ impl Gedcom {
         x
     }
 
-    /// Rattache un média à un enregistrement (personne, famille, source…).
+    /// Attaches a media to a record (person, family, source…).
     pub fn attach_media(&mut self, record: &str, media: &str) -> Result<(), String> {
         let tag = self.get(record).ok_or_else(|| rust_i18n::t!("error.record_not_found"))?.tag.clone();
         if !matches!(tag.as_str(), "INDI" | "FAM" | "SOUR" | "SUBM") {
@@ -459,12 +459,12 @@ impl Gedcom {
         Ok(())
     }
 
-    /// Détache un média d'un enregistrement (le média reste dans le fichier).
+    /// Detaches a media from a record (the media stays in the file).
     pub fn detach_media(&mut self, record: &str, media: &str) {
         self.remove_link(record, "OBJE", media);
     }
 
-    /// Tous les chemins `FILE` déjà référencés.
+    /// Every `FILE` path already referenced.
     pub fn referenced_files(&self) -> std::collections::HashSet<String> {
         self.records_of(RecordKind::Media)
             .flat_map(|m| m.children_with("FILE").map(|f| f.val().to_string()).collect::<Vec<_>>())
@@ -472,7 +472,7 @@ impl Gedcom {
     }
 }
 
-/// Type MIME d'après l'extension (`FILE.FORM` est obligatoire en GEDCOM 7).
+/// MIME type from the extension (`FILE.FORM` is required in GEDCOM 7).
 pub fn mime_for(file: &str) -> &'static str {
     let web = crate::weblink::is_web_url(file);
     let file = if web { file.split(['?', '#']).next().unwrap_or(file) } else { file };
@@ -491,18 +491,18 @@ pub fn mime_for(file: &str) -> &'static str {
         "mp4" => "video/mp4",
         "txt" => "text/plain",
         "htm" | "html" => "text/html",
-        // Page web (« …/ark:47539/s0051b… », « …/fiche.php »).
+        // Web page (“…/ark:47539/s0051b…”, “…/record.php”).
         _ if web => crate::weblink::WEB_FORM,
         _ => "application/octet-stream",
     }
 }
 
-/// Fichiers qu'on propose de rattacher.
+/// Files offered for attachment.
 pub fn is_media_file(name: &str) -> bool {
     !name.starts_with('.') && mime_for(name) != "application/octet-stream" && !name.ends_with(".ged")
 }
 
-/// « Actes/Naissance_Jean-Guyot_1850.jpg » → « Naissance Jean-Guyot 1850 ».
+/// “Records/Birth_Jean-Martin_1850.jpg” → “Birth Jean-Martin 1850”.
 pub fn title_from_file(file: &str) -> String {
     let name = file.rsplit(['/', '\\']).next().unwrap_or(file);
     let stem = name.rsplit_once('.').map(|(s, _)| s).unwrap_or(name);
@@ -510,7 +510,7 @@ pub fn title_from_file(file: &str) -> String {
 }
 
 impl<'a> Individual<'a> {
-    /// Familles dont la personne est l'un des parents, avec le conjoint.
+    /// Families where the person is one of the parents, with the spouse.
     pub fn unions(&self, g: &'a Gedcom) -> Vec<(String, Option<String>)> {
         self.fams()
             .into_iter()
@@ -523,19 +523,19 @@ impl<'a> Individual<'a> {
     }
 }
 
-/// Événement à ajouter avec [`Gedcom::add_event`].
+/// Event to add with [`Gedcom::add_event`].
 #[derive(Debug, Clone, Default)]
 pub struct NewEvent {
     pub tag: String,
     pub detail: String,
-    /// Valeur GEDCOM de la date, et sa phrase éventuelle (`PHRASE`).
+    /// GEDCOM value of the date, and its phrase if any (`PHRASE`).
     pub date: String,
     pub date_phrase: String,
     pub place: String,
     pub source: Option<String>,
 }
 
-/// Événements proposés à l'ajout : individuels, puis familiaux.
+/// Events offered for adding: individual, then family events.
 pub const INDIVIDUAL_EVENTS: &[&str] = &[
     "BIRT", "BAPM", "DEAT", "BURI", "CREM", "RESI", "OCCU", "CENS", "EDUC", "GRAD", "RETI", "EMIG", "IMMI", "NATU",
     "CONF", "FCOM", "WILL", "PROB", "EVEN",

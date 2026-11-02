@@ -1,5 +1,5 @@
-//! Fenêtres d'ajout ouvertes par les « + » du panneau de détail :
-//! nouvel événement, et proches (créer ou lier une personne).
+//! Add windows opened by the “+” of the detail panel: new event, and relatives (create or link a
+//! person).
 
 use super::relatives::PickPurpose;
 use super::*;
@@ -9,7 +9,7 @@ use rust_i18n::t;
 
 pub(super) enum AddDialog {
     Event(Box<EventDialog>),
-    /// Proches d'un individu.
+    /// Relatives of an individual.
     Relatives {
         target: String,
     },
@@ -21,30 +21,30 @@ pub(super) enum AddDialog {
     Agent(Box<super::agent::AgentDialog>),
 }
 
-/// Action d'une ligne de la fenêtre des proches.
+/// Action of a row of the relatives window.
 type RowAction = Box<dyn Fn(&mut Workspace, &mut Window, &mut Context<Workspace>)>;
 
 pub(super) struct EventDialog {
     owner: String,
-    /// Événement modifié (position dans l'enregistrement) ; `None` : ajout.
+    /// Edited event (position in the record); `None`: adding.
     editing: Option<usize>,
     kind: Entity<PickerState>,
     detail: Entity<InputState>,
     date: Entity<DateField>,
     place: Entity<InputState>,
     source: Entity<PickerState>,
-    /// Ajout depuis un individu marié : union qui portera un événement familial
-    /// (types préfixés `FAM:`). `None` si l'individu n'a qu'une union, ou aucune.
+    /// Adding from a married individual: union that will hold a family event (types prefixed with
+    /// `FAM:`). `None` if the individual has only one union, or none.
     union: Option<Entity<PickerState>>,
-    /// Unions de l'individu (famille, libellé).
+    /// Unions of the individual (family, label).
     unions: Vec<(String, String)>,
     error: Option<SharedString>,
     _subs: Vec<Subscription>,
 }
 
 impl Workspace {
-    /// Ouvre la fenêtre « Nouvel événement » pour un individu ou une famille,
-    /// ou la fenêtre de modification de l'événement `editing`.
+    /// Opens the “New Event” window for an individual or a family, or the edit window of event
+    /// `editing`.
     pub(super) fn open_event_dialog(
         &mut self,
         owner: String,
@@ -72,7 +72,7 @@ impl Workspace {
                 )
             })
             .collect();
-        // Types d'événements personnalisés (Réglages du fichier › Événements), avant « Autre… ».
+        // Custom event types (File Settings › Events), before “Other…”.
         let types = g.event_types();
         let custom = |fam: bool, prefix: &str| -> Vec<(String, String)> {
             types
@@ -83,7 +83,7 @@ impl Workspace {
         };
         let at = options.iter().position(|(t, _)| t == "EVEN").unwrap_or(options.len());
         options.splice(at..at, custom(family, ""));
-        // Ajout depuis un individu : les événements de ses unions (mariage…) aussi.
+        // Adding from an individual: the events of their unions (marriage…) too.
         let unions: Vec<(String, String)> = match (editing, g.individual(&owner)) {
             (None, Some(i)) => i
                 .unions(g)
@@ -99,7 +99,7 @@ impl Workspace {
             _ => Vec::new(),
         };
         if !unions.is_empty() {
-            // Mariage et compagnie juste après la naissance et le baptême.
+            // Marriage and co. right after birth and baptism.
             let at = options.iter().position(|(t, _)| t == "BAPM").map_or(0, |i| i + 1);
             options.splice(
                 at..at,
@@ -115,7 +115,7 @@ impl Workspace {
             choice(&opts, &unions[0].0, window, cx)
         });
         let mut options: Vec<(&str, &str)> = options.iter().map(|(v, l)| (v.as_str(), l.as_str())).collect();
-        // Type absent de la liste proposée à l'ajout (CHR, ADOP…) : on le garde.
+        // Type missing from the list offered when adding (CHR, ADOP…): keep it.
         let cur_tag = current.as_ref().map(|e| e.tag.clone()).unwrap_or_default();
         let cur_label = gedcom::event_name(&cur_tag);
         if !cur_tag.is_empty() && !tags.contains(&cur_tag.as_str()) {
@@ -200,7 +200,7 @@ impl Workspace {
             source: d.source.read(cx).selected_value().cloned(),
         };
         let (mut owner, editing) = (d.owner.clone(), d.editing);
-        // Événement d'une union : porté par la famille choisie.
+        // Event of a union: held by the chosen family.
         let mut ev = ev;
         if let Some(t) = ev.tag.strip_prefix("FAM:").map(str::to_string) {
             let fam = match &d.union {
@@ -215,12 +215,12 @@ impl Workspace {
             ev.tag = t;
             owner = fam;
         }
-        // Type personnalisé : un `EVEN` dont le `TYPE` est le libellé.
+        // Custom type: an `EVEN` whose `TYPE` is the label.
         if let Some(label) = ev.tag.strip_prefix("EVEN:").map(str::to_string) {
             ev.tag = "EVEN".into();
             ev.detail = label;
         }
-        // Vérification avant la modification, pour garder la fenêtre ouverte en cas d'erreur.
+        // Check before editing, to keep the window open on error.
         let mut probe = self.doc.as_ref().unwrap().ged.clone();
         let check = match editing {
             Some(ix) => probe.update_event(&owner, ix, &ev),
@@ -253,7 +253,7 @@ impl Workspace {
         window.focus(&self.focus, cx);
     }
 
-    /// Supprime un événement (Annuler pour revenir en arrière).
+    /// Deletes an event (Undo to go back).
     pub(super) fn delete_event(&mut self, owner: String, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
         if matches!(&self.add_dialog, Some(AddDialog::Event(d)) if d.owner == owner && d.editing == Some(ix)) {
             self.add_dialog = None;
@@ -355,8 +355,8 @@ impl Workspace {
             "EDUC" => Some(t!("event_dialog.education")),
             "EVEN" => Some(t!("event_dialog.event_type")),
             "RESI" | "" => None,
-            // Le `TYPE` d'un événement standard ne se saisit pas ici (éditeur GEDCOM) ;
-            // celui d'un événement modifié est gardé tel quel.
+            // The `TYPE` of a standard event is not entered here (GEDCOM editor); that of an edited
+            // event is kept as is.
             _ => None,
         };
         let field = |label: std::borrow::Cow<'static, str>, el: AnyElement| {
@@ -431,7 +431,7 @@ impl Workspace {
             .into_any_element()
     }
 
-    /// Une ligne « Rôle : Nouveau · Existant… ».
+    /// A “Role: New · Existing…” row.
     fn relative_row(
         &self,
         label: String,
@@ -475,7 +475,7 @@ impl Workspace {
     fn relatives_body(&self, indi: &str, cx: &mut Context<Self>) -> AnyElement {
         let g = &self.doc.as_ref().unwrap().ged;
         let (father, mother) = g.parents(indi);
-        // Plusieurs unions : on choisit celle de l'enfant (« Enfant avec Marie »).
+        // Several unions: pick the child's (“Child with Marie”).
         let unions = g.individual(indi).map(|i| i.unions(g)).unwrap_or_default();
         let mut rows = Vec::new();
         for rel in Relation::ALL {
@@ -514,7 +514,7 @@ impl Workspace {
     }
 }
 
-/// Bouton « + » discret à côté d'un titre de section.
+/// Discreet “+” button next to a section title.
 pub(super) fn plus_button(id: &'static str) -> Button {
     Button::new(id).xsmall().ghost().icon(IconName::Plus)
 }

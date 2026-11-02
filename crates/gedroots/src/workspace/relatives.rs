@@ -1,25 +1,25 @@
-//! Ajout et liaison de proches, sélecteur de personne, rattachement de médias.
+//! Adding and linking relatives, person picker, attaching media.
 
 use super::*;
 use gpui_kit::component::IconName;
 use rust_i18n::t;
 
-/// Ce que fera le choix dans le sélecteur.
+/// What the choice in the picker will do.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PickPurpose {
-    /// `other` devient le `rel` de `indi`.
+    /// `other` becomes the `rel` of `indi`.
     Relative { indi: String, rel: Relation },
-    /// La personne choisie devient un enfant de la famille.
+    /// The chosen person becomes a child of the family.
     FamilyChild { fam: String },
-    /// Le média est rattaché à l'enregistrement choisi.
+    /// The media is attached to the chosen record.
     MediaTo { media: String },
-    /// La personne choisie est identifiée sur la photo (page `page`), dans la zone `crop`.
+    /// The chosen person is identified on the photo (page `page`), in the `crop` area.
     TagPerson { media: String, page: usize, crop: Crop },
-    /// Le média choisi est ajouté à la fin de `media`, comme nouvelles pages.
+    /// The chosen media is added at the end of `media`, as new pages.
     MergeInto { media: String },
-    /// Source où saisir un acte (ou nouvelle source, choix vide).
+    /// Source in which to enter a record (or new source, empty choice).
     ActSource,
-    /// Lien de parenté entre `indi` et la personne choisie (rien n'est modifié).
+    /// Relationship between `indi` and the chosen person (nothing is changed).
     Kinship { indi: String },
 }
 
@@ -54,7 +54,7 @@ pub struct Picker {
     _sub: Subscription,
 }
 
-/// Fichiers image/PDF du dossier du `.ged` (chemins relatifs, séparés par `/`).
+/// Image/PDF files of the `.ged` folder (relative paths, separated by `/`).
 pub fn scan_media_files(ged_path: Option<&std::path::Path>) -> Vec<String> {
     let Some(root) = ged_path.and_then(|p| p.parent()) else { return vec![] };
     let mut out = Vec::new();
@@ -83,8 +83,8 @@ pub fn scan_media_files(ged_path: Option<&std::path::Path>) -> Vec<String> {
     out
 }
 
-/// Fichiers non encore rattachés dont le nom contient les mots-clés (nom, prénom…),
-/// du plus pertinent au moins pertinent.
+/// Files not attached yet whose name contains the keywords (surname, given name…), from most to
+/// least relevant.
 pub(super) fn suggest_files(
     files: &[String],
     referenced: &std::collections::HashSet<String>,
@@ -96,7 +96,7 @@ pub(super) fn suggest_files(
         .filter(|f| !referenced.contains(*f))
         .filter_map(|f| {
             let k = sort_key(f);
-            // Le premier mot-clé (nom de famille, titre…) est obligatoire.
+            // The first keyword (surname, title…) is required.
             if !k.contains(first.as_str()) {
                 return None;
             }
@@ -112,8 +112,8 @@ pub(super) fn keywords(s: &str) -> Vec<String> {
 }
 
 impl Workspace {
-    /// Applique une modification au document avec point d'annulation.
-    /// `f` renvoie le message d'état et, éventuellement, l'enregistrement à ouvrir.
+    /// Applies a change to the document with an undo point. `f` returns the status message and,
+    /// optionally, the record to open.
     pub(super) fn mutate(
         &mut self,
         window: &mut Window,
@@ -201,7 +201,7 @@ impl Workspace {
         cx.notify();
     }
 
-    /// Candidats du sélecteur (au plus 80).
+    /// Candidates of the picker (at most 80).
     fn picker_results(&self, cx: &App) -> Vec<String> {
         let (Some(p), Some(doc)) = (&self.picker, &self.doc) else { return vec![] };
         let g = &doc.ged;
@@ -215,7 +215,7 @@ impl Workspace {
             PickPurpose::Kinship { indi } => Some(indi),
             _ => exclude,
         };
-        // Pour un lien de parenté : sexe compatible, et les dates plausibles en premier.
+        // For a relationship: compatible sex, and plausible dates first.
         let (wrong_sex, expected) = match &p.purpose {
             PickPurpose::Relative { indi, rel } => {
                 let year = g.individual(indi).and_then(|i| i.birth_year());
@@ -233,7 +233,7 @@ impl Workspace {
             }
             _ => (None, None),
         };
-        // Proches déjà liés (parents, frères et sœurs, conjoints, enfants) : inutile de les proposer.
+        // Relatives already linked (parents, siblings, spouses, children): no need to suggest them.
         let mut close = std::collections::HashSet::new();
         if let Some(i) = exclude.and_then(|x| g.individual(x)) {
             for f in i.famc().into_iter().chain(i.fams()).filter_map(|f| g.family(f)) {
@@ -258,7 +258,7 @@ impl Workspace {
         });
         let mut out: Vec<String> = Vec::new();
         if let PickPurpose::MergeInto { media } = &p.purpose {
-            // Médias, d'après leur titre ou leurs fichiers.
+            // Media, by their title or their files.
             let words: Vec<String> = text.split_whitespace().map(sort_key).collect();
             for r in g.records_of(RecordKind::Media) {
                 let Some(x) = r.xref.as_deref().filter(|x| *x != media) else { continue };
@@ -276,7 +276,7 @@ impl Workspace {
             return out;
         }
         if let PickPurpose::ActSource = p.purpose {
-            // Sources d'après leur titre ; en dernier, « Nouvelle source » (choix vide).
+            // Sources by their title; last, “New Source” (empty choice).
             let words: Vec<String> = text.split_whitespace().map(sort_key).collect();
             let mut found: Vec<(String, String)> = g
                 .records_of(RecordKind::Source)
@@ -292,7 +292,7 @@ impl Workspace {
             return out;
         }
         if let PickPurpose::MediaTo { .. } = p.purpose {
-            // Sources et familles aussi, d'après le texte libre.
+            // Sources and families too, by the free text.
             let words: Vec<String> = q.words.clone();
             let hit = |label: &str| {
                 let k = sort_key(label);
@@ -309,7 +309,8 @@ impl Workspace {
             }
         }
         if let PickPurpose::TagPerson { media, .. } = &p.purpose {
-            // D'abord les personnes déjà liées à la photo sans zone, en dernier celles déjà situées.
+            // First the people already linked to the photo without an area, last those already
+            // located.
             let links = g.media_links(media);
             let rank = |x: &str| match links.iter().find(|l| l.owner == x) {
                 Some(l) if l.crop.is_none() => 0,
@@ -328,7 +329,8 @@ impl Workspace {
         window.focus(&self.focus, cx);
         if let PickPurpose::ActSource = p.purpose {
             let source = if chosen.is_empty() {
-                // Nouvelle source, titrée d'après la recherche (sinon titre automatique au premier acte).
+                // New source, titled after the search (otherwise automatic title at the first
+                // record).
                 let title = p.input.read(cx).value().trim().to_string();
                 self.checkpoint();
                 let Some(doc) = &mut self.doc else { return };
@@ -379,23 +381,23 @@ impl Workspace {
                     g.merge_media(&[media.clone(), chosen])?;
                     Ok((crate::tn!("picker.added_to_media", n, who = who).into_owned(), Some(media)))
                 }
-                // Traité avant (n'écrit rien par lui-même).
+                // Handled before (writes nothing by itself).
                 PickPurpose::ActSource => Ok((String::new(), None)),
                 PickPurpose::TagPerson { media, page, crop } => {
                     g.tag_person_on(&chosen, &media, page, crop)?;
                     Ok((t!("picker.tagged", who = who).into_owned(), None))
                 }
-                // Traité avant : rien à modifier.
+                // Handled before: nothing to change.
                 PickPurpose::Kinship { .. } => Err(t!("stats.kinship_title").into()),
             }
         });
     }
 
     // ------------------------------------------------------------------
-    // Médias
+    // Media
     // ------------------------------------------------------------------
 
-    /// Chemin à écrire dans `FILE` : relatif au dossier du `.ged` si possible.
+    /// Path to write in `FILE`: relative to the `.ged` folder if possible.
     pub(super) fn file_value(&self, path: &std::path::Path) -> String {
         let base = self.doc.as_ref().and_then(|d| d.path.as_ref()).and_then(|p| p.parent());
         match base.and_then(|b| path.strip_prefix(b).ok()) {
@@ -413,7 +415,7 @@ impl Workspace {
     // Rendu
     // ------------------------------------------------------------------
 
-    /// Fenêtre de choix d'une personne (ou d'un enregistrement), au-dessus de l'interface.
+    /// Window for choosing a person (or a record), above the interface.
     pub(super) fn render_picker(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let p = self.picker.as_ref()?;
         let g = &self.doc.as_ref()?.ged;

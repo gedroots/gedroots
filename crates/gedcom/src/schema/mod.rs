@@ -1,17 +1,16 @@
-//! Schéma GEDCOM 7 : quelles sous-structures sont permises sous chaque
-//! structure, avec quelle cardinalité, et quel type de valeur elles portent.
+//! GEDCOM 7 schema: which substructures are allowed under each structure, with which cardinality,
+//! and which type of value they carry.
 //!
-//! Les tables viennent du registre officiel de FamilySearch
-//! (`GEDCOM-registries`, fichier `generated_files/g7validation.json`) et sont
-//! générées dans [`data`] par `docs/schema/gen.py`. Les libellés traduits
-//! sont dans `locales/schema.yml`.
+//! The tables come from FamilySearch's official registry (`GEDCOM-registries`, file
+//! `generated_files/g7validation.json`) and are generated into [`data`] by `docs/schema/gen.py`.
+//! The translated labels are in `locales/schema.yml`.
 
 #[rustfmt::skip]
 mod data;
 
 use std::borrow::Cow;
 
-/// Nombre d'occurrences permises d'une sous-structure (`{0:1}`, `{1:M}`…).
+/// Number of occurrences allowed for a substructure (`{0:1}`, `{1:M}`…).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Card {
     Optional,
@@ -21,12 +20,12 @@ pub enum Card {
 }
 
 impl Card {
-    /// Au plus une occurrence.
+    /// At most one occurrence.
     pub fn single(self) -> bool {
         matches!(self, Card::Optional | Card::Required)
     }
 
-    /// Au moins une occurrence.
+    /// At least one occurrence.
     pub fn required(self) -> bool {
         matches!(self, Card::Required | Card::AtLeastOne)
     }
@@ -41,16 +40,16 @@ impl Card {
     }
 }
 
-/// Type de la valeur portée par une structure.
+/// Type of the value carried by a structure.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Payload {
-    /// Pas de valeur.
+    /// No value.
     None,
-    /// `Y` ou rien (événements).
+    /// `Y` or nothing (events).
     YOrEmpty,
-    /// Pointeur vers un enregistrement de ce type (`INDI`, `FAM`…).
+    /// Pointer to a record of this type (`INDI`, `FAM`…).
     Pointer(&'static str),
-    /// Valeur énumérée (ou liste de valeurs séparées par des virgules).
+    /// Enumerated value (or list of comma-separated values).
     Enum {
         list: bool,
         values: &'static [&'static str],
@@ -76,31 +75,31 @@ impl Sub {
     }
 }
 
-/// Définition d'une structure GEDCOM 7.
+/// Definition of a GEDCOM 7 structure.
 #[derive(Debug)]
 pub struct StructDef {
-    /// Identifiant dans le registre (`record-INDI`, `INDI-NAME`, `DATE`…).
+    /// Identifier in the registry (`record-INDI`, `INDI-NAME`, `DATE`…).
     pub id: &'static str,
-    /// Libellé anglais du registre.
+    /// English label from the registry.
     pub label: &'static str,
     pub payload: Payload,
     pub subs: &'static [Sub],
 }
 
 impl StructDef {
-    /// Sous-structure standard `tag`, si elle est permise ici.
+    /// Standard substructure `tag`, if it is allowed here.
     pub fn sub(&self, tag: &str) -> Option<&'static Sub> {
-        // `subs` est généré trié par balise.
+        // `subs` is generated sorted by tag.
         self.subs.binary_search_by(|s| s.tag.cmp(tag)).ok().map(|i| &self.subs[i])
     }
 }
 
-/// Le niveau 0 du fichier (enregistrements, `HEAD`, `TRLR`).
+/// Level 0 of the file (records, `HEAD`, `TRLR`).
 pub fn root() -> &'static StructDef {
     &data::STRUCTS[0]
 }
 
-/// Définition d'un enregistrement de niveau 0 (`INDI`, `FAM`, `SOUR`…).
+/// Definition of a level 0 record (`INDI`, `FAM`, `SOUR`…).
 pub fn record(tag: &str) -> Option<&'static StructDef> {
     root().sub(tag).map(Sub::def)
 }
@@ -122,14 +121,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn substructures_sont_triees() {
+    fn substructures_are_sorted() {
         for d in data::STRUCTS {
-            assert!(d.subs.windows(2).all(|w| w[0].tag < w[1].tag), "{} non trié", d.id);
+            assert!(d.subs.windows(2).all(|w| w[0].tag < w[1].tag), "{} is not sorted", d.id);
         }
     }
 
     #[test]
-    fn individu() {
+    fn individual() {
         let indi = record("INDI").unwrap();
         assert_eq!(indi.id, "record-INDI");
         let birt = indi.sub("BIRT").unwrap();

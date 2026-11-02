@@ -1,17 +1,15 @@
-//! Fenêtre « Médias » (Édition › Médias…, ⌘⇧M, « + » des images, clic droit
-//! d'un événement) : une seule porte d'entrée pour les médias d'un individu,
-//! d'une union, d'un événement ou d'une source.
+//! “Media” window (Edit › Media…, ⌘⇧M, the images’ “+”, right-click on an event): a single entry
+//! point for the media of an individual, a family, an event or a source.
 //!
-//! - **Rattachés** : les médias liés, groupés par provenance (l'événement, l'acte
-//!   cité, les portraits…), avec le détail de celui qu'on choisit ;
-//! - **Bibliothèque** : lier un média du fichier, ou un fichier du dossier pas
-//!   encore rattaché (il prend alors le nom du modèle) ;
-//! - **Importer des fichiers…** (ou déposer des fichiers sur la fenêtre) : un
-//!   aperçu montre le nom et le dossier que chaque fichier prendra selon
-//!   Réglages du fichier › Médias, avant de le déplacer (ou copier).
+//! - **Attached**: the linked media, grouped by origin (the event, the cited record, the
+//!   portraits…), with the details of the selected one;
+//! - **Library**: link a media of the file, or a file of the folder not attached yet (it then takes
+//!   the template’s name);
+//! - **Import files…** (or drop files on the window): a preview shows the name and folder each file
+//!   will get according to File Settings › Media, before moving (or copying) it.
 //!
-//! Le lien (où se joint le média) et les groupes viennent de
-//! [`gedcom::media_links`] ; le rangement des fichiers de [`super::media_files`].
+//! The link (where the media is attached) and the groups come from [`gedcom::media_links`]; file
+//! organization from [`super::media_files`].
 
 use super::media_files::{free_name, planned_paths, store_act_media, store_imported};
 use super::settings::SettingsPage;
@@ -33,23 +31,23 @@ pub(super) enum LibScope {
     Files,
 }
 
-/// Un élément choisi dans la bibliothèque.
+/// An item chosen in the library.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum Pick {
     Media(String),
-    /// Fichier du dossier du `.ged`, pas encore rattaché (chemin relatif).
+    /// File of the `.ged` folder, not attached yet (relative path).
     File(String),
 }
 
-/// Fichiers en cours d'import, avec l'aperçu de leur rangement.
+/// Files being imported, with the preview of where they will go.
 pub(super) struct ImportDraft {
     files: Vec<PathBuf>,
-    /// Où joindre le média ; `None` : saisir un nouvel acte avec ces images.
+    /// Where to attach the media; `None`: enter a new record with these images.
     host: Option<MediaHost>,
     move_files: bool,
-    /// Plusieurs fichiers : un seul média de plusieurs pages.
+    /// Several files: a single media with several pages.
     one_media: bool,
-    /// (fichier d'origine, chemin après rangement)
+    /// (original file, path after organization)
     rows: Vec<(String, String)>,
 }
 
@@ -58,7 +56,7 @@ pub(super) struct Gallery {
     tab: Tab,
     selected: Option<(String, MediaHost)>,
     title: Option<(Entity<InputState>, Subscription)>,
-    /// « Joindre à » de la bibliothèque (`None` : le choix par défaut).
+    /// The library’s “Attach to” (`None`: the default choice).
     host: Option<MediaHost>,
     scope: LibScope,
     query: Entity<InputState>,
@@ -67,11 +65,11 @@ pub(super) struct Gallery {
     _sub: Subscription,
 }
 
-/// Le choix « Déplacer » plutôt que « Copier » est retenu pendant la session.
+/// The “Move” rather than “Copy” choice is kept for the session.
 static MOVE_FILES: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 
-/// Segment d'un contrôle segmenté (onglets, Copier/Déplacer) : le choix
-/// courant ressort sur fond clair, les autres restent discrets.
+/// Segment of a segmented control (tabs, Copy/Move): the current choice stands out on a light
+/// background, the others stay discreet.
 fn segment(id: &'static str, selected: bool, label: impl Into<SharedString>) -> Stateful<Div> {
     div()
         .id(id)
@@ -85,7 +83,7 @@ fn segment(id: &'static str, selected: bool, label: impl Into<SharedString>) -> 
         .child(label.into())
 }
 
-/// Chemin lisible d'un fichier d'origine : `~/Téléchargements/scan.jpg`.
+/// Readable path of an original file: `~/Downloads/scan.jpg`.
 fn display_path(p: &str) -> String {
     let home = dirs_home();
     match Path::new(p).strip_prefix(&home) {
@@ -94,8 +92,8 @@ fn display_path(p: &str) -> String {
     }
 }
 
-/// Crée les médias des fichiers importés : un seul média de plusieurs pages, ou
-/// un par fichier. Une image d'acte ou de source prend le titre de la source.
+/// Creates the media of the imported files: a single media with several pages, or one per file. A
+/// record or source image takes the source’s title.
 fn create_import_media(g: &mut Gedcom, files: &[String], one: bool, host: Option<&MediaHost>) -> Vec<String> {
     let source_title = match host {
         Some(MediaHost::Act { source, key }) => Some(
@@ -134,7 +132,7 @@ fn create_import_media(g: &mut Gedcom, files: &[String], one: bool, host: Option
     out
 }
 
-/// Libellé d'un lien : « Acte de naissance de Rémi GUYOT », « Naissance · Rémi GUYOT »…
+/// Label of a link: “Birth record of Paul MARCHAND”, “Birth · Paul MARCHAND”…
 fn host_label(g: &Gedcom, h: &MediaHost) -> String {
     match h {
         MediaHost::Record(x) => g.record_label(x),
@@ -146,7 +144,7 @@ fn host_label(g: &Gedcom, h: &MediaHost) -> String {
     }
 }
 
-/// Enregistrement qu'ouvre un clic sur le lien.
+/// Record opened by a click on the link.
 fn host_record(h: &MediaHost) -> &str {
     match h {
         MediaHost::Record(x) | MediaHost::Event { owner: x, .. } | MediaHost::Act { source: x, .. } => x,
@@ -181,7 +179,7 @@ impl Workspace {
         cx.notify();
     }
 
-    /// Médias de l'élément sélectionné (individu, union, source).
+    /// Media of the selected item (individual, family, source).
     pub(super) fn open_gallery_for_selection(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(doc) = &self.doc else { return };
         let Some(x) = self.selected.clone() else { return };
@@ -190,7 +188,7 @@ impl Workspace {
         }
     }
 
-    /// Ouvre la fenêtre sur l'aperçu d'import des fichiers déposés.
+    /// Opens the window on the import preview of the dropped files.
     pub(super) fn open_gallery_with_files(
         &mut self,
         target: GalleryTarget,
@@ -208,7 +206,7 @@ impl Workspace {
         cx.notify();
     }
 
-    /// Échap : referme l'aperçu d'import, sinon la fenêtre.
+    /// Esc: closes the import preview, otherwise the window.
     pub(super) fn gallery_escape(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
         let Some(gal) = &mut self.gallery else { return false };
         if gal.import.take().is_none() {
@@ -218,8 +216,8 @@ impl Workspace {
         true
     }
 
-    /// Choix « Joindre à » : l'acte cité, l'événement, la personne… Pour un
-    /// registre, « Nouvel acte » (`None`) vient en premier.
+    /// “Attach to” choices: the cited record, the event, the person… For a register, “New record”
+    /// (`None`) comes first.
     fn host_choices(&self) -> Vec<(String, Option<MediaHost>)> {
         let (Some(doc), Some(gal)) = (&self.doc, &self.gallery) else { return Vec::new() };
         let g = &doc.ged;
@@ -237,7 +235,7 @@ impl Workspace {
     // Import
     // ------------------------------------------------------------------
 
-    /// Prépare l'aperçu d'import ; `host` : groupe visé (sinon le choix par défaut).
+    /// Prepares the import preview; `host`: target group (otherwise the default choice).
     fn gallery_import(
         &mut self,
         files: Vec<PathBuf>,
@@ -249,7 +247,7 @@ impl Workspace {
         if files.is_empty() {
             return;
         }
-        // Dépôt sur le dossier d'un média déjà ouvert : rien à faire ici.
+        // Drop on the folder of an already open media: nothing to do here.
         let host = match host {
             Some(h) => h,
             None => self.host_choices().into_iter().next().and_then(|(_, h)| h),
@@ -287,7 +285,7 @@ impl Workspace {
         .detach();
     }
 
-    /// Nom que prendra chaque fichier, calculé sur une copie du fichier GEDCOM.
+    /// Name each file will get, computed on a copy of the GEDCOM file.
     fn plan_import(&self, d: &ImportDraft) -> Vec<(String, String)> {
         let Some(doc) = &self.doc else { return Vec::new() };
         let files: Vec<String> = d.files.iter().map(|p| self.file_value(p)).collect();
@@ -318,7 +316,7 @@ impl Workspace {
         rows
     }
 
-    /// Recalcule les noms prévus de l'import en cours (réglages modifiés).
+    /// Recomputes the planned names of the current import (settings changed).
     pub(super) fn refresh_import_plan(&mut self, cx: &mut Context<Self>) {
         self.update_draft(|_| {}, cx);
     }
@@ -337,7 +335,7 @@ impl Workspace {
         let Some(d) = self.gallery.as_mut().and_then(|g| g.import.take()) else { return };
         MOVE_FILES.store(d.move_files, std::sync::atomic::Ordering::Relaxed);
         let Some(host) = d.host.clone() else {
-            // Registre : on saisit l'acte, les images en main (nommées à l'enregistrement).
+            // Register: the record is entered with the images at hand (named when saved).
             let Some(GalleryTarget::Record(source)) = self.gallery.as_ref().map(|g| g.target.clone()) else { return };
             self.close_gallery(window, cx);
             self.open_act(source, None, window, cx);
@@ -367,7 +365,7 @@ impl Workspace {
     }
 
     // ------------------------------------------------------------------
-    // Rattachés
+    // Attached
     // ------------------------------------------------------------------
 
     fn gallery_select(&mut self, media: String, host: MediaHost, window: &mut Window, cx: &mut Context<Self>) {
@@ -396,7 +394,7 @@ impl Workspace {
         }
         self.mutate(window, cx, |g| {
             let n = g.get_mut(&media).ok_or(t!("gallery.not_found"))?;
-            // Le titre d'un média est celui de son premier fichier (GEDCOM 7).
+            // A media’s title is that of its first file (GEDCOM 7).
             match n.children.iter_mut().find(|c| c.tag == "FILE") {
                 Some(f) => f.set_child_val("TITL", &title),
                 None => n.set_child_val("TITL", &title),
@@ -434,10 +432,10 @@ impl Workspace {
     }
 
     // ------------------------------------------------------------------
-    // Bibliothèque
+    // Library
     // ------------------------------------------------------------------
 
-    /// Mots-clés de l'élément : nom et premier prénom, titre de la source…
+    /// Keywords of the item: surname and first given name, source title…
     fn gallery_keywords(&self, g: &Gedcom, target: &GalleryTarget) -> Vec<String> {
         let x = match target {
             GalleryTarget::Record(x) | GalleryTarget::Event { owner: x, .. } => x,
@@ -509,8 +507,8 @@ impl Workspace {
         cx.notify();
     }
 
-    /// Hôte retenu pour la bibliothèque : le choix de l'utilisateur, sinon le
-    /// premier lien possible (jamais « Nouvel acte »).
+    /// Host kept for the library: the user’s choice, otherwise the first possible link (never “New
+    /// record”).
     fn library_host(&self) -> Option<MediaHost> {
         let gal = self.gallery.as_ref()?;
         gal.host.clone().or_else(|| self.host_choices().into_iter().find_map(|(_, h)| h))
@@ -550,7 +548,7 @@ impl Workspace {
     // Rendu
     // ------------------------------------------------------------------
 
-    /// Vignette d'un média (première page) ou d'un fichier.
+    /// Thumbnail of a media (first page) or of a file.
     fn gallery_thumb(&self, path: Option<PathBuf>, is_image: bool, w: f32, h: f32, fit: ObjectFit) -> AnyElement {
         let frame = div()
             .w_full()
@@ -704,7 +702,7 @@ impl Workspace {
                         .bg(theme::panel())
                         .shadow_lg()
                         .overflow_hidden()
-                        // Fichiers déposés n'importe où : aperçu d'import.
+                        // Files dropped anywhere: import preview.
                         .drag_over::<ExternalPaths>(|d, _, _, _| d.border_color(theme::accent()))
                         .on_drop(move |paths: &ExternalPaths, window, cx| {
                             let files = paths.paths().to_vec();
@@ -721,8 +719,8 @@ impl Workspace {
     fn render_attached(&self, gal: &Gallery, groups: Vec<GalleryGroup>, cx: &mut Context<Self>) -> AnyElement {
         let doc = self.doc.as_ref().unwrap();
         let g = &doc.ged;
-        // Emplacement « Importer… » : sur chaque groupe d'un événement ou d'une
-        // source ; sur le premier seulement pour un individu ou une union.
+        // “Import…” slot: on each group of an event or a source; only on the first one for an
+        // individual or a family.
         let slots_everywhere = match &gal.target {
             GalleryTarget::Event { .. } => true,
             GalleryTarget::Record(x) => g.get(x).is_some_and(|n| n.tag == "SOUR"),
@@ -884,7 +882,7 @@ impl Workspace {
         let m = Media::new(node);
         let planned = planned_paths(g, &media);
         let off_template = planned.iter().any(|(a, b)| a != b);
-        // Recadrer : une photo jointe directement à la personne.
+        // Crop: a photo attached directly to the person.
         let crop_owner = match (&gal.target, &host) {
             (GalleryTarget::Record(x), MediaHost::Record(h))
                 if x == h && g.get(x).is_some_and(|n| n.tag == "INDI") && m.is_image() =>
@@ -1132,7 +1130,7 @@ impl Workspace {
             .into_any_element()
     }
 
-    /// Bouton « Joindre à » : liste des liens possibles, coche sur le choix courant.
+    /// “Attach to” button: list of possible links, check mark on the current choice.
     fn host_button(
         &self,
         id: &'static str,
@@ -1348,7 +1346,7 @@ impl Workspace {
             .primary()
             .label(if new_act { t!("gallery.enter_act_go") } else { t!("gallery.import") })
             .on_click(cx.listener(|this, _, w, cx| this.run_import(w, cx)));
-        // Ordre des boutons : action à gauche sous Windows, à droite ailleurs.
+        // Button order: action on the left on Windows, on the right elsewhere.
         let buttons = if cfg!(target_os = "windows") {
             h_flex().gap_2().child(go).child(cancel)
         } else {
@@ -1373,7 +1371,7 @@ impl Workspace {
 }
 
 impl LibScope {
-    /// Une recherche tapée dans « Suggérés » cherche dans tous les médias.
+    /// A search typed in “Suggested” searches all media.
     fn max_query(self) -> LibScope {
         match self {
             LibScope::Suggested => LibScope::Media,

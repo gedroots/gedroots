@@ -1,6 +1,6 @@
-//! Assistant d'import (Fichier › Importer un GEDCOM…) : ouvre le fichier, liste
-//! ce qu'il contient de non standard (voir `gedcom::import`) et propose de le
-//! convertir en GEDCOM 7. La conversion s'annule comme toute modification.
+//! Import wizard (File › Import a GEDCOM…): opens the file, lists what it contains that is not
+//! standard (see `gedcom::import`) and offers to convert it to GEDCOM 7. The conversion can be
+//! undone like any change.
 
 use super::add::AddDialog;
 use super::*;
@@ -34,7 +34,7 @@ impl Workspace {
         .detach();
     }
 
-    /// Analyse le fichier ouvert et affiche l'assistant s'il y a quelque chose à normaliser.
+    /// Analyzes the open file and shows the wizard if there is something to normalize.
     fn open_import_wizard(&mut self, cx: &mut Context<Self>) {
         let Some(doc) = &self.doc else { return };
         let file = doc.path.as_ref().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().to_string());

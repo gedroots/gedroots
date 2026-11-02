@@ -1,11 +1,11 @@
-//! Lecture et écriture du texte GEDCOM.
+//! Reading and writing GEDCOM text.
 
 use crate::node::Node;
 use std::fmt;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParseError {
-    /// Numéro de ligne (à partir de 1).
+    /// Line number (from 1).
     pub line: usize,
     pub message: String,
 }
@@ -18,7 +18,7 @@ impl fmt::Display for ParseError {
 
 impl std::error::Error for ParseError {}
 
-/// Particularités de forme du fichier source, restituées à l'écriture.
+/// Formatting details of the source file, restored on writing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TextFormat {
     pub bom: bool,
@@ -28,12 +28,12 @@ pub struct TextFormat {
 
 impl Default for TextFormat {
     fn default() -> Self {
-        // GEDCOM 7 : UTF-8, BOM facultatif ; on suit Ancestris (BOM + LF).
+        // GEDCOM 7: UTF-8, optional BOM; follow Ancestris (BOM + LF).
         Self { bom: true, crlf: false, final_newline: true }
     }
 }
 
-/// Analyse un texte GEDCOM en une liste de structures de niveau 0.
+/// Parses a GEDCOM text into a list of level 0 structures.
 pub fn parse_nodes(input: &str) -> Result<(Vec<Node>, TextFormat), ParseError> {
     let bom = input.starts_with('\u{feff}');
     let body = input.strip_prefix('\u{feff}').unwrap_or(input);
@@ -41,7 +41,7 @@ pub fn parse_nodes(input: &str) -> Result<(Vec<Node>, TextFormat), ParseError> {
     let final_newline = body.ends_with('\n') || body.ends_with('\r');
 
     let mut roots: Vec<Node> = Vec::new();
-    // Pile des nœuds ouverts : stack[i] est au niveau i.
+    // Stack of open nodes: stack[i] is at level i.
     let mut stack: Vec<Node> = Vec::new();
 
     for (idx, raw) in body.split('\n').enumerate() {
@@ -107,7 +107,7 @@ fn parse_line(line: &str) -> Result<(usize, Node), String> {
     Ok((level, Node { xref, tag: tag.to_string(), value, children: Vec::new() }))
 }
 
-/// Sérialise des structures (à partir du niveau `base_level`).
+/// Serializes structures (from level `base_level`).
 pub fn write_nodes<'a>(nodes: impl IntoIterator<Item = &'a Node>, base_level: usize, newline: &str, out: &mut String) {
     for n in nodes {
         write_node(n, base_level, newline, out);
@@ -131,14 +131,14 @@ fn write_node(n: &Node, level: usize, newline: &str, out: &mut String) {
     }
 }
 
-/// Texte GEDCOM d'un seul enregistrement (pour l'éditeur brut).
+/// GEDCOM text of a single record (for the raw editor).
 pub fn node_to_string(n: &Node) -> String {
     let mut s = String::new();
     write_node(n, 0, "\n", &mut s);
     s
 }
 
-/// Relit le texte d'un enregistrement saisi dans l'éditeur brut.
+/// Reads back the text of a record typed in the raw editor.
 pub fn node_from_string(text: &str) -> Result<Node, ParseError> {
     let (mut nodes, _) = parse_nodes(text)?;
     match nodes.len() {

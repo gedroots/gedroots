@@ -1,17 +1,17 @@
-//! Conversions exactes entre calendriers, par numéro de jour fixe
-//! (« rata die » : 1 = 1er janvier de l'an 1 grégorien proleptique).
+//! Exact conversions between calendars, through a fixed day number (“rata die”: 1 = 1 January of
+//! year 1, proleptic Gregorian).
 //!
-//! Années « astronomiques » : 1 av. J.-C. = 0, 2 av. J.-C. = -1…
-//! Algorithmes d'après Dershowitz & Reingold, *Calendrical Calculations*.
+//! “Astronomical” years: 1 BC = 0, 2 BC = -1… Algorithms from Dershowitz & Reingold, *Calendrical
+//! Calculations*.
 
-/// Jour fixe du 1er janvier 1970 (pour passer aux jours « Unix »).
+/// Fixed day of 1 January 1970 (to convert to “Unix” days).
 pub const UNIX_EPOCH_RD: i64 = 719_163;
 
 fn div(a: i64, b: i64) -> i64 {
     a.div_euclid(b)
 }
 
-// --- Grégorien ---------------------------------------------------------------
+// --- Gregorian ---------------------------------------------------------------
 
 pub fn gregorian_leap(y: i64) -> bool {
     y.rem_euclid(4) == 0 && (y.rem_euclid(100) != 0 || y.rem_euclid(400) == 0)
@@ -30,7 +30,7 @@ pub fn fixed_from_gregorian(y: i64, m: u32, d: u32) -> i64 {
 }
 
 pub fn gregorian_from_fixed(rd: i64) -> (i64, u32, u32) {
-    // Algorithme de H. Hinnant sur les jours Unix.
+    // H. Hinnant's algorithm on Unix days.
     let z = rd - UNIX_EPOCH_RD + 719_468;
     let era = div(z, 146_097);
     let doe = z - era * 146_097;
@@ -78,7 +78,7 @@ pub fn julian_from_fixed(rd: i64) -> (i64, u32, u32) {
     (y, m, d)
 }
 
-/// Nombre de jours d'un mois grégorien (`julian` : règle bissextile julienne).
+/// Number of days in a Gregorian month (`julian`: Julian leap year rule).
 pub fn western_month_days(y: i64, m: u32, julian: bool) -> u32 {
     match m {
         1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
@@ -88,12 +88,12 @@ pub fn western_month_days(y: i64, m: u32, julian: bool) -> u32 {
     }
 }
 
-// --- Républicain -------------------------------------------------------------
+// --- French Republican -------------------------------------------------------
 
-/// 1er vendémiaire an I = 22 septembre 1792.
+/// 1 Vendémiaire year I = 22 September 1792.
 const FRENCH_EPOCH: i64 = 654_415;
 
-/// Années sextiles : III, VII, XI, XV… (règle arithmétique des convertisseurs usuels).
+/// Leap (sextile) years: III, VII, XI, XV… (arithmetic rule of the usual converters).
 pub fn french_leap(y: i64) -> bool {
     y.rem_euclid(4) == 3
 }
@@ -102,7 +102,7 @@ pub fn french_new_year(y: i64) -> i64 {
     FRENCH_EPOCH + 365 * (y - 1) + div(y, 4)
 }
 
-/// 12 mois de 30 jours, puis 5 (ou 6) jours complémentaires.
+/// 12 months of 30 days, then 5 (or 6) complementary days.
 pub fn french_month_days(y: i64, m: u32) -> u32 {
     if m == 13 { if french_leap(y) { 6 } else { 5 } } else { 30 }
 }
@@ -123,7 +123,7 @@ pub fn french_from_fixed(rd: i64) -> (i64, u32, u32) {
     ((y), (doy / 30 + 1) as u32, (doy % 30 + 1) as u32)
 }
 
-// --- Hébraïque ---------------------------------------------------------------
+// --- Hebrew ------------------------------------------------------------------
 
 /// 1er tichri an 1 = 7 octobre 3761 av. J.-C. (julien).
 const HEBREW_EPOCH: i64 = -1_373_427;
@@ -158,8 +158,8 @@ fn hebrew_year_days(y: i64) -> i64 {
     hebrew_new_year(y + 1) - hebrew_new_year(y)
 }
 
-/// Mois dans l'ordre GEDCOM (1 = tichri … 6 = adar I, 7 = adar / adar II … 13 = eloul).
-/// En année commune, adar I n'existe pas : `ADR` est lu comme adar (`ADS`).
+/// Months in GEDCOM order (1 = Tishrei … 6 = Adar I, 7 = Adar / Adar II … 13 = Elul). In a common
+/// year, Adar I does not exist: `ADR` is read as Adar (`ADS`).
 pub fn hebrew_month_days(y: i64, m: u32) -> u32 {
     let len = hebrew_year_days(y);
     match m {
@@ -183,7 +183,7 @@ pub fn hebrew_month_days(y: i64, m: u32) -> u32 {
     }
 }
 
-/// Mois effectivement présents dans l'année, dans l'ordre.
+/// Months actually present in the year, in order.
 fn hebrew_months(y: i64) -> impl Iterator<Item = u32> {
     let leap = hebrew_leap(y);
     (1..=13).filter(move |&m| m != 6 || leap)
@@ -211,7 +211,7 @@ pub fn hebrew_from_fixed(rd: i64) -> (i64, u32, u32) {
         }
         left -= n;
     }
-    unreachable!("jour hors de l'année hébraïque")
+    unreachable!("day outside the Hebrew year")
 }
 
 #[cfg(test)]
@@ -230,7 +230,7 @@ mod tests {
 
     #[test]
     fn julian_known() {
-        // Réforme grégorienne : jeudi 4 oct. 1582 (julien) suivi du vendredi 15 oct. 1582.
+        // Gregorian reform: Thursday 4 Oct. 1582 (Julian) followed by Friday 15 Oct. 1582.
         assert_eq!(fixed_from_julian(1582, 10, 4) + 1, fixed_from_gregorian(1582, 10, 15));
         assert_eq!(julian_from_fixed(fixed_from_gregorian(1700, 3, 14)), (1700, 3, 3));
         for rd in [-500_000, 0, 1, 577_000, 700_000] {
@@ -247,7 +247,7 @@ mod tests {
         // 15 brumaire an XII = 7 novembre 1803 ; 30 germinal an IV = 19 avril 1796.
         assert_eq!(gregorian_from_fixed(fixed_from_french(12, 2, 15)), (1803, 11, 7));
         assert_eq!(gregorian_from_fixed(fixed_from_french(4, 7, 30)), (1796, 4, 19));
-        // Dernier jour du calendrier : 10 nivôse an XIV = 31 décembre 1805.
+        // Last day of the calendar: 10 Nivôse year XIV = 31 December 1805.
         assert_eq!(gregorian_from_fixed(fixed_from_french(14, 4, 10)), (1805, 12, 31));
         assert_eq!(french_month_days(3, 13), 6);
         let rd = fixed_from_french(11, 13, 6);
@@ -261,7 +261,7 @@ mod tests {
         assert_eq!(gregorian_from_fixed(fixed_from_hebrew(5785, 1, 1)), (2024, 10, 3));
         assert_eq!(gregorian_from_fixed(fixed_from_hebrew(5784, 8, 15)), (2024, 4, 23));
         assert!(hebrew_leap(5784) && !hebrew_leap(5785));
-        // Pourim 5785 (14 adar, année commune) = 14 mars 2025, même écrit ADR.
+        // Purim 5785 (14 Adar, common year) = 14 March 2025, even written ADR.
         assert_eq!(gregorian_from_fixed(fixed_from_hebrew(5785, 7, 14)), (2025, 3, 14));
         assert_eq!(fixed_from_hebrew(5785, 6, 14), fixed_from_hebrew(5785, 7, 14));
         for rd in [-1_373_427, 0, 650_000, 739_000, 739_500] {
