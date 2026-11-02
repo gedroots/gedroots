@@ -94,6 +94,9 @@ réaffiche, et **Ne plus masquer** retire la balise).
 1 _GR_IGNORE marriage_too_young
 ```
 
+Les anomalies masquées se retrouvent dans **Fichier › Réglages du fichier…**, d'où on peut les
+réafficher (la balise est retirée, et sa déclaration aussi quand il n'en reste plus).
+
 L'anomalie est masquée lorsque son enregistrement principal (celui qu'ouvre un clic dans
 la liste) porte la balise avec le bon code.
 

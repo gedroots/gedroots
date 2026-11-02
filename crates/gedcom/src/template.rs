@@ -547,7 +547,7 @@ impl Gedcom {
         let xref = self.next_free_xref("T");
         let mut t = template.clone();
         t.name = if template.custom { template.name.clone() } else { format!("{} (personnalisé)", template.name) };
-        self.records.push(t.to_node(&xref));
+        self.records.push(std::sync::Arc::new(t.to_node(&xref)));
         self.declare_extensions();
         self.reindex();
         xref

@@ -58,6 +58,7 @@ impl Workspace {
             return d;
         }
         let d = on!(d, cx, SaveFile, |this, w, cx| this.save_file(&SaveFile, w, cx));
+        let d = on!(d, cx, OpenFileSettings, |this, w, cx| this.open_settings(w, cx));
         let d = on!(d, cx, SaveFileAs, |this, w, cx| this.save_file_as(w, cx));
         let d = on!(d, cx, OpenAnalyses, |this, w, cx| this.open_analyses(&OpenAnalyses, w, cx));
         let d = on!(d, cx, EnterRecord, |this, w, cx| this.open_entry(&EnterRecord, w, cx));
@@ -120,11 +121,13 @@ impl Workspace {
             // Arbre et filtres de la liste des individus.
             .when(individuals, |d| {
                 let d = on!(d, cx, ShowTree, |this, w, cx| this.show_tab(CenterTab::Tree, cx));
-                let d = on!(d, cx, TreeAncestors, |this, w, cx| this.set_tree_mode(TreeMode::Ancestors, cx));
-                let d = on!(d, cx, TreeDescendants, |this, w, cx| this.set_tree_mode(TreeMode::Descendants, cx));
+                let d = on!(d, cx, TreeChart, |this, w, cx| this.set_tree_mode(TreeMode::Chart, cx));
                 let d = on!(d, cx, TreeFan, |this, w, cx| this.set_tree_mode(TreeMode::Fan, cx));
-                let d = on!(d, cx, MoreGenerations, |this, w, cx| this.step_generations(1, cx));
-                let d = on!(d, cx, FewerGenerations, |this, w, cx| this.step_generations(-1, cx));
+                // L'arbre libre charge ses générations tout seul ; l'éventail se règle.
+                let d = d.when(self.tree_mode == TreeMode::Fan, |d| {
+                    let d = on!(d, cx, MoreGenerations, |this, w, cx| this.step_generations(1, cx));
+                    on!(d, cx, FewerGenerations, |this, w, cx| this.step_generations(-1, cx))
+                });
                 let d = on!(d, cx, FilterMen, |this, w, cx| this.toggle_filter("sexe:h", w, cx));
                 let d = on!(d, cx, FilterWomen, |this, w, cx| this.toggle_filter("sexe:f", w, cx));
                 let d = on!(d, cx, FilterAncestors, |this, w, cx| this.toggle_filter("sosa", w, cx));
@@ -135,6 +138,12 @@ impl Workspace {
             })
             // Individu sélectionné.
             .when(indi.is_some(), |d| {
+                let d = on!(d, cx, CenterTree, |this, w, cx| {
+                    if let Some(x) = this.selected.clone() {
+                        this.tree_mode = TreeMode::Chart;
+                        this.center_chart_on(x, w, cx)
+                    }
+                });
                 let d = d
                     .when(parents.0.is_none(), |d| {
                         let d = on!(d, cx, AddFather, |this, w, cx| this.relative(Relation::Father, false, w, cx));

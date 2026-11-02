@@ -17,7 +17,7 @@ et suit la maquette « Lignée » (thème sombre, barre d'activité, liste, arbr
   qui ne s'appliquent pas à la sélection sont grisées (macOS) ou sans effet.
 - **Palette de commandes** (`⌘⇧P` / `Ctrl+Maj+P`) : toutes les commandes applicables, recherche
   sans accents. Raccourcis : `⌘1`…`⌘7` listes, `⌥⌘1`…`⌥⌘3` arbre/fiche/GEDCOM, `⌘F`
-  rechercher, `⌘⇧N` nouvel élément, `⌘⇧H` individu racine, `⌘=` / `⌘-` générations,
+  rechercher, `⌘⇧N` nouvel élément, `⌘⇧H` individu racine, `⌘=` / `⌘-` générations de l'éventail,
   `⌘⇧S` enregistrer sous.
 - **Clic droit partout** : lignes des listes (et le fond, pour créer), cases des arbres et de
   l'éventail, cases vides (nouvelle personne ou personne existante), événements, proches,
@@ -37,8 +37,10 @@ et suit la maquette « Lignée » (thème sombre, barre d'activité, liste, arbr
   `sans:source`, `sans:parents`, `avec:média`, `sosa:1-63`…), filtres rapides (Affichage › Filtrer la liste) ;
   fiche avec portrait, galerie d'images, événements (dates en français, calendrier républicain compris), sources citées,
   famille (parents, conjoints, enfants) cliquable.
-- **Arbres** : ascendance (4 générations, portraits, lignées paternelle/maternelle, numéros Sosa),
-  descendance (2 à 8 générations) et **éventail** (2 à 7 générations), cliquables pour recentrer.
+- **Arbres** : **arbre libre** (ascendants à droite, descendants et conjoints à gauche, frères et
+  sœurs au-dessus ; on s'y déplace en glissant ou à la molette, les générations se chargent au fur et
+  à mesure dans les deux sens, une mini-carte montre où l'on est, double-clic pour recentrer) et
+  **éventail** (2 à 7 générations).
 - **Ajouter un proche** en un clic depuis une personne (père, mère, conjoint, enfant, frère ou
   sœur), ou **lier une personne existante** via un sélecteur qui propose d'abord les dates
   plausibles ; détacher une personne d'une famille. Les liens `FAMS`/`FAMC` ↔ `HUSB`/`WIFE`/`CHIL`
@@ -75,6 +77,10 @@ et suit la maquette « Lignée » (thème sombre, barre d'activité, liste, arbr
   logiciel, liste ce qu'il contient de non standard et propose de le convertir en GEDCOM 7
   (annulable). Premier contrôle : les balises `_URL` deviennent des liens multimédia (`WWW`
   pour les dépôts). Les contrôles sont dans `crates/gedcom/src/import.rs`.
+- **Réglages du fichier** (Fichier › « Réglages du fichier… ») : auteur, e-mail, droits,
+  description, langue et individu racine, plus la liste des anomalies masquées (« Réafficher »).
+  Tout est rangé dans l'en-tête du .ged en GEDCOM 7 standard (`HEAD.SUBM`, `COPR`, `NOTE`,
+  `LANG`). À chaque enregistrement, `HEAD.SOUR` et `HEAD.DATE` indiquent GedRoots et la date.
 - **Médias à plusieurs pages** : un acte sur deux feuillets est un seul média (`OBJE` avec un
   `FILE` par page, standard GEDCOM 7). Visionneuse page par page (miniatures, ⇞ / ⇟), pages
   ajoutées par glisser-déposer ou Média › Pages, réordonnées en glissant les miniatures, retirées

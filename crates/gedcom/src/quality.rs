@@ -318,7 +318,7 @@ fn empty_notes(x: &str, who: &str, node: &Node, path: &mut Vec<usize>, out: &mut
 fn unused(g: &Gedcom, out: &mut Vec<Issue>) {
     // Tout ce qui est cité quelque part (sauf par soi-même).
     let mut cited: HashSet<&str> = HashSet::new();
-    for (owner, n) in std::iter::once((None, &g.header)).chain(g.records.iter().map(|r| (r.xref.as_deref(), r))) {
+    for (owner, n) in std::iter::once((None, &g.header)).chain(g.records.iter().map(|r| (r.xref.as_deref(), &**r))) {
         n.walk(&mut |c| {
             if let Some(p) = c.pointer()
                 && Some(p) != owner

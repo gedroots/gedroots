@@ -33,7 +33,7 @@ impl Render for PagePreview {
             .bg(theme::surface())
             .opacity(0.85);
         match self.0.clone() {
-            Some(p) => tile.child(img(p).size_full().object_fit(ObjectFit::Cover)),
+            Some(p) => tile.child(picture(p, THUMB_W, THUMB_H, ObjectFit::Cover).size_full()),
             None => tile,
         }
     }
@@ -229,7 +229,7 @@ impl Workspace {
             .border_color(theme::border())
             .bg(theme::surface());
         match path.filter(|p| p.exists()) {
-            Some(p) if image => tile.child(img(p).size_full().object_fit(ObjectFit::Cover)),
+            Some(p) if image => tile.child(picture(p, w, h, ObjectFit::Cover).size_full()),
             Some(_) => {
                 tile.flex().items_center().justify_center().child(icon(IconName::FileText).text_color(theme::muted()))
             }

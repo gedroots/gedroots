@@ -17,8 +17,10 @@ pub(super) type MenuBuilder = Rc<dyn Fn(PopupMenu, &mut Window, &mut Context<Pop
 pub(super) enum From {
     /// Une ligne de la liste de gauche (on peut y supprimer l'élément).
     List,
-    /// Une case de l'arbre, un lien du panneau de détail…
+    /// Un lien du panneau de détail, une case de l'éventail…
     Link,
+    /// Une case de l'arbre libre.
+    Tree,
     /// Un membre affiché dans la fiche d'une famille.
     Member(String),
     /// Une image rattachée à l'enregistrement donné (vignettes du panneau).
@@ -297,9 +299,16 @@ pub(super) fn person_menu(ws: Ws, x: String, from: From) -> MenuBuilder {
         let (x1, x2, x3, x4, x5, x6, x7) =
             (x.clone(), x.clone(), x.clone(), x.clone(), x.clone(), x.clone(), x.clone());
         let (wa, wb) = (ws.clone(), ws.clone());
-        menu.item(act(&ws, "Afficher dans l'arbre", move |this, w, cx| {
-            this.open_in(x1.clone(), CenterTab::Tree, w, cx)
-        }))
+        let in_tree = matches!(from, From::Tree);
+        menu.item(act(
+            &ws,
+            if in_tree { "Centrer l'arbre ici" } else { "Afficher dans l'arbre" },
+            move |this, w, cx| {
+                this.entry_form = None;
+                this.goto(x1.clone(), w, cx);
+                this.center_chart_on(x1.clone(), w, cx)
+            },
+        ))
         .item(act(&ws, "Ouvrir la fiche", move |this, w, cx| this.open_in(x2.clone(), CenterTab::Form, w, cx)))
         .separator()
         .submenu("Ajouter un proche", window, cx, move |m, _, _| {

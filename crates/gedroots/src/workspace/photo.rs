@@ -7,41 +7,14 @@
 
 use super::relatives::PickPurpose;
 use super::*;
-use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
+pub(super) use crate::images::image_size;
+use crate::images::picture;
+use std::cell::Cell;
 use std::path::Path;
 
 /// Taille maximale de l'image dans la fiche d'un média.
 const MAX_W: f32 = 1600.;
 const MAX_H: f32 = 900.;
-
-thread_local! {
-    static SIZES: RefCell<HashMap<PathBuf, Option<(u32, u32)>>> = RefCell::new(HashMap::new());
-}
-
-/// Dimensions de l'image telle qu'affichée (orientation EXIF appliquée,
-/// comme le fait GPUI), lues dans l'en-tête du fichier et mises en cache.
-pub(super) fn image_size(path: &Path) -> Option<(u32, u32)> {
-    if let Some(s) = SIZES.with(|c| c.borrow().get(path).copied()) {
-        return s;
-    }
-    let read = || -> Option<(u32, u32)> {
-        use image::ImageDecoder;
-        let mut dec = image::ImageReader::open(path).ok()?.with_guessed_format().ok()?.into_decoder().ok()?;
-        let (w, h) = dec.dimensions();
-        let turned = matches!(
-            dec.orientation().unwrap_or(image::metadata::Orientation::NoTransforms),
-            image::metadata::Orientation::Rotate90
-                | image::metadata::Orientation::Rotate270
-                | image::metadata::Orientation::Rotate90FlipH
-                | image::metadata::Orientation::Rotate270FlipH
-        );
-        Some(if turned { (h, w) } else { (w, h) })
-    };
-    let s = read();
-    SIZES.with(|c| c.borrow_mut().insert(path.to_path_buf(), s));
-    s
-}
 
 /// La zone `rect` de l'image, mise à l'échelle dans une boîte `w × h`.
 /// `cover` : remplit la boîte (en rognant), sinon la zone y tient entière.
@@ -51,13 +24,12 @@ pub(super) fn cropped_img(path: PathBuf, size: (u32, u32), rect: Rect, w: f32, h
     // Centre la zone dans la boîte.
     let (ox, oy) = ((w - rw * s) / 2., (h - rh * s) / 2.);
     div().relative().overflow_hidden().w(px(w)).h(px(h)).flex_none().child(
-        img(path)
+        picture(path, size.0 as f32 * s, size.1 as f32 * s, ObjectFit::Fill)
             .absolute()
             .left(px(ox - x * s))
             .top(px(oy - y * s))
             .w(px(size.0 as f32 * s))
-            .h(px(size.1 as f32 * s))
-            .object_fit(ObjectFit::Fill),
+            .h(px(size.1 as f32 * s)),
     )
 }
 
@@ -67,10 +39,9 @@ pub(super) fn linked_img(path: PathBuf, crop: Option<Crop>, w: f32, h: f32, cove
         Some((r, size)) if !Crop::from_rect(r).is_full(size.0, size.1) => {
             cropped_img(path, size, r, w, h, cover).into_any_element()
         }
-        _ => img(path)
+        _ => picture(path, w, h, if cover { ObjectFit::Cover } else { ObjectFit::Contain })
             .w(px(w))
             .h(px(h))
-            .object_fit(if cover { ObjectFit::Cover } else { ObjectFit::Contain })
             .into_any_element(),
     }
 }
@@ -78,7 +49,7 @@ pub(super) fn linked_img(path: PathBuf, crop: Option<Crop>, w: f32, h: f32, cove
 /// Zone recadrée seule, à sa propre proportion, dans au plus `max_w × max_h`.
 pub(super) fn fitted_crop(path: PathBuf, crop: Option<Crop>, max_w: f32, max_h: f32) -> AnyElement {
     let Some((size, r)) = image_size(&path).and_then(|s| crop?.rect(s.0, s.1).map(|r| (s, r))) else {
-        return img(path).max_w_full().max_h(px(max_h)).object_fit(ObjectFit::Contain).into_any_element();
+        return picture(path, max_w, max_h, ObjectFit::Contain).max_w_full().max_h(px(max_h)).into_any_element();
     };
     let (x, y, rw, rh) = (r.0 as f32, r.1 as f32, r.2 as f32, r.3 as f32);
     let s = (max_w / rw).min(max_h / rh).min(2.);
@@ -90,13 +61,12 @@ pub(super) fn fitted_crop(path: PathBuf, crop: Option<Crop>, max_w: f32, max_h: 
         .max_w(px(rw * s))
         .aspect_ratio(rw / rh)
         .child(
-            img(path)
+            picture(path, size.0 as f32 * s, size.1 as f32 * s, ObjectFit::Fill)
                 .absolute()
                 .left(relative(-x / rw))
                 .top(relative(-y / rh))
                 .w(relative(size.0 as f32 / rw))
-                .h(relative(size.1 as f32 / rh))
-                .object_fit(ObjectFit::Fill),
+                .h(relative(size.1 as f32 / rh)),
         )
         .into_any_element()
 }
@@ -216,7 +186,7 @@ impl Workspace {
     pub(super) fn render_photo(&self, media: &str, path: PathBuf, cx: &mut Context<Self>) -> AnyElement {
         let g = &self.doc.as_ref().unwrap().ged;
         let Some(size) = image_size(&path) else {
-            return img(path).max_w_full().max_h(px(MAX_H)).object_fit(ObjectFit::Contain).into_any_element();
+            return picture(path, MAX_W, MAX_H, ObjectFit::Contain).max_w_full().max_h(px(MAX_H)).into_any_element();
         };
         let avail = match self.photo_bounds.avail.get() {
             a if a > 50. => a,
@@ -305,7 +275,7 @@ impl Workspace {
             .w(px(dw))
             .h(px(dh))
             .flex_none()
-            .child(img(path.clone()).size_full().object_fit(ObjectFit::Fill))
+            .child(picture(path.clone(), dw, dh, ObjectFit::Fill).size_full())
             .child(canvas_el)
             .children(boxes)
             .children(draft)

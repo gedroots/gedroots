@@ -16,6 +16,7 @@ actions!(
         NewFile,
         OpenFile,
         ImportFile,
+        OpenFileSettings,
         SaveFile,
         SaveFileAs,
         Quit,
@@ -80,9 +81,9 @@ actions!(
         ShowTree,
         ShowForm,
         ShowRaw,
-        TreeAncestors,
-        TreeDescendants,
+        TreeChart,
         TreeFan,
+        CenterTree,
         MoreGenerations,
         FewerGenerations,
         FilterMen,
@@ -175,6 +176,8 @@ fn model() -> Vec<(&'static str, Vec<Item>)> {
         Sep,
         a("Enregistrer", SaveFile),
         a("Enregistrer sous…", SaveFileAs),
+        Sep,
+        a("Réglages du fichier…", OpenFileSettings),
     ];
     if !mac {
         file.extend([Sep, a("Quitter", Quit)]);
@@ -294,9 +297,10 @@ fn model() -> Vec<(&'static str, Vec<Item>)> {
             Sub(
                 "Arbre",
                 vec![
-                    a("Ascendance", TreeAncestors),
-                    a("Descendance", TreeDescendants),
+                    a("Arbre libre", TreeChart),
                     a("Éventail", TreeFan),
+                    Sep,
+                    a("Centrer sur la personne", CenterTree),
                     Sep,
                     a("Plus de générations", MoreGenerations),
                     a("Moins de générations", FewerGenerations),

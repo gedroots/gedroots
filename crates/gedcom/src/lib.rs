@@ -12,6 +12,7 @@
 //! - [`events`] : modification et suppression des événements ;
 //! - [`quality`] : page Qualité des données (cohérence, schéma GEDCOM 7, éléments vides ou inutilisés) ;
 //! - [`import`] : contrôles de l'assistant d'import (balises non standard → GEDCOM 7) ;
+//! - [`settings`] : réglages du fichier (auteur, droits, langue…) dans l'en-tête ;
 //! - [`weblink`] : liens web en GEDCOM 7 standard (`OBJE` dont le `FILE` est une URL) ;
 //! - [`crop`] : recadrage des médias (`CROP`) et personnes identifiées sur les photos ;
 //! - [`multipage`] : médias à plusieurs pages (plusieurs `FILE`), fusion et séparation ;
@@ -37,6 +38,7 @@ pub mod quality;
 pub mod relations;
 pub mod schema;
 pub mod search;
+pub mod settings;
 pub mod template;
 pub mod weblink;
 
@@ -52,6 +54,7 @@ pub use parse::{ParseError, node_from_string, node_to_string};
 pub use pedigree::{DescNode, DescUnion};
 pub use relations::{FAMILY_EVENTS, INDIVIDUAL_EVENTS, NewEvent, Relation, is_media_file, mime_for, title_from_file};
 pub use search::{IndividualQuery, has_token, toggle_token};
+pub use settings::{FileInfo, FileSettings, IgnoredIssue};
 pub use template::{FieldDef, PersonField, Relation as RoleRelation, RoleDef, Template, builtin_templates};
 pub use weblink::{WebLink, WebLinkKind, host, is_web_url, normalize_url};
 

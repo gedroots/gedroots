@@ -490,16 +490,4 @@ impl Gedcom {
         self.declare_extension(IGNORE_TAG, IGNORE_URI);
         true
     }
-
-    /// Ne plus masquer une anomalie : retire `_GR_IGNORE <code>` de l'enregistrement.
-    pub fn unignore_issue(&mut self, xref: &str, code: &str) -> bool {
-        let Some(r) = self.get_mut(xref) else { return false };
-        let before = r.children.len();
-        r.children.retain(|n| !(n.tag == IGNORE_TAG && n.val().trim() == code));
-        if r.children.len() == before {
-            return false;
-        }
-        r.touch();
-        true
-    }
 }
