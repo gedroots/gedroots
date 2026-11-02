@@ -408,7 +408,66 @@ pub fn sort_key(s: &str) -> String {
 /// (`Lieudit, Commune, Code_Postal, Département, Région, Pays`) :
 /// « , Troyes, 10000, Aube, Grand Est, France » → « Troyes (Aube) »,
 /// « La Gare, Amions, 42260, Loire, … » → « La Gare, Amions (Loire) ».
+///
+/// Si un format des lieux a été indiqué avec [`set_place_layout`] (celui du
+/// fichier ouvert), le libellé suit ce format : voir [`short_place_in`].
 pub fn short_place(raw: &str) -> String {
+    let layout = PLACE_LAYOUT.read().map(|l| l.clone()).unwrap_or_default();
+    short_place_in(raw, &layout)
+}
+
+/// Format des lieux du fichier ouvert, utilisé par [`short_place`].
+static PLACE_LAYOUT: std::sync::RwLock<Vec<String>> = std::sync::RwLock::new(Vec::new());
+
+/// Indique le format des lieux (`HEAD.PLAC.FORM`) à suivre pour les libellés courts.
+pub fn set_place_layout(form: &[String]) {
+    if let Ok(mut l) = PLACE_LAYOUT.write() {
+        *l = form.to_vec();
+    }
+}
+
+/// Libellé court d'un lieu selon un format (`["Commune", "Département", "Pays"]`) :
+/// commune (précédée du lieu-dit éventuel) et, entre parenthèses, la première
+/// juridiction plus large reconnue (département, comté, province…, sinon région,
+/// sinon pays). Sans format, ou si le lieu ne le suit pas, format Ancestris.
+pub fn short_place_in(raw: &str, form: &[String]) -> String {
+    let parts: Vec<&str> = raw.split(',').map(str::trim).collect();
+    if form.len() >= 2 && parts.len() == form.len() && !is_ancestris_layout(form) {
+        return short_by_layout(&parts, form);
+    }
+    short_ancestris(raw)
+}
+
+/// Le format par défaut d'Ancestris, que [`short_ancestris`] connaît déjà.
+fn is_ancestris_layout(form: &[String]) -> bool {
+    let k: Vec<String> = form.iter().map(|f| sort_key(f)).collect();
+    k.len() == 6 && k[1].contains("commune") && k[3].contains("departement")
+}
+
+fn short_by_layout(parts: &[&str], form: &[String]) -> String {
+    let keys: Vec<String> = form.iter().map(|f| sort_key(f)).collect();
+    let find = |words: &[&str]| keys.iter().position(|k| words.iter().any(|w| k.contains(w)));
+    let at = |i: usize| parts.get(i).copied().filter(|s| !s.is_empty());
+    let nonempty: Vec<usize> = (0..parts.len()).filter(|&i| at(i).is_some()).collect();
+    let Some(&first) = nonempty.first() else { return String::new() };
+    let commune = find(&["commune", "ville", "city", "town", "village", "paroisse", "parish", "municip", "localite"]);
+    // Nom : la commune (ou la juridiction la plus précise remplie), avec un lieu-dit qui la précède.
+    let main = commune.filter(|&c| at(c).is_some()).unwrap_or(first);
+    let name = match (first < main).then(|| at(first)).flatten() {
+        Some(l) => format!("{l}, {}", at(main).unwrap_or("")),
+        None => at(main).unwrap_or("").to_string(),
+    };
+    let wider = |words: &[&str]| find(words).filter(|&i| i > main).and_then(at);
+    let context = wider(&["departement", "county", "comte", "province", "state", "etat", "district"])
+        .or_else(|| wider(&["region"]))
+        .or_else(|| nonempty.last().filter(|&&i| i > main).and_then(|&i| at(i)));
+    match context {
+        Some(c) if c != name => format!("{name} ({c})"),
+        _ => name,
+    }
+}
+
+fn short_ancestris(raw: &str) -> String {
     let parts: Vec<&str> = raw.split(',').map(str::trim).collect();
     if parts.len() < 4 {
         return parts.iter().copied().filter(|s| !s.is_empty()).collect::<Vec<_>>().join(", ");

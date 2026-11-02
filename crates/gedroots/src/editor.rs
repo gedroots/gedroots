@@ -17,7 +17,7 @@ pub enum Target {
 }
 
 pub struct Field {
-    pub label: &'static str,
+    pub label: SharedString,
     pub state: FieldState,
     /// Lieu : propose les lieux déjà présents dans le fichier.
     pub place: bool,
@@ -173,7 +173,7 @@ impl RecordEditor {
         macro_rules! field {
             ($label:expr, $hint:expr, $v:expr) => {
                 fields.push(Field {
-                    label: $label,
+                    label: $label.into(),
                     state: FieldState::Text(input(window, cx, &$v, $hint)),
                     place: false,
                 })
@@ -182,7 +182,7 @@ impl RecordEditor {
         macro_rules! date_field {
             ($label:expr, $ev:expr) => {
                 fields.push(Field {
-                    label: $label,
+                    label: $label.into(),
                     state: FieldState::Date(date_field(&$ev.date, &$ev.phrase, window, cx)),
                     place: false,
                 })
@@ -190,13 +190,31 @@ impl RecordEditor {
         }
         macro_rules! place_field {
             ($label:expr, $v:expr) => {
-                fields.push(Field { label: $label, state: FieldState::Text(input(window, cx, &$v, "")), place: true })
+                fields.push(Field {
+                    label: $label.into(),
+                    state: FieldState::Text(input(window, cx, &$v, "")),
+                    place: true,
+                })
             };
         }
         match &target {
             Target::Place(name) => {
                 let place = ged.places().into_iter().find(|p| &p.name == name);
-                field!("Lieu", "Lieudit, Commune, Code postal, Département, Région, Pays", name.clone());
+                // Un champ par juridiction du format des lieux (Réglages du fichier › Lieux),
+                // si le lieu le suit ; sinon le nom complet.
+                let form = ged.place_form();
+                let parts: Vec<&str> = name.split(',').map(str::trim).collect();
+                if form.len() >= 2 && parts.len() == form.len() {
+                    for (j, part) in form.iter().zip(parts) {
+                        fields.push(Field {
+                            label: j.replace('_', " ").into(),
+                            state: FieldState::Text(input(window, cx, part, "")),
+                            place: false,
+                        });
+                    }
+                } else {
+                    field!("Lieu", "Commune, Département, Pays", name.clone());
+                }
                 field!("Latitude", "ex. N48.8463", place.as_ref().and_then(|p| p.latitude.clone()).unwrap_or_default());
                 field!(
                     "Longitude",
@@ -221,7 +239,7 @@ impl RecordEditor {
                         field!("Prénoms", "", f.given);
                         field!("Nom", "", f.surname);
                         let sex = choice(SEXES, &f.sex, window, cx);
-                        fields.push(Field { label: "Sexe", state: FieldState::Choice(sex), place: false });
+                        fields.push(Field { label: "Sexe".into(), state: FieldState::Choice(sex), place: false });
                         field!("Profession", "", f.occupation);
                         date_field!("Naissance — date", f.birth);
                         place_field!("Naissance — lieu", f.birth.place);
@@ -316,13 +334,30 @@ impl RecordEditor {
         self.long_text.as_ref().map(|(_, s)| s.read(cx).value().to_string()).unwrap_or_default()
     }
 
+    /// Nom du lieu saisi : le champ « Lieu », ou les juridictions jointes par des virgules
+    /// (le nom d'origine est gardé tel quel s'il n'a pas changé).
+    pub fn place_name(&self, cx: &App) -> Option<String> {
+        let Target::Place(old) = &self.target else { return None };
+        let v = self.values(cx);
+        let parts = &v[..v.len() - 2];
+        Some(if parts.len() == 1 {
+            parts[0].trim().to_string()
+        } else if parts.iter().map(|p| p.trim()).eq(old.split(',').map(str::trim)) {
+            old.clone()
+        } else {
+            parts.iter().map(|p| p.trim()).collect::<Vec<_>>().join(", ")
+        })
+    }
+
     /// Applique le formulaire visuel au document. Renvoie un message de résultat.
     pub fn apply_form(&self, ged: &mut Gedcom, cx: &App) -> Result<String, String> {
         let v = self.values(cx);
         let note = self.long_value(cx);
         match &self.target {
             Target::Place(old) => {
-                let n = ged.update_place(old, &v[0], &v[1], &v[2]);
+                let new = self.place_name(cx).unwrap_or_else(|| old.clone());
+                let coords = &v[v.len() - 2..];
+                let n = ged.update_place(old, &new, &coords[0], &coords[1]);
                 Ok(format!("Lieu mis à jour ({n} occurrence{})", if n > 1 { "s" } else { "" }))
             }
             Target::Record { xref, kind } => {

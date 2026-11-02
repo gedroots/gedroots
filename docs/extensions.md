@@ -12,6 +12,7 @@ l'exige GEDCOM 7 :
 2 TAG _GR_TPL https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_tpl
 2 TAG _GR_FLD https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_fld
 2 TAG _GR_FILE https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_file
+2 TAG _GR_EVEN https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_even
 ```
 
 Les autres logiciels ignorent ces balises sans perte de données.
@@ -36,6 +37,32 @@ menu **… → Définir comme racine**.
 Sans cette balise (ou si elle pointe vers un individu supprimé), GedRoots prend le Sosa 1
 déclaré par Ancestris (`_SOSADABOVILLE 1`), sinon le premier individu du fichier.
 Supprimer l'individu racine retire aussi la balise.
+
+## `_GR_EVEN`
+
+Type d'événement personnalisé déclaré avant d'être utilisé (**Fichier › Réglages du
+fichier… › Événements**). Un type personnalisé est un `EVEN` standard avec un `TYPE` :
+ceux qui figurent déjà dans le fichier sont déduits de leurs `TYPE` et n'ont pas besoin de
+cette balise. Elle ne sert qu'à proposer un type pas encore utilisé dans **Ajouter un
+événement…**.
+
+- **Sous** : `HEAD`, au niveau 1. Une occurrence par type déclaré.
+- **Valeur** : le libellé du type, tel qu'il sera écrit dans `TYPE`.
+- **Sous-structures** : `_GR_REC FAM` pour un événement familial (sous `FAM`) ; absent,
+  le type concerne les individus.
+
+```
+0 HEAD
+1 SCHMA
+2 TAG _GR_EVEN https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_even
+2 TAG _GR_REC https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_even
+1 _GR_EVEN Baptême protestant
+1 _GR_EVEN Publication des bans
+2 _GR_REC FAM
+```
+
+Renommer un type dans les réglages réécrit tous les `TYPE` correspondants (renommer vers un
+type existant les fusionne) ; un type déclaré et inutilisé peut être retiré.
 
 ## `_GR_FILE`
 
