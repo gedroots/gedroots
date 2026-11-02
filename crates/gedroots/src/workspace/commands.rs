@@ -166,6 +166,16 @@ impl Workspace {
                 let d = on!(d, cx, LinkChild, |this, w, cx| this.relative(Relation::Child, true, w, cx));
                 let d = on!(d, cx, LinkSibling, |this, w, cx| this.relative(Relation::Sibling, true, w, cx));
                 let d = on!(d, cx, KinshipWith, |this, w, cx| this.ask_kinship(w, cx));
+                let d = on!(d, cx, LinkMedia, |this, w, cx| {
+                    if let Some(owner) = this.selected.clone() {
+                        this.open_picker(PickPurpose::MediaFor { owner, crop: false }, w, cx)
+                    }
+                });
+                let d = on!(d, cx, CropMedia, |this, w, cx| {
+                    if let Some(owner) = this.selected.clone() {
+                        this.open_picker(PickPurpose::MediaFor { owner, crop: true }, w, cx)
+                    }
+                });
                 d.when(!is_root, |d| {
                     on!(d, cx, SetRoot, |this, w, cx| {
                         if let Some(x) = this.selected.clone() {

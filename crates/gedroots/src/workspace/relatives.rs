@@ -20,6 +20,8 @@ pub enum PickPurpose {
     MergeInto { media: String },
     /// Le média choisi est lié à l'événement `ix` de `owner`.
     MediaToEvent { owner: String, ix: usize },
+    /// Le média choisi est lié à `owner` ; `crop` : on y délimite ensuite sa zone.
+    MediaFor { owner: String, crop: bool },
     /// Source où saisir un acte (ou nouvelle source, choix vide).
     ActSource,
     /// Lien de parenté entre `indi` et la personne choisie (rien n'est modifié).
@@ -39,6 +41,10 @@ impl PickPurpose {
             PickPurpose::Kinship { indi } => format!("Lien de parenté de {} avec…", g.record_label(indi)),
             PickPurpose::MergeInto { media } => format!("Ajouter à « {} » les pages du média…", g.record_label(media)),
             PickPurpose::ActSource => "Saisir un acte dans la source…".into(),
+            PickPurpose::MediaFor { owner, crop: false } => format!("Lier un média à {}", g.record_label(owner)),
+            PickPurpose::MediaFor { owner, crop: true } => {
+                format!("Recadrer une image pour {}", g.record_label(owner))
+            }
             PickPurpose::MediaToEvent { owner, ix } => format!(
                 "Lier un média à « {} » · {}",
                 g.event_title(owner, *ix).unwrap_or_default(),
@@ -181,7 +187,9 @@ impl Workspace {
 
     pub(super) fn open_picker(&mut self, purpose: PickPurpose, window: &mut Window, cx: &mut Context<Self>) {
         let hint = match purpose {
-            PickPurpose::MergeInto { .. } | PickPurpose::MediaToEvent { .. } => "Titre ou fichier du média…",
+            PickPurpose::MergeInto { .. } | PickPurpose::MediaToEvent { .. } | PickPurpose::MediaFor { .. } => {
+                "Titre ou fichier du média…"
+            }
             PickPurpose::ActSource => "Titre de la source, ou d'une nouvelle source…",
             _ => "Nom, prénom… (critères : né:1850 lieu:troyes)",
         };
@@ -264,15 +272,34 @@ impl Workspace {
         let mut out: Vec<String> = Vec::new();
         let media_search = match &p.purpose {
             PickPurpose::MergeInto { media } => Some(Some(media.as_str())),
-            PickPurpose::MediaToEvent { .. } => Some(None),
+            PickPurpose::MediaToEvent { .. } | PickPurpose::MediaFor { .. } => Some(None),
             _ => None,
         };
         if let Some(skip) = media_search {
+            // Lier à un enregistrement : pas les pages web, ni les médias déjà liés ;
+            // recadrer : les images seulement (déjà liées ou non).
+            let (linked, only_images): (Vec<&str>, bool) = match &p.purpose {
+                PickPurpose::MediaFor { owner, crop } => (
+                    if *crop {
+                        vec![]
+                    } else {
+                        g.get(owner)
+                            .map(|n| n.children_with("OBJE").filter_map(|o| o.pointer()).collect())
+                            .unwrap_or_default()
+                    },
+                    *crop,
+                ),
+                _ => (vec![], false),
+            };
+            let for_record = matches!(p.purpose, PickPurpose::MediaFor { .. });
             // Médias, d'après leur titre ou leurs fichiers.
             let words: Vec<String> = text.split_whitespace().map(sort_key).collect();
             for r in g.records_of(RecordKind::Media) {
                 let Some(x) = r.xref.as_deref().filter(|x| Some(*x) != skip) else { continue };
                 let m = Media::new(r);
+                if linked.contains(&x) || (only_images && !m.is_image()) || (for_record && m.web_url().is_some()) {
+                    continue;
+                }
                 let k = sort_key(&format!(
                     "{} {}",
                     m.title(),
@@ -354,6 +381,10 @@ impl Workspace {
             self.open_act(source, None, window, cx);
             return;
         }
+        if let PickPurpose::MediaFor { owner, crop: true } = p.purpose {
+            self.start_crop_for(owner, chosen, window, cx);
+            return;
+        }
         if let PickPurpose::Kinship { indi } = p.purpose {
             self.kinship = Some((indi.clone(), chosen));
             self.open_location(View::Individuals, Some(indi), window, cx);
@@ -391,6 +422,10 @@ impl Workspace {
                     g.attach_media_to_event(&owner, ix, &chosen)?;
                     let what = g.event_title(&owner, ix).unwrap_or_default().to_lowercase();
                     Ok((format!("« {who} » lié à l'événement {what} de {}", g.record_label(&owner)), None))
+                }
+                PickPurpose::MediaFor { owner, .. } => {
+                    g.attach_media(&owner, &chosen)?;
+                    Ok((format!("« {who} » lié à {}", g.record_label(&owner)), None))
                 }
                 // Traité avant (n'écrit rien par lui-même).
                 PickPurpose::ActSource => Ok((String::new(), None)),

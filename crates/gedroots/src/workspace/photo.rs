@@ -83,6 +83,8 @@ pub struct PhotoDraw {
     pub current: Option<(f32, f32)>,
     /// Taille de l'image.
     pub size: (u32, u32),
+    /// Tracé lancé depuis la fiche de `owner` : on y revient (dans cet onglet) une fois la zone enregistrée.
+    pub back: Option<CenterTab>,
 }
 
 impl PhotoDraw {
@@ -126,9 +128,26 @@ impl Workspace {
             return;
         };
         let page = self.current_page(&media);
-        self.photo_draw = Some(PhotoDraw { media, owner, page, start: None, current: None, size });
+        self.photo_draw = Some(PhotoDraw { media, owner, page, start: None, current: None, size, back: None });
         self.set_status("Tracez un cadre sur la photo (Échap pour annuler)", false);
         cx.notify();
+    }
+
+    /// Ouvre l'image `media` pour y délimiter la zone de `owner` (lien `OBJE` avec `CROP`),
+    /// puis revient à la fiche de `owner`.
+    pub(super) fn start_crop_for(&mut self, owner: String, media: String, window: &mut Window, cx: &mut Context<Self>) {
+        let tab = self.tab;
+        self.goto(media.clone(), window, cx);
+        self.tab = CenterTab::Form;
+        let Some(path) = self.photo_file(&media) else {
+            self.set_status("Image introuvable pour ce média", true);
+            cx.notify();
+            return;
+        };
+        self.start_draw(media, Some(owner), &path, cx);
+        if let Some(d) = self.photo_draw.as_mut() {
+            d.back = Some(tab);
+        }
     }
 
     pub(super) fn cancel_draw(&mut self, cx: &mut Context<Self>) {
@@ -160,10 +179,16 @@ impl Workspace {
         let d = self.photo_draw.take().unwrap();
         let crop = Crop::from_rect(rect.unwrap());
         match d.owner {
-            Some(owner) => self.mutate(window, cx, |g| {
-                g.set_link_crop_on(&owner, &d.media, d.page, Some(crop))?;
-                Ok((format!("Zone de {} enregistrée", g.record_label(&owner)), None))
-            }),
+            Some(owner) => {
+                self.mutate(window, cx, |g| {
+                    g.set_link_crop_on(&owner, &d.media, d.page, Some(crop))?;
+                    let msg = format!("Zone de {} enregistrée", g.record_label(&owner));
+                    Ok((msg, d.back.map(|_| owner.clone())))
+                });
+                if let Some(tab) = d.back {
+                    self.tab = tab;
+                }
+            }
             None => self.open_picker(PickPurpose::TagPerson { media: d.media, page: d.page, crop }, window, cx),
         }
     }

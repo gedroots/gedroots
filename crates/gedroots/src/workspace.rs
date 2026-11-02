@@ -12,7 +12,7 @@ use gedcom::*;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::input::{Editor, Input, InputEvent, InputState, Textarea};
-use gpui_kit::component::menu::AppMenuBar;
+use gpui_kit::component::menu::{AppMenuBar, DropdownMenu, PopupMenuItem};
 use gpui_kit::component::select::Select;
 use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::{Disableable, Icon, Sizable, h_flex, v_flex};
@@ -1700,13 +1700,16 @@ impl Workspace {
     }
 
     /// Vignettes des images liées, dans le panneau de détail.
-    fn render_gallery(&self, xref: &str, large: bool, cx: &mut Context<Self>) -> Option<AnyElement> {
+    /// `add` : « + » à côté du titre (ajouter des photos, lier ou recadrer un média),
+    /// et le titre reste affiché même sans image.
+    fn render_gallery(&self, xref: &str, large: bool, add: bool, cx: &mut Context<Self>) -> Option<AnyElement> {
         let doc = self.doc.as_ref()?;
         let images = doc.ged.images_of(xref);
-        if images.is_empty() {
+        if images.is_empty() && !add {
             return None;
         }
         let n = images.len();
+        let add_button = add.then(|| self.add_image_button(xref, cx));
         let tiles = images.into_iter().map(|m| {
             let target = m.xref().to_string();
             let menu = self.record_menu(m.xref(), MenuFrom::Attached(xref.to_string()), cx);
@@ -1772,15 +1775,47 @@ impl Workspace {
                         .gap_2()
                         .items_center()
                         .child(icon(IconName::Images))
-                        .child(label_caps(format!("Images · {n}"))),
+                        .child(label_caps(if n > 0 { format!("Images · {n}") } else { "Images".into() }))
+                        .child(div().flex_1())
+                        .children(add_button),
                 )
-                .child(if large {
-                    v_flex().gap_2().children(tiles).into_any_element()
-                } else {
-                    div().grid().grid_cols(3).gap_2().children(tiles).into_any_element()
+                .when(n > 0, |d| {
+                    d.child(if large {
+                        v_flex().gap_2().children(tiles).into_any_element()
+                    } else {
+                        div().grid().grid_cols(3).gap_2().children(tiles).into_any_element()
+                    })
                 })
                 .into_any_element(),
         )
+    }
+
+    /// « + » des images : nouvelles photos, média existant, ou recadrage d'un média existant.
+    fn add_image_button(&self, xref: &str, cx: &mut Context<Self>) -> AnyElement {
+        let (owner, me) = (xref.to_string(), cx.entity().downgrade());
+        add::plus_button("add-image")
+            .tooltip("Ajouter une image")
+            .dropdown_menu(move |menu, _, _| {
+                let item =
+                    |label: &'static str, f: fn(&mut Workspace, String, &mut Window, &mut Context<Workspace>)| {
+                        let (me, owner) = (me.clone(), owner.clone());
+                        PopupMenuItem::new(label).on_click(move |_, window, cx| {
+                            let (me, owner) = (me.clone(), owner.clone());
+                            // Après la fermeture du menu : le sélecteur prend alors le focus.
+                            window.defer(cx, move |window, cx| {
+                                let _ = me.update(cx, |this, cx| f(this, owner, window, cx));
+                            });
+                        })
+                    };
+                menu.item(item("Ajouter des photos…", |this, x, w, cx| this.choose_files(x, w, cx)))
+                    .item(item("Lier un média existant…", |this, owner, w, cx| {
+                        this.open_picker(relatives::PickPurpose::MediaFor { owner, crop: false }, w, cx)
+                    }))
+                    .item(item("Recadrer un média existant…", |this, owner, w, cx| {
+                        this.open_picker(relatives::PickPurpose::MediaFor { owner, crop: true }, w, cx)
+                    }))
+            })
+            .into_any_element()
     }
 
     fn media_preview(&self, ed: &RecordEditor, cx: &mut Context<Self>) -> Option<AnyElement> {
@@ -1967,7 +2002,7 @@ impl Workspace {
                 } else {
                     (outgoing, refs)
                 };
-                let gallery = self.render_gallery(key, kind == Some(RecordKind::Source), cx);
+                let gallery = self.render_gallery(key, kind == Some(RecordKind::Source), false, cx);
                 let shown_under_photo = kind == Some(RecordKind::Media)
                     && self.tab == CenterTab::Form
                     && self.photo_file(key).is_some()
@@ -2447,7 +2482,7 @@ impl Workspace {
             .filter(|x| !images.contains(x) && !weblinks::is_web_media(g, x))
             .collect();
         let web = self.render_web_links(&xref, cx);
-        let gallery = self.render_gallery(&xref, false, cx);
+        let gallery = self.render_gallery(&xref, false, true, cx);
         let notes = i.notes();
         v_flex()
             .child(header)
