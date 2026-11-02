@@ -6,6 +6,7 @@ use super::add::AddDialog;
 use super::*;
 use gedcom::import::{self, Finding};
 use gpui_kit::component::checkbox::Checkbox;
+use rust_i18n::t;
 
 pub(super) struct ImportDialog {
     file: String,
@@ -18,7 +19,7 @@ impl Workspace {
             files: true,
             directories: false,
             multiple: false,
-            prompt: Some("Importer un fichier GEDCOM".into()),
+            prompt: Some(t!("import.prompt").into()),
         });
         cx.spawn_in(window, async move |this, cx| {
             if let Ok(Ok(Some(mut paths))) = rx.await
@@ -40,7 +41,7 @@ impl Workspace {
         let file = file.unwrap_or_default();
         let findings = import::analyze(&doc.ged);
         if findings.is_empty() {
-            self.set_status(format!("{file} importé · déjà conforme à GEDCOM 7"), false);
+            self.set_status(t!("import.already_conform", file = file), false);
         } else {
             let findings = findings.into_iter().map(|f| (f, true)).collect();
             self.add_dialog = Some(AddDialog::Import(Box::new(ImportDialog { file, findings })));
@@ -54,7 +55,7 @@ impl Workspace {
         if !ids.is_empty() {
             self.mutate(window, cx, move |g| {
                 let n: usize = import::apply(g, &ids).iter().map(|(_, n)| n).sum();
-                Ok((format!("{} importé · {n} élément(s) normalisé(s) en GEDCOM 7", d.file), None))
+                Ok((t!("import.normalized", file = d.file, n = n).to_string(), None))
             });
         }
         window.focus(&self.focus, cx);
@@ -62,7 +63,7 @@ impl Workspace {
     }
 
     pub(super) fn import_title(&self, d: &ImportDialog) -> String {
-        format!("Importer · {}", d.file)
+        t!("import.title", file = d.file).to_string()
     }
 
     pub(super) fn import_body(&self, d: &ImportDialog, cx: &mut Context<Self>) -> AnyElement {
@@ -84,7 +85,7 @@ impl Workspace {
                 h_flex()
                     .gap_2()
                     .justify_end()
-                    .child(Button::new("import-skip").ghost().small().label("Garder tel quel").on_click(cx.listener(
+                    .child(Button::new("import-skip").ghost().small().label(t!("import.keep")).on_click(cx.listener(
                         |this, _, w, cx| {
                             this.add_dialog = None;
                             window_focus(this, w, cx);
@@ -95,7 +96,7 @@ impl Workspace {
                             .primary()
                             .small()
                             .icon(IconName::Check)
-                            .label("Normaliser")
+                            .label(t!("import.normalize"))
                             .disabled(!any)
                             .on_click(cx.listener(|this, _, w, cx| this.apply_import(w, cx))),
                     ),

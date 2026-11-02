@@ -7,6 +7,7 @@ use gedcom::*;
 use gpui_kit::component::input::{EditorState, InputState, TextareaState};
 use gpui_kit::component::select::{SearchableVec, SelectItem, SelectState};
 use gpui_kit::{App, AppContext, Context, Entity, SharedString, Window, px};
+use rust_i18n::t;
 use std::rc::Rc;
 
 /// Ce qui est sélectionné dans la vue courante.
@@ -41,7 +42,14 @@ impl FieldState {
 }
 
 /// Valeurs de `SEX` (GEDCOM 7) et leur libellé.
-const SEXES: &[(&str, &str)] = &[("M", "Homme"), ("F", "Femme"), ("X", "Autre"), ("U", "Inconnu")];
+fn sexes() -> [(&'static str, String); 4] {
+    [
+        ("M", t!("sex.male").into()),
+        ("F", t!("sex.female").into()),
+        ("X", t!("sex.other").into()),
+        ("U", t!("sex.unknown").into()),
+    ]
+}
 
 /// Liste déroulante de valeurs fixes (valeur GEDCOM, libellé).
 pub(crate) fn choice<T: 'static>(
@@ -111,8 +119,8 @@ pub type PickerState = SelectState<SearchableVec<Pick>>;
 
 /// Sélecteur d'un enregistrement lié (époux, dépôt…).
 pub struct Picker {
-    pub label: &'static str,
-    pub placeholder: &'static str,
+    pub label: SharedString,
+    pub placeholder: SharedString,
     pub state: Entity<PickerState>,
 }
 
@@ -159,13 +167,19 @@ pub struct RecordEditor {
     pub target: Target,
     pub pickers: Vec<Picker>,
     pub fields: Vec<Field>,
-    pub long_text: Option<(&'static str, Entity<TextareaState>)>,
+    pub long_text: Option<(SharedString, Entity<TextareaState>)>,
     pub raw: Option<Entity<EditorState>>,
     pub error: Option<SharedString>,
 }
 
 /// Champ de saisie ; l'exemple de format s'affiche en grisé tant qu'il est vide.
-fn input<T: 'static>(window: &mut Window, cx: &mut Context<T>, value: &str, hint: &'static str) -> Entity<InputState> {
+fn input<T: 'static>(
+    window: &mut Window,
+    cx: &mut Context<T>,
+    value: &str,
+    hint: impl Into<SharedString>,
+) -> Entity<InputState> {
+    let hint = hint.into();
     let value = value.to_string();
     cx.new(|cx| InputState::new(window, cx).placeholder(hint).default_value(value))
 }
@@ -224,12 +238,16 @@ impl RecordEditor {
                         });
                     }
                 } else {
-                    field!("Lieu", "Commune, Département, Pays", name.clone());
+                    field!(t!("editor.place"), t!("editor.place_placeholder"), name.clone());
                 }
-                field!("Latitude", "ex. N48.8463", place.as_ref().and_then(|p| p.latitude.clone()).unwrap_or_default());
                 field!(
-                    "Longitude",
-                    "ex. E2.4018",
+                    t!("editor.latitude"),
+                    t!("editor.latitude_placeholder"),
+                    place.as_ref().and_then(|p| p.latitude.clone()).unwrap_or_default()
+                );
+                field!(
+                    t!("editor.longitude"),
+                    t!("editor.longitude_placeholder"),
                     place.as_ref().and_then(|p| p.longitude.clone()).unwrap_or_default()
                 );
             }
@@ -241,39 +259,45 @@ impl RecordEditor {
                         fields,
                         long_text,
                         raw,
-                        error: Some("Enregistrement introuvable".into()),
+                        error: Some(t!("editor.not_found").into()),
                     };
                 };
                 match kind {
                     RecordKind::Individual => {
                         let f = IndividualForm::read(node);
-                        field!("Prénoms", "", f.given);
-                        field!("Nom", "", f.surname);
-                        let sex = choice(SEXES, &f.sex, window, cx);
-                        fields.push(Field { label: "Sexe".into(), state: FieldState::Choice(sex), place: false });
-                        field!("Profession", "", f.occupation);
-                        date_field!("Naissance — date", f.birth);
-                        place_field!("Naissance — lieu", f.birth.place);
-                        date_field!("Décès — date", f.death);
-                        place_field!("Décès — lieu", f.death.place);
-                        long_text = Some(("Note", textarea(window, cx, &f.note)));
+                        field!(t!("editor.given"), "", f.given);
+                        field!(t!("editor.name"), "", f.surname);
+                        let sexes = sexes();
+                        let sexes: Vec<(&str, &str)> = sexes.iter().map(|(v, l)| (*v, l.as_str())).collect();
+                        let sex = choice(&sexes, &f.sex, window, cx);
+                        fields.push(Field {
+                            label: t!("editor.sex").into(),
+                            state: FieldState::Choice(sex),
+                            place: false,
+                        });
+                        field!(t!("editor.occupation"), "", f.occupation);
+                        date_field!(t!("editor.birth_date"), f.birth);
+                        place_field!(t!("editor.birth_place"), f.birth.place);
+                        date_field!(t!("editor.death_date"), f.death);
+                        place_field!(t!("editor.death_place"), f.death.place);
+                        long_text = Some((t!("editor.note").into(), textarea(window, cx, &f.note)));
                     }
                     // Les unions se gèrent depuis la fiche des conjoints.
                     RecordKind::Family => {}
                     RecordKind::Source => {
                         let f = SourceForm::read(node);
-                        field!("Titre", "", f.title);
-                        field!("Auteur", "", f.author);
-                        field!("Publication", "", f.publication);
-                        field!("Cote", "", f.call_number);
+                        field!(t!("editor.title"), "", f.title);
+                        field!(t!("editor.author"), "", f.author);
+                        field!(t!("editor.publication"), "", f.publication);
+                        field!(t!("editor.call_number"), "", f.call_number);
                         // Contenu (`DATA` / `EVEN`) : types d'actes et période.
                         let content = SourceContent::read(node);
-                        field!("Actes", "Naissances, mariages, décès", content.events_label());
+                        field!(t!("editor.acts"), t!("editor.acts_placeholder"), content.events_label());
                         fields.push(Field {
-                            label: "Période".into(),
+                            label: t!("editor.period").into(),
                             state: FieldState::Date(cx.new(|cx| {
                                 DateField::new(&content.period, "", window, cx).with_placeholder(
-                                    "de 1793 à 1802",
+                                    t!("editor.period_placeholder"),
                                     window,
                                     cx,
                                 )
@@ -281,27 +305,35 @@ impl RecordEditor {
                             place: false,
                         });
                         let state = picker(ged, RecordKind::Repository, &f.repository, window, cx);
-                        pickers.push(Picker { label: "Dépôt", placeholder: "Choisir un dépôt…", state });
-                        long_text = Some(("Texte de la source", textarea(window, cx, &f.text)));
+                        pickers.push(Picker {
+                            label: t!("editor.repository").into(),
+                            placeholder: t!("editor.choose_repository").into(),
+                            state,
+                        });
+                        long_text = Some((t!("editor.source_text").into(), textarea(window, cx, &f.text)));
                     }
                     RecordKind::Repository => {
                         let f = RepositoryForm::read(node);
-                        field!("Nom", "", f.name);
-                        field!("Site web", "", f.www);
+                        field!(t!("editor.name"), "", f.name);
+                        field!(t!("editor.website"), "", f.www);
                     }
                     RecordKind::Media => {
                         let f = MediaForm::read(node);
                         // Le format (FORM) se déduit du fichier : pas de champ.
-                        field!("Titre", "", f.title);
-                        field!("Fichier", "Actes/acte.jpg", f.file);
+                        field!(t!("editor.title"), "", f.title);
+                        field!(t!("editor.file"), t!("editor.file_placeholder"), f.file);
                         let medi = choice(MEDIUMS, medium(node).unwrap_or(""), window, cx);
-                        fields.push(Field { label: "Support".into(), state: FieldState::Choice(medi), place: false });
+                        fields.push(Field {
+                            label: t!("editor.medium").into(),
+                            state: FieldState::Choice(medi),
+                            place: false,
+                        });
                     }
                     RecordKind::SharedNote => {
-                        long_text = Some(("Texte", textarea(window, cx, &node.text())));
+                        long_text = Some((t!("editor.text").into(), textarea(window, cx, &node.text())));
                     }
                     RecordKind::Submitter => {
-                        field!("Nom", "", node.child_val("NAME").unwrap_or(""));
+                        field!(t!("editor.name"), "", node.child_val("NAME").unwrap_or(""));
                     }
                 }
                 let text = node_to_string(node);
@@ -368,10 +400,10 @@ impl RecordEditor {
                 let new = self.place_name(cx).unwrap_or_else(|| old.clone());
                 let coords = &v[v.len() - 2..];
                 let n = ged.update_place(old, &new, &coords[0], &coords[1]);
-                Ok(format!("Lieu mis à jour ({n} occurrence{})", if n > 1 { "s" } else { "" }))
+                Ok(crate::tn!("editor.place_updated", n).into_owned())
             }
             Target::Record { xref, kind } => {
-                let node = ged.get_mut(xref).ok_or("Enregistrement introuvable")?;
+                let node = ged.get_mut(xref).ok_or_else(|| t!("editor.not_found").to_string())?;
                 match kind {
                     RecordKind::Individual => IndividualForm {
                         given: v[0].clone(),
@@ -426,19 +458,19 @@ impl RecordEditor {
                     RecordKind::SharedNote => node.set_text(&note),
                     RecordKind::Submitter => node.set_child_val("NAME", &v[0]),
                 }
-                Ok(format!("{} : modifications appliquées", ged.record_label(xref)))
+                Ok(t!("editor.applied", name = ged.record_label(xref)).into_owned())
             }
         }
     }
 
     /// Applique le texte de l'éditeur GEDCOM brut. Renvoie le nouvel identifiant.
     pub fn apply_raw(&self, ged: &mut Gedcom, cx: &App) -> Result<String, String> {
-        let Target::Record { xref, kind } = &self.target else { return Err("rien à appliquer".into()) };
-        let raw = self.raw.as_ref().ok_or("pas d'éditeur brut")?;
+        let Target::Record { xref, kind } = &self.target else { return Err(t!("editor.nothing").into()) };
+        let raw = self.raw.as_ref().ok_or_else(|| t!("editor.no_raw").to_string())?;
         let text = raw.read(cx).value().to_string();
         let node = node_from_string(&text).map_err(|e| e.to_string())?;
         if node.tag != kind.tag() {
-            return Err(format!("le type doit rester {} (trouvé {})", kind.tag(), node.tag));
+            return Err(t!("editor.wrong_type", expected = kind.tag(), found = node.tag).into_owned());
         }
         let new_xref = node.xref.clone().unwrap_or_default();
         ged.replace(xref, node)?;

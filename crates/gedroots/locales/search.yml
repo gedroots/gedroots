@@ -1,0 +1,32 @@
+_version: 2
+# Search field, filters and saved searches.
+saved.saved:
+  en: Search saved
+  fr: Recherche enregistrée
+saved.renamed:
+  en: Search renamed
+  fr: Recherche renommée
+saved.not_found:
+  en: search not found
+  fr: recherche introuvable
+saved.deleted:
+  en: "Search “%{name}” deleted"
+  fr: "Recherche « %{name} » supprimée"
+saved.title:
+  en: Searches
+  fr: Recherches
+filters.exactly:
+  en: Exactly
+  fr: Exactement
+filters.margin:
+  en: "± %{n} years"
+  fr: "± %{n} ans"
+filters.variants:
+  en: Include Variants
+  fr: Inclure les variantes
+filters.unknown:
+  en: "Criterion not understood: %{criteria}"
+  fr: "Critère non compris : %{criteria}"
+filters.all:
+  en: All
+  fr: Tous

@@ -20,6 +20,7 @@ use gpui_kit::component::popover::Popover;
 use gpui_kit::component::{Sizable, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
+use rust_i18n::t;
 
 pub struct DateField {
     input: Entity<InputState>,
@@ -41,8 +42,8 @@ pub fn date_field<T: 'static>(
 
 impl DateField {
     /// Remplace l'exemple grisé du champ vide (ex. une période).
-    pub fn with_placeholder(self, hint: &'static str, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        self.input.update(cx, |s, cx| s.set_placeholder(hint, window, cx));
+    pub fn with_placeholder(self, hint: impl Into<SharedString>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        self.input.update(cx, |s, cx| s.set_placeholder(hint.into(), window, cx));
         self
     }
 
@@ -51,11 +52,11 @@ impl DateField {
         let text = parsed.to_input_text();
         let input = {
             let text = text.clone();
-            cx.new(|cx| InputState::new(window, cx).placeholder("ex. 14 mars 1912").default_value(text))
+            cx.new(|cx| InputState::new(window, cx).placeholder(t!("date_field.placeholder")).default_value(text))
         };
         let phrase_input = {
             let p = parsed.phrase.clone();
-            cx.new(|cx| InputState::new(window, cx).placeholder("tel qu'écrit dans l'acte").default_value(p))
+            cx.new(|cx| InputState::new(window, cx).placeholder(t!("date_field.phrase_placeholder")).default_value(p))
         };
         let main = cx.subscribe_in(&input, window, |this, _, ev: &InputEvent, window, cx| {
             if matches!(ev, InputEvent::Change) {
@@ -106,7 +107,7 @@ impl DateField {
         if text.trim() == self.original.0.trim() {
             return Ok((self.original.1.clone(), self.original.2.clone()));
         }
-        let p = parse_input(&text).map_err(|e| format!("date « {} » : {e}", text.trim()))?;
+        let p = parse_input(&text).map_err(|e| t!("date_field.invalid", text = text.trim(), error = e).to_string())?;
         Ok((p.value(), p.phrase))
     }
 
@@ -151,7 +152,7 @@ impl DateField {
         }
         Some(match parse_input(t) {
             Err(e) => (e, theme::danger()),
-            Ok(Parsed { date: None, .. }) => ("texte seul, sans date".into(), theme::warn()),
+            Ok(Parsed { date: None, .. }) => (t!("date_field.text_only").into(), theme::warn()),
             Ok(p) => {
                 let d = p.date.as_ref()?;
                 let shown = d.to_french();
@@ -197,8 +198,8 @@ fn chip(id: impl Into<SharedString>, label: impl Into<SharedString>, on: bool, e
         .child(label.into())
 }
 
-fn caps(label: &'static str) -> Div {
-    div().text_xs().font_weight(FontWeight::SEMIBOLD).text_color(theme::muted()).child(label.to_uppercase())
+fn caps(label: impl Into<SharedString>) -> Div {
+    div().text_xs().font_weight(FontWeight::SEMIBOLD).text_color(theme::muted()).child(label.into().to_uppercase())
 }
 
 fn details(this: &Entity<DateField>, cx: &App) -> AnyElement {
@@ -253,10 +254,15 @@ fn details(this: &Entity<DateField>, cx: &App) -> AnyElement {
     v_flex()
         .w(px(320.))
         .gap_3()
-        .child(v_flex().gap_1().child(caps("Précision")).child(h_flex().flex_wrap().gap_1().children(kinds)))
-        .child(v_flex().gap_1().child(caps("Calendrier")).children(calendars))
+        .child(
+            v_flex()
+                .gap_1()
+                .child(caps(t!("date_field.precision")))
+                .child(h_flex().flex_wrap().gap_1().children(kinds)),
+        )
+        .child(v_flex().gap_1().child(caps(t!("date_field.calendar"))).children(calendars))
         .when(date.is_some(), |d| {
-            d.child(v_flex().gap_1().child(caps("Texte d'origine")).child(Input::new(&f.phrase).small()))
+            d.child(v_flex().gap_1().child(caps(t!("date_field.original_text"))).child(Input::new(&f.phrase).small()))
         })
         .into_any_element()
 }

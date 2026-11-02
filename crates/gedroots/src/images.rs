@@ -154,7 +154,7 @@ fn end_frame(window: &mut Window, cx: &mut App) {
     cache.frame += 1;
     cache.pending = false;
     if std::env::var_os("GEDROOTS_DEBUG_IMAGES").is_some() && !evicted.is_empty() {
-        eprintln!("images : {} libérée(s), {} en cache, {} Mo", evicted.len(), cache.entries.len(), cache.total >> 20);
+        eprintln!("images: {} released, {} cached, {} MB", evicted.len(), cache.entries.len(), cache.total >> 20);
     }
     for (key, image) in evicted {
         cx.remove_asset::<Scaled>(&key);
@@ -176,7 +176,7 @@ impl Asset for Scaled {
             let image = decode(&source.0, source.1, source.2)?;
             if std::env::var_os("GEDROOTS_DEBUG_IMAGES").is_some() {
                 let s = image.size(0);
-                eprintln!("images : {} décodée en {}×{}", source.0.display(), s.width.0, s.height.0);
+                eprintln!("images: {} decoded at {}×{}", source.0.display(), s.width.0, s.height.0);
             }
             Ok(Arc::new(image))
         }

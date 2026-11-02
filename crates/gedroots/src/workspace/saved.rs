@@ -7,6 +7,7 @@
 
 use super::*;
 use gedcom::saved::{SavedSearch, default_name};
+use rust_i18n::t;
 
 /// Renommage en cours dans la barre latérale.
 pub(super) struct SavedRename {
@@ -76,7 +77,7 @@ impl Workspace {
         let mut index = 0;
         self.mutate(window, cx, |g| {
             index = g.save_search(&s);
-            Ok(("Recherche enregistrée".into(), None))
+            Ok((t!("saved.saved").into(), None))
         });
         self.refresh_saved();
         self.start_rename_search(index, window, cx);
@@ -117,7 +118,7 @@ impl Workspace {
         if !name.is_empty() && !unchanged {
             self.mutate(window, cx, |g| {
                 g.rename_search(r.index, &name);
-                Ok(("Recherche renommée".into(), None))
+                Ok((t!("saved.renamed").into(), None))
             });
             self.refresh_saved();
         }
@@ -132,8 +133,8 @@ impl Workspace {
     pub(super) fn delete_saved(&mut self, i: usize, window: &mut Window, cx: &mut Context<Self>) {
         self.saved_rename = None;
         self.mutate(window, cx, |g| {
-            let s = g.delete_search(i).ok_or("recherche introuvable")?;
-            Ok((format!("Recherche « {} » supprimée", s.name), None))
+            let s = g.delete_search(i).ok_or_else(|| t!("saved.not_found").to_string())?;
+            Ok((t!("saved.deleted", name = s.name).to_string(), None))
         });
         self.refresh_saved();
         cx.notify();
@@ -158,17 +159,20 @@ impl Workspace {
             return None;
         }
         let active = self.active_saved(cx);
-        let header =
-            h_flex().mt_4().px_2().h(px(22.)).items_center().justify_between().child(label_caps("Recherches")).when(
-                can_save,
-                |d| {
-                    d.child(
-                        add::plus_button("save-search")
-                            .tooltip(label::save_search())
-                            .on_click(cx.listener(|this, _, w, cx| this.save_search(w, cx))),
-                    )
-                },
-            );
+        let header = h_flex()
+            .mt_4()
+            .px_2()
+            .h(px(22.))
+            .items_center()
+            .justify_between()
+            .child(label_caps(t!("saved.title")))
+            .when(can_save, |d| {
+                d.child(
+                    add::plus_button("save-search")
+                        .tooltip(label::save_search())
+                        .on_click(cx.listener(|this, _, w, cx| this.save_search(w, cx))),
+                )
+            });
         let mut list = v_flex().gap_0p5().child(header);
         for (i, (s, n)) in self.saved.iter().enumerate() {
             let icon = view_of(s.scope).icon();

@@ -250,7 +250,7 @@ fn appearance_is_dark(a: WindowAppearance) -> bool {
 pub fn install(cx: &mut App) {
     let fonts = FONTS.iter().map(|b| Cow::Borrowed(*b)).collect();
     if let Err(e) = cx.text_system().add_fonts(fonts) {
-        eprintln!("police Inter indisponible : {e}");
+        eprintln!("Inter font unavailable: {e}");
     }
     apply(forced_dark().unwrap_or_else(|| appearance_is_dark(cx.window_appearance())), cx);
 }

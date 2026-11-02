@@ -17,6 +17,7 @@ use super::media_files::{free_name, planned_paths, store_act_media, store_import
 use super::settings::SettingsPage;
 use super::*;
 use gpui_kit::component::checkbox::Checkbox;
+use rust_i18n::t;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -82,10 +83,6 @@ fn segment(id: &'static str, selected: bool, label: impl Into<SharedString>) -> 
         .when(selected, |d| d.bg(theme::bg()).text_color(theme::text()).font_weight(FontWeight::MEDIUM).shadow_xs())
         .when(!selected, |d| d.text_color(theme::muted()).hover(|d| d.text_color(theme::text())))
         .child(label.into())
-}
-
-fn plural(n: usize) -> &'static str {
-    if n > 1 { "s" } else { "" }
 }
 
 /// Chemin lisible d'un fichier d'origine : `~/Téléchargements/scan.jpg`.
@@ -162,7 +159,7 @@ impl Workspace {
     // ------------------------------------------------------------------
 
     pub(super) fn open_gallery(&mut self, target: GalleryTarget, window: &mut Window, cx: &mut Context<Self>) {
-        let query = cx.new(|cx| InputState::new(window, cx).placeholder("Titre, nom de fichier, personne…"));
+        let query = cx.new(|cx| InputState::new(window, cx).placeholder(t!("gallery.search")));
         let sub = cx.subscribe_in(&query, window, |_, _, ev: &InputEvent, _, cx| {
             if matches!(ev, InputEvent::Change) {
                 cx.notify();
@@ -230,7 +227,7 @@ impl Workspace {
         if let GalleryTarget::Record(x) = &gal.target
             && g.is_register(x)
         {
-            out.push(("Nouvel acte…".into(), None));
+            out.push((t!("gallery.new_act").into(), None));
         }
         out.extend(g.media_hosts(&gal.target).into_iter().map(|(l, h)| (l, Some(h))));
         out
@@ -280,7 +277,7 @@ impl Workspace {
             files: true,
             directories: false,
             multiple: true,
-            prompt: Some("Importer".into()),
+            prompt: Some(t!("gallery.import").into()),
         });
         cx.spawn_in(window, async move |this, cx| {
             if let Ok(Ok(Some(paths))) = rx.await {
@@ -353,7 +350,7 @@ impl Workspace {
                 g.link_media(&host, m)?;
             }
             let n = files.len();
-            let mut msg = format!("{n} fichier{} importé{} · {}", plural(n), plural(n), host_label(g, &host));
+            let mut msg = crate::tn!("gallery.imported", n, to = host_label(g, &host)).into_owned();
             msg.push_str(&store_imported(g, base.as_deref(), &media, move_files));
             Ok((msg, None))
         });
@@ -393,14 +390,14 @@ impl Workspace {
             return;
         }
         self.mutate(window, cx, |g| {
-            let n = g.get_mut(&media).ok_or("média introuvable")?;
+            let n = g.get_mut(&media).ok_or(t!("gallery.not_found"))?;
             // Le titre d'un média est celui de son premier fichier (GEDCOM 7).
             match n.children.iter_mut().find(|c| c.tag == "FILE") {
                 Some(f) => f.set_child_val("TITL", &title),
                 None => n.set_child_val("TITL", &title),
             }
             n.touch();
-            Ok(("Titre du média modifié".into(), None))
+            Ok((t!("gallery.title_changed").into(), None))
         });
     }
 
@@ -409,7 +406,7 @@ impl Workspace {
             let what = g.record_label(&media);
             let from = host_label(g, &host);
             g.unlink_media(&host, &media)?;
-            Ok((format!("« {what} » détaché de {from} (Annuler pour revenir en arrière)"), None))
+            Ok((t!("gallery.detached", what = what, from = from).into(), None))
         });
         if let Some(gal) = &mut self.gallery {
             gal.selected = None;
@@ -421,8 +418,8 @@ impl Workspace {
     fn gallery_delete(&mut self, media: String, window: &mut Window, cx: &mut Context<Self>) {
         self.mutate(window, cx, |g| {
             let what = g.record_label(&media);
-            g.delete_record(&media).ok_or("média introuvable")?;
-            Ok((format!("Média « {what} » supprimé, fichiers gardés (Annuler pour revenir en arrière)"), None))
+            g.delete_record(&media).ok_or(t!("gallery.not_found"))?;
+            Ok((t!("gallery.deleted", what = what).into(), None))
         });
         if let Some(gal) = &mut self.gallery {
             gal.selected = None;
@@ -534,7 +531,7 @@ impl Workspace {
                 }
             }
             let n = picked.len();
-            Ok((format!("{n} élément{} lié{} · {}{note}", plural(n), plural(n), host_label(g, &host)), None))
+            Ok((crate::tn!("gallery.linked", n, to = host_label(g, &host), note = note).into(), None))
         });
         self.rescan_media();
         if let Some(gal) = &mut self.gallery {
@@ -583,7 +580,7 @@ impl Workspace {
                         .text_xs()
                         .text_color(theme::warn())
                         .child(icon(IconName::Image))
-                        .child("Introuvable"),
+                        .child(t!("gallery.missing")),
                 )
                 .into_any_element(),
         }
@@ -598,10 +595,11 @@ impl Workspace {
         let gal = self.gallery.as_ref()?;
         let g = &self.doc.as_ref()?.ged;
         let (title, subtitle) = match &gal.target {
-            GalleryTarget::Record(x) => ("Médias".to_string(), g.record_label(x)),
-            GalleryTarget::Event { owner, ix } => {
-                ("Médias".to_string(), format!("{} · {}", g.event_heading(owner, *ix), g.record_label(owner)))
-            }
+            GalleryTarget::Record(x) => (t!("gallery.title").into_owned(), g.record_label(x)),
+            GalleryTarget::Event { owner, ix } => (
+                t!("gallery.title").into_owned(),
+                format!("{} · {}", g.event_heading(owner, *ix), g.record_label(owner)),
+            ),
         };
         let groups = g.gallery(&gal.target);
         let count: usize = groups.iter().map(|gr| gr.items.len()).sum();
@@ -614,21 +612,24 @@ impl Workspace {
             .border_color(theme::border())
             .when(importing.is_some(), |d| {
                 d.child(
-                    Button::new("gal-back").xsmall().ghost().icon(IconName::ChevronLeft).tooltip("Retour").on_click(
-                        cx.listener(|this, _, _, cx| {
+                    Button::new("gal-back")
+                        .xsmall()
+                        .ghost()
+                        .icon(IconName::ChevronLeft)
+                        .tooltip(t!("gallery.back"))
+                        .on_click(cx.listener(|this, _, _, cx| {
                             if let Some(gal) = &mut this.gallery {
                                 gal.import = None;
                             }
                             cx.notify();
-                        }),
-                    ),
+                        })),
                 )
             })
             .child(
                 v_flex()
                     .min_w_0()
                     .child(div().font_weight(FontWeight::SEMIBOLD).child(match importing {
-                        Some(d) => format!("Importer {} fichier{}", d.files.len(), plural(d.files.len())),
+                        Some(d) => crate::tn!("gallery.import_files", d.files.len()).into_owned(),
                         None => title,
                     }))
                     .child(div().text_xs().text_color(theme::muted()).truncate().child(subtitle)),
@@ -642,7 +643,7 @@ impl Workspace {
                         .rounded(theme::RADIUS_SM)
                         .bg(theme::surface())
                         .child(
-                            segment("gal-tab-attached", gal.tab == Tab::Attached, format!("Rattachés · {count}"))
+                            segment("gal-tab-attached", gal.tab == Tab::Attached, t!("gallery.attached", n = count))
                                 .on_click(cx.listener(|this, _, _, cx| {
                                     if let Some(g) = &mut this.gallery {
                                         g.tab = Tab::Attached;
@@ -650,7 +651,7 @@ impl Workspace {
                                     cx.notify();
                                 })),
                         )
-                        .child(segment("gal-tab-library", gal.tab == Tab::Library, "Bibliothèque").on_click(
+                        .child(segment("gal-tab-library", gal.tab == Tab::Library, t!("gallery.library")).on_click(
                             cx.listener(|this, _, w, cx| {
                                 if let Some(g) = &mut this.gallery {
                                     g.tab = Tab::Library;
@@ -667,7 +668,7 @@ impl Workspace {
                     .xsmall()
                     .ghost()
                     .icon(IconName::Close)
-                    .tooltip("Fermer (Échap)")
+                    .tooltip(t!("gallery.close"))
                     .on_click(cx.listener(|this, _, w, cx| this.close_gallery(w, cx))),
             );
         let (body, footer) = match (importing, gal.tab) {
@@ -760,7 +761,7 @@ impl Workspace {
                                 .bg(theme::image_label_bg())
                                 .text_xs()
                                 .text_color(theme::image_text())
-                                .child(format!("{pages} p.")),
+                                .child(t!("gallery.pages", n = pages)),
                         )
                     })
                     .child(
@@ -769,7 +770,7 @@ impl Workspace {
                             .text_xs()
                             .child(div().font_weight(FontWeight::MEDIUM).truncate().child(media.title()))
                             .child(if off_template {
-                                div().text_color(theme::warn()).child("Nom hors modèle")
+                                div().text_color(theme::warn()).child(t!("gallery.off_template"))
                             } else {
                                 div().text_color(theme::muted()).truncate().child(
                                     media
@@ -806,7 +807,7 @@ impl Workspace {
                         let _ = entity.update(cx, |this, cx| this.gallery_import(files, Some(Some(h)), window, cx));
                     })
                     .child(icon(IconName::Plus))
-                    .child("Importer…")
+                    .child(t!("gallery.import_more"))
                     .on_click(cx.listener(move |this, _, w, cx| this.choose_import(Some(Some(h2.clone())), w, cx)))
                     .into_any_element()
             });
@@ -830,7 +831,7 @@ impl Workspace {
         if register {
             let entity = cx.entity().downgrade();
             list = list.child(
-                v_flex().gap_2().child(label_caps("Nouvel acte")).child(
+                v_flex().gap_2().child(label_caps(t!("gallery.new_act_caps"))).child(
                     h_flex()
                         .id("gal-new-act")
                         .h(px(56.))
@@ -853,7 +854,7 @@ impl Workspace {
                             let _ = entity.update(cx, |this, cx| this.gallery_import(files, Some(None), window, cx));
                         })
                         .child(icon(IconName::Plus))
-                        .child("Saisir un acte avec des images…")
+                        .child(t!("gallery.enter_act"))
                         .on_click(cx.listener(|this, _, w, cx| this.choose_import(Some(None), w, cx))),
                 ),
             );
@@ -906,29 +907,32 @@ impl Workspace {
                 .children(gal.title.as_ref().map(|(input, _)| {
                     v_flex()
                         .gap_1()
-                        .child(div().text_xs().text_color(theme::muted()).child("Titre"))
+                        .child(div().text_xs().text_color(theme::muted()).child(t!("editor.title")))
                         .child(Input::new(input).small())
                 }))
                 .child(
-                    v_flex().gap_1().child(div().text_xs().text_color(theme::muted()).child("Joint à")).child(
-                        div()
-                            .id("gal-host")
-                            .text_color(theme::accent())
-                            .cursor_pointer()
-                            .child(host_label(g, &host))
-                            .on_click(cx.listener(move |this, _, w, cx| {
-                                this.close_gallery(w, cx);
-                                this.goto(open_rec.clone(), w, cx)
-                            })),
-                    ),
+                    v_flex()
+                        .gap_1()
+                        .child(div().text_xs().text_color(theme::muted()).child(t!("gallery.attached_to")))
+                        .child(
+                            div()
+                                .id("gal-host")
+                                .text_color(theme::accent())
+                                .cursor_pointer()
+                                .child(host_label(g, &host))
+                                .on_click(cx.listener(move |this, _, w, cx| {
+                                    this.close_gallery(w, cx);
+                                    this.goto(open_rec.clone(), w, cx)
+                                })),
+                        ),
                 )
                 .child(
                     v_flex()
                         .gap_1()
                         .child(div().text_xs().text_color(theme::muted()).child(if m.page_count() > 1 {
-                            format!("Fichiers · {}", m.page_count())
+                            t!("gallery.files_count", n = m.page_count()).into_owned()
                         } else {
-                            "Fichier".into()
+                            t!("editor.file").into_owned()
                         }))
                         .children(m.files().into_iter().map(|f| mono(f.path.to_string()).text_xs()))
                         .when(off_template, |d| {
@@ -938,10 +942,16 @@ impl Workspace {
                                     .items_center()
                                     .text_xs()
                                     .text_color(theme::warn())
-                                    .child("Nom hors modèle")
-                                    .child(Button::new("gal-rename").xsmall().ghost().label("Renommer…").on_click(
-                                        cx.listener(move |this, _, _, cx| this.open_rename_media(m1.clone(), cx)),
-                                    )),
+                                    .child(t!("gallery.off_template"))
+                                    .child(
+                                        Button::new("gal-rename")
+                                            .xsmall()
+                                            .ghost()
+                                            .label(t!("gallery.rename"))
+                                            .on_click(cx.listener(move |this, _, _, cx| {
+                                                this.open_rename_media(m1.clone(), cx)
+                                            })),
+                                    ),
                             )
                         }),
                 )
@@ -951,11 +961,11 @@ impl Workspace {
                         .gap_2()
                         .flex_wrap()
                         .items_center()
-                        .child(Button::new("gal-detach").xsmall().label("Détacher").on_click(
+                        .child(Button::new("gal-detach").xsmall().label(t!("gallery.detach")).on_click(
                             cx.listener(move |this, _, w, cx| this.gallery_detach(m3.clone(), h1.clone(), w, cx)),
                         ))
                         .when_some(crop_owner, |d, owner| {
-                            d.child(Button::new("gal-crop").xsmall().label("Recadrer…").on_click(cx.listener(
+                            d.child(Button::new("gal-crop").xsmall().label(t!("gallery.crop")).on_click(cx.listener(
                                 move |this, _, w, cx| {
                                     this.close_gallery(w, cx);
                                     this.start_crop_for(owner.clone(), m4.clone(), w, cx)
@@ -967,29 +977,31 @@ impl Workspace {
                                 .xsmall()
                                 .ghost()
                                 .icon(IconName::Ellipsis)
-                                .tooltip("Plus d'actions")
+                                .tooltip(t!("gallery.more"))
                                 .dropdown_menu(move |menu, _, _| {
                                     let (me0, me1, me2, me3) = (me.clone(), me.clone(), me.clone(), me.clone());
                                     let (o, a, b, c) = (m2.clone(), m5.clone(), m6.clone(), m5.clone());
-                                    menu.item(PopupMenuItem::new("Ouvrir la fiche").on_click(move |_, w, cx| {
-                                        let o = o.clone();
-                                        let _ = me0.update(cx, |this, cx| {
-                                            this.close_gallery(w, cx);
-                                            this.open_in(o, CenterTab::Form, w, cx)
-                                        });
-                                    }))
+                                    menu.item(PopupMenuItem::new(t!("context.open_details")).on_click(
+                                        move |_, w, cx| {
+                                            let o = o.clone();
+                                            let _ = me0.update(cx, |this, cx| {
+                                                this.close_gallery(w, cx);
+                                                this.open_in(o, CenterTab::Form, w, cx)
+                                            });
+                                        },
+                                    ))
                                     .separator()
                                     .item(PopupMenuItem::new(label::add_pages()).on_click(move |_, w, cx| {
                                         let a = a.clone();
                                         let _ = me1.update(cx, |this, cx| this.choose_pages(a, w, cx));
                                     }))
-                                    .item(PopupMenuItem::new("Renommer selon le modèle…").on_click(move |_, _, cx| {
+                                    .item(PopupMenuItem::new(t!("cmd.rename_media_files")).on_click(move |_, _, cx| {
                                         let b = b.clone();
                                         let _ = me2.update(cx, |this, cx| this.open_rename_media(b, cx));
                                     }))
                                     .separator()
                                     .item(
-                                        PopupMenuItem::new("Supprimer le média").on_click(move |_, w, cx| {
+                                        PopupMenuItem::new(t!("gallery.delete")).on_click(move |_, w, cx| {
                                             let c = c.clone();
                                             let _ = me3.update(cx, |this, cx| this.gallery_delete(c, w, cx));
                                         }),
@@ -1024,15 +1036,18 @@ impl Workspace {
                 Pick::Media(x) => {
                     let m = Media::new(g.get(x).unwrap());
                     let sub = match m.file().and_then(|f| f.rsplit_once('/')) {
-                        Some((d, _)) => format!("Média · {d}/"),
-                        None => "Média".to_string(),
+                        Some((d, _)) => t!("gallery.media_in", dir = d).into_owned(),
+                        None => t!("menu.media").into_owned(),
                     };
                     (self.media_thumb(&m, 168., 96., ObjectFit::Cover), m.title(), sub)
                 }
                 Pick::File(f) => {
                     let path = pages::file_path(doc, f);
                     let name = f.rsplit('/').next().unwrap_or(f).to_string();
-                    let dir = f.rsplit_once('/').map(|(d, _)| format!("Fichier · {d}/")).unwrap_or("Fichier".into());
+                    let dir = f
+                        .rsplit_once('/')
+                        .map(|(d, _)| t!("gallery.file_in", dir = d).into_owned())
+                        .unwrap_or(t!("editor.file").into_owned());
                     (self.gallery_thumb(path, is_image_file(f), 168., 96., ObjectFit::Cover), name, dir)
                 }
             };
@@ -1082,12 +1097,16 @@ impl Workspace {
                     .p_0p5()
                     .rounded(theme::RADIUS_SM)
                     .bg(theme::surface())
-                    .child(scope_button("lib-suggested", LibScope::Suggested, "Suggérés".into()))
-                    .child(scope_button("lib-media", LibScope::Media, format!("Tous les médias · {media_count}")))
+                    .child(scope_button("lib-suggested", LibScope::Suggested, t!("gallery.suggested").into_owned()))
+                    .child(scope_button(
+                        "lib-media",
+                        LibScope::Media,
+                        t!("gallery.all_media", n = media_count).into_owned(),
+                    ))
                     .child(scope_button(
                         "lib-files",
                         LibScope::Files,
-                        format!("Fichiers à rattacher · {referenced_count}"),
+                        t!("gallery.unattached", n = referenced_count).into_owned(),
                     )),
             )
             .child(
@@ -1097,7 +1116,11 @@ impl Workspace {
                     .min_h_0()
                     .overflow_y_scroll()
                     .when(empty, |d| {
-                        d.flex().items_center().justify_center().text_color(theme::muted()).child("Aucun résultat")
+                        d.flex()
+                            .items_center()
+                            .justify_center()
+                            .text_color(theme::muted())
+                            .child(t!("picker.no_result"))
                     })
                     .when(!empty, |d| d.child(div().grid().grid_cols(5).gap_3().children(tiles))),
             )
@@ -1122,7 +1145,7 @@ impl Workspace {
                 .find(|(_, c)| c.as_ref() == Some(h))
                 .map(|(l, _)| l.clone())
                 .unwrap_or_else(|| host_label(g, h)),
-            None => "Nouvel acte…".into(),
+            None => t!("gallery.new_act").into(),
         };
         if choices.len() <= 1 {
             return div().text_sm().child(label).into_any_element();
@@ -1161,12 +1184,12 @@ impl Workspace {
                 Button::new("gal-import")
                     .small()
                     .icon(IconName::Upload)
-                    .label("Importer des fichiers…")
+                    .label(t!("gallery.import_files_button"))
                     .on_click(cx.listener(|this, _, w, cx| this.choose_import(None, w, cx))),
             )
             .child(div().flex_1())
             .when(library, |d| {
-                d.child(div().text_sm().text_color(theme::muted()).child("Joindre à"))
+                d.child(div().text_sm().text_color(theme::muted()).child(t!("gallery.attach_to")))
                     .child(self.host_button(
                         "gal-lib-host",
                         host.as_ref(),
@@ -1184,7 +1207,11 @@ impl Workspace {
                             .small()
                             .primary()
                             .disabled(n == 0)
-                            .label(if n == 0 { "Lier".to_string() } else { format!("Lier {n} élément{}", plural(n)) })
+                            .label(if n == 0 {
+                                t!("gallery.link").into_owned()
+                            } else {
+                                crate::tn!("gallery.link_n", n).into_owned()
+                            })
                             .on_click(cx.listener(|this, _, w, cx| this.link_picked(w, cx))),
                     )
             })
@@ -1194,7 +1221,7 @@ impl Workspace {
     fn render_import(&self, d: &ImportDraft, cx: &mut Context<Self>) -> AnyElement {
         let g = &self.doc.as_ref().unwrap().ged;
         let unnamed = g.media_naming().is_empty();
-        let row = |label: &'static str, content: AnyElement| {
+        let row = |label: std::borrow::Cow<'static, str>, content: AnyElement| {
             h_flex()
                 .gap_4()
                 .items_center()
@@ -1208,17 +1235,17 @@ impl Workspace {
             .rounded(theme::RADIUS_SM)
             .bg(theme::surface())
             .child(
-                segment("imp-copy", !move_files, "Copier")
+                segment("imp-copy", !move_files, t!("gallery.copy"))
                     .on_click(cx.listener(|this, _, _, cx| this.update_draft(|d| d.move_files = false, cx))),
             )
             .child(
-                segment("imp-move", move_files, "Déplacer")
+                segment("imp-move", move_files, t!("gallery.move"))
                     .on_click(cx.listener(|this, _, _, cx| this.update_draft(|d| d.move_files = true, cx))),
             );
         let n = d.files.len();
         let pages = Checkbox::new("imp-one")
             .checked(d.one_media)
-            .label(format!("Un seul média de {n} pages"))
+            .label(t!("gallery.one_media", n = n).into_owned())
             .on_click(cx.listener(|this, checked: &bool, _, cx| {
                 let c = *checked;
                 this.update_draft(|d| d.one_media = c, cx)
@@ -1233,7 +1260,7 @@ impl Workspace {
             .bg(theme::bg())
             .overflow_y_scroll()
             .child(row(
-                "Joindre à",
+                t!("gallery.attach_to"),
                 self.host_button(
                     "imp-host",
                     d.host.as_ref(),
@@ -1244,7 +1271,7 @@ impl Workspace {
             ))
             .when(!new_act, |el| {
                 el.child(row(
-                    "Fichiers",
+                    t!("gallery.files"),
                     h_flex().gap_4().items_center().child(mode).when(n > 1, |e| e.child(pages)).into_any_element(),
                 ))
             })
@@ -1297,28 +1324,24 @@ impl Workspace {
                 ),
             )
             .when(unnamed && !new_act && doc.path.is_some(), |el| {
-                el.child(
-                    div()
-                        .text_xs()
-                        .text_color(theme::warn())
-                        .child("Rangement des médias non réglé : noms et dossiers inchangés"),
-                )
+                el.child(div().text_xs().text_color(theme::warn()).child(t!("gallery.no_naming")))
             })
             .into_any_element()
     }
 
     fn render_import_footer(&self, d: &ImportDraft, cx: &mut Context<Self>) -> AnyElement {
         let new_act = d.host.is_none();
-        let cancel = Button::new("imp-cancel").small().label("Annuler").on_click(cx.listener(|this, _, _, cx| {
-            if let Some(gal) = &mut this.gallery {
-                gal.import = None;
-            }
-            cx.notify();
-        }));
+        let cancel =
+            Button::new("imp-cancel").small().label(t!("common.cancel")).on_click(cx.listener(|this, _, _, cx| {
+                if let Some(gal) = &mut this.gallery {
+                    gal.import = None;
+                }
+                cx.notify();
+            }));
         let go = Button::new("imp-go")
             .small()
             .primary()
-            .label(if new_act { "Saisir l'acte" } else { "Importer" })
+            .label(if new_act { t!("gallery.enter_act_go") } else { t!("gallery.import") })
             .on_click(cx.listener(|this, _, w, cx| this.run_import(w, cx)));
         // Ordre des boutons : action à gauche sous Windows, à droite ailleurs.
         let buttons = if cfg!(target_os = "windows") {
@@ -1332,12 +1355,12 @@ impl Workspace {
             .items_center()
             .border_t_1()
             .border_color(theme::border())
-            .child(Button::new("imp-settings").small().ghost().label("Rangement des médias…").on_click(cx.listener(
-                |this, _, w, cx| {
+            .child(Button::new("imp-settings").small().ghost().label(t!("gallery.naming_settings")).on_click(
+                cx.listener(|this, _, w, cx| {
                     this.close_gallery(w, cx);
                     this.open_settings_page(SettingsPage::Media, w, cx)
-                },
-            )))
+                }),
+            ))
             .child(div().flex_1())
             .child(buttons)
             .into_any_element()

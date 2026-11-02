@@ -1,0 +1,182 @@
+_version: 2
+# Main window: sidebar, lists, details and status messages.
+ws.quality:
+  en: Quality
+  fr: Qualité
+ws.stats:
+  en: Stats
+  fr: Stats
+ws.map:
+  en: Map
+  fr: Carte
+ws.gedcom:
+  en: GEDCOM
+  fr: GEDCOM
+ws.open_failed:
+  en: "Could not open %{path}: %{error}"
+  fr: "Impossible d'ouvrir %{path} : %{error}"
+ws.open_prompt:
+  en: Open a GEDCOM File
+  fr: Ouvrir un fichier GEDCOM
+ws.saved:
+  en: "Saved to %{path}"
+  fr: "Enregistré dans %{path}"
+ws.save_failed:
+  en: "Save failed: %{error}"
+  fr: "Échec de l'enregistrement : %{error}"
+ws.undone:
+  en: Change undone
+  fr: Modification annulée
+ws.redone:
+  en: Change redone
+  fr: Modification rétablie
+ws.search_sources:
+  en: Search for a source, a record type…
+  fr: "Rechercher une source, un type d'acte…"
+ws.search_places:
+  en: Search for a place, a county…
+  fr: Rechercher un lieu, un département…
+ws.search_media:
+  en: Search for a media, a person…
+  fr: Rechercher un média, une personne…
+ws.search_people:
+  en: Search for a name, a place…
+  fr: Rechercher un nom, un lieu…
+ws.empty_family:
+  en: Family with no members
+  fr: Famille sans aucun membre
+ws.name_copied:
+  en: Name copied
+  fr: Nom copié
+ws.id_copied:
+  en: "ID %{id} copied"
+  fr: "Identifiant %{id} copié"
+ws.created:
+  en: "%{kind} created"
+  fr: "%{kind} créé(e)"
+ws.deleted:
+  en: "“%{label}” deleted (Undo to go back)"
+  fr: "« %{label} » supprimé (Annuler pour revenir en arrière)"
+ws.place_removed.one:
+  en: "Place removed from %{n} event (Undo to go back)"
+  fr: "Lieu retiré de %{n} événement (Annuler pour revenir en arrière)"
+ws.place_removed.other:
+  en: "Place removed from %{n} events (Undo to go back)"
+  fr: "Lieu retiré de %{n} événements (Annuler pour revenir en arrière)"
+ws.no_change:
+  en: No changes
+  fr: Aucune modification
+ws.gedcom_applied:
+  en: GEDCOM applied
+  fr: GEDCOM appliqué
+ws.gedcom_invalid:
+  en: "Invalid GEDCOM: %{error}"
+  fr: "GEDCOM invalide : %{error}"
+ws.act_deleted:
+  en: "Record deleted: %{title}"
+  fr: "Acte supprimé : %{title}"
+ws.acts_count:
+  en: "Records · %{n}"
+  fr: "Actes · %{n}"
+ws.flag_no_media:
+  en: Without Media
+  fr: Sans média
+ws.flag_no_file:
+  en: Missing File
+  fr: Fichier absent
+ws.history_tip:
+  en: "%{verb}: %{dest}"
+  fr: "%{verb} : %{dest}"
+ws.tree_gens:
+  en: "%{mode} · %{n} gen."
+  fr: "%{mode} · %{n} gén."
+ws.apply:
+  en: Apply
+  fr: Appliquer
+ws.revert:
+  en: Revert
+  fr: Rétablir
+ws.keep:
+  en: Keep
+  fr: Garder
+ws.confirm_remove_place:
+  en: "Confirm: Remove This Place Everywhere"
+  fr: "Confirmer : retirer ce lieu partout"
+ws.confirm_delete:
+  en: Confirm Deletion
+  fr: Confirmer la suppression
+ws.images_count:
+  en: "Images · %{n}"
+  fr: "Images · %{n}"
+ws.pages_short:
+  en: "%{n} p."
+  fr: "%{n} p."
+ws.not_found:
+  en: Not Found
+  fr: Introuvable
+ws.images:
+  en: Images
+  fr: Images
+ws.open_host:
+  en: "Open %{host}"
+  fr: "Ouvrir %{host}"
+ws.no_local_file:
+  en: No local file attached
+  fr: Aucun fichier local associé
+ws.apply_gedcom:
+  en: Apply GEDCOM
+  fr: Appliquer le GEDCOM
+ws.place_coords:
+  en: "%{lat} · %{lon} · %{n} use(s)"
+  fr: "%{lat} · %{lon} · %{n} occurrence(s)"
+ws.place_no_coords:
+  en: "No coordinates · %{n} use(s)"
+  fr: "Sans coordonnées · %{n} occurrence(s)"
+ws.cited_by:
+  en: Cited By
+  fr: Cité par
+ws.links:
+  en: Links
+  fr: Liens
+ws.used_by:
+  en: Used By
+  fr: Utilisé par
+ws.other_media:
+  en: Other Media
+  fr: Autres médias
+ws.event_value:
+  en: "%{label}: %{value}"
+  fr: "%{label} : %{value}"
+ws.with:
+  en: "with %{name}"
+  fr: "avec %{name}"
+ws.unknown_dates:
+  en: unknown dates
+  fr: dates inconnues
+ws.sourced:
+  en: "%{sourced}/%{total} sourced"
+  fr: "%{sourced}/%{total} sourcés"
+ws.detach_parents:
+  en: Detach from Parents
+  fr: Détacher de ses parents
+ws.detach_union:
+  en: Detach from This Union
+  fr: Détacher de cette union
+ws.remove_child:
+  en: Remove This Child
+  fr: Retirer cet enfant
+ws.family:
+  en: Family
+  fr: Famille
+ws.add_relative:
+  en: Add or Link a Relative
+  fr: Ajouter ou lier un proche
+ws.open_file:
+  en: Open a GEDCOM File…
+  fr: Ouvrir un fichier GEDCOM…
+ws.recent:
+  en: Recent
+  fr: Récents
+ws.media_tooltip:
+  en: "Media… (⌘⇧M)"
+  fr: "Médias… (⌘⇧M)"

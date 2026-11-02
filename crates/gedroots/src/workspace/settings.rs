@@ -16,6 +16,7 @@ use super::*;
 use crate::editor::{PickerState, choice, picker};
 use gpui_kit::component::input::TextareaState;
 use gpui_kit::component::menu::{DropdownMenu, PopupMenuItem};
+use rust_i18n::t;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum SettingsPage {
@@ -35,8 +36,8 @@ struct SiteRow {
 impl SiteRow {
     fn new(site: &SearchSite, window: &mut Window, cx: &mut Context<Workspace>) -> (Self, Vec<Subscription>) {
         let row = SiteRow {
-            name: text_input("Nom du site", &site.name, window, cx),
-            url: text_input("https://exemple.org/recherche?nom={nom}&prenom={prenom}", &site.url, window, cx),
+            name: text_input(&t!("settings.site_name"), &site.name, window, cx),
+            url: text_input(&t!("settings.site_url"), &site.url, window, cx),
         };
         let subs = vec![refresh_on_change(&row.url, cx)];
         (row, subs)
@@ -99,7 +100,7 @@ struct MediaRow {
 impl MediaRow {
     fn new(f: &MediaFolder, window: &mut Window, cx: &mut Context<Workspace>) -> (Self, Vec<Subscription>) {
         let row = MediaRow {
-            dir: text_input("Actes", &f.dir, window, cx),
+            dir: text_input(&t!("settings.media_dir_placeholder"), &f.dir, window, cx),
             types: f.types.clone(),
             template: text_input("{annee} {nom} {prenom}", &f.template, window, cx),
         };
@@ -142,8 +143,8 @@ impl Workspace {
         let Some(doc) = &self.doc else { return };
         let g = doc.ged.clone();
         let s = g.file_settings();
-        let author = text_input("Nom", &s.author, window, cx);
-        let email = text_input("nom@exemple.fr", &s.email, window, cx);
+        let author = text_input(&t!("editor.name"), &s.author, window, cx);
+        let email = text_input(&t!("settings.email_placeholder"), &s.email, window, cx);
         let copyright = text_input("© 2026 …", &s.copyright, window, cx);
         let description = cx.new(|cx| TextareaState::new(window, cx).rows(3).default_value(s.description));
         let mut langs: Vec<(&str, &str)> = gedcom::complete::LANGUAGES.to_vec();
@@ -156,7 +157,10 @@ impl Workspace {
             .place_form()
             .iter()
             .enumerate()
-            .map(|(i, name)| PlaceRow { name: text_input("Commune", name, window, cx), from: Some(i) })
+            .map(|(i, name)| PlaceRow {
+                name: text_input(&t!("settings.municipality"), name, window, cx),
+                from: Some(i),
+            })
             .collect();
         let events = g
             .event_types()
@@ -174,7 +178,7 @@ impl Workspace {
             })
             .collect();
         let naming = g.media_naming();
-        let media_root = text_input("Médias", &naming.root, window, cx);
+        let media_root = text_input(&t!("cmd.media_list"), &naming.root, window, cx);
         let mut subs = vec![refresh_on_change(&media_root, cx)];
         let media = naming
             .folders
@@ -289,14 +293,14 @@ impl Workspace {
                 if let Some(r) = root.filter(|_| root_changed) {
                     g.set_root(&r);
                 }
-                let mut msg = String::from("Réglages du fichier enregistrés");
+                let mut msg = t!("settings.saved").into_owned();
                 if format_changed {
                     let r = g.set_place_format(&format);
                     if r.rewritten > 0 {
-                        msg.push_str(&format!(" · {} réécrit(s)", places(r.rewritten)));
+                        msg.push_str(&t!("settings.rewritten", places = places(r.rewritten)));
                     }
                     if r.skipped > 0 {
-                        msg.push_str(&format!(" · {} d'un autre format inchangé(s)", places(r.skipped)));
+                        msg.push_str(&t!("settings.skipped", places = places(r.skipped)));
                     }
                 }
                 for (family, label) in &removed {
@@ -330,7 +334,7 @@ impl Workspace {
             SettingsPage::Media => self.settings_media(d, cx),
             SettingsPage::Search => self.settings_search(d, cx),
         };
-        let tab = |id: &'static str, label: &'static str, page: SettingsPage| {
+        let tab = |id: &'static str, label: std::borrow::Cow<'static, str>, page: SettingsPage| {
             let active = d.page == page;
             Button::new(id).small().label(label).when(active, |b| b.primary()).when(!active, |b| b.ghost()).on_click(
                 cx.listener(move |this, _, _, cx| {
@@ -346,11 +350,11 @@ impl Workspace {
             .child(
                 h_flex()
                     .gap_1()
-                    .child(tab("settings-general", "Général", SettingsPage::General))
-                    .child(tab("settings-places", "Lieux", SettingsPage::Places))
-                    .child(tab("settings-events", "Événements", SettingsPage::Events))
-                    .child(tab("settings-media", "Médias", SettingsPage::Media))
-                    .child(tab("settings-search", "Recherche", SettingsPage::Search)),
+                    .child(tab("settings-general", t!("settings.general"), SettingsPage::General))
+                    .child(tab("settings-places", t!("cmd.places"), SettingsPage::Places))
+                    .child(tab("settings-events", t!("settings.events"), SettingsPage::Events))
+                    .child(tab("settings-media", t!("cmd.media_list"), SettingsPage::Media))
+                    .child(tab("settings-search", t!("settings.search"), SettingsPage::Search)),
             )
             .child(theme::scroll_y("settings-body").max_h(px(460.)).child(body))
             .child(
@@ -359,7 +363,7 @@ impl Workspace {
                         .primary()
                         .small()
                         .icon(IconName::Check)
-                        .label("Enregistrer")
+                        .label(t!("common.save"))
                         .on_click(cx.listener(|this, _, w, cx| this.save_settings(w, cx))),
                 ),
             )
@@ -376,21 +380,25 @@ impl Workspace {
             about.push_str(&format!(" · {}", info.software));
         }
         if let Some((date, _)) = &info.saved {
-            about.push_str(&format!(", le {}", Date::parse(date).to_french()));
+            about.push_str(&t!("settings.saved_on", date = Date::parse(date).to_french()));
         }
-        let counts = [
-            (RecordKind::Individual, "individu", "individus"),
-            (RecordKind::Family, "famille", "familles"),
-            (RecordKind::Source, "source", "sources"),
-            (RecordKind::Media, "média", "médias"),
-        ]
-        .iter()
-        .map(|(k, one, many)| {
-            let n = g.count(*k);
-            format!("{n} {}", if n == 1 { one } else { many })
-        })
-        .collect::<Vec<_>>()
-        .join(" · ");
+        let counts = [RecordKind::Individual, RecordKind::Family, RecordKind::Source, RecordKind::Media]
+            .iter()
+            .map(|k| {
+                let n = g.count(*k);
+                match (k, n == 1) {
+                    (RecordKind::Individual, true) => t!("settings.count_individuals.one", n = n),
+                    (RecordKind::Individual, false) => t!("settings.count_individuals.other", n = n),
+                    (RecordKind::Family, true) => t!("settings.count_families.one", n = n),
+                    (RecordKind::Family, false) => t!("settings.count_families.other", n = n),
+                    (RecordKind::Source, true) => t!("settings.count_sources.one", n = n),
+                    (RecordKind::Source, false) => t!("settings.count_sources.other", n = n),
+                    (_, true) => t!("settings.count_media.one", n = n),
+                    (_, false) => t!("settings.count_media.other", n = n),
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" · ");
 
         v_flex()
             .gap_3()
@@ -398,23 +406,28 @@ impl Workspace {
             .child(
                 h_flex()
                     .gap_3()
-                    .child(field("Auteur", Input::new(&d.author).small().into_any_element()).flex_1())
-                    .child(field("E-mail", Input::new(&d.email).small().into_any_element()).flex_1()),
+                    .child(field(t!("settings.author"), Input::new(&d.author).small().into_any_element()).flex_1())
+                    .child(field(t!("settings.email"), Input::new(&d.email).small().into_any_element()).flex_1()),
             )
             .child(
                 h_flex()
                     .gap_3()
-                    .child(field("Droits", Input::new(&d.copyright).small().into_any_element()).flex_1())
                     .child(
-                        field("Langue", Select::new(&d.language).small().placeholder("Choisir…").into_any_element())
-                            .w(px(160.))
-                            .flex_none(),
+                        field(t!("settings.copyright"), Input::new(&d.copyright).small().into_any_element()).flex_1(),
+                    )
+                    .child(
+                        field(
+                            t!("settings.language"),
+                            Select::new(&d.language).small().placeholder(t!("event_dialog.choose")).into_any_element(),
+                        )
+                        .w(px(160.))
+                        .flex_none(),
                     ),
             )
-            .child(field("Description", Textarea::new(&d.description).h(px(72.)).into_any_element()))
+            .child(field(t!("settings.description"), Textarea::new(&d.description).h(px(72.)).into_any_element()))
             .child(field(
-                "Individu racine",
-                Select::new(&d.root).small().search_placeholder("Rechercher…").into_any_element(),
+                t!("settings.root"),
+                Select::new(&d.root).small().search_placeholder(t!("event_dialog.search")).into_any_element(),
             ))
             .into_any_element()
     }
@@ -473,25 +486,27 @@ impl Workspace {
         v_flex()
             .gap_2()
             .child(section_header(
-                "Format des lieux",
-                plus_button("plac-add").tooltip("Ajouter une juridiction").on_click(cx.listener(|this, _, w, cx| {
-                    let name = text_input("Juridiction", "", w, cx);
-                    name.update(cx, |s, cx| s.focus(w, cx));
-                    if let Some(d) = this.settings_dialog() {
-                        d.places.push(PlaceRow { name, from: None });
-                    }
-                    cx.notify();
-                })),
+                t!("settings.place_format"),
+                plus_button("plac-add").tooltip(t!("settings.add_jurisdiction")).on_click(cx.listener(
+                    |this, _, w, cx| {
+                        let name = text_input(&t!("settings.jurisdiction"), "", w, cx);
+                        name.update(cx, |s, cx| s.focus(w, cx));
+                        if let Some(d) = this.settings_dialog() {
+                            d.places.push(PlaceRow { name, from: None });
+                        }
+                        cx.notify();
+                    },
+                )),
             ))
             .children(rows)
             .when_some(preview, |v, p| {
-                v.child(div().pt_1().text_sm().text_color(theme::muted()).child(format!("Exemple : {p}")))
+                v.child(div().pt_1().text_sm().text_color(theme::muted()).child(t!("settings.example", example = p)))
             })
             .into_any_element()
     }
 
     fn settings_events(&self, d: &SettingsDialog, cx: &mut Context<Self>) -> AnyElement {
-        let section = |family: bool, title: &'static str, cx: &mut Context<Self>| {
+        let section = |family: bool, title: std::borrow::Cow<'static, str>, cx: &mut Context<Self>| {
             let rows = d.events.iter().enumerate().filter(|(_, r)| r.family == family).map(|(i, r)| {
                 let removable = r.uses == 0;
                 h_flex()
@@ -533,9 +548,9 @@ impl Workspace {
                 .child(section_header(
                     title,
                     plus_button(if family { "even-add-fam" } else { "even-add-indi" })
-                        .tooltip("Ajouter un type")
+                        .tooltip(t!("settings.add_type"))
                         .on_click(cx.listener(move |this, _, w, cx| {
-                            let label = text_input("Libellé", "", w, cx);
+                            let label = text_input(&t!("settings.label"), "", w, cx);
                             let ty = text_input("TYPE", "", w, cx);
                             label.update(cx, |s, cx| s.focus(w, cx));
                             if let Some(d) = this.settings_dialog() {
@@ -555,8 +570,8 @@ impl Workspace {
         };
         v_flex()
             .gap_4()
-            .child(section(false, "Événements individuels", cx))
-            .child(section(true, "Événements familiaux", cx))
+            .child(section(false, t!("settings.individual_events"), cx))
+            .child(section(true, t!("settings.family_events"), cx))
             .into_any_element()
     }
 }
@@ -590,7 +605,7 @@ impl Workspace {
                         .truncate()
                         .when(r.types.is_empty(), |d| d.text_color(theme::muted()))
                         .child(if r.types.is_empty() {
-                            "Tout le reste".to_string()
+                            t!("settings.everything_else").into_owned()
                         } else {
                             media_type_labels(&r.types)
                         }),
@@ -694,13 +709,13 @@ impl Workspace {
         });
         v_flex()
             .gap_3()
-            .child(field("Dossier des médias", Input::new(&d.media_root).small().into_any_element()))
+            .child(field(t!("settings.media_folder"), Input::new(&d.media_root).small().into_any_element()))
             .child(
                 v_flex()
                     .gap_2()
                     .child(section_header(
-                        "Sous-dossiers",
-                        plus_button("media-add").tooltip("Ajouter un dossier").on_click(cx.listener(
+                        t!("settings.subfolders"),
+                        plus_button("media-add").tooltip(t!("settings.add_folder")).on_click(cx.listener(
                             |this, _, w, cx| {
                                 let (row, subs) = MediaRow::new(&MediaFolder::default(), w, cx);
                                 row.dir.update(cx, |s, cx| s.focus(w, cx));
@@ -797,8 +812,8 @@ impl Workspace {
         v_flex()
             .gap_2()
             .child(section_header(
-                "Sites de recherche",
-                plus_button("site-add").tooltip("Ajouter un site").on_click(cx.listener(|this, _, w, cx| {
+                t!("settings.sites"),
+                plus_button("site-add").tooltip(t!("settings.add_site")).on_click(cx.listener(|this, _, w, cx| {
                     let empty = SearchSite { name: String::new(), url: String::new() };
                     let (row, subs) = SiteRow::new(&empty, w, cx);
                     row.name.update(cx, |s, cx| s.focus(w, cx));
@@ -844,7 +859,7 @@ fn type_options(g: &Gedcom) -> Vec<(String, Vec<String>)> {
             out.push((t.label, vec![t.ty]));
         }
     }
-    out.push(("Portrait".into(), vec!["INDI".into()]));
+    out.push((t!("settings.portrait").into(), vec!["INDI".into()]));
     out
 }
 
@@ -867,10 +882,10 @@ fn media_naming(d: &SettingsDialog, cx: &App) -> MediaNaming {
     MediaNaming { root: d.media_root.read(cx).value().trim().to_string(), folders }
 }
 
-fn field(label: &'static str, el: AnyElement) -> Div {
+fn field(label: impl Into<SharedString>, el: AnyElement) -> Div {
     v_flex().gap_1().min_w_0().child(label_caps(label)).child(el)
 }
 
 fn places(n: usize) -> String {
-    if n == 1 { "1 lieu".into() } else { format!("{n} lieux") }
+    if n == 1 { t!("settings.places.one", n = n) } else { t!("settings.places.other", n = n) }.into_owned()
 }

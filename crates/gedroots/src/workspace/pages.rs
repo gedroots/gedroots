@@ -5,6 +5,7 @@
 
 use super::relatives::PickPurpose;
 use super::*;
+use rust_i18n::t;
 
 /// Taille des miniatures de pages.
 const THUMB_W: f32 = 64.;
@@ -101,9 +102,9 @@ impl Workspace {
         self.mutate(window, cx, |g| {
             added = g.add_media_pages(&media, &files)?;
             if added == 0 {
-                return Err("Ces fichiers font déjà partie du média".into());
+                return Err(t!("pages.already").into());
             }
-            Ok((format!("{added} page{} ajoutée{}", plural(added), plural(added)), None))
+            Ok((crate::tn!("pages.added", added).to_string(), None))
         });
         if added > 0 {
             self.media_page = first_new;
@@ -115,7 +116,7 @@ impl Workspace {
             files: true,
             directories: false,
             multiple: true,
-            prompt: Some("Ajouter les pages".into()),
+            prompt: Some(t!("pages.add_prompt").into()),
         });
         cx.spawn_in(window, async move |this, cx| {
             if let Ok(Ok(Some(paths))) = rx.await {
@@ -141,7 +142,7 @@ impl Workspace {
         }
         self.mutate(window, cx, |g| {
             g.move_media_page(&media, from, to)?;
-            Ok((format!("Page {from} déplacée en position {to}"), None))
+            Ok((t!("pages.moved", from = from, to = to).to_string(), None))
         });
         self.media_page = to;
     }
@@ -149,7 +150,7 @@ impl Workspace {
     pub(super) fn remove_page(&mut self, media: String, page: usize, window: &mut Window, cx: &mut Context<Self>) {
         self.mutate(window, cx, |g| {
             g.remove_media_page(&media, page)?;
-            Ok((format!("Page {page} retirée du média (le fichier reste sur le disque)"), None))
+            Ok((t!("pages.removed", page = page).to_string(), None))
         });
     }
 
@@ -157,7 +158,7 @@ impl Workspace {
     pub(super) fn split_page(&mut self, media: String, page: usize, window: &mut Window, cx: &mut Context<Self>) {
         self.mutate(window, cx, |g| {
             let new = g.split_media_page(&media, page)?;
-            Ok((format!("Page {page} séparée en un nouveau média, « {} »", g.record_label(&new)), Some(new)))
+            Ok((t!("pages.split", page = page, name = g.record_label(&new)).to_string(), Some(new)))
         });
     }
 
@@ -166,7 +167,7 @@ impl Workspace {
         self.mutate(window, cx, |g| {
             let target = g.merge_media(&list)?;
             let n = Media::new(g.get(&target).unwrap()).page_count();
-            Ok((format!("{} médias fusionnés en un média de {n} pages", list.len()), Some(target)))
+            Ok((t!("pages.merged", count = list.len(), n = n).to_string(), Some(target)))
         });
         self.media_marked.clear();
     }
@@ -281,10 +282,10 @@ impl Workspace {
                     h_flex()
                         .gap_2()
                         .items_center()
-                        .child(label_caps(format!("Pages · {n}")))
+                        .child(label_caps(t!("pages.section", n = n).to_string()))
                         .child(
                             super::add::plus_button("add-page")
-                                .tooltip("Ajouter des pages")
+                                .tooltip(t!("pages.add_prompt"))
                                 .on_click(cx.listener(move |this, _, w, cx| this.choose_pages(id.clone(), w, cx))),
                         )
                         .child(div().flex_1())
@@ -325,7 +326,11 @@ impl Workspace {
             let files = m.files();
             let first = page + 1;
             page += files.len();
-            let pages = if files.len() > 1 { format!("pages {first} à {page}") } else { format!("page {first}") };
+            let pages = if files.len() > 1 {
+                t!("pages.range", first = first, last = page)
+            } else {
+                t!("photo.page", n = first)
+            };
             let target = x.clone();
             Some(
                 h_flex()
@@ -391,7 +396,7 @@ impl Workspace {
                     .p_4()
                     .gap_3()
                     .max_w(px(720.))
-                    .child(label_caps(format!("{count} médias sélectionnés · {total} pages")))
+                    .child(label_caps(t!("pages.selected", count = count, total = total).to_string()))
                     .children(rows)
                     .child(
                         h_flex()
@@ -401,18 +406,18 @@ impl Workspace {
                                     .primary()
                                     .small()
                                     .icon(IconName::Merge)
-                                    .label(format!("Fusionner en un média de {total} pages"))
+                                    .label(t!("pages.merge", total = total))
                                     .on_click(cx.listener(move |this, _, w, cx| {
                                         let list = this.media_marked.clone();
                                         this.merge_media(list, w, cx)
                                     })),
                             )
-                            .child(Button::new("merge-cancel").ghost().small().label("Annuler").on_click(cx.listener(
-                                |this, _, _, cx| {
+                            .child(Button::new("merge-cancel").ghost().small().label(t!("common.cancel")).on_click(
+                                cx.listener(|this, _, _, cx| {
                                     this.media_marked.clear();
                                     cx.notify();
-                                },
-                            ))),
+                                }),
+                            )),
                     ),
             )
             .into_any_element()
@@ -478,8 +483,4 @@ impl Workspace {
             }))
         })
     }
-}
-
-fn plural(n: usize) -> &'static str {
-    if n > 1 { "s" } else { "" }
 }

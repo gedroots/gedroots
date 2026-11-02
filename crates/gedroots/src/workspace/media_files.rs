@@ -12,6 +12,7 @@
 
 use super::add::AddDialog;
 use super::*;
+use rust_i18n::t;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
@@ -83,7 +84,8 @@ fn place_files(
                 continue;
             }
             if let Some(dir) = to.parent() {
-                std::fs::create_dir_all(dir).map_err(|e| format!("dossier {} : {e}", dir.display()))?;
+                std::fs::create_dir_all(dir)
+                    .map_err(|e| t!("media_files.folder_error", path = dir.display(), error = e).to_string())?;
             }
             let done = if inside || move_outside {
                 // Autre disque : copie puis suppression de l'original.
@@ -92,7 +94,7 @@ fn place_files(
             } else {
                 std::fs::copy(&from, &to).map(|_| ())
             };
-            done.map_err(|e| format!("{} : {e}", from.display()))?;
+            done.map_err(|e| t!("media_files.file_error", path = from.display(), error = e).to_string())?;
             let rel = relative(base, &to);
             g.replace_media_file(m, i, &old, &rel);
             moved.push((m.clone(), i, old, rel));
@@ -116,15 +118,15 @@ pub(super) fn store_new_media(g: &mut Gedcom, base: Option<&Path>, media: &[Stri
         return String::new();
     }
     let Some(base) = base.filter(|_| !g.media_naming().is_empty()) else {
-        return " — attention : fichier hors du dossier du .ged, chemin absolu enregistré".into();
+        return t!("media_files.outside").into_owned();
     };
     match place_files(g, base, media, &|_, _, _| false, false) {
         Ok(m) if !m.is_empty() => {
             let n = m.len();
-            format!(" · {n} copié{} dans le dossier du fichier", if n > 1 { "s" } else { "" })
+            crate::tn!("media_files.copied", n).into_owned()
         }
         Ok(_) => String::new(),
-        Err(e) => format!(" — copie impossible : {e}"),
+        Err(e) => t!("media_files.copy_failed", error = e).into_owned(),
     }
 }
 
@@ -142,14 +144,10 @@ pub(super) fn store_act_media(g: &mut Gedcom, base: Option<&Path>, media: &str) 
     match place_files(g, base, &[media.to_string()], &alone, false) {
         Ok(m) if !m.is_empty() => {
             let n = m.len();
-            format!(
-                " · {n} fichier{} nommé{} selon le modèle",
-                if n > 1 { "s" } else { "" },
-                if n > 1 { "s" } else { "" }
-            )
+            crate::tn!("media_files.named", n).into_owned()
         }
         Ok(_) => String::new(),
-        Err(e) => format!(" — rangement impossible : {e}"),
+        Err(e) => t!("media_files.store_failed", error = e).into_owned(),
     }
 }
 
@@ -168,11 +166,14 @@ pub(super) fn store_imported(g: &mut Gedcom, base: Option<&Path>, media: &[Strin
     match place_files(g, base, media, &alone, move_files) {
         Ok(m) if !m.is_empty() => {
             let n = m.len();
-            let s = if n > 1 { "s" } else { "" };
-            format!(" · {n} fichier{s} {} selon le modèle", if move_files { "rangé" } else { "copié" }.to_string() + s)
+            if move_files {
+                crate::tn!("media_files.placed_moved", n).into_owned()
+            } else {
+                crate::tn!("media_files.placed_copied", n).into_owned()
+            }
         }
         Ok(_) => String::new(),
-        Err(e) => format!(" — rangement impossible : {e}"),
+        Err(e) => t!("media_files.store_failed", error = e).into_owned(),
     }
 }
 
@@ -196,7 +197,7 @@ impl Workspace {
         let rows: Vec<(String, String)> =
             doc.ged.media_renames(&media).into_iter().filter(|(_, a, b)| a != b).map(|(_, a, b)| (a, b)).collect();
         if rows.is_empty() {
-            self.set_status("Les fichiers de ce média portent déjà le nom du modèle", false);
+            self.set_status(t!("media_files.already_named"), false);
         } else {
             self.add_dialog = Some(AddDialog::RenameMedia(Box::new(RenameDialog { media, rows })));
         }
@@ -206,7 +207,7 @@ impl Workspace {
     fn rename_media(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(AddDialog::RenameMedia(d)) = self.add_dialog.take() else { return };
         let Some(base) = self.ged_dir() else {
-            self.set_status("Enregistrez d'abord le fichier .ged", true);
+            self.set_status(t!("media_files.save_first"), true);
             cx.notify();
             return;
         };
@@ -222,12 +223,9 @@ impl Workspace {
                 }
                 doc.dirty = true;
                 let n = moved.len();
-                self.set_status(
-                    format!("{n} fichier{} renommé{}", if n > 1 { "s" } else { "" }, if n > 1 { "s" } else { "" }),
-                    false,
-                );
+                self.set_status(crate::tn!("media_files.renamed", n), false);
             }
-            Err(e) => self.set_status(format!("Renommage interrompu : {e}"), true),
+            Err(e) => self.set_status(t!("media_files.rename_failed", error = e), true),
         }
         self.rescan_media();
         self.rebuild_rows(cx);
@@ -252,7 +250,7 @@ impl Workspace {
                         .primary()
                         .small()
                         .icon(IconName::Check)
-                        .label("Renommer")
+                        .label(t!("media_files.rename"))
                         .on_click(cx.listener(|this, _, w, cx| this.rename_media(w, cx))),
                 ),
             )
@@ -313,7 +311,7 @@ mod tests {
             MediaChoice::NewFiles(vec![outside.to_string_lossy().to_string(), "scan.pdf".into(), "partagé.jpg".into()]);
         let m = act.save(&mut g).unwrap().media.unwrap();
         let note = store_act_media(&mut g, Some(&base), &m);
-        assert!(note.contains("2 fichiers nommés"), "{note}");
+        assert!(note.contains("2 files named"), "{note}");
 
         let files: Vec<String> = g.get(&m).unwrap().children_with("FILE").map(|f| f.val().to_string()).collect();
         assert_eq!(files, ["Actes/N_MARCHAND_Louise p1.jpg", "Actes/N_MARCHAND_Louise p2.pdf", "partagé.jpg"]);

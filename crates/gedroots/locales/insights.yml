@@ -1,0 +1,89 @@
+_version: 2
+# Statistics page and relationship window.
+stats.percent:
+  en: "%{value}%"
+  fr: "%{value} %"
+stats.kinship_title:
+  en: Relationship
+  fr: Lien de parenté
+stats.kinship_is:
+  en: is the
+  fr: est
+stats.kinship_of:
+  en: of
+  fr: de
+stats.civil_degree:
+  en: "Civil degree: %{degree}"
+  fr: "Degré civil : %{degree}"
+stats.common_ancestors:
+  en: COMMON ANCESTORS
+  fr: ANCÊTRES COMMUNS
+stats.path:
+  en: PATH
+  fr: CHEMIN
+stats.no_link:
+  en: "No relationship found between %{a} and %{b}."
+  fr: "Aucun lien trouvé entre %{a} et %{b}."
+stats.years:
+  en: "%{years} yrs"
+  fr: "%{years} ans"
+stats.overview:
+  en: OVERVIEW
+  fr: "VUE D'ENSEMBLE"
+stats.individuals:
+  en: people
+  fr: individus
+stats.families:
+  en: families
+  fr: familles
+stats.men_women:
+  en: men / women
+  fr: hommes / femmes
+stats.sourced_events:
+  en: sourced events
+  fr: événements sourcés
+stats.children_per_family:
+  en: children per family
+  fr: enfants par famille
+stats.first_marriage_men:
+  en: age at 1st marriage (M)
+  fr: âge au 1er mariage (H)
+stats.first_marriage_women:
+  en: age at 1st marriage (F)
+  fr: âge au 1er mariage (F)
+stats.longevity:
+  en: LIFESPAN BY CENTURY OF BIRTH
+  fr: LONGÉVITÉ PAR SIÈCLE DE NAISSANCE
+stats.births:
+  en: "%{years} (%{births} b.)"
+  fr: "%{years} (%{births} n.)"
+stats.longest:
+  en: LONGEST LIVES
+  fr: LES PLUS LONGUES VIES
+stats.ancestry_of:
+  en: "ANCESTRY OF %{name}"
+  fr: "ASCENDANCE DE %{name}"
+stats.ancestry:
+  en: ANCESTRY
+  fr: ASCENDANCE
+stats.duplicates:
+  en: " (%{n} duplicates)"
+  fr: " (%{n} doubles)"
+stats.generation:
+  en: "Generation %{n}"
+  fr: "Génération %{n}"
+stats.implexe:
+  en: "Pedigree collapse: %{value}"
+  fr: "Implexe : %{value}"
+stats.surnames:
+  en: SURNAMES
+  fr: PATRONYMES
+stats.given_men:
+  en: MALE GIVEN NAMES
+  fr: PRÉNOMS MASCULINS
+stats.given_women:
+  en: FEMALE GIVEN NAMES
+  fr: PRÉNOMS FÉMININS
+stats.places:
+  en: MOST CITED PLACES
+  fr: LIEUX LES PLUS CITÉS

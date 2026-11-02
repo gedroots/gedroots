@@ -8,6 +8,7 @@
 use super::*;
 use crate::gazetteer;
 use gedcom::gazetteer::{Candidate, Level, join_parts, sub_place};
+use rust_i18n::t;
 use std::collections::HashMap;
 
 /// Lieux réels proposés pendant la saisie d'un lieu.
@@ -49,15 +50,15 @@ pub(super) struct Locate {
 }
 
 /// Exemple affiché dans le champ vide d'une juridiction.
-fn example(level: Level) -> &'static str {
+fn example(level: Level) -> SharedString {
     match level {
-        Level::Locality => "ex. Le Moulin",
-        Level::Municipality => "ex. Troyes",
-        Level::PostCode => "ex. 10000",
-        Level::County => "ex. Aube",
-        Level::State => "ex. Grand Est",
-        Level::Country => "ex. France",
-        Level::Other => "",
+        Level::Locality => t!("places.example_locality").into(),
+        Level::Municipality => t!("places.example_municipality").into(),
+        Level::PostCode => t!("places.example_postcode").into(),
+        Level::County => t!("places.example_county").into(),
+        Level::State => t!("places.example_state").into(),
+        Level::Country => t!("places.example_country").into(),
+        Level::Other => "".into(),
     }
 }
 
@@ -217,7 +218,7 @@ impl Workspace {
                     format!("pl-sub-{id}").into(),
                     IconName::CornerDownRight,
                     name.into(),
-                    Some(format!("lieu-dit à {}", short_place(&parent)).into()),
+                    Some(t!("places.locality_in", place = short_place(&parent)).into()),
                 )
                 .on_click(cx.listener(move |this, _, window, cx| {
                     this.open_new_place(entity.clone(), parts.clone(), None, near, None, window, cx)
@@ -228,7 +229,7 @@ impl Workspace {
         if !real.is_empty() {
             list = list
                 .when(sections > 0, |l| l.child(separator()))
-                .child(div().px_2().pt_1().child(label_caps("Lieux réels")))
+                .child(div().px_2().pt_1().child(label_caps(t!("places.real_places"))))
                 .children(real.into_iter().enumerate().map(|(n, c)| {
                     let entity = input.clone();
                     let parts = c.parts(&form);
@@ -268,7 +269,7 @@ impl Workspace {
                 .hover(|d| d.bg(theme::hover()))
                 .text_color(theme::accent())
                 .child(icon(IconName::Plus))
-                .child(format!("Créer « {typed} »"))
+                .child(t!("places.create", name = typed))
                 .on_click(cx.listener(move |this, _, window, cx| {
                     this.open_new_place(entity.clone(), blank.clone(), None, None, None, window, cx)
                 })),
@@ -293,13 +294,17 @@ impl Workspace {
         let (labels, values): (Vec<(String, Level)>, Vec<String>) = if form.len() >= 2 && parts.len() == form.len() {
             (form.iter().map(|f| (f.replace('_', " "), Level::of(f))).collect(), parts)
         } else {
-            (vec![("Lieu".into(), Level::Other)], vec![join_parts(&parts).trim_start_matches(", ").to_string()])
+            (
+                vec![(t!("editor.place").into_owned(), Level::Other)],
+                vec![join_parts(&parts).trim_start_matches(", ").to_string()],
+            )
         };
         let fields: Vec<(SharedString, Entity<InputState>)> = labels
             .into_iter()
             .zip(values)
             .map(|((label, level), value)| {
-                let ph = if label == "Lieu" { "Commune, Département, Pays" } else { example(level) };
+                let ph =
+                    if label == t!("editor.place") { t!("editor.place_placeholder").into() } else { example(level) };
                 let state = cx.new(|cx| InputState::new(window, cx).placeholder(ph).default_value(value));
                 (SharedString::from(label), state)
             })
@@ -332,7 +337,7 @@ impl Workspace {
         let values: Vec<String> = d.fields.iter().map(|(_, s)| s.read(cx).value().trim().to_string()).collect();
         let name = join_parts(&values);
         if name.is_empty() {
-            d.error = Some("Le lieu est vide".into());
+            d.error = Some(t!("places.empty").into());
             cx.notify();
             return;
         }
@@ -373,7 +378,7 @@ impl Workspace {
         });
         let coords = match d.pin {
             Some((lat, lon)) => mono(format!("{} · {}", geo::format_latitude(lat), geo::format_longitude(lon))),
-            None => div().text_xs().text_color(theme::muted()).child("Sans coordonnées"),
+            None => div().text_xs().text_color(theme::muted()).child(t!("places.no_coords")),
         };
         Some(
             div()
@@ -406,7 +411,7 @@ impl Workspace {
                                 .items_center()
                                 .border_b_1()
                                 .border_color(theme::border())
-                                .child(div().flex_1().font_weight(FontWeight::SEMIBOLD).child("Nouveau lieu"))
+                                .child(div().flex_1().font_weight(FontWeight::SEMIBOLD).child(t!("places.new_place")))
                                 .child(
                                     Button::new("new-place-close")
                                         .xsmall()
@@ -453,7 +458,7 @@ impl Workspace {
                                     Button::new("new-place-cancel")
                                         .ghost()
                                         .small()
-                                        .label("Annuler")
+                                        .label(t!("common.cancel"))
                                         .on_click(cx.listener(|this, _, _, cx| this.close_new_place(cx))),
                                 )
                                 .child(
@@ -461,7 +466,7 @@ impl Workspace {
                                         .primary()
                                         .small()
                                         .icon(IconName::Check)
-                                        .label("Créer le lieu")
+                                        .label(t!("places.create_place"))
                                         .on_click(cx.listener(|this, _, w, cx| this.create_new_place(w, cx))),
                                 ),
                         ),
@@ -477,7 +482,7 @@ impl Workspace {
     /// Cherche un lieu du fichier dans OpenStreetMap, avec toutes ses juridictions.
     pub(super) fn start_locate(&mut self, name: String, cx: &mut Context<Self>) {
         if gazetteer::offline() {
-            self.set_status("Recherche en ligne désactivée", true);
+            self.set_status(t!("places.offline"), true);
             cx.notify();
             return;
         }
@@ -513,7 +518,7 @@ impl Workspace {
         self.mutate(window, cx, move |g| {
             let (la, lo) = (geo::format_latitude(c.lat), geo::format_longitude(c.lon));
             let n = g.locate_place(&name, &la, &lo, c.exid.as_ref());
-            Ok((format!("{} : {la} {lo} ({n} occurrence(s))", short_place(&name)), None))
+            Ok((t!("places.located", place = short_place(&name), lat = la, lon = lo, n = n).into_owned(), None))
         });
     }
 
@@ -532,34 +537,36 @@ impl Workspace {
         let name = place.name.clone();
         let by_hand = {
             let name = name.clone();
-            place_row("locate-hand".into(), IconName::MapPin, "Placer sur la carte".into(), None)
+            place_row("locate-hand".into(), IconName::MapPin, t!("places.place_on_map").into(), None)
                 .on_click(cx.listener(move |this, _, _, cx| this.place_by_hand(name.clone(), cx)))
         };
         let body = match self.locate.as_ref().filter(|l| l.name == name).map(|l| &l.results) {
             None => h_flex()
                 .gap_2()
-                .child(Button::new("locate").primary().small().icon(IconName::Locate).label("Localiser").on_click(
-                    cx.listener({
-                        let name = name.clone();
-                        move |this, _, _, cx| this.start_locate(name.clone(), cx)
-                    }),
-                ))
-                .child(Button::new("locate-hand-btn").ghost().small().label("Placer sur la carte").on_click(
+                .child(
+                    Button::new("locate").primary().small().icon(IconName::Locate).label(t!("places.locate")).on_click(
+                        cx.listener({
+                            let name = name.clone();
+                            move |this, _, _, cx| this.start_locate(name.clone(), cx)
+                        }),
+                    ),
+                )
+                .child(Button::new("locate-hand-btn").ghost().small().label(t!("places.place_on_map")).on_click(
                     cx.listener({
                         let name = name.clone();
                         move |this, _, _, cx| this.place_by_hand(name.clone(), cx)
                     }),
                 ))
                 .into_any_element(),
-            Some(None) => div().text_color(theme::muted()).child("Recherche…").into_any_element(),
+            Some(None) => div().text_color(theme::muted()).child(t!("places.searching")).into_any_element(),
             Some(Some(Err(e))) => v_flex()
                 .gap_1()
-                .child(div().text_color(theme::danger()).child(format!("Recherche impossible : {e}")))
+                .child(div().text_color(theme::danger()).child(t!("places.search_failed", error = e)))
                 .child(by_hand)
                 .into_any_element(),
             Some(Some(Ok(found))) => v_flex()
                 .gap_0p5()
-                .when(found.is_empty(), |d| d.child(div().text_color(theme::muted()).child("Aucun lieu trouvé")))
+                .when(found.is_empty(), |d| d.child(div().text_color(theme::muted()).child(t!("places.none_found"))))
                 .children(found.iter().enumerate().map(|(n, c)| {
                     let (name, c2) = (name.clone(), c.clone());
                     place_row(format!("locate-{n}").into(), IconName::Globe, c.title().into(), Some(c.context().into()))
@@ -576,7 +583,7 @@ impl Workspace {
                 .gap_2()
                 .border_b_1()
                 .border_color(theme::border())
-                .child(label_caps("Position"))
+                .child(label_caps(t!("places.position")))
                 .child(body)
                 .into_any_element(),
         )

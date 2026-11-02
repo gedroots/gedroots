@@ -336,3 +336,48 @@ cmd:
   all_commands:
     en: All Commands…
     fr: Toutes les commandes…
+context.edit_act:
+  en: Edit Record
+  fr: "Modifier l'acte"
+context.delete_act:
+  en: Delete Record
+  fr: "Supprimer l'acte"
+context.edit_event:
+  en: Edit Event…
+  fr: "Modifier l'événement…"
+context.show_place:
+  en: Show Place
+  fr: Afficher le lieu
+context.open_source:
+  en: "Open Source “%{title}”"
+  fr: "Ouvrir la source « %{title} »"
+context.delete_event:
+  en: Delete Event
+  fr: "Supprimer l'événement"
+context.show_on_map:
+  en: Show on Map
+  fr: Afficher sur la carte
+context.open_place:
+  en: Open Place Details
+  fr: Ouvrir la fiche du lieu
+context.open_details:
+  en: Open Details
+  fr: Ouvrir la fiche
+context.set_portrait:
+  en: Set as Portrait
+  fr: Définir comme portrait
+context.portrait_set:
+  en: "Portrait of %{name} set"
+  fr: "Portrait de %{name} défini"
+context.detach_event:
+  en: Detach from Event
+  fr: "Détacher de l'événement"
+context.detached_event:
+  en: "“%{what}” detached from the %{from} event"
+  fr: "« %{what} » détaché de l'événement %{from}"
+context.detach:
+  en: Detach from This Item
+  fr: Détacher de cet élément
+context.detached:
+  en: "“%{what}” detached from %{from}"
+  fr: "« %{what} » détaché de %{from}"

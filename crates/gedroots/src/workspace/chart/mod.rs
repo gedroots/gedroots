@@ -356,8 +356,8 @@ impl Workspace {
             Slot::AddParent { child, rel } => {
                 let (child, rel) = (child.clone(), *rel);
                 let menu = self.slot_menu(&child, rel, cx);
-                let label = if rel == Relation::Father { "Père" } else { "Mère" };
-                place(add_slot(format!("chart-add-{child}-{label}"), label))
+                let label = if rel == Relation::Father { label::father() } else { label::mother() };
+                place(add_slot(format!("chart-add-{child}-{rel:?}"), label))
                     .on_click(cx.listener(move |this, _, w, cx| {
                         if !this.chart.get_mut().dragged {
                             this.add_relative(child.clone(), rel, w, cx)
@@ -368,12 +368,12 @@ impl Workspace {
             }
             Slot::AddChild(x) | Slot::AddSibling(x) => {
                 let (rel, label) = match c.slot {
-                    Slot::AddChild(_) => (Relation::Child, "Enfant"),
-                    _ => (Relation::Sibling, "Frère ou sœur"),
+                    Slot::AddChild(_) => (Relation::Child, label::child()),
+                    _ => (Relation::Sibling, label::sibling()),
                 };
                 let x = x.clone();
                 let menu = self.slot_menu(&x, rel, cx);
-                place(add_slot(format!("chart-add-{label}"), label))
+                place(add_slot(format!("chart-add-{rel:?}"), label))
                     .on_click(cx.listener(move |this, _, w, cx| {
                         if !this.chart.get_mut().dragged {
                             this.add_relative(x.clone(), rel, w, cx)

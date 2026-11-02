@@ -427,7 +427,7 @@ impl MapView {
                             .on_click(cx.listener(|this, _, _, cx| this.zoom_by(-1, None, cx))),
                     )
                     .when(!self.picker, |d| {
-                        d.child(Button::new("fit").ghost().xsmall().label("Tout afficher").on_click(cx.listener(
+                        d.child(Button::new("fit").ghost().xsmall().label(t!("map.fit")).on_click(cx.listener(
                             |this, _, _, cx| {
                                 this.fit();
                                 cx.notify();
@@ -441,12 +441,8 @@ impl MapView {
                         Button::new("online")
                             .ghost()
                             .xsmall()
-                            .label(if self.online { "● En ligne" } else { "○ Hors ligne" })
-                            .tooltip(if self.online {
-                                "Les tuiles manquantes sont téléchargées depuis OpenStreetMap puis gardées en cache"
-                            } else {
-                                "Seules les tuiles déjà en cache sont affichées ; aucune connexion"
-                            })
+                            .label(if self.online { t!("map.online") } else { t!("map.offline") })
+                            .tooltip(if self.online { t!("map.online_tip") } else { t!("map.offline_tip") })
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.online = !this.online;
                                 this.failed.clear();
@@ -589,13 +585,13 @@ impl Render for MapView {
                     .bg(theme::panel().opacity(0.85))
                     .text_color(theme::muted())
                     .when(!self.picker, |d| {
-                        d.child(format!("{shown} lieu(x) sur la carte")).when(missing > 0, |d| {
-                            d.child(div().text_color(theme::warn()).child(format!("{missing} sans coordonnées")))
+                        d.child(t!("map.shown", n = shown).to_string()).when(missing > 0, |d| {
+                            d.child(div().text_color(theme::warn()).child(t!("map.missing", n = missing).to_string()))
                         })
                     })
                     .child(div().flex_1())
-                    .when(!self.picker, |d| d.child(format!("zoom {}", self.zoom)))
-                    .child("© les contributeurs d'OpenStreetMap"),
+                    .when(!self.picker, |d| d.child(t!("map.zoom", n = self.zoom).to_string()))
+                    .child(t!("map.attribution")),
             )
             .context_menu(background_menu(cx.entity().downgrade()))
     }
@@ -624,13 +620,13 @@ fn marker_menu(
 ) -> impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static {
     move |menu, _, _| {
         let (n1, n2) = (name.clone(), name.clone());
-        menu.item(map_item(&map, "Afficher ce lieu", move |_, cx| cx.emit(MapEvent::Select(n1.clone()))))
-            .item(map_item(&map, "Déplacer à la main…", move |this, cx| {
+        menu.item(map_item(&map, t!("map.show_place"), move |_, cx| cx.emit(MapEvent::Select(n1.clone()))))
+            .item(map_item(&map, t!("map.move_by_hand"), move |this, cx| {
                 cx.emit(MapEvent::Select(n2.clone()));
                 this.placing = true;
             }))
             .separator()
-            .item(map_item(&map, "Zoomer ici", move |this, cx| {
+            .item(map_item(&map, t!("map.zoom_in"), move |this, cx| {
                 let origin = this.bounds.origin;
                 this.zoom_by(2, Some(origin + at), cx)
             }))
@@ -649,7 +645,7 @@ fn background_menu(
         };
         menu.when_some(selected.zip(pos), |m, (name, pos)| {
             let short = gedcom::short_place(&name).to_string();
-            m.item(map_item(&map, format!("Placer « {short} » ici"), move |this, cx| {
+            m.item(map_item(&map, t!("map.place_here", name = short), move |this, cx| {
                 let (x, y) = this.to_world(pos);
                 let (lat, lon) = unproject(x.rem_euclid(TILE_SIZE), y.clamp(0., TILE_SIZE));
                 this.placing = false;
@@ -658,13 +654,13 @@ fn background_menu(
             .separator()
         })
         .when_some(pos, |m, pos| {
-            m.item(map_item(&map, "Zoomer ici", move |this, cx| this.zoom_by(2, Some(pos), cx))).item(map_item(
+            m.item(map_item(&map, t!("map.zoom_in"), move |this, cx| this.zoom_by(2, Some(pos), cx))).item(map_item(
                 &map,
-                "Dézoomer",
+                t!("map.zoom_out"),
                 move |this, cx| this.zoom_by(-2, Some(pos), cx),
             ))
         })
-        .item(map_item(&map, "Tout afficher", |this, _| this.fit()))
+        .item(map_item(&map, t!("map.fit"), |this, _| this.fit()))
     }
 }
 
@@ -689,7 +685,7 @@ fn download(agent: &ureq::Agent, url: &str, path: &std::path::Path) -> Result<()
     let mut bytes = Vec::new();
     std::io::Read::read_to_end(&mut resp.into_reader().take(4 << 20), &mut bytes).map_err(|e| e.to_string())?;
     if bytes.len() < 8 || !(bytes.starts_with(b"\x89PNG") || bytes.starts_with(&[0xFF, 0xD8])) {
-        return Err("réponse inattendue".into());
+        return Err(t!("map.unexpected").into());
     }
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
@@ -699,4 +695,5 @@ fn download(agent: &ureq::Agent, url: &str, path: &std::path::Path) -> Result<()
     std::fs::rename(tmp, path).map_err(|e| e.to_string())
 }
 
+use rust_i18n::t;
 use std::io::Read as _;

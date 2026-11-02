@@ -1,0 +1,109 @@
+_version: 2
+map.fit:
+  en: Show All
+  fr: Tout afficher
+map.online:
+  en: ● Online
+  fr: ● En ligne
+map.offline:
+  en: ○ Offline
+  fr: ○ Hors ligne
+map.online_tip:
+  en: Missing tiles are downloaded from OpenStreetMap, then kept in the cache
+  fr: Les tuiles manquantes sont téléchargées depuis OpenStreetMap puis gardées en cache
+map.offline_tip:
+  en: Only tiles already in the cache are shown; no connection
+  fr: Seules les tuiles déjà en cache sont affichées ; aucune connexion
+map.shown:
+  en: "%{n} place(s) on the map"
+  fr: "%{n} lieu(x) sur la carte"
+map.missing:
+  en: "%{n} without coordinates"
+  fr: "%{n} sans coordonnées"
+map.zoom:
+  en: "zoom %{n}"
+  fr: "zoom %{n}"
+map.attribution:
+  en: © OpenStreetMap contributors
+  fr: "© les contributeurs d'OpenStreetMap"
+map.show_place:
+  en: Show This Place
+  fr: Afficher ce lieu
+map.move_by_hand:
+  en: Move by Hand…
+  fr: Déplacer à la main…
+map.zoom_in:
+  en: Zoom In Here
+  fr: Zoomer ici
+map.place_here:
+  en: "Place “%{name}” Here"
+  fr: "Placer « %{name} » ici"
+map.zoom_out:
+  en: Zoom Out
+  fr: Dézoomer
+map.unexpected:
+  en: unexpected response
+  fr: réponse inattendue
+places.example_locality:
+  en: e.g. Le Moulin
+  fr: ex. Le Moulin
+places.example_municipality:
+  en: e.g. Troyes
+  fr: ex. Troyes
+places.example_postcode:
+  en: e.g. 10000
+  fr: ex. 10000
+places.example_county:
+  en: e.g. Aube
+  fr: ex. Aube
+places.example_state:
+  en: e.g. Grand Est
+  fr: ex. Grand Est
+places.example_country:
+  en: e.g. France
+  fr: ex. France
+places.locality_in:
+  en: "locality in %{place}"
+  fr: "lieu-dit à %{place}"
+places.real_places:
+  en: Real Places
+  fr: Lieux réels
+places.create:
+  en: "Create “%{name}”"
+  fr: "Créer « %{name} »"
+places.empty:
+  en: The place is empty
+  fr: Le lieu est vide
+places.no_coords:
+  en: No coordinates
+  fr: Sans coordonnées
+places.new_place:
+  en: New Place
+  fr: Nouveau lieu
+places.create_place:
+  en: Create Place
+  fr: Créer le lieu
+places.offline:
+  en: Online search turned off
+  fr: Recherche en ligne désactivée
+places.located:
+  en: "%{place}: %{lat} %{lon} (%{n} use(s))"
+  fr: "%{place} : %{lat} %{lon} (%{n} occurrence(s))"
+places.place_on_map:
+  en: Place on the Map
+  fr: Placer sur la carte
+places.locate:
+  en: Locate
+  fr: Localiser
+places.searching:
+  en: Searching…
+  fr: Recherche…
+places.search_failed:
+  en: "Search failed: %{error}"
+  fr: "Recherche impossible : %{error}"
+places.none_found:
+  en: No place found
+  fr: Aucun lieu trouvé
+places.position:
+  en: Position
+  fr: Position

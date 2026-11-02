@@ -1,0 +1,344 @@
+_version: 2
+# Record details: sections shared by every kind of record.
+weblinks.title_placeholder:
+  en: e.g. Parish register, 1850
+  fr: ex. Registre paroissial, 1850
+weblinks.edited:
+  en: Web link edited
+  fr: Lien web modifié
+weblinks.added:
+  en: Web link added
+  fr: Lien web ajouté
+weblinks.removed:
+  en: Web link removed
+  fr: Lien web retiré
+weblinks.edit_title:
+  en: Edit Web Link
+  fr: Modifier le lien web
+weblinks.new_title:
+  en: New Web Link
+  fr: Nouveau lien web
+weblinks.address:
+  en: Address
+  fr: Adresse
+weblinks.title:
+  en: Title
+  fr: Titre
+weblinks.section:
+  en: Web Links
+  fr: Liens web
+common.save:
+  en: Save
+  fr: Enregistrer
+common.add:
+  en: Add
+  fr: Ajouter
+common.edit:
+  en: Edit
+  fr: Modifier
+common.remove:
+  en: Remove
+  fr: Retirer
+editor.place_placeholder:
+  en: Town, County, Country
+  fr: Commune, Département, Pays
+editor.place:
+  en: Place
+  fr: Lieu
+editor.latitude:
+  en: Latitude
+  fr: Latitude
+editor.latitude_placeholder:
+  en: e.g. N48.8463
+  fr: ex. N48.8463
+editor.longitude:
+  en: Longitude
+  fr: Longitude
+editor.longitude_placeholder:
+  en: e.g. E2.4018
+  fr: ex. E2.4018
+editor.not_found:
+  en: Record not found
+  fr: Enregistrement introuvable
+editor.given:
+  en: Given Names
+  fr: Prénoms
+editor.name:
+  en: Name
+  fr: Nom
+editor.sex:
+  en: Sex
+  fr: Sexe
+editor.occupation:
+  en: Occupation
+  fr: Profession
+editor.birth_date:
+  en: Birth — Date
+  fr: Naissance — date
+editor.birth_place:
+  en: Birth — Place
+  fr: Naissance — lieu
+editor.death_date:
+  en: Death — Date
+  fr: Décès — date
+editor.death_place:
+  en: Death — Place
+  fr: Décès — lieu
+editor.note:
+  en: Note
+  fr: Note
+editor.title:
+  en: Title
+  fr: Titre
+editor.author:
+  en: Author
+  fr: Auteur
+editor.publication:
+  en: Publication
+  fr: Publication
+editor.call_number:
+  en: Call Number
+  fr: Cote
+editor.acts:
+  en: Records
+  fr: Actes
+editor.acts_placeholder:
+  en: Births, marriages, deaths
+  fr: Naissances, mariages, décès
+editor.period:
+  en: Period
+  fr: Période
+editor.period_placeholder:
+  en: from 1793 to 1802
+  fr: de 1793 à 1802
+editor.repository:
+  en: Repository
+  fr: Dépôt
+editor.choose_repository:
+  en: Choose a repository…
+  fr: Choisir un dépôt…
+editor.source_text:
+  en: Source Text
+  fr: Texte de la source
+editor.website:
+  en: Website
+  fr: Site web
+editor.file:
+  en: File
+  fr: Fichier
+editor.file_placeholder:
+  en: Records/record.jpg
+  fr: Actes/acte.jpg
+editor.medium:
+  en: Medium
+  fr: Support
+editor.text:
+  en: Text
+  fr: Texte
+editor.place_updated.one:
+  en: "Place updated (%{n} use)"
+  fr: "Lieu mis à jour (%{n} occurrence)"
+editor.place_updated.other:
+  en: "Place updated (%{n} uses)"
+  fr: "Lieu mis à jour (%{n} occurrences)"
+editor.applied:
+  en: "%{name}: changes applied"
+  fr: "%{name} : modifications appliquées"
+editor.nothing:
+  en: nothing to apply
+  fr: rien à appliquer
+editor.no_raw:
+  en: no raw editor
+  fr: "pas d'éditeur brut"
+editor.wrong_type:
+  en: "the type must stay %{expected} (found %{found})"
+  fr: "le type doit rester %{expected} (trouvé %{found})"
+sex.male:
+  en: Male
+  fr: Homme
+sex.female:
+  en: Female
+  fr: Femme
+sex.other:
+  en: Other
+  fr: Autre
+sex.unknown:
+  en: Unknown
+  fr: Inconnu
+kind.individual:
+  en: Person
+  fr: Individu
+kind.family:
+  en: Family
+  fr: Famille
+kind.source:
+  en: Source
+  fr: Source
+kind.repository:
+  en: Repository
+  fr: Dépôt
+kind.media:
+  en: Media
+  fr: Média
+kind.shared_note:
+  en: Shared Note
+  fr: Note partagée
+kind.submitter:
+  en: Submitter
+  fr: Auteur
+picker.choose_father:
+  en: "Choose the Father of %{name}"
+  fr: "Choisir le père de %{name}"
+picker.choose_mother:
+  en: "Choose the Mother of %{name}"
+  fr: "Choisir la mère de %{name}"
+picker.choose_spouse:
+  en: "Choose a Spouse of %{name}"
+  fr: "Choisir un conjoint de %{name}"
+picker.choose_child:
+  en: "Choose a Child of %{name}"
+  fr: "Choisir un enfant de %{name}"
+picker.choose_sibling:
+  en: "Choose a Sibling of %{name}"
+  fr: "Choisir un frère ou une sœur de %{name}"
+picker.attach_to:
+  en: "Attach “%{name}” To…"
+  fr: "Rattacher « %{name} » à…"
+picker.who:
+  en: Who Is in This Area of the Photo?
+  fr: Qui est sur cette zone de la photo ?
+picker.kinship:
+  en: "Relationship of %{name} With…"
+  fr: "Lien de parenté de %{name} avec…"
+picker.merge_into:
+  en: "Add to “%{name}” the Pages of the Media…"
+  fr: "Ajouter à « %{name} » les pages du média…"
+picker.act_source:
+  en: Enter a Record in the Source…
+  fr: Saisir un acte dans la source…
+picker.relative_added:
+  en: "%{rel} of %{name} added: fill in their details"
+  fr: "%{rel} de %{name} ajouté(e) : complétez sa fiche"
+picker.family_not_found:
+  en: family not found
+  fr: famille introuvable
+picker.child_added:
+  en: "Child added: fill in their details"
+  fr: "Enfant ajouté : complétez sa fiche"
+picker.detached:
+  en: "%{who} detached from %{from}"
+  fr: "%{who} détaché(e) de %{from}"
+picker.media_hint:
+  en: Media title or file…
+  fr: Titre ou fichier du média…
+picker.source_hint:
+  en: Title of the source, or of a new source…
+  fr: "Titre de la source, ou d'une nouvelle source…"
+picker.person_hint:
+  en: "Name, given name… (criteria: né:1850 lieu:troyes)"
+  fr: "Nom, prénom… (critères : né:1850 lieu:troyes)"
+picker.linked_as:
+  en: "%{who} linked as %{rel} of %{name}"
+  fr: "%{who} lié(e) comme %{rel} de %{name}"
+picker.added_child:
+  en: "%{who} added as a child"
+  fr: "%{who} ajouté(e) comme enfant"
+picker.media_attached:
+  en: "Media attached to %{who}"
+  fr: "Média rattaché à %{who}"
+picker.media_not_found:
+  en: media not found
+  fr: média introuvable
+picker.added_to_media.one:
+  en: "“%{who}” added to the media (%{n} page)"
+  fr: "« %{who} » ajouté au média (%{n} page)"
+picker.added_to_media.other:
+  en: "“%{who}” added to the media (%{n} pages)"
+  fr: "« %{who} » ajouté au média (%{n} pages)"
+picker.tagged:
+  en: "%{who} tagged in the photo"
+  fr: "%{who} identifié(e) sur la photo"
+picker.no_result:
+  en: No results
+  fr: Aucun résultat
+picker.pages:
+  en: "%{n} pages"
+  fr: "%{n} pages"
+picker.new_source:
+  en: + New Source
+  fr: + Nouvelle source
+picker.keys:
+  en: "Enter: first result · Esc: close"
+  fr: "Entrée : premier résultat · Échap : fermer"
+event_dialog.other:
+  en: Other…
+  fr: Autre…
+event_dialog.with:
+  en: "With %{name}"
+  fr: "Avec %{name}"
+event_dialog.no_spouse:
+  en: Union with no known spouse
+  fr: Union sans conjoint connu
+event_dialog.town:
+  en: Town…
+  fr: Commune…
+event_dialog.choose_type:
+  en: Choose the event type
+  fr: "Choisissez le type d'événement"
+event_dialog.choose_union:
+  en: Choose the union
+  fr: "Choisissez l'union"
+event_dialog.edited:
+  en: "%{label} of %{who} edited"
+  fr: "%{label} de %{who} modifié(e)"
+event_dialog.added:
+  en: "%{label} added to %{who}"
+  fr: "%{label} ajouté(e) à %{who}"
+event_dialog.deleted:
+  en: "%{label} removed from %{who} (Undo to go back)"
+  fr: "%{label} retiré(e) de %{who} (Annuler pour revenir en arrière)"
+event_dialog.new:
+  en: New Event
+  fr: Nouvel événement
+event_dialog.relatives_title:
+  en: "Relatives · %{name}"
+  fr: "Proches · %{name}"
+event_dialog.education:
+  en: School or Degree
+  fr: Établissement ou diplôme
+event_dialog.event_type:
+  en: Event Type
+  fr: "Type d'événement"
+event_dialog.type:
+  en: Type
+  fr: Type
+event_dialog.choose:
+  en: Choose…
+  fr: Choisir…
+event_dialog.union:
+  en: Union
+  fr: Union
+event_dialog.date:
+  en: Date
+  fr: Date
+event_dialog.none:
+  en: None
+  fr: Aucune
+event_dialog.search:
+  en: Search…
+  fr: Rechercher…
+event_dialog.new_person:
+  en: New Person
+  fr: Nouvelle personne
+event_dialog.existing_person:
+  en: Existing Person…
+  fr: Personne existante…
+event_dialog.child_with:
+  en: "Child with %{name}"
+  fr: "Enfant avec %{name}"
+event_dialog.child_unknown:
+  en: Child (unknown spouse)
+  fr: Enfant (conjoint inconnu)
+common.delete:
+  en: Delete
+  fr: Supprimer
