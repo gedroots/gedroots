@@ -24,6 +24,8 @@ actions!(
         SaveFile,
         SaveFileAs,
         ExportGedzip,
+        ExportGedcom551,
+        ExportGeneanet,
         Quit,
         // Edit
         Undo,
@@ -339,7 +341,14 @@ fn model_with(recents: &[std::path::PathBuf]) -> Vec<(SharedString, Vec<Item>)> 
         a(t!("cmd.save"), SaveFile),
         a(t!("cmd.save_as"), SaveFileAs),
         Sep,
-        a(t!("cmd.export_gedzip"), ExportGedzip),
+        Sub(
+            t!("menu.export").into(),
+            vec![
+                a(t!("cmd.export_gedzip"), ExportGedzip),
+                a(t!("cmd.export_gedcom551"), ExportGedcom551),
+                a(t!("cmd.export_geneanet"), ExportGeneanet),
+            ],
+        ),
     ]);
     if !mac {
         file.extend([Sep, a(t!("cmd.file_settings"), OpenFileSettings), Sep, a(t!("cmd.quit"), Quit)]);
@@ -600,7 +609,7 @@ mod tests {
         let entries = palette_entries();
         assert!(entries.iter().any(|e| e.path == "Person › Add Relative › Father"));
         assert!(entries.iter().any(|e| e.path == "Source › Enter Record"));
-        assert!(entries.iter().any(|e| e.path == "File › Export as GEDZIP"));
+        assert!(entries.iter().any(|e| e.path == "File › Export › GEDCOM for Geneanet"));
         for (i, e) in entries.iter().enumerate() {
             assert!(
                 !entries[i + 1..].iter().any(|o| o.action.partial_eq(e.action.as_ref())),

@@ -35,6 +35,7 @@ pub mod date;
 pub mod document;
 pub mod events;
 pub mod gazetteer;
+pub mod gedcom551;
 pub mod gedzip;
 pub mod geo;
 pub mod import;

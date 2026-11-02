@@ -7,6 +7,7 @@
 use super::relatives::PickPurpose;
 use super::tree::TreeMode;
 use super::*;
+use gedcom::gedcom551::Flavor;
 use gpui_kit::component::command::{Command, CommandItem, CommandState};
 
 /// Déclare un gestionnaire d'action sur l'élément racine.
@@ -60,6 +61,8 @@ impl Workspace {
         let d = on!(d, cx, OpenFileSettings, |this, w, cx| this.open_settings(w, cx));
         let d = on!(d, cx, SaveFileAs, |this, w, cx| this.save_file_as(w, cx));
         let d = on!(d, cx, ExportGedzip, |this, w, cx| this.export_gedzip(w, cx));
+        let d = on!(d, cx, ExportGedcom551, |this, w, cx| this.export_gedcom(Flavor::Standard, w, cx));
+        let d = on!(d, cx, ExportGeneanet, |this, w, cx| this.export_gedcom(Flavor::Geneanet, w, cx));
         let d = on!(d, cx, EnterRecord, |this, w, cx| this.enter_act(w, cx));
         let d = on!(d, cx, FocusSearch, |this, w, cx| this.filter.update(cx, |f, cx| f.focus(w, cx)));
         let d = on!(d, cx, ClearSearch, |this, w, cx| this.set_query(String::new(), w, cx));
