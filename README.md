@@ -163,7 +163,7 @@ Compile GEDRoots en mode release, construit `GEDRoots.app` (icône, nom dans la 
 le Dock, pas de Terminal) et la copie dans `/Applications`. Les fichiers `.ged` s'ouvrent ensuite
 d'un double-clic ou par « Ouvrir avec » dans le Finder. Sans `--install`, l'app reste dans
 `target/release/GEDRoots.app` ; avec `--dmg`, une image disque `GEDRoots.dmg` est créée à côté
-(c'est ce que produit la CI sur `main`). Pour un autre cargo :
+(utile pour la CI). Pour un autre cargo :
 `CARGO="mise exec rust@stable -- cargo" packaging/macos/bundle.sh --install`.
 
 L'app est signée « ad hoc », ce qui suffit sur le Mac qui l'a compilée. Une app téléchargée
