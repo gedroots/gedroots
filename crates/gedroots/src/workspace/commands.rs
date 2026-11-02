@@ -76,6 +76,12 @@ impl Workspace {
             }
         });
         let d = on!(d, cx, NewMedia, |this, w, cx| this.create_in(View::Media, w, cx));
+        let d = on!(d, cx, NewRepository, |this, w, cx| this.create_in(View::Repositories, w, cx));
+        let d = on!(d, cx, NewNote, |this, w, cx| this.create_in(View::Notes, w, cx));
+        let d = on!(d, cx, ToggleSidebar, |this, w, cx| {
+            this.sidebar = !this.sidebar;
+            cx.notify();
+        });
 
         // Vues.
         let d = on!(d, cx, ShowIndividuals, |this, w, cx| this.show_view(View::Individuals, w, cx));
@@ -96,7 +102,6 @@ impl Workspace {
         d.when(self.history.can_back(), |d| on!(d, cx, GoBack, |this, w, cx| this.go_back(w, cx)))
             .when(self.history.can_forward(), |d| on!(d, cx, GoForward, |this, w, cx| this.go_forward(w, cx)))
             .when(can_undo, |d| on!(d, cx, Undo, |this, w, cx| this.undo(&Undo, w, cx)))
-            .when(self.view.kind().is_some(), |d| on!(d, cx, NewRecord, |this, w, cx| this.create_record(w, cx)))
             .when(sel.is_some(), |d| {
                 on!(d, cx, DeleteRecord, |this, w, cx| {
                     this.tab = CenterTab::Form;
@@ -107,6 +112,13 @@ impl Workspace {
                 on!(d, cx, CopyId, |this, w, cx| {
                     if let Some(x) = this.selected.clone() {
                         this.copy_id(&x, cx)
+                    }
+                })
+            })
+            .when(sel.is_some(), |d| {
+                on!(d, cx, CopyName, |this, w, cx| {
+                    if let Some(x) = this.selected.clone() {
+                        this.copy_name(&x, cx)
                     }
                 })
             })
@@ -260,14 +272,26 @@ impl Workspace {
     }
 
     /// Change de liste, en quittant la saisie d'acte si besoin.
-    fn show_view(&mut self, view: View, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn show_view(&mut self, view: View, window: &mut Window, cx: &mut Context<Self>) {
         self.act_editor = None;
         self.set_view(view, window, cx);
         cx.notify();
     }
 
     fn show_tab(&mut self, tab: CenterTab, cx: &mut Context<Self>) {
+        if tab == CenterTab::Raw {
+            self.raw_open = true;
+        }
         self.tab = tab;
+        cx.notify();
+    }
+
+    /// Referme l'onglet GEDCOM brut et revient à la première vue de la liste.
+    pub(super) fn close_raw(&mut self, cx: &mut Context<Self>) {
+        self.raw_open = false;
+        if self.tab == CenterTab::Raw {
+            self.tab = CenterTab::Form;
+        }
         cx.notify();
     }
 

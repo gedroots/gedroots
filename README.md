@@ -11,19 +11,24 @@ et suit le [design system GEDRoots](design.md) (fonds neutres et touches de viol
 
 ## Fonctionnalités
 
+- **Navigation** : une barre latérale à quatre zones (Individus, Sources, Lieux, Médias), avec
+  leur effectif ; elle se masque avec `⌃⌘S` (`Ctrl+Alt+S`). Dépôts et notes s'ouvrent depuis les
+  fiches qui les citent, la recherche ou le menu Affichage ; Qualité et Statistiques aussi.
 - **Tout est dans la barre de menus** (Fichier, Édition, Individu, Source, Média,
-  Affichage, Aide) : pas de barre d'outils, l'écran reste aux données. Menus natifs
+  Affichage, Aide), une seule fois par commande : pas de barre d'outils, l'écran reste aux données. Menus natifs
   sous macOS ; sous Linux et Windows, les mêmes menus dans le haut de la fenêtre. Les commandes
   qui ne s'appliquent pas à la sélection sont grisées (macOS) ou sans effet.
 - **Palette de commandes** (`⌘⇧P` / `Ctrl+Maj+P`) : toutes les commandes applicables, recherche
-  sans accents. Raccourcis : `⌘1`…`⌘8` listes et pages, `⌥⌘1`…`⌥⌘3` arbre/fiche/GEDCOM, `⌘F`
-  rechercher, `⌘⇧N` nouvel élément, `⌘⇧H` individu racine, `⌘=` / `⌘-` générations de l'éventail,
+  sans accents. Raccourcis : `⌘1`…`⌘4` zones de la barre latérale, `⌘5` dépôts, `⌘6` notes,
+  `⌘7` qualité, `⌘8` statistiques, `⌥⌘1`…`⌥⌘3` arbre/fiche/GEDCOM (ce dernier s'ouvre en onglet
+  qu'on referme), `⌘F` rechercher, `⌘⇧N` nouvel individu, `⌘⇧H` individu racine, `⌘=` / `⌘-` générations de l'éventail,
   `⌘⇧S` enregistrer sous.
 - **Clic droit partout** : lignes des listes (et le fond, pour créer), cases des arbres et de
   l'éventail, cases vides (nouvelle personne ou personne existante), événements, proches,
   liens et vignettes du panneau de détail, repères et fond de la carte
   (« Placer ce lieu ici »). Le menu agit sur l'élément cliqué sans le sélectionner, avec les
-  mêmes commandes que la barre de menus.
+  mêmes commandes et les mêmes libellés que la barre de menus ; seules les actions sur une
+  partie de fiche (un événement, un média rattaché, un membre) n'existent qu'au clic droit.
 - **Événements modifiables** : un clic sur un événement (individu ou union) le rouvre dans
   la même fenêtre que l'ajout (type, précision, date, lieu suggéré, source) ; on peut aussi le
   supprimer. Notes, âge, médias et autres citations de l'événement sont conservés.
@@ -140,8 +145,8 @@ et suit le [design system GEDRoots](design.md) (fonds neutres et touches de viol
 - Créer / supprimer un enregistrement (avec confirmation ; un lieu peut être retiré de tous
   les événements), annuler (50 niveaux), date de modification `CHAN`
   mise à jour comme dans Ancestris.
-- **Qualité des données** (`⌘8` / `Ctrl+8`, menu Affichage) : une page dans
-  la barre de gauche, avec le nombre d'anomalies à corriger, par catégorie : dates et âges
+- **Qualité des données** (`⌘7` / `Ctrl+7`, menu Affichage) : une page avec les anomalies à
+  corriger, par catégorie : dates et âges
   impossibles, liens familiaux incohérents, structure GEDCOM 7 (balise non permise,
   information obligatoire absente ou en double, date illisible, valeur inconnue, lien
   cassé), éléments vides ou isolés (événements et notes vides, familles sans membre,

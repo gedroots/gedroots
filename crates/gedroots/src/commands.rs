@@ -22,9 +22,9 @@ actions!(
         Quit,
         // Édition
         Undo,
-        NewRecord,
         DeleteRecord,
         CopyId,
+        CopyName,
         FocusSearch,
         ToggleFlagged,
         AddWebLink,
@@ -48,6 +48,8 @@ actions!(
         AddEvent,
         // Source
         NewSource,
+        NewRepository,
+        NewNote,
         EnterRecord,
         // Média
         NewMedia,
@@ -65,6 +67,7 @@ actions!(
         MergeSelectedMedia,
         RenameMediaFiles,
         // Affichage
+        ToggleSidebar,
         GoBack,
         GoForward,
         ShowIndividuals,
@@ -119,7 +122,7 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new(shortcut!("shift-s"), SaveFileAs, WS),
         KeyBinding::new(shortcut!("q"), Quit, None),
         KeyBinding::new(shortcut!("shift-z"), Undo, WS),
-        KeyBinding::new(shortcut!("shift-n"), NewRecord, WS),
+        KeyBinding::new(shortcut!("shift-n"), NewIndividual, WS),
         KeyBinding::new(shortcut!("f"), FocusSearch, WS),
         KeyBinding::new(shortcut!("e"), EnterRecord, WS),
         KeyBinding::new(shortcut!("shift-h"), GoToRoot, WS),
@@ -127,6 +130,7 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new(shortcut!(","), OpenFileSettings, WS),
         KeyBinding::new(shortcut!("["), GoBack, WS),
         KeyBinding::new(shortcut!("]"), GoForward, WS),
+        // Les quatre zones de la barre latérale, puis les listes et pages du menu Affichage.
         KeyBinding::new(shortcut!("1"), ShowIndividuals, WS),
         KeyBinding::new(shortcut!("2"), ShowSources, WS),
         KeyBinding::new(shortcut!("3"), ShowPlaces, WS),
@@ -135,6 +139,8 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new(shortcut!("6"), ShowNotes, WS),
         KeyBinding::new(shortcut!("7"), ShowQuality, WS),
         KeyBinding::new(shortcut!("8"), ShowStats, WS),
+        // Comme le Finder et Mail : ⌃⌘S (Ctrl+Alt+S ailleurs).
+        KeyBinding::new(if cfg!(target_os = "macos") { "ctrl-cmd-s" } else { "ctrl-alt-s" }, ToggleSidebar, WS),
         KeyBinding::new(shortcut!("alt-1"), ShowTree, WS),
         KeyBinding::new(shortcut!("alt-2"), ShowForm, WS),
         KeyBinding::new(shortcut!("alt-3"), ShowRaw, WS),
@@ -145,6 +151,43 @@ pub fn bind_keys(cx: &mut App) {
         // Suggestions de l'éditeur GEDCOM brut à la demande.
         KeyBinding::new("ctrl-space", input::ShowCompletions, Some("Input")),
     ]);
+}
+
+/// Libellés partagés entre la barre de menus et les menus contextuels (clic
+/// droit) : une commande porte le même nom partout où elle apparaît.
+pub mod label {
+    pub const NEW_INDIVIDUAL: &str = "Nouvel individu";
+    pub const NEW_SOURCE: &str = "Nouvelle source";
+    pub const NEW_MEDIA: &str = "Nouveau média";
+    pub const NEW_REPOSITORY: &str = "Nouveau dépôt";
+    pub const NEW_NOTE: &str = "Nouvelle note";
+    pub const ATTACH_FILES: &str = "Rattacher des fichiers…";
+    pub const COPY_ID: &str = "Copier l'ID";
+    pub const COPY_NAME: &str = "Copier le nom";
+    pub const DELETE: &str = "Supprimer l'élément…";
+    pub const ADD_RELATIVE: &str = "Ajouter un proche";
+    pub const LINK_PERSON: &str = "Lier une personne existante";
+    pub const FATHER: &str = "Père";
+    pub const MOTHER: &str = "Mère";
+    pub const SPOUSE: &str = "Conjoint";
+    pub const CHILD: &str = "Enfant";
+    pub const SIBLING: &str = "Frère ou sœur";
+    pub const FATHER_LINK: &str = "Père…";
+    pub const MOTHER_LINK: &str = "Mère…";
+    pub const SPOUSE_LINK: &str = "Conjoint…";
+    pub const CHILD_LINK: &str = "Enfant…";
+    pub const SIBLING_LINK: &str = "Frère ou sœur…";
+    pub const ADD_EVENT: &str = "Ajouter un événement…";
+    pub const SET_ROOT: &str = "Définir comme individu racine";
+    pub const GO_TO_ROOT: &str = "Aller à l'individu racine";
+    pub const CENTER_TREE: &str = "Centrer l'arbre sur la personne";
+    pub const ENTER_ACT: &str = "Saisir un acte…";
+    pub const ATTACH_MEDIA_TO: &str = "Rattacher ce média à…";
+    pub const TAG_PERSON: &str = "Identifier une personne sur la photo";
+    pub const MERGE_WITH_MEDIA: &str = "Fusionner avec un autre média…";
+    pub const MERGE_SELECTED_MEDIA: &str = "Fusionner les médias sélectionnés";
+    pub const ADD_PAGES: &str = "Ajouter des pages…";
+    pub const CLEAR_SEARCH: &str = "Effacer la recherche";
 }
 
 /// Une entrée de menu.
@@ -167,15 +210,7 @@ fn model() -> Vec<(&'static str, Vec<Item>)> {
     let mut menus = Vec::new();
     if mac {
         // Sur macOS, les réglages vont à leur place habituelle : menu de l'application, ⌘,.
-        menus.push((
-            "GEDRoots",
-            vec![
-                a("Réglages du fichier…", OpenFileSettings),
-                a("Toutes les commandes…", CommandPalette),
-                Sep,
-                a("Quitter GEDRoots", Quit),
-            ],
-        ));
+        menus.push(("GEDRoots", vec![a("Réglages du fichier…", OpenFileSettings), Sep, a("Quitter GEDRoots", Quit)]));
     }
     let mut file = vec![
         a("Nouveau fichier", NewFile),
@@ -199,11 +234,12 @@ fn model() -> Vec<(&'static str, Vec<Item>)> {
             Item::Os("Coller", Box::new(input::Paste), OsAction::Paste),
             Item::Os("Tout sélectionner", Box::new(input::SelectAll), OsAction::SelectAll),
             Sep,
-            a("Nouvel élément dans cette liste", NewRecord),
-            a("Supprimer l'élément…", DeleteRecord),
-            a("Copier l'ID", CopyId),
-            Sep,
+            a(label::ATTACH_FILES, AttachFiles),
             a("Ajouter un lien web…", AddWebLink),
+            Sep,
+            a(label::COPY_NAME, CopyName),
+            a(label::COPY_ID, CopyId),
+            a(label::DELETE, DeleteRecord),
             Sep,
             a("Rechercher", FocusSearch),
         ],
@@ -211,45 +247,53 @@ fn model() -> Vec<(&'static str, Vec<Item>)> {
     menus.push((
         "Individu",
         vec![
-            a("Nouvel individu", NewIndividual),
+            a(label::NEW_INDIVIDUAL, NewIndividual),
             Sep,
             Sub(
-                "Ajouter un proche",
+                label::ADD_RELATIVE,
                 vec![
-                    a("Père", AddFather),
-                    a("Mère", AddMother),
-                    a("Conjoint", AddSpouse),
-                    a("Enfant", AddChild),
-                    a("Frère ou sœur", AddSibling),
+                    a(label::FATHER, AddFather),
+                    a(label::MOTHER, AddMother),
+                    a(label::SPOUSE, AddSpouse),
+                    a(label::CHILD, AddChild),
+                    a(label::SIBLING, AddSibling),
                 ],
             ),
             Sub(
-                "Lier une personne existante",
+                label::LINK_PERSON,
                 vec![
-                    a("Père…", LinkFather),
-                    a("Mère…", LinkMother),
-                    a("Conjoint…", LinkSpouse),
-                    a("Enfant…", LinkChild),
-                    a("Frère ou sœur…", LinkSibling),
+                    a(label::FATHER_LINK, LinkFather),
+                    a(label::MOTHER_LINK, LinkMother),
+                    a(label::SPOUSE_LINK, LinkSpouse),
+                    a(label::CHILD_LINK, LinkChild),
+                    a(label::SIBLING_LINK, LinkSibling),
                 ],
             ),
-            a("Ajouter un événement…", AddEvent),
-            a("Rattacher des photos ou documents…", AttachFiles),
+            a(label::ADD_EVENT, AddEvent),
             a("Lier un média existant…", LinkMedia),
             a("Recadrer un média existant…", CropMedia),
             Sep,
-            a("Définir comme individu racine", SetRoot),
-            a("Aller à l'individu racine", GoToRoot),
+            a(label::SET_ROOT, SetRoot),
+            a(label::GO_TO_ROOT, GoToRoot),
             a("Lien de parenté avec…", KinshipWith),
         ],
     ));
-    menus.push(("Source", vec![a("Saisir un acte…", EnterRecord), Sep, a("Nouvelle source", NewSource)]));
+    // Dépôts et notes partagées hors de la barre latérale : on les crée depuis le menu Source.
+    menus.push((
+        "Source",
+        vec![
+            a(label::ENTER_ACT, EnterRecord),
+            Sep,
+            a(label::NEW_SOURCE, NewSource),
+            a(label::NEW_REPOSITORY, NewRepository),
+            a(label::NEW_NOTE, NewNote),
+        ],
+    ));
     menus.push((
         "Média",
         vec![
-            a("Nouveau média", NewMedia),
-            a("Rattacher des fichiers à l'élément…", AttachFiles),
-            a("Rattacher ce média à…", AttachMediaTo),
+            a(label::NEW_MEDIA, NewMedia),
+            a(label::ATTACH_MEDIA_TO, AttachMediaTo),
             Sep,
             Sub(
                 "Pages",
@@ -257,7 +301,7 @@ fn model() -> Vec<(&'static str, Vec<Item>)> {
                     a("Page précédente", PreviousPage),
                     a("Page suivante", NextPage),
                     Sep,
-                    a("Ajouter des pages…", AddPages),
+                    a(label::ADD_PAGES, AddPages),
                     a("Déplacer la page vers la gauche", MovePageLeft),
                     a("Déplacer la page vers la droite", MovePageRight),
                     Sep,
@@ -265,11 +309,11 @@ fn model() -> Vec<(&'static str, Vec<Item>)> {
                     a("Retirer cette page du média", RemovePage),
                 ],
             ),
-            a("Fusionner avec un autre média…", MergeWithMedia),
-            a("Fusionner les médias sélectionnés", MergeSelectedMedia),
+            a(label::MERGE_WITH_MEDIA, MergeWithMedia),
+            a(label::MERGE_SELECTED_MEDIA, MergeSelectedMedia),
             a("Renommer selon le modèle…", RenameMediaFiles),
             Sep,
-            a("Identifier une personne sur la photo", TagPerson),
+            a(label::TAG_PERSON, TagPerson),
             Sep,
             a("Fichiers à rattacher", ShowUnreferencedFiles),
         ],
@@ -286,6 +330,7 @@ fn model() -> Vec<(&'static str, Vec<Item>)> {
             a("Médias", ShowMedia),
             a("Dépôts", ShowRepositories),
             a("Notes", ShowNotes),
+            Sep,
             a("Qualité des données", ShowQuality),
             a("Statistiques", ShowStats),
             Sep,
@@ -293,6 +338,7 @@ fn model() -> Vec<(&'static str, Vec<Item>)> {
             a("Fiche", ShowForm),
             a("GEDCOM brut", ShowRaw),
             Sep,
+            a("Masquer ou afficher la barre latérale", ToggleSidebar),
             a("Événements des proches", ToggleRelativeEvents),
             Sep,
             Sub(
@@ -301,7 +347,7 @@ fn model() -> Vec<(&'static str, Vec<Item>)> {
                     a("Arbre libre", TreeChart),
                     a("Éventail", TreeFan),
                     Sep,
-                    a("Centrer sur la personne", CenterTree),
+                    a(label::CENTER_TREE, CenterTree),
                     Sep,
                     a("Plus de générations", MoreGenerations),
                     a("Moins de générations", FewerGenerations),
@@ -321,11 +367,9 @@ fn model() -> Vec<(&'static str, Vec<Item>)> {
                     Sep,
                     a("Éléments signalés seulement", ToggleFlagged),
                     a("Anomalies masquées", ToggleIgnoredIssues),
-                    a("Effacer la recherche", ClearSearch),
+                    a(label::CLEAR_SEARCH, ClearSearch),
                 ],
             ),
-            Sep,
-            a("Toutes les commandes…", CommandPalette),
         ],
     ));
     menus.push((
@@ -388,16 +432,39 @@ pub fn palette_entries() -> Vec<PaletteEntry> {
     }
     let mut out = Vec::new();
     for (menu, items) in model() {
-        if menu != "GEDRoots" {
-            walk(menu, items, &mut out);
-        }
+        walk(menu, items, &mut out);
     }
     out
 }
 
 #[cfg(test)]
 mod tests {
-    use super::palette_entries;
+    use super::{Item, model, palette_entries};
+    use gpui_kit::Action;
+
+    /// Une commande n'a qu'une place dans la barre de menus.
+    #[test]
+    fn menus_have_every_command_once() {
+        fn walk(path: &str, items: Vec<Item>, seen: &mut Vec<(String, Box<dyn Action>)>) {
+            for i in items {
+                match i {
+                    Item::Action(name, action) => {
+                        let here = format!("{path} › {name}");
+                        if let Some((other, _)) = seen.iter().find(|(_, a)| a.partial_eq(action.as_ref())) {
+                            panic!("« {here} » double « {other} »");
+                        }
+                        seen.push((here, action));
+                    }
+                    Item::Sub(name, items) => walk(&format!("{path} › {name}"), items, seen),
+                    Item::Os(..) | Item::Separator => {}
+                }
+            }
+        }
+        let mut seen = Vec::new();
+        for (menu, items) in model() {
+            walk(menu, items, &mut seen);
+        }
+    }
 
     #[test]
     fn palette_has_every_command_once() {
