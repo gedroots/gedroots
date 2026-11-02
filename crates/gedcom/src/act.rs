@@ -1538,7 +1538,7 @@ fn cites(n: &Node, ptr: &str) -> bool {
 }
 
 /// Clé de l'acte auquel appartient une citation.
-fn key_of(cite: &Node) -> ActKey {
+pub(crate) fn key_of(cite: &Node) -> ActKey {
     ActKey {
         page: cite.child_val("PAGE").unwrap_or("").trim().to_string(),
         date: cite.path_val(&["DATA", "DATE"]).unwrap_or("").trim().to_string(),

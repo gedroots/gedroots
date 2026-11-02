@@ -52,9 +52,7 @@ actions!(
         GoToRoot,
         SearchAncestors,
         SearchDescendants,
-        AttachFiles,
-        LinkMedia,
-        CropMedia,
+        MediaGallery,
         AddEvent,
         // Source
         NewSource,
@@ -143,6 +141,7 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new(shortcut!("shift-n"), NewIndividual, WS),
         KeyBinding::new(shortcut!("f"), FocusSearch, WS),
         KeyBinding::new(shortcut!("e"), EnterRecord, WS),
+        KeyBinding::new(shortcut!("shift-m"), MediaGallery, WS),
         KeyBinding::new(shortcut!("shift-h"), GoToRoot, WS),
         KeyBinding::new(shortcut!("shift-p"), CommandPalette, WS),
         KeyBinding::new(shortcut!(","), OpenFileSettings, WS),
@@ -193,8 +192,8 @@ pub mod label {
     pub fn new_note() -> SharedString {
         t!("cmd.new_note").into()
     }
-    pub fn attach_files() -> SharedString {
-        t!("cmd.attach_files").into()
+    pub fn media_gallery() -> SharedString {
+        t!("cmd.media_gallery").into()
     }
     pub fn copy_id() -> SharedString {
         t!("cmd.copy_id").into()
@@ -357,7 +356,7 @@ fn model_with(recents: &[std::path::PathBuf]) -> Vec<(SharedString, Vec<Item>)> 
             Item::Os(t!("cmd.paste").into(), Box::new(input::Paste), OsAction::Paste),
             Item::Os(t!("cmd.select_all").into(), Box::new(input::SelectAll), OsAction::SelectAll),
             Sep,
-            a(label::attach_files(), AttachFiles),
+            a(label::media_gallery(), MediaGallery),
             a(t!("cmd.add_web_link"), AddWebLink),
             Sep,
             a(label::copy_name(), CopyName),
@@ -393,8 +392,6 @@ fn model_with(recents: &[std::path::PathBuf]) -> Vec<(SharedString, Vec<Item>)> 
                 ],
             ),
             a(label::add_event(), AddEvent),
-            a(t!("cmd.link_media"), LinkMedia),
-            a(t!("cmd.crop_media"), CropMedia),
             Sep,
             a(label::go_to_root(), GoToRoot),
             a(t!("cmd.kinship_with"), KinshipWith),

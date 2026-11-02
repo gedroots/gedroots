@@ -28,6 +28,7 @@ mod chart;
 mod commands;
 mod export;
 mod filters;
+mod gallery;
 mod history;
 mod import;
 mod insights;
@@ -245,6 +246,8 @@ pub struct Workspace {
     /// Boutons « Détacher » dépliés dans le panneau d'un individu.
     /// Fenêtre d'ajout (événement, proches) ouverte par un « + ».
     add_dialog: Option<add::AddDialog>,
+    /// Fenêtre « Médias » (galerie d'un individu, d'un événement, d'une source).
+    gallery: Option<gallery::Gallery>,
     /// Champ de lieu en cours de saisie dans la fiche.
     place_focus: Option<EntityId>,
     /// Lieux réels proposés pendant la saisie d'un lieu.
@@ -339,6 +342,7 @@ impl Workspace {
             locate: None,
             editor_subs: Vec::new(),
             add_dialog: None,
+            gallery: None,
             _subs: vec![sub, map_sub, appearance_sub],
         };
         if let Some(p) = path {
@@ -1922,31 +1926,12 @@ impl Workspace {
         )
     }
 
-    /// « + » des images : nouvelles photos, média existant, ou recadrage d'un média existant.
+    /// « + » des images : la fenêtre Médias (voir, lier, importer).
     fn add_image_button(&self, xref: &str, cx: &mut Context<Self>) -> AnyElement {
-        let (owner, me) = (xref.to_string(), cx.entity().downgrade());
+        let owner = xref.to_string();
         add::plus_button("add-image")
-            .tooltip("Ajouter une image")
-            .dropdown_menu(move |menu, _, _| {
-                let item =
-                    |label: &'static str, f: fn(&mut Workspace, String, &mut Window, &mut Context<Workspace>)| {
-                        let (me, owner) = (me.clone(), owner.clone());
-                        PopupMenuItem::new(label).on_click(move |_, window, cx| {
-                            let (me, owner) = (me.clone(), owner.clone());
-                            // Après la fermeture du menu : le sélecteur prend alors le focus.
-                            window.defer(cx, move |window, cx| {
-                                let _ = me.update(cx, |this, cx| f(this, owner, window, cx));
-                            });
-                        })
-                    };
-                menu.item(item("Ajouter des photos…", |this, x, w, cx| this.choose_files(x, w, cx)))
-                    .item(item("Lier un média existant…", |this, owner, w, cx| {
-                        this.open_picker(relatives::PickPurpose::MediaFor { owner, crop: false }, w, cx)
-                    }))
-                    .item(item("Recadrer un média existant…", |this, owner, w, cx| {
-                        this.open_picker(relatives::PickPurpose::MediaFor { owner, crop: true }, w, cx)
-                    }))
-            })
+            .tooltip("Médias… (⌘⇧M)")
+            .on_click(cx.listener(move |this, _, w, cx| this.open_gallery(GalleryTarget::Record(owner.clone()), w, cx)))
             .into_any_element()
     }
 
@@ -2052,8 +2037,8 @@ impl Workspace {
             .border_l_1()
             .border_color(theme::border())
             .text_sm();
-        // Déposer des photos ou documents n'importe où sur le panneau les rattache.
-        // Sur un média, ils deviennent de nouvelles pages.
+        // Déposer des photos ou documents n'importe où sur le panneau ouvre l'aperçu
+        // d'import de la fenêtre Médias. Sur un média, ils deviennent de nouvelles pages.
         let kind = g.get(key).and_then(|n| RecordKind::from_tag(&n.tag));
         let attachable =
             kind.is_some_and(|k| matches!(k, RecordKind::Individual | RecordKind::Source | RecordKind::Media));
@@ -2064,11 +2049,12 @@ impl Workspace {
                 move |paths: &ExternalPaths, window, cx| {
                     let record = record.clone();
                     let _ = entity.update(cx, |this, cx| {
-                        let files = paths.paths().iter().map(|p| this.file_value(p)).collect();
                         if as_pages {
+                            let files = paths.paths().iter().map(|p| this.file_value(p)).collect();
                             this.add_pages(record, files, window, cx);
                         } else {
-                            this.attach_files(Some(record), files, window, cx);
+                            let files = paths.paths().to_vec();
+                            this.open_gallery_with_files(GalleryTarget::Record(record), files, window, cx);
                         }
                     });
                 },
@@ -2078,10 +2064,7 @@ impl Workspace {
         };
         match self.view {
             View::Individuals => match g.individual(key) {
-                Some(i) => panel
-                    .child(self.render_individual_card(g, i, cx))
-                    .children(self.render_actions(cx))
-                    .into_any_element(),
+                Some(i) => panel.child(self.render_individual_card(g, i, cx)).into_any_element(),
                 None => panel.into_any_element(),
             },
             View::Places => {
@@ -2126,17 +2109,17 @@ impl Workspace {
                     })
                     .unwrap_or_default();
                 let kind = node.and_then(|n| RecordKind::from_tag(&n.tag));
-                let gallery = self.render_gallery(key, kind == Some(RecordKind::Source), false, cx);
+                let is_source = kind == Some(RecordKind::Source);
+                let gallery = self.render_gallery(key, is_source, is_source, cx);
                 let shown_under_photo = kind == Some(RecordKind::Media)
                     && self.tab == CenterTab::Form
                     && self.photo_file(key).is_some()
                     && !refs.is_empty();
-                let actions = self.render_actions(cx);
                 let show_refs = !shown_under_photo && !refs.is_empty();
                 let web = self.render_web_links(key, cx);
                 // Rien d'autre que le titre (déjà dans la fiche) : pas de panneau, la
                 // zone centrale prend la place.
-                if actions.is_none() && gallery.is_none() && outgoing.is_empty() && !show_refs && web.is_none() {
+                if gallery.is_none() && outgoing.is_empty() && !show_refs && web.is_none() {
                     return div().into_any_element();
                 }
                 panel
@@ -2156,7 +2139,6 @@ impl Workspace {
                                 ),
                             ),
                     )
-                    .children(actions)
                     .when_some(gallery, |d, el| d.child(el))
                     .when_some(web, |d, el| d.child(el))
                     .when(!outgoing.is_empty(), |d| d.child(self.render_links("Liens", outgoing, cx)))
@@ -2225,7 +2207,7 @@ impl Workspace {
                 };
                 let key = format!("{ev_owner}-{ix}");
                 let (o1, o2) = (ev_owner.clone(), ev_owner.clone());
-                // Déposer des fichiers sur l'événement : médias de l'événement.
+                // Déposer des fichiers sur l'événement : aperçu d'import de ses médias.
                 let (drop_owner, entity) = (ev_owner.clone(), cx.entity().downgrade());
                 let row = v_flex()
                     .id(SharedString::from(format!("ev-{key}")))
@@ -2240,8 +2222,9 @@ impl Workspace {
                         cx.stop_propagation();
                         let owner = drop_owner.clone();
                         let _ = entity.update(cx, |this, cx| {
-                            let files = paths.paths().iter().map(|p| this.file_value(p)).collect();
-                            this.attach_files_to_event(owner, ix, files, window, cx);
+                            let files = paths.paths().to_vec();
+                            let target = GalleryTarget::Event { owner, ix };
+                            this.open_gallery_with_files(target, files, window, cx);
                         });
                     })
                     .child(
@@ -2758,8 +2741,11 @@ impl Render for Workspace {
                 MouseButton::Navigate(NavigationDirection::Forward),
                 cx.listener(|this, _, w, cx| this.go_forward(w, cx)),
             )
-            .on_key_down(cx.listener(|this, ev: &KeyDownEvent, _, cx| {
+            .on_key_down(cx.listener(|this, ev: &KeyDownEvent, w, cx| {
                 if ev.keystroke.key == "escape" {
+                    if this.gallery_escape(w, cx) {
+                        return;
+                    }
                     if this.photo_draw.is_some() {
                         this.cancel_draw(cx);
                     } else if this.kinship.take().is_some() {
@@ -2774,6 +2760,7 @@ impl Render for Workspace {
             .child(body)
             .children(self.render_picker(cx))
             .children(self.render_kinship(cx))
+            .children(self.render_media_gallery(cx))
             .children(self.render_add_dialog(cx))
             .children(self.render_new_place(cx))
             .children(self.render_palette(cx))
