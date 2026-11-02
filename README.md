@@ -39,9 +39,19 @@ et suit le [design system GEDRoots](design.md) (fonds neutres et touches de viol
   sœurs, conjoints, enfants et petits-enfants survenus de son vivant. Chaque événement affiche ses médias (`2 OBJE`, GEDCOM 7 standard) :
   déposer des fichiers sur l'événement les y rattache, le clic droit permet d'en rattacher,
   de lier un média existant ou d'en détacher.
-- **Individus** : liste avec recherche sans accents ni casse et critères
-  (`né:1800-1850`, `mort:<1900`, `vécu:1870`, `lieu:troyes`, `prof:meunier`, `sexe:f`,
-  `sans:source`, `sans:parents`, `sans:mariage`, `avec:média`, `sosa:1-63`…), filtres rapides (Affichage › Filtrer la liste) ;
+- **Recherche** : un champ par liste, sans accents ni casse. Chaque critère complet devient
+  un jeton (« Né 1800–1850 », « Sans source ») et, pendant la frappe, des propositions tirées
+  du fichier (lieux, noms, professions, types d'actes, dépôts…) affichent leur nombre de
+  résultats (↑ ↓ ↵, Échap). Le compteur de la zone dans la barre latérale donne le nombre de
+  résultats. Critères des individus : `né:1800-1850`, `mort:<1900`, `vécu:1870`, `lieu:troyes`,
+  `nom:guyot`, `prof:meunier`, `sexe:f`, `sans:source`, `sans:parents`, `sans:mariage`,
+  `avec:média`, `sosa:1-63`… ; des sources : `type:naissance`, `dépôt:…`, `sans:média`,
+  `sans:citation` ; des lieux : `dans:aube`, `sans:coordonnées` ; des médias :
+  `événement:naissance`, `pour:guyot`, `format:pdf`, `support:photo` (`MEDI`), `sans:lien`. Une valeur avec des espaces
+  s'écrit entre guillemets. Dans la zone Médias, une ligne de types (Tous · Actes ·
+  Portraits…) reprend les sous-dossiers des réglages, sinon les dossiers des fichiers, sinon
+  le support GEDCOM (`MEDI`) ; les liens web ont leur type.
+- **Individus** : filtres rapides (Affichage › Filtrer la liste) ;
   fiche avec portrait, galerie d'images, événements (dates en français, calendrier républicain compris), sources citées,
   famille (parents, conjoints, enfants) cliquable.
 - **Pas d'onglet Familles** : une union (`FAM`) se gère depuis la fiche de chacun des conjoints
@@ -273,7 +283,7 @@ cache, par défaut `~/Library/Caches/GEDRoots/tiles` ou `~/.cache/gedroots/tiles
 
 | Crate | Rôle |
 | --- | --- |
-| [`crates/gedcom`](crates/gedcom) | Lecture/écriture GEDCOM 7 sans perte, vues typées (individus, familles, sources, lieux, médias), recadrage `CROP` (`crop.rs`), médias multipages (`multipage.rs`), liens web (`weblink.rs`), assistant d'import (`import.rs`), préparation de l'export GEDZIP (`gedzip.rs`), formulaires d'édition, dates, coordonnées (`geo.rs`), outils d'analyse (`analysis/`), contrôles de la page Qualité (`quality.rs`), recherche (`search.rs`), ajout/liaison de proches et médias (`relations.rs`), descendance (`pedigree.rs`) et actes des sources (`act.rs`). Sans dépendance. |
+| [`crates/gedcom`](crates/gedcom) | Lecture/écriture GEDCOM 7 sans perte, vues typées (individus, familles, sources, lieux, médias), recadrage `CROP` (`crop.rs`), médias multipages (`multipage.rs`), liens web (`weblink.rs`), assistant d'import (`import.rs`), préparation de l'export GEDZIP (`gedzip.rs`), formulaires d'édition, dates, coordonnées (`geo.rs`), outils d'analyse (`analysis/`), contrôles de la page Qualité (`quality.rs`), recherche (`search.rs`, `query.rs`), ajout/liaison de proches et médias (`relations.rs`), descendance (`pedigree.rs`) et actes des sources (`act.rs`). Sans dépendance. |
 | [`crates/gedroots`](crates/gedroots) | Application GPUI : `commands.rs` (toutes les commandes, raccourcis et menus), `workspace.rs` (fenêtre et vues) et `workspace/` (`commands.rs` commandes et palette, `tree.rs` arbres, `relatives.rs` proches/sélecteur/médias, `add.rs` fenêtres d'ajout et de modification d'événement, `menus.rs` menus du clic droit, `photo.rs` recadrage et personnes sur les photos, `pages.rs` médias multipages et fusion, `weblinks.rs` liens web, `import.rs` assistant d'import, `export.rs` export GEDZIP, `filters.rs` filtres rapides, `quality.rs` page Qualité, `insights.rs` page Statistiques et lien de parenté), `editor.rs` (éditeurs visuel et brut), `act_editor.rs` (éditeur d'acte), `gedzip.rs` (écriture de l'archive `.gdz`), `map.rs` (carte des lieux), `theme.rs` (palette de la maquette). |
 
 ## Tests

@@ -8,6 +8,7 @@ use crate::images::picture;
 use crate::map::{MapEvent, MapView};
 use crate::theme;
 use gedcom::analysis::timeline::{self, EntryKind};
+use gedcom::query::Scope;
 use gedcom::*;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants};
@@ -87,6 +88,17 @@ impl View {
     /// Pages sans fiche (Qualité, Statistiques).
     fn page(self) -> Option<View> {
         matches!(self, View::Quality | View::Stats).then_some(self)
+    }
+
+    /// Zone de recherche par critères (les autres listes filtrent le texte).
+    fn scope(self) -> Option<Scope> {
+        Some(match self {
+            View::Individuals => Scope::Individuals,
+            View::Sources => Scope::Sources,
+            View::Places => Scope::Places,
+            View::Media => Scope::Media,
+            _ => return None,
+        })
     }
 
     fn kind(self) -> Option<RecordKind> {
@@ -190,8 +202,17 @@ pub struct Workspace {
     media_files: Rc<Vec<String>>,
     /// Suppression en attente de confirmation (clé de l'élément).
     pending_delete: Option<String>,
-    /// Aide de la recherche avancée dépliée.
-    search_help: bool,
+    /// Recherche : types et contexte des médias, recalculés quand le fichier change.
+    media_index: Option<Rc<MediaIndex>>,
+    /// Type choisi dans la barre des types de la zone Médias (`None` : tous).
+    media_type: Option<String>,
+    /// Propositions sous le champ de recherche, avec leur nombre de résultats.
+    suggestions: Vec<(gedcom::query::Suggestion, usize)>,
+    suggest_sel: usize,
+    /// Propositions refermées (Échap) jusqu'à la prochaine frappe.
+    suggest_closed: bool,
+    /// Le champ de recherche avait le focus au dernier rendu.
+    search_focused: bool,
     /// Saisie guidée d'un acte en cours (remplace liste, fiche et détail).
     act_editor: Option<(Entity<ActEditor>, Subscription)>,
     /// Actes de la source affichée (relus à chaque rafraîchissement de la fiche).
@@ -239,10 +260,9 @@ pub struct Workspace {
 impl Workspace {
     pub fn new(path: Option<PathBuf>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let filter = cx.new(|cx| InputState::new(window, cx).placeholder("Rechercher un nom, un lieu…"));
-        let sub = cx.subscribe_in(&filter, window, |this, _, ev: &InputEvent, _, cx| {
+        let sub = cx.subscribe_in(&filter, window, |this, _, ev: &InputEvent, window, cx| {
             if matches!(ev, InputEvent::Change) {
-                this.build_rows(cx);
-                cx.notify();
+                this.on_search_changed(window, cx);
             }
         });
         let map = cx.new(|_| MapView::new());
@@ -269,7 +289,12 @@ impl Workspace {
             picker: None,
             media_files: Rc::new(Vec::new()),
             pending_delete: None,
-            search_help: false,
+            media_index: None,
+            media_type: None,
+            suggestions: Vec::new(),
+            suggest_sel: 0,
+            suggest_closed: false,
+            search_focused: false,
             act_editor: None,
             source_acts: Vec::new(),
             palette: None,
@@ -494,7 +519,17 @@ impl Workspace {
         self.raw_open = false;
         self.selected = None;
         self.editor = None;
-        self.filter.update(cx, |f, cx| f.set_value("", window, cx));
+        let placeholder = match view {
+            View::Sources => "Rechercher une source, un type d'acte…",
+            View::Places => "Rechercher un lieu, un département…",
+            View::Media => "Rechercher un média, une personne…",
+            _ => "Rechercher un nom, un lieu…",
+        };
+        self.filter.update(cx, |f, cx| {
+            f.set_value("", window, cx);
+            f.set_placeholder(placeholder, window, cx);
+        });
+        self.suggestions.clear();
         self.tab = match view {
             View::Individuals => CenterTab::Tree,
             View::Places => CenterTab::Map,
@@ -910,6 +945,7 @@ impl Workspace {
     /// Le fichier a peut-être changé : relance les contrôles et reconstruit la liste.
     fn rebuild_rows(&mut self, cx: &mut Context<Self>) {
         self.quality.stale = true;
+        self.media_index = None;
         self.refresh_quality();
         self.build_rows(cx);
     }
@@ -934,6 +970,9 @@ impl Workspace {
             };
             self.rows = Rc::new(vec![row]);
             return;
+        }
+        if self.view == View::Media {
+            self.ensure_media_index();
         }
         let Some(doc) = &self.doc else {
             self.rows = Rc::new(Vec::new());
@@ -1063,16 +1102,12 @@ impl Workspace {
         if self.only_flagged {
             rows.retain(|r| r.flagged);
         }
-        if self.view == View::Individuals {
-            // Recherche avec critères (né:, lieu:, sexe:, sans:source…), voir gedcom::search.
-            let query = IndividualQuery::parse(self.filter.read(cx).value().as_ref());
-            if !query.is_empty() {
-                let hits: std::collections::HashSet<String> = g
-                    .records_of(RecordKind::Individual)
-                    .map(Individual::new)
-                    .filter(|i| query.matches(g, i))
-                    .map(|i| i.xref().to_string())
-                    .collect();
+        if let Some(scope) = self.view.scope() {
+            // Recherche avec critères (né:, lieu:, type:, dans:…), voir gedcom::query.
+            let query = Self::committed_query(&self.filter.read(cx).value());
+            let media_type = self.active_media_type();
+            if !query.trim().is_empty() || media_type.is_some() {
+                let hits = g.search(scope, &query, self.media_index.as_deref(), media_type.as_deref());
                 rows.retain(|r| hits.contains(&r.key));
             }
         } else if !q.is_empty() {
@@ -1309,6 +1344,8 @@ impl Workspace {
     /// lance aucune action ; les commandes sont dans les menus.
     fn render_sidebar(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let doc = self.doc.as_ref();
+        // Zone active filtrée : son compteur donne le nombre de résultats.
+        let filtered = self.is_filtered(cx);
         v_flex()
             .w(px(184.))
             .flex_none()
@@ -1319,11 +1356,12 @@ impl Workspace {
             .border_r_1()
             .border_color(theme::border())
             .children(View::SIDEBAR.into_iter().map(|v| {
+                let active = v == self.view;
                 let n = doc.map(|d| match v.kind() {
+                    _ if active && filtered => self.rows.len(),
                     Some(k) => d.ged.count(k),
                     None => d.ged.places().len(),
                 });
-                let active = v == self.view;
                 h_flex()
                     .id(SharedString::from(format!("zone-{}", v.label())))
                     .px_2()
@@ -1354,21 +1392,16 @@ impl Workspace {
         let menu_row = self.menu_row.clone();
         let flag = self.flag_label();
         let only = self.only_flagged;
-        // Le nom de la liste et son total sont dans la barre de gauche : ici, seulement
-        // le nombre de résultats quand une recherche ou un filtre est actif.
-        let filtered = only || !self.filter.read(cx).value().trim().is_empty();
         v_flex()
             .w(px(300.))
             .flex_none()
+            .relative()
             .bg(theme::bg())
             .border_r_1()
             .border_color(theme::border())
-            .child(div().px_3().pt_3().pb_2().child(Input::new(&self.filter).small().cleanable(true)))
-            .when(filtered, |d| {
-                let n = rows.len();
-                d.child(mono(format!("{n} résultat{}", if n > 1 { "s" } else { "" })).px_3().pb_2())
-            })
-            .when(self.view == View::Individuals, |d| d.child(self.render_quick_filters(cx)))
+            .child(self.render_search_field(cx))
+            .child(self.render_search_notes(cx))
+            .when(self.view == View::Media, |d| d.child(self.render_media_types(cx)))
             // Filtre actif (Affichage › Filtrer la liste) : rappel, cliquable pour le retirer.
             .when(only && !flag.is_empty(), |d| {
                 d.child(h_flex().px_3().pb_2().child(
@@ -1467,6 +1500,8 @@ impl Workspace {
                     // sous les lignes, créer un élément.
                     .with_menu(self.list_menu(cx)),
             )
+            // Propositions de la recherche, par-dessus la liste.
+            .children(self.render_suggestions(cx))
     }
 
     fn render_center(&self, cx: &mut Context<Self>) -> AnyElement {
@@ -2647,6 +2682,13 @@ impl Workspace {
 
 impl Render for Workspace {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // Propositions de recherche : visibles tant que le champ a le focus.
+        let focused = self.filter.read(cx).focus_handle(cx).is_focused(window);
+        if focused && !self.search_focused {
+            self.suggest_closed = false;
+            self.refresh_suggestions(cx);
+        }
+        self.search_focused = focused;
         let title = match &self.doc {
             Some(d) => format!(
                 "{}{} — GEDRoots",
