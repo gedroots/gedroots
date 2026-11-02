@@ -17,18 +17,23 @@ Living people are hidden from the agent. Only your computer can reach the server
 
 ## Before you begin
 
-You need an AI agent that supports MCP servers over HTTP, such as [Claude Code](https://claude.com/claude-code). To search online archives, the agent also needs a way to browse the web.
+You need an AI agent that supports MCP servers, such as Claude Code, Codex, Gemini CLI, Claude Desktop, Cursor or VS Code. To search online archives, the agent also needs a way to browse the web.
 
 ## Connect the agent
 
 1. In GEDRoots, select **File › Connect an AI Agent…**.
 2. Turn on **Allow AI agents**.
-3. Click **Copy Command** and run the command once in a terminal. For Claude Code, it looks like this:
+3. Pick your agent in the list. GEDRoots shows the shortest way to connect it:
 
-   ```sh
-   claude mcp add --transport http gedroots http://127.0.0.1:47280/mcp \
-     --header "Authorization: Bearer <token>"
-   ```
+| Agent | How |
+| --- | --- |
+| Claude Code, Gemini CLI | A command to run once **In a terminal**, such as `claude mcp add --transport http gedroots …` |
+| Codex | A block to add to `~/.codex/config.toml` |
+| Claude Desktop | A block for its configuration file. It requires Node.js. |
+| Cursor, VS Code | **Add to Cursor** or **Add to VS Code** installs the server in one click |
+| Other MCP Client | The **Address**, the **Transport** (Streamable HTTP) and the **Header** with the token |
+
+The token is masked on screen; the **Copy** buttons copy the real value. The window shows whether the server is running and when an agent last connected.
 
 The server runs while GEDRoots is open and the setting is on. The setting and its token belong to your computer, not to your `.ged` file.
 
