@@ -72,7 +72,7 @@ fn read<R>(ws: &Ws, cx: &App, f: impl FnOnce(&Workspace, &Gedcom) -> R) -> Optio
 impl Workspace {
     /// Ouvre un enregistrement dans l'onglet voulu.
     fn open_in(&mut self, xref: String, tab: CenterTab, window: &mut Window, cx: &mut Context<Self>) {
-        self.entry_form = None;
+        self.act_editor = None;
         self.goto(xref, window, cx);
         self.tab = tab;
         cx.notify();
@@ -102,6 +102,20 @@ impl Workspace {
 
     pub(super) fn person_menu(&self, xref: &str, from: From, cx: &Context<Self>) -> MenuBuilder {
         person_menu(Self::ws(cx), xref.to_string(), from)
+    }
+
+    /// Menu d'un acte, dans la fiche de sa source.
+    pub(super) fn act_menu(&self, source: &str, key: ActKey, cx: &Context<Self>) -> MenuBuilder {
+        let ws = Self::ws(cx);
+        let source = source.to_string();
+        Rc::new(move |menu, _, _| {
+            let (s1, k1, s2, k2) = (source.clone(), key.clone(), source.clone(), key.clone());
+            menu.item(act(&ws, "Modifier l'acte", move |this, w, cx| {
+                this.open_act(s1.clone(), Some(k1.clone()), w, cx)
+            }))
+            .separator()
+            .item(act(&ws, "Supprimer l'acte", move |this, w, cx| this.delete_act(s2.clone(), k2.clone(), w, cx)))
+        })
     }
 
     /// Menu d'un événement du panneau de détail.
@@ -197,7 +211,7 @@ impl Workspace {
                     m.item(act(&ws, "Aller à l'individu racine", |this, w, cx| this.goto_root(w, cx)))
                 })
                 .when(view == View::Sources, |m| {
-                    m.item(act(&ws, "Saisir un acte…", |this, w, cx| this.open_entry(&EnterRecord, w, cx)))
+                    m.item(act(&ws, "Saisir un acte…", |this, w, cx| this.enter_act(w, cx)))
                 })
                 .when(filtered, |m| {
                     m.separator().item(act(&ws, "Effacer la recherche", |this, w, cx| {
@@ -304,7 +318,7 @@ pub(super) fn person_menu(ws: Ws, x: String, from: From) -> MenuBuilder {
             &ws,
             if in_tree { "Centrer l'arbre ici" } else { "Afficher dans l'arbre" },
             move |this, w, cx| {
-                this.entry_form = None;
+                this.act_editor = None;
                 this.goto(x1.clone(), w, cx);
                 this.center_chart_on(x1.clone(), w, cx)
             },
@@ -418,7 +432,7 @@ fn other_menu(ws: Ws, x: String, kind: RecordKind, from: From) -> MenuBuilder {
                 m.separator()
                     .item(act(&ws, "Saisir un acte…", move |this, w, cx| {
                         this.goto(x2.clone(), w, cx);
-                        this.open_entry(&EnterRecord, w, cx)
+                        this.enter_act(w, cx)
                     }))
                     .item(act(&ws, "Rattacher des photos ou documents…", move |this, w, cx| {
                         this.choose_files(x3.clone(), w, cx)

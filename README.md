@@ -118,16 +118,20 @@ et suit la maquette « Lignée » (thème sombre, barre d'activité, liste, arbr
   « nais » → `BIRT`), individus/familles/sources pour les pointeurs, valeurs énumérées,
   mots-clés et mois des dates (calendrier républicain compris), lieux déjà saisis.
   `Ctrl+Espace` affiche les suggestions à la demande.
-- **Saisie d'acte guidée** (`⌘E` / `Ctrl+E`), à la manière d'*Ancestral Sources* pour
-  Family Historian : on choisit un modèle (naissance, baptême, mariage, décès, inhumation,
-  recensement, registre matricule), la source et son image, puis on saisit les personnes
-  citées. Pour chacune, GEDRoots propose les individus existants qui correspondent (nom,
+- **Actes dans la fiche source** : la fiche d'une source liste ses actes (relus depuis les
+  citations qui la désignent, regroupées par référence `PAGE`) ; « + » ou `⌘E` / `Ctrl+E`
+  ouvre un acte vide, un clic rouvre un acte pour le corriger, clic droit pour le supprimer.
+  « Nouvelle source » s'ouvre directement sur un acte vide. L'éditeur est générique, sans
+  modèles : on choisit n'importe quel événement GEDCOM (ou un type personnalisé), puis on
+  ajoute les personnes avec leur rôle standard (enfant, père, mère, époux, témoin, parrain,
+  déclarant, officiant, voisin…) ; les champs et les liens familiaux découlent du rôle.
+  Pour chaque personne, GEDRoots propose les individus existants qui correspondent (nom,
   âge, et liens déjà connus : « parent de… », « conjoint de… ») ; on peut lier, créer, ou
-  mentionner sans créer. Un seul enregistrement crée les individus, l'événement, les liens
+  mentionner sans créer. L'enregistrement écrit tout de suite l'événement, les liens
   familiaux, les témoins (`ASSO`), les professions et domiciles datés, une naissance estimée
-  d'après l'âge, et toutes les citations avec leur rôle (`EVEN`/`ROLE`). Aperçu du GEDCOM
-  avant d'écrire, et « Enregistrer et acte suivant » pour dépouiller un registre.
-  Les modèles sont des extensions GEDCOM (voir [docs/extensions.md](docs/extensions.md)).
+  d'après l'âge, et toutes les citations avec leur rôle (`EVEN`/`ROLE`), sans aucune
+  extension. Aperçu du GEDCOM avant d'écrire, et « Enregistrer et acte suivant » pour
+  dépouiller un registre (le numéro de la référence avance tout seul).
 - Créer / supprimer un enregistrement (avec confirmation ; un lieu peut être retiré de tous
   les événements), annuler (50 niveaux), date de modification `CHAN`
   mise à jour comme dans Ancestris.
@@ -159,7 +163,7 @@ et suit la maquette « Lignée » (thème sombre, barre d'activité, liste, arbr
 
 ![Éditeur visuel](docs/capture-fiche.png)
 
-![Saisie d'acte](docs/capture-saisie.png)
+![Acte dans la fiche source](docs/capture-saisie.png)
 
 ## Installer
 
@@ -219,8 +223,8 @@ Sous Linux, installer d'abord les dépendances de GPUI :
 
 | Crate | Rôle |
 | --- | --- |
-| [`crates/gedcom`](crates/gedcom) | Lecture/écriture GEDCOM 7 sans perte, vues typées (individus, familles, sources, lieux, médias), recadrage `CROP` (`crop.rs`), médias multipages (`multipage.rs`), liens web (`weblink.rs`) et assistant d'import (`import.rs`), formulaires d'édition, dates, coordonnées (`geo.rs`), outils d'analyse (`analysis/`), contrôles de la page Qualité (`quality.rs`), recherche (`search.rs`), ajout/liaison de proches et médias (`relations.rs`), descendance (`pedigree.rs`), modèles d'actes (`template.rs`) et saisie guidée (`entry.rs`). Sans dépendance. |
-| [`crates/gedroots`](crates/gedroots) | Application GPUI : `commands.rs` (toutes les commandes, raccourcis et menus), `workspace.rs` (fenêtre et vues) et `workspace/` (`commands.rs` commandes et palette, `tree.rs` arbres, `relatives.rs` proches/sélecteur/médias, `add.rs` fenêtres d'ajout et de modification d'événement, `menus.rs` menus du clic droit, `photo.rs` recadrage et personnes sur les photos, `pages.rs` médias multipages et fusion, `weblinks.rs` liens web, `import.rs` assistant d'import, `filters.rs` filtres rapides, `quality.rs` page Qualité, `insights.rs` page Statistiques et lien de parenté), `editor.rs` (éditeurs visuel et brut), `entry_form.rs` (saisie d'acte), `map.rs` (carte des lieux), `theme.rs` (palette de la maquette). |
+| [`crates/gedcom`](crates/gedcom) | Lecture/écriture GEDCOM 7 sans perte, vues typées (individus, familles, sources, lieux, médias), recadrage `CROP` (`crop.rs`), médias multipages (`multipage.rs`), liens web (`weblink.rs`) et assistant d'import (`import.rs`), formulaires d'édition, dates, coordonnées (`geo.rs`), outils d'analyse (`analysis/`), contrôles de la page Qualité (`quality.rs`), recherche (`search.rs`), ajout/liaison de proches et médias (`relations.rs`), descendance (`pedigree.rs`) et actes des sources (`act.rs`). Sans dépendance. |
+| [`crates/gedroots`](crates/gedroots) | Application GPUI : `commands.rs` (toutes les commandes, raccourcis et menus), `workspace.rs` (fenêtre et vues) et `workspace/` (`commands.rs` commandes et palette, `tree.rs` arbres, `relatives.rs` proches/sélecteur/médias, `add.rs` fenêtres d'ajout et de modification d'événement, `menus.rs` menus du clic droit, `photo.rs` recadrage et personnes sur les photos, `pages.rs` médias multipages et fusion, `weblinks.rs` liens web, `import.rs` assistant d'import, `filters.rs` filtres rapides, `quality.rs` page Qualité, `insights.rs` page Statistiques et lien de parenté), `editor.rs` (éditeurs visuel et brut), `act_editor.rs` (éditeur d'acte), `map.rs` (carte des lieux), `theme.rs` (palette de la maquette). |
 
 ## Tests
 
