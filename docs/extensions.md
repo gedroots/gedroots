@@ -11,6 +11,7 @@ l'exige GEDCOM 7 :
 2 TAG _GR_ROOT https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_root
 2 TAG _GR_FILE https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_file
 2 TAG _GR_EVEN https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_even
+2 TAG _GR_MEDIA https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_media
 ```
 
 Les autres logiciels ignorent ces balises sans perte de données.
@@ -61,6 +62,67 @@ cette balise. Elle ne sert qu'à proposer un type pas encore utilisé dans **Ajo
 
 Renommer un type dans les réglages réécrit tous les `TYPE` correspondants (renommer vers un
 type existant les fusionne) ; un type déclaré et inutilisé peut être retiré.
+
+## `_GR_MEDIA`
+
+Rangement des fichiers médias (**Fichier › Réglages du fichier… › Médias**) : le dossier
+des médias, puis des sous-dossiers, chacun avec les événements qu'il reçoit et son modèle
+de nom. Les chemins restent des `FILE` standard, relatifs au dossier du `.ged`.
+
+- **Sous** : `HEAD`, au niveau 1, une seule occurrence.
+- **Valeur** : le dossier des médias, relatif au `.ged` (peut être vide).
+- **Sous-structures** : un `_GR_DIR <sous-dossier>` par sous-dossier, dans l'ordre :
+  - `_GR_TYPES <liste>` : ce que le dossier reçoit, séparé par des virgules — balises
+    d'événements (`BIRT`, `MARR`…), types personnalisés (le `TYPE` d'un `EVEN`), `INDI`
+    (média rattaché directement à un individu : portrait) ou `FAM`. Absent : tout le reste.
+  - `_GR_NAME <modèle>` : nom des fichiers. Absent : le nom d'origine est gardé.
+
+Un média va dans le premier sous-dossier dont les types contiennent le sien ; sans
+sous-dossier qui le reçoive, il reste où il est.
+
+```
+0 HEAD
+1 SCHMA
+2 TAG _GR_MEDIA https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_media
+2 TAG _GR_DIR https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_media
+2 TAG _GR_TYPES https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_media
+2 TAG _GR_NAME https://github.com/antoninguyot/gedroots/blob/main/docs/extensions.md#_gr_media
+1 _GR_MEDIA
+2 _GR_DIR Matricules
+3 _GR_TYPES military service, military discharge
+3 _GR_NAME {sosa:6}_{fratrie}_{nom:simple}_{prenom}_{n}
+2 _GR_DIR Actes
+3 _GR_TYPES BIRT, BAPM, CHR, MARR, DEAT, BURI
+3 _GR_NAME {sosa:6}_{fratrie}_{type:1}_{nom:simple}_{prenom}_{conjoint:simple}_{n}
+2 _GR_DIR Portraits
+3 _GR_TYPES INDI
+3 _GR_NAME {sosa:6}_{nom:simple}_{prenom}
+2 _GR_DIR Divers
+```
+
+Variables du modèle (`/` crée un sous-dossier) :
+
+| Variable | Valeur |
+|---|---|
+| `{type}` | type de l'événement (« Naissance », ou le `TYPE` d'un `EVEN`) |
+| `{date}`, `{annee}`, `{lieu}` | date (AAAA-MM-JJ), année et commune de l'événement |
+| `{nom}`, `{prenom}`, `{prenoms}` | nom, premier prénom, tous les prénoms ; pour un couple, le mari |
+| `{conjoint}` | pour un couple, le nom de l'épouse |
+| `{sosa}`, `{fratrie}` | numéro Sosa-d'Aboville calculé depuis l'individu racine : `58` et `2` pour le 2e enfant du Sosa 58, `B1` pour le 1er enfant de sa 2e union, `2.3` pour un petit-enfant |
+| `{source}`, `{page}`, `{titre}` | titre de la source, cote (`PAGE`), titre du média |
+| `{n}` | numéro de page d'un média à plusieurs fichiers (sinon « p2 », « p3 »… en fin de nom) |
+
+Options : `{sosa:6}` complète un nombre par des zéros, `{type:1}` garde les premières
+lettres (N, M, D…), `{nom:simple}` retire accents, espaces et apostrophes. Une variable
+vide disparaît avec le séparateur qui la précède.
+
+Les variables sont tirées de l'événement qui cite le média, ou une source qui le porte : de
+préférence celui que la source décrit (`DATA.EVEN`) ou que son titre nomme (« Acte de
+naissance… »), plutôt qu'un attribut (profession, résidence) ; à égalité, celui que le
+premier sous-dossier reçoit. À défaut, de la source qui porte le média, puis de la personne ou
+de la famille liée. Un fichier rattaché depuis l'extérieur du dossier du `.ged` y est copié
+sous ce nom ; **Média › Renommer selon le modèle…** déplace les fichiers d'un média existant
+après confirmation.
 
 ## `_GR_FILE`
 

@@ -13,6 +13,7 @@
 //! - [`quality`] : page Qualité des données (cohérence, schéma GEDCOM 7, éléments vides ou inutilisés) ;
 //! - [`import`] : contrôles de l'assistant d'import (balises non standard → GEDCOM 7) ;
 //! - [`custom`] : format des lieux (`HEAD.PLAC.FORM`) et types d'événements personnalisés ;
+//! - [`media_naming`] : dossier et modèle de nom des fichiers médias (`_GR_MEDIA`) ;
 //! - [`settings`] : réglages du fichier (auteur, droits, langue…) dans l'en-tête ;
 //! - [`kinds`] : types des sources (`DATA` / `EVEN`) et des médias (`MEDI`), portrait ;
 //! - [`weblink`] : liens web en GEDCOM 7 standard (`OBJE` dont le `FILE` est une URL) ;
@@ -33,6 +34,7 @@ pub mod events;
 pub mod geo;
 pub mod import;
 pub mod kinds;
+pub mod media_naming;
 pub mod model;
 pub mod multipage;
 pub mod node;
@@ -52,6 +54,9 @@ pub use date::{Calendar, Date, DateKind, Parsed as DateInput, SimpleDate, parse_
 pub use document::{Gedcom, RecordKind};
 pub use events::PersonEvent;
 pub use kinds::{MEDIUMS, SourceContent, medium, medium_label, parse_event_list, set_medium};
+pub use media_naming::{
+    MEDIA_TOKENS, MediaContext, MediaFolder, MediaNaming, Numbering, media_path, media_type_labels,
+};
 pub use model::*;
 pub use multipage::{MediaFile, PAGE_TAG, page_of_link, strip_page_suffix};
 pub use node::Node;
