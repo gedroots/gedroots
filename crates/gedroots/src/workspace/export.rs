@@ -3,7 +3,7 @@
 //!
 //! L'export part du fichier tel qu'il est affiché, modifications non
 //! enregistrées comprises ; le `.ged` et les médias ne sont pas touchés. Les
-//! fichiers introuvables ne bloquent pas l'export : ils sont listés à la fin,
+//! fichiers introuvables ne bloquent pas l'export (leur `FILE` reste tel quel) : ils sont listés à la fin,
 //! chacun menant à son média.
 
 use super::add::AddDialog;
@@ -34,16 +34,16 @@ impl Workspace {
 
     fn write_gedzip(&mut self, dest: PathBuf, window: &mut Window, cx: &mut Context<Self>) {
         let Some(doc) = &self.doc else { return };
-        let mut packed = gedcom::gedzip::pack(&doc.ged);
+        let mut packed = gedcom::gedzip::pack(&doc.ged, &|f| find_file(doc, f).is_some());
         packed.ged.stamp_header();
-        let mut entries = Vec::new();
-        let mut missing = Vec::new();
-        for f in packed.files {
-            match find_file(doc, &f.original) {
-                Some(source) => entries.push(Entry { name: f.name, source }),
-                None => missing.push((f.media.into_iter().next().unwrap_or_default(), f.original)),
-            }
-        }
+        let entries: Vec<Entry> = packed
+            .files
+            .into_iter()
+            // Un fichier disparu entre-temps fait échouer l'écriture, avec son chemin.
+            .map(|f| Entry { source: find_file(doc, &f.original).unwrap_or_else(|| f.original.into()), name: f.name })
+            .collect();
+        let missing: Vec<(String, String)> =
+            packed.missing.into_iter().map(|m| (m.media.into_iter().next().unwrap_or_default(), m.original)).collect();
         // Le dialogue d'enregistrement a déjà demandé s'il fallait remplacer
         // `dest` ; jamais le .ged ouvert ni un fichier qu'on met dans l'archive.
         let same =

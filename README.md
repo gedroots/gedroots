@@ -94,7 +94,8 @@ et suit le [design system GEDRoots](design.md) (fonds neutres et touches de viol
   chapitre 4) avec `gedcom.ged` et les fichiers des médias, pour transmettre l'arbre complet.
   Les chemins relatifs gardent leur dossier (`Actes/…`), les fichiers hors du dossier du .ged
   vont dans `media/`, les `FILE` sont réécrits pour l'archive ; le .ged et les médias ne sont
-  pas modifiés. Les fichiers introuvables sont listés à la fin, chacun menant à son média.
+  pas modifiés. Les fichiers introuvables gardent leur `FILE` et sont listés à la fin, chacun
+  menant à son média.
 - **Réglages du fichier** (⌘ / Ctrl + `,` ; menu GEDRoots sur macOS, Fichier ailleurs) : auteur, e-mail, droits,
   description, langue et individu racine, plus la liste des anomalies masquées (« Réafficher »).
   Tout est rangé dans l'en-tête du .ged en GEDCOM 7 standard (`HEAD.SUBM`, `COPR`, `NOTE`,

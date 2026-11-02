@@ -2,10 +2,11 @@
 //! contient `gedcom.ged` à la racine et chaque fichier local cité par un `FILE`,
 //! sous le nom que donne ce `FILE`.
 //!
-//! [`pack`] ne lit pas le disque : il donne une copie du fichier dont les `FILE`
-//! locaux sont réécrits en chemins relatifs à l'archive, et la liste des fichiers
-//! à y mettre avec leur valeur `FILE` d'origine. L'application retrouve ces
-//! fichiers sur le disque et écrit l'archive. Le fichier ouvert n'est pas modifié.
+//! [`pack`] ne lit pas le disque (l'application lui dit quels fichiers existent) :
+//! il donne une copie du fichier dont les `FILE` locaux sont réécrits en chemins
+//! relatifs à l'archive, la liste des fichiers à y mettre avec leur valeur `FILE`
+//! d'origine, et les fichiers introuvables, dont le `FILE` ne change pas.
+//! L'application écrit l'archive. Le fichier ouvert n'est pas modifié.
 //!
 //! Noms dans l'archive :
 //! - un chemin relatif (`Actes/naissance.jpg`, `./Actes\naissance.jpg`) garde
@@ -38,18 +39,32 @@ pub struct PackedFile {
     pub media: Vec<String>,
 }
 
-/// Copie du fichier prête pour l'archive, et fichiers à y joindre.
+/// Un fichier local introuvable : son `FILE` est gardé tel quel.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MissingFile {
+    /// Valeur `FILE` d'origine.
+    pub original: String,
+    /// Médias qui citent ce fichier.
+    pub media: Vec<String>,
+}
+
+/// Copie du fichier prête pour l'archive, fichiers à y joindre et fichiers introuvables.
 pub struct Packed {
     pub ged: Gedcom,
     pub files: Vec<PackedFile>,
+    pub missing: Vec<MissingFile>,
 }
 
-/// Prépare l'export GEDZIP de `g` (voir le module).
-pub fn pack(g: &Gedcom) -> Packed {
+/// Prépare l'export GEDZIP de `g` (voir le module). `exists` dit si le fichier
+/// d'une valeur `FILE` se trouve sur le disque : un fichier introuvable n'a pas
+/// de place dans l'archive et son `FILE` reste tel quel, pour ne pas perdre le
+/// chemin d'origine ni pointer vers une entrée absente.
+pub fn pack(g: &Gedcom, exists: &dyn Fn(&str) -> bool) -> Packed {
     let mut ged = g.clone();
     let mut files: Vec<PackedFile> = Vec::new();
-    // Valeur `FILE` d'origine → position dans `files`.
-    let mut by_original: HashMap<String, usize> = HashMap::new();
+    let mut missing: Vec<MissingFile> = Vec::new();
+    // Valeur `FILE` d'origine → nom dans l'archive (`None` : introuvable).
+    let mut by_original: HashMap<String, Option<usize>> = HashMap::new();
     let mut used: HashSet<String> = HashSet::new();
     for r in ged.records.iter_mut().filter(|r| r.tag == "OBJE") {
         if !r.children.iter().any(|c| c.tag == "FILE" && is_local(c.val())) {
@@ -62,19 +77,30 @@ pub fn pack(g: &Gedcom) -> Packed {
             if !is_local(&original) {
                 continue;
             }
-            let i = *by_original.entry(original.clone()).or_insert_with(|| {
-                let name = free_name(archive_name(&original), &mut used);
-                files.push(PackedFile { name, original: original.clone(), media: Vec::new() });
-                files.len() - 1
+            let slot = *by_original.entry(original.clone()).or_insert_with(|| {
+                if exists(&original) {
+                    let name = free_name(archive_name(&original), &mut used);
+                    files.push(PackedFile { name, original: original.clone(), media: Vec::new() });
+                    Some(files.len() - 1)
+                } else {
+                    missing.push(MissingFile { original: original.clone(), media: Vec::new() });
+                    None
+                }
             });
-            if !files[i].media.contains(&media) {
-                files[i].media.push(media.clone());
+            let cited = match slot {
+                Some(i) => {
+                    f.value = Some(escape(&files[i].name));
+                    &mut files[i].media
+                }
+                None => &mut missing.iter_mut().find(|m| m.original == original).unwrap().media,
+            };
+            if !cited.contains(&media) {
+                cited.push(media.clone());
             }
-            f.value = Some(escape(&files[i].name));
         }
     }
     ged.reindex();
-    Packed { ged, files }
+    Packed { ged, files, missing }
 }
 
 /// Le `FILE` désigne-t-il un fichier local (et non une adresse web) ?

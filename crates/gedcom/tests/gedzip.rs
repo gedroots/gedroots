@@ -1,5 +1,5 @@
 use gedcom::Gedcom;
-use gedcom::gedzip::{self, PackedFile};
+use gedcom::gedzip::{self, MissingFile, PackedFile};
 
 const GED: &str = "0 HEAD
 1 GEDC
@@ -37,7 +37,7 @@ fn file_of(g: &Gedcom, x: &str) -> Vec<String> {
 #[test]
 fn local_files_get_archive_names() {
     let g = Gedcom::parse(GED).unwrap();
-    let p = gedzip::pack(&g);
+    let p = gedzip::pack(&g, &|_| true);
     let names: Vec<(&str, &str)> = p.files.iter().map(|f| (f.original.as_str(), f.name.as_str())).collect();
     assert_eq!(
         names,
@@ -64,7 +64,7 @@ fn local_files_get_archive_names() {
 #[test]
 fn file_values_are_rewritten_as_urls() {
     let g = Gedcom::parse(GED).unwrap();
-    let p = gedzip::pack(&g);
+    let p = gedzip::pack(&g, &|_| true);
     assert_eq!(file_of(&p.ged, "O1"), ["Actes/naissance%20Jean.jpg", "Actes/page%202.jpg"]);
     assert_eq!(file_of(&p.ged, "O2"), ["media/portrait.jpg"]);
     assert_eq!(file_of(&p.ged, "O4"), ["media/portrait%20(2).jpg"]);
@@ -85,4 +85,22 @@ fn local_or_web() {
     assert!(!gedzip::is_local("https://x.fr/a.jpg"));
     assert!(!gedzip::is_local("ftp://x.fr/a.jpg"));
     assert!(!gedzip::is_local(""));
+}
+
+#[test]
+fn missing_files_keep_their_value() {
+    let g = Gedcom::parse(GED).unwrap();
+    let p = gedzip::pack(&g, &|f| !f.contains("portrait"));
+    assert_eq!(
+        p.missing,
+        [
+            MissingFile { original: "/Users/moi/Photos/portrait.jpg".into(), media: vec!["O2".into()] },
+            MissingFile { original: "file:///Users/moi/Autres/portrait.jpg".into(), media: vec!["O4".into()] },
+        ]
+    );
+    // Pas d'entrée dans l'archive, et le chemin d'origine n'est pas perdu.
+    assert!(!p.files.iter().any(|f| f.original.contains("portrait")));
+    assert_eq!(file_of(&p.ged, "O2"), ["/Users/moi/Photos/portrait.jpg"]);
+    assert_eq!(file_of(&p.ged, "O4"), ["file:///Users/moi/Autres/portrait.jpg"]);
+    assert_eq!(file_of(&p.ged, "O1"), ["Actes/naissance%20Jean.jpg", "Actes/page%202.jpg"]);
 }
