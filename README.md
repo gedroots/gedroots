@@ -41,8 +41,7 @@ et suit le [design system GEDRoots](design.md) (fonds neutres et touches de viol
   famille (parents, conjoints, enfants) cliquable.
 - **Pas d'onglet Familles** : une union (`FAM`) se gère depuis la fiche de chacun des conjoints
   (événements d'union, enfants, photos et notes du couple). Avec plusieurs unions, la fenêtre
-  « + » propose « Enfant avec … » pour chacune, et le clic droit sur un conjoint « Ajouter un
-  enfant à ce couple ». Un conjoint ajouté à un parent seul rejoint son union existante. Un lien
+  « + » propose « Enfant avec … » pour chacune. Un conjoint ajouté à un parent seul rejoint son union existante. Un lien
   vers une famille (Qualité, « Cité par »…) ouvre la fiche d'un conjoint.
 - **Arbres** : **arbre libre** (ascendants à droite, descendants et conjoints à gauche, frères et
   sœurs au-dessus ; on s'y déplace en glissant ou à la molette, les générations se chargent au fur et

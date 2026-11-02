@@ -277,21 +277,10 @@ fn tail(menu: PopupMenu, ws: &Ws, xref: &str, from: &From) -> PopupMenu {
 
 pub(super) fn person_menu(ws: Ws, x: String, from: From) -> MenuBuilder {
     Rc::new(move |menu, window, cx| {
-        let Some((father, mother, is_root, name, couple)) = read(&ws, cx, |_, g| {
+        let Some((father, mother, is_root, name)) = read(&ws, cx, |_, g| {
             let (f, m) = g.parents(&x);
             let name = g.individual(&x).map(|i| i.display_name()).unwrap_or_default();
-            // Conjoint dans la fiche d'un individu : l'union des deux, pour y ajouter un enfant.
-            let couple = match &from {
-                From::Relative(indi, fam, _) => g
-                    .family(fam)
-                    .filter(|f| {
-                        let spouses = [f.husband(), f.wife()];
-                        spouses.contains(&Some(x.as_str())) && spouses.contains(&Some(indi.as_str()))
-                    })
-                    .map(|_| fam.clone()),
-                _ => None,
-            };
-            (f.is_some(), m.is_some(), g.root().as_deref() == Some(x.as_str()), name, couple)
+            (f.is_some(), m.is_some(), g.root().as_deref() == Some(x.as_str()), name)
         }) else {
             return menu;
         };
@@ -338,15 +327,6 @@ pub(super) fn person_menu(ws: Ws, x: String, from: From) -> MenuBuilder {
                     this.open_picker(PickPurpose::Relative { indi: indi.clone(), rel }, w, cx)
                 }))
             })
-        })
-        .when_some(couple, |m, fam| {
-            let f2 = fam.clone();
-            m.item(act(&ws, "Ajouter un enfant à ce couple", move |this, w, cx| {
-                this.add_family_child(fam.clone(), w, cx)
-            }))
-            .item(act(&ws, "Lier un enfant existant à ce couple…", move |this, w, cx| {
-                this.open_picker(PickPurpose::FamilyChild { fam: f2.clone() }, w, cx)
-            }))
         })
         .item(act(&ws, "Ajouter un événement…", move |this, w, cx| this.open_event_dialog(x5.clone(), None, w, cx)))
         .item(act(&ws, "Rattacher des photos ou documents…", move |this, w, cx| this.choose_files(x6.clone(), w, cx)))
