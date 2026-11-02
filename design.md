@@ -246,7 +246,7 @@ ci-dessous. Toute nouvelle fonction se vérifie sur les trois colonnes.
 |---|---|---|---|
 | Barre de menus | Native, en haut de l'écran, menu « GEDRoots » en premier | Dans la fenêtre, barre du haut | Dans la fenêtre, barre du haut (écart assumé : GNOME préfère un menu principal ☰) |
 | Boutons de fenêtre | Feux tricolores à gauche, fondus dans la barre du haut | Réduire / agrandir / fermer à droite | Côté et boutons selon le réglage du système (fermer à droite par défaut) |
-| Retour / suivant | Chevrons ‹ › dans la barre du haut, après le bouton de barre latérale | Flèche retour seule, tout à gauche de la barre de titre | Flèche retour au début de la barre d'en-tête |
+| Retour / suivant | Chevrons ‹ › à gauche de la barre du haut, après les feux tricolores | ‹ › centrés à côté du nom du fichier (écart assumé : Fluent met une flèche retour tout à gauche) | ‹ › centrés à côté du nom du fichier (écart assumé : GNOME met une flèche retour au début de la barre) |
 | Raccourcis retour / suivant | `⌘[` / `⌘]` | `Alt+←` / `Alt+→` | `Alt+←` / `Alt+→` |
 | Touche de commande | `⌘` (`⌥` pour les variantes) | `Ctrl` (`Alt` pour les variantes) | `Ctrl` (`Alt` pour les variantes) |
 | Rétablir | `⌘⇧Z` | `Ctrl+Y` | `Ctrl+Maj+Z` |
@@ -266,8 +266,6 @@ l'apparence de chaque système, mais le comportement suit la plateforme.
 
 État au 2 novembre 2026, à résorber au fil des PR :
 
-- Pas de boutons précédent / suivant visibles dans la barre du haut (seulement clavier, menu
-  et boutons de la souris).
 - Hors macOS, les menus n'ont pas de lettres soulignées et Réglages ne porte pas le nom de la
   plateforme (Paramètres, Préférences).
 
