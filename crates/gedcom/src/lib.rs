@@ -20,15 +20,15 @@
 //! - [`multipage`] : médias à plusieurs pages (plusieurs `FILE`), fusion et séparation ;
 //! - [`pedigree`] : descendance pour les vues en arbre ;
 //! - [`date`] : dates GEDCOM (y compris calendrier républicain) affichées en français ;
-//! - [`template`] et [`entry`] : modèles d'actes et saisie guidée des sources.
+//! - [`act`] : actes d'une source (saisie, lecture depuis les citations, modification).
 
+pub mod act;
 pub mod analysis;
 pub mod complete;
 pub mod crop;
 pub mod custom;
 pub mod date;
 pub mod document;
-pub mod entry;
 pub mod events;
 pub mod geo;
 pub mod import;
@@ -43,14 +43,13 @@ pub mod relations;
 pub mod schema;
 pub mod search;
 pub mod settings;
-pub mod template;
 pub mod weblink;
 
+pub use act::{Act, ActKey, ActResult, ActRole, MediaChoice, Participant, PersonChoice, PersonField, Suggestion};
 pub use crop::{Crop, MediaLink, Rect};
 pub use custom::{EventType, Jurisdiction, PlaceRewrite};
 pub use date::{Calendar, Date, DateKind, Parsed as DateInput, SimpleDate, parse_input as parse_date_input};
 pub use document::{Gedcom, RecordKind};
-pub use entry::{Entry, EntryResult, MediaChoice, Participant, PersonChoice, SourceChoice, Suggestion};
 pub use events::PersonEvent;
 pub use kinds::{MEDIUMS, SourceContent, medium, medium_label, parse_event_list, set_medium};
 pub use model::*;
@@ -61,7 +60,6 @@ pub use pedigree::{DescNode, DescUnion};
 pub use relations::{FAMILY_EVENTS, INDIVIDUAL_EVENTS, NewEvent, Relation, is_media_file, mime_for, title_from_file};
 pub use search::{IndividualQuery, has_token, toggle_token};
 pub use settings::{FileInfo, FileSettings, IgnoredIssue};
-pub use template::{FieldDef, PersonField, Relation as RoleRelation, RoleDef, Template, builtin_templates};
 pub use weblink::{WebLink, WebLinkKind, host, is_web_url, normalize_url};
 
 /// Charge un fichier GEDCOM depuis le disque.

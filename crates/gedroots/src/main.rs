@@ -3,11 +3,11 @@
 // Sous Windows, pas de fenêtre de console derrière l'app (sauf en debug, pour les messages).
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod act_editor;
 mod commands;
 mod completion;
 mod date_field;
 mod editor;
-mod entry_form;
 mod images;
 mod map;
 mod theme;

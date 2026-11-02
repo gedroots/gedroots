@@ -123,7 +123,7 @@ impl Workspace {
             other.push(here);
         }
         self.history.restoring = true;
-        self.entry_form = None;
+        self.act_editor = None;
         self.open_location(target.view, Some(target.key), window, cx);
         self.tab = target.tab;
         self.history.restoring = false;

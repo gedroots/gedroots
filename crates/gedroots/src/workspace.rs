@@ -1,9 +1,9 @@
 //! Fenêtre principale : barre d'activité, liste, zone centrale (arbre, fiche,
 //! GEDCOM brut), panneau de détail et barre d'état — d'après la maquette.
 
+use crate::act_editor::{ActEditor, ActEditorEvent};
 use crate::commands::*;
 use crate::editor::{FieldState, RecordEditor, Target};
-use crate::entry_form::{EntryForm, EntryFormEvent};
 use crate::images::picture;
 use crate::map::{MapEvent, MapView};
 use crate::theme;
@@ -205,7 +205,9 @@ pub struct Workspace {
     /// Aide de la recherche avancée dépliée.
     search_help: bool,
     /// Saisie guidée d'un acte en cours (remplace liste, fiche et détail).
-    entry_form: Option<(Entity<EntryForm>, Subscription)>,
+    act_editor: Option<(Entity<ActEditor>, Subscription)>,
+    /// Actes de la source affichée (relus à chaque rafraîchissement de la fiche).
+    source_acts: Vec<Act>,
     /// Palette de commandes ouverte.
     palette: Option<commands::Palette>,
     /// Barre de menus dans la fenêtre (Linux, Windows) ; native sous macOS.
@@ -274,7 +276,8 @@ impl Workspace {
             media_files: Rc::new(Vec::new()),
             pending_delete: None,
             search_help: false,
-            entry_form: None,
+            act_editor: None,
+            source_acts: Vec::new(),
             palette: None,
             menu_bar: (!cfg!(target_os = "macos")).then(|| AppMenuBar::new(cx)),
             window_title: String::new(),
@@ -484,6 +487,8 @@ impl Workspace {
     fn select(&mut self, key: String, window: &mut Window, cx: &mut Context<Self>) {
         if self.selected.as_deref() != Some(key.as_str()) {
             self.leave_location();
+            // Un acte en cours appartient à la source qu'on quitte.
+            self.act_editor = None;
             self.media_page = 1;
         }
         self.media_marked.clear();
@@ -577,6 +582,10 @@ impl Workspace {
                 }
             },
             None => Target::Place(key.clone()),
+        };
+        self.source_acts = match &target {
+            Target::Record { xref, kind: RecordKind::Source } => doc.ged.acts(xref),
+            _ => Vec::new(),
         };
         let ed = RecordEditor::new(&doc.ged, target, window, cx);
         // Champs de lieu : suggestions des lieux existants pendant la saisie.
@@ -712,60 +721,147 @@ impl Workspace {
     }
 
     // ------------------------------------------------------------------
-    // Saisie guidée d'un acte
+    // Actes d'une source
     // ------------------------------------------------------------------
 
-    fn open_entry(&mut self, _: &EnterRecord, window: &mut Window, cx: &mut Context<Self>) {
+    /// « Saisir un acte… » : dans la source affichée, sinon après avoir choisi
+    /// (ou créé) la source.
+    pub(super) fn enter_act(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(doc) = &self.doc else { return };
-        if self.entry_form.is_some() {
-            return;
+        let source = self
+            .selected
+            .clone()
+            .filter(|x| self.view == View::Sources && doc.ged.get(x).is_some_and(|n| n.tag == "SOUR"));
+        match source {
+            Some(s) => self.open_act(s, None, window, cx),
+            None => self.open_picker(relatives::PickPurpose::ActSource, window, cx),
         }
-        // Depuis la vue Sources, on part de la source sélectionnée.
-        let source = self.selected.clone().filter(|_| self.view == View::Sources);
-        let (ged, path) = (doc.ged.clone(), doc.path.clone());
-        let form = cx.new(|cx| EntryForm::new(ged, path, source, window, cx));
-        let sub = cx.subscribe_in(&form, window, |this, form, ev: &EntryFormEvent, window, cx| match ev {
-            EntryFormEvent::Close => {
-                this.entry_form = None;
+    }
+
+    /// Ouvre un acte de la source dans sa fiche (`key` : acte existant ; sinon un acte vide).
+    pub(super) fn open_act(
+        &mut self,
+        source: String,
+        key: Option<ActKey>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.selected.as_deref() != Some(source.as_str()) || self.view != View::Sources {
+            self.goto(source.clone(), window, cx);
+        }
+        self.tab = CenterTab::Form;
+        let Some(doc) = &self.doc else { return };
+        let g = &doc.ged;
+        let act = match key.and_then(|k| g.act(&source, &k)) {
+            Some(a) => a,
+            None => {
+                // Nouvel acte : l'événement que la source contient, sinon celui de son dernier acte.
+                let event = g
+                    .get(&source)
+                    .map(SourceContent::read)
+                    .and_then(|c| c.events.first().cloned())
+                    .or_else(|| self.source_acts.last().map(|a| a.event.clone()))
+                    .filter(|e| !e.is_empty())
+                    .unwrap_or_else(|| "BIRT".into());
+                Act::new(&source, &event)
+            }
+        };
+        let (ged, path) = (g.clone(), doc.path.clone());
+        let editor = cx.new(|cx| ActEditor::new(ged, path, act, window, cx));
+        let sub = cx.subscribe_in(&editor, window, |this, editor, ev: &ActEditorEvent, window, cx| match ev {
+            ActEditorEvent::Close => {
+                this.act_editor = None;
                 window.focus(&this.focus, cx);
                 cx.notify();
             }
-            EntryFormEvent::Save { entry, next } => this.save_entry(form.clone(), entry, *next, window, cx),
+            ActEditorEvent::Save { act, next } => this.save_act(editor.clone(), act, *next, window, cx),
         });
-        self.entry_form = Some((form, sub));
+        self.act_editor = Some((editor, sub));
         cx.notify();
     }
 
-    fn save_entry(
+    fn save_act(
         &mut self,
-        form: Entity<EntryForm>,
-        entry: &gedcom::Entry,
+        editor: Entity<ActEditor>,
+        act: &Act,
         next: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         self.checkpoint();
         let Some(doc) = &mut self.doc else { return };
-        match entry.apply(&mut doc.ged) {
+        match act.save(&mut doc.ged) {
             Ok(res) => {
                 let ged = doc.ged.clone();
-                let principal = res.persons.iter().flatten().next().cloned();
                 self.set_status(res.summary(), false);
                 self.rebuild_rows(cx);
-                form.update(cx, |f, cx| f.saved(ged, &res, next, window, cx));
-                if !next {
-                    self.entry_form = None;
-                    if let Some(x) = principal {
-                        self.goto(x, window, cx);
-                    }
+                self.refresh_editor(window, cx);
+                if next {
+                    editor.update(cx, |e, cx| e.saved(ged, &res, window, cx));
+                } else {
+                    self.act_editor = None;
+                    window.focus(&self.focus, cx);
                 }
             }
             Err(e) => {
                 self.drop_checkpoint();
-                form.update(cx, |f, cx| f.set_error(e, cx));
+                editor.update(cx, |f, cx| f.set_error(e, cx));
             }
         }
         cx.notify();
+    }
+
+    /// Supprime un acte : ses citations (les événements et les personnes restent).
+    pub(super) fn delete_act(&mut self, source: String, key: ActKey, window: &mut Window, cx: &mut Context<Self>) {
+        self.mutate(window, cx, |g| {
+            let title = g.act(&source, &key).map(|a| a.title()).unwrap_or_default();
+            g.remove_act(&source, &key);
+            Ok((format!("Acte supprimé : {title}"), None))
+        });
+    }
+
+    /// Section « Actes » de la fiche d'une source, avec son « + ».
+    fn render_acts(&self, source: &str, cx: &mut Context<Self>) -> AnyElement {
+        let s = source.to_string();
+        v_flex()
+            .gap_1()
+            .child(
+                h_flex()
+                    .gap_1()
+                    .items_center()
+                    .child(label_caps(if self.source_acts.is_empty() {
+                        "Actes".to_string()
+                    } else {
+                        format!("Actes · {}", self.source_acts.len())
+                    }))
+                    .child(
+                        Button::new("add-act")
+                            .ghost()
+                            .xsmall()
+                            .icon(IconName::Plus)
+                            .tooltip("Saisir un acte")
+                            .on_click(cx.listener(move |this, _, w, cx| this.open_act(s.clone(), None, w, cx))),
+                    ),
+            )
+            .children(self.source_acts.iter().enumerate().map(|(n, a)| {
+                let key = a.original.clone().unwrap_or_default();
+                let (s1, k1) = (source.to_string(), key.clone());
+                h_flex()
+                    .id(SharedString::from(format!("act-{n}")))
+                    .gap_2()
+                    .px_2()
+                    .py_1()
+                    .rounded_sm()
+                    .cursor_pointer()
+                    .hover(|d| d.bg(theme::hover()))
+                    .child(
+                        div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(a.title()),
+                    )
+                    .child(mono(a.subtitle()))
+                    .on_click(cx.listener(move |this, _, w, cx| this.open_act(s1.clone(), Some(k1.clone()), w, cx)))
+                    .with_menu(self.act_menu(source, key, cx))
+            }))
+            .into_any_element()
     }
 
     // ------------------------------------------------------------------
@@ -1429,6 +1525,13 @@ impl Workspace {
                                     .on_click(cx.listener(|this, _, w, cx| this.delete_selected(w, cx))),
                             )
                         }),
+                )
+                .when_some(
+                    match &ed.target {
+                        Target::Record { xref, kind: RecordKind::Source } => Some(xref.clone()),
+                        _ => None,
+                    },
+                    |d, s| d.child(self.render_acts(&s, cx)),
                 )
                 .when_some(preview, |d, p| d.child(p))
                 .when_some(self.record_images(ed, cx), |d, p| d.child(p)),
@@ -2392,13 +2495,15 @@ impl Render for Workspace {
         if window.focused(cx).is_none() {
             window.focus(&self.focus, cx);
         }
-        let body: AnyElement = if let (Some(_), Some((form, _))) = (&self.doc, &self.entry_form) {
+        let body: AnyElement = if let (Some(_), Some((editor, _))) = (&self.doc, &self.act_editor) {
+            // Acte ouvert dans la fiche de sa source : il prend la place de la fiche et du panneau.
             h_flex()
                 .flex_1()
                 .min_h_0()
                 .items_stretch()
                 .child(self.render_activity_bar(cx))
-                .child(form.clone())
+                .child(self.render_list(cx))
+                .child(editor.clone())
                 .into_any_element()
         } else if self.doc.is_some() {
             h_flex()

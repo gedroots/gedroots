@@ -37,6 +37,13 @@ pub static CHECKS: &[Check] = &[
         count: Gedcom::prim_count,
         fix: Gedcom::migrate_prim_tags,
     },
+    Check {
+        id: "templates",
+        what: ("reste de l'ancienne saisie guidée", "restes de l'ancienne saisie guidée"),
+        into: "actes en GEDCOM 7 standard, sans modèles",
+        count: Gedcom::legacy_template_count,
+        fix: Gedcom::migrate_legacy_templates,
+    },
 ];
 
 /// Ce qu'un contrôle a trouvé.
