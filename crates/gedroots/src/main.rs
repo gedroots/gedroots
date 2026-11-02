@@ -104,7 +104,12 @@ fn open_workspace(path: Option<PathBuf>, cx: &mut App) -> Option<(AnyWindowHandl
     let bounds = Bounds::centered(None, size(px(1440.), px(900.)), cx);
     let options = WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(bounds)),
-        titlebar: Some(TitlebarOptions { title: Some("GEDRoots".into()), ..Default::default() }),
+        // macOS : barre de titre fondue dans la barre du haut de l'app, feux tricolores compris.
+        titlebar: Some(TitlebarOptions {
+            title: Some("GEDRoots".into()),
+            appears_transparent: cfg!(target_os = "macos"),
+            traffic_light_position: cfg!(target_os = "macos").then(|| point(px(14.), px(13.))),
+        }),
         ..Default::default()
     };
     let (window, ws) = gpui_kit::open_window(options, cx, move |window, cx| {

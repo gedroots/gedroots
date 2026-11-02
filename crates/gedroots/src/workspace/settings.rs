@@ -440,7 +440,7 @@ impl Workspace {
             .gap_2()
             .child(section_header(
                 "Format des lieux",
-                plus_button("plac-add").on_click(cx.listener(|this, _, w, cx| {
+                plus_button("plac-add").tooltip("Ajouter une juridiction").on_click(cx.listener(|this, _, w, cx| {
                     let name = text_input("Juridiction", "", w, cx);
                     name.update(cx, |s, cx| s.focus(w, cx));
                     if let Some(d) = this.settings_dialog() {
@@ -497,16 +497,16 @@ impl Workspace {
                 .gap_2()
                 .child(section_header(
                     title,
-                    plus_button(if family { "even-add-fam" } else { "even-add-indi" }).on_click(cx.listener(
-                        move |this, _, w, cx| {
+                    plus_button(if family { "even-add-fam" } else { "even-add-indi" })
+                        .tooltip("Ajouter un type")
+                        .on_click(cx.listener(move |this, _, w, cx| {
                             let label = text_input("Libellé", "", w, cx);
                             label.update(cx, |s, cx| s.focus(w, cx));
                             if let Some(d) = this.settings_dialog() {
                                 d.events.push(EventRow { label, original: None, family, uses: 0 });
                             }
                             cx.notify();
-                        },
-                    )),
+                        })),
                 ))
                 .children(rows)
         };
@@ -657,16 +657,18 @@ impl Workspace {
                     .gap_2()
                     .child(section_header(
                         "Sous-dossiers",
-                        plus_button("media-add").on_click(cx.listener(|this, _, w, cx| {
-                            let (row, subs) = MediaRow::new(&MediaFolder::default(), w, cx);
-                            row.dir.update(cx, |s, cx| s.focus(w, cx));
-                            if let Some(d) = this.settings_dialog() {
-                                d.media.push(row);
-                                d.media_active = d.media.len() - 1;
-                                d._subs.extend(subs);
-                            }
-                            cx.notify();
-                        })),
+                        plus_button("media-add").tooltip("Ajouter un dossier").on_click(cx.listener(
+                            |this, _, w, cx| {
+                                let (row, subs) = MediaRow::new(&MediaFolder::default(), w, cx);
+                                row.dir.update(cx, |s, cx| s.focus(w, cx));
+                                if let Some(d) = this.settings_dialog() {
+                                    d.media.push(row);
+                                    d.media_active = d.media.len() - 1;
+                                    d._subs.extend(subs);
+                                }
+                                cx.notify();
+                            },
+                        )),
                     ))
                     .children(rows)
                     .when(n > 0, |v| v.child(h_flex().flex_wrap().gap_1().children(tokens))),

@@ -14,6 +14,7 @@ use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::input::{Editor, Input, InputEvent, InputState, Textarea};
 use gpui_kit::component::menu::AppMenuBar;
 use gpui_kit::component::select::Select;
+use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::{Disableable, Icon, Sizable, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
@@ -329,7 +330,6 @@ impl Workspace {
         match gedcom::load(&path) {
             Ok(ged) => {
                 let first = ged.root();
-                let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
                 self.doc = Some(Document {
                     ged,
                     path: Some(path),
@@ -345,7 +345,7 @@ impl Workspace {
                 if let Some(x) = first {
                     self.select(x, window, cx);
                 }
-                self.set_status(format!("{name} ouvert"), false);
+                self.status = None;
             }
             Err(e) => self.set_status(format!("Impossible d'ouvrir {} : {e}", path.display()), true),
         }
@@ -1177,39 +1177,59 @@ fn avatar(doc: &Document, i: &Individual<'_>, size: f32, ring: Hsla) -> Div {
 }
 
 impl Workspace {
+    /// Barre du haut. Sous macOS elle remplace la barre de titre : les feux tricolores y sont
+    /// posés (voir `main.rs`) et elle sert à déplacer la fenêtre. Le nom du fichier n'apparaît
+    /// qu'ici, centré, suivi d'un point tant qu'il reste des modifications à enregistrer.
     fn render_header(&self) -> impl IntoElement {
-        let file = self
-            .doc
-            .as_ref()
-            .map(|d| {
-                d.path
-                    .as_ref()
-                    .and_then(|p| p.file_name())
-                    .map(|n| n.to_string_lossy().to_string())
-                    .unwrap_or_else(|| "Nouveau fichier".into())
-            })
-            .unwrap_or_default();
+        let mac = cfg!(target_os = "macos");
+        let title = self.doc.as_ref().map(|d| {
+            let name = d
+                .path
+                .as_ref()
+                .and_then(|p| p.file_name())
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| "Nouveau fichier".into());
+            if d.dirty { format!("{name} •") } else { name }
+        });
         h_flex()
+            .id("header")
             .h(px(40.))
             .flex_none()
             .px_3()
-            .gap_3()
+            .when(mac, |d| {
+                d.pl(px(80.)).on_mouse_down(MouseButton::Left, |e, window, _| {
+                    if e.click_count == 2 {
+                        window.titlebar_double_click();
+                    } else {
+                        window.start_window_move();
+                    }
+                })
+            })
             .items_center()
             .bg(theme::panel())
             .border_b_1()
             .border_color(theme::border())
             .child(
                 h_flex()
-                    .gap_2()
+                    .flex_1()
+                    .min_w_0()
+                    .gap_3()
                     .items_center()
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .child(img("brand/icon-micro.svg").size(px(16.)))
-                    .child("GEDRoots"),
+                    .child(
+                        h_flex()
+                            .gap_2()
+                            .items_center()
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .child(img("brand/icon-micro.svg").size(px(16.)))
+                            .when(!mac, |d| d.child("GEDRoots")),
+                    )
+                    // Linux, Windows : menus dans la fenêtre (natifs sous macOS).
+                    .children(self.menu_bar.clone().map(|m| div().h_full().child(m))),
             )
-            // Linux, Windows : menus dans la fenêtre (natifs sous macOS).
-            .children(self.menu_bar.clone().map(|m| div().h_full().child(m)))
-            .child(div().text_color(theme::muted()).child(file))
-            .child(div().flex_1())
+            .children(title.map(|t| div().flex_none().text_sm().font_weight(FontWeight::MEDIUM).child(t)))
+            .child(h_flex().flex_1().min_w_0().justify_end().text_xs().children(self.status.clone().map(
+                |(msg, err)| div().truncate().text_color(if err { theme::danger() } else { theme::muted() }).child(msg),
+            )))
     }
 
     fn render_activity_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -1436,6 +1456,17 @@ impl Workspace {
                                 if active { d.bg(theme::bg()) } else { d.border_b_1().hover(|d| d.bg(theme::hover())) }
                             })
                             .text_color(if active { theme::text() } else { theme::muted() })
+                            // Infobulle : le raccourci de l'onglet.
+                            .tooltip(move |w, cx| {
+                                let tip = Tooltip::new(t.label());
+                                match t {
+                                    CenterTab::Tree => tip.action(&ShowTree, Some("Workspace")),
+                                    CenterTab::Form => tip.action(&ShowForm, Some("Workspace")),
+                                    CenterTab::Raw => tip.action(&ShowRaw, Some("Workspace")),
+                                    CenterTab::Map => tip,
+                                }
+                                .build(w, cx)
+                            })
                             .child(icon(t.icon()).size(px(14.)).text_color(if active {
                                 theme::text()
                             } else {
@@ -1465,12 +1496,7 @@ impl Workspace {
     }
 
     fn render_empty_center(&self) -> impl IntoElement {
-        v_flex()
-            .flex_1()
-            .items_center()
-            .justify_center()
-            .text_color(theme::muted())
-            .child("Sélectionnez un élément dans la liste")
+        div().flex_1()
     }
 
     fn render_form(&self, ed: &RecordEditor, cx: &mut Context<Self>) -> impl IntoElement {
@@ -2435,34 +2461,6 @@ impl Workspace {
             })
     }
 
-    fn render_status(&self) -> impl IntoElement {
-        let saved = self.doc.as_ref().is_none_or(|d| !d.dirty);
-        h_flex()
-            .h(px(26.))
-            .flex_none()
-            .px_3()
-            .gap_4()
-            .items_center()
-            .text_xs()
-            .bg(theme::panel())
-            .border_t_1()
-            .border_color(theme::border())
-            .text_color(theme::muted())
-            .when(self.doc.is_some(), |d| {
-                d.child(
-                    h_flex()
-                        .gap_2()
-                        .items_center()
-                        .child(dot(if saved { theme::ok() } else { theme::warn() }))
-                        .child(if saved { "Enregistré" } else { "Modifications non enregistrées" }),
-                )
-            })
-            .child(div().flex_1())
-            .when_some(self.status.clone(), |d, (msg, err)| {
-                d.child(div().text_color(if err { theme::danger() } else { theme::muted() }).child(msg))
-            })
-    }
-
     fn render_welcome(&self, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .flex_1()
@@ -2516,6 +2514,8 @@ impl Render for Workspace {
         };
         if title != self.window_title {
             window.set_window_title(&title);
+            // macOS : point dans le bouton de fermeture tant que le fichier n'est pas enregistré.
+            window.set_window_edited(self.doc.as_ref().is_some_and(|d| d.dirty));
             self.window_title = title;
         }
         // Les raccourcis (Enregistrer…) passent par ce nœud : on le garde dans la chaîne de focus.
@@ -2573,7 +2573,6 @@ impl Render for Workspace {
             // macOS : menus natifs, et le nom du fichier est dans le titre de la fenêtre.
             .when(self.menu_bar.is_some(), |d| d.child(self.render_header()))
             .child(body)
-            .child(self.render_status())
             .children(self.render_picker(cx))
             .children(self.render_add_dialog(cx))
             .children(self.render_palette(cx))
