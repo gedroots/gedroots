@@ -28,6 +28,7 @@ mod menus;
 mod pages;
 mod photo;
 mod relatives;
+mod settings;
 mod tree;
 mod weblinks;
 
@@ -347,6 +348,7 @@ impl Workspace {
 
     fn write_to(&mut self, path: PathBuf, cx: &mut Context<Self>) {
         let Some(doc) = &mut self.doc else { return };
+        doc.ged.stamp_header();
         match gedcom::save(&doc.ged, &path) {
             Ok(()) => {
                 doc.path = Some(path.clone());

@@ -16,6 +16,7 @@ actions!(
         NewFile,
         OpenFile,
         ImportFile,
+        OpenFileSettings,
         SaveFile,
         SaveFileAs,
         Quit,
@@ -172,6 +173,8 @@ fn model() -> Vec<(&'static str, Vec<Item>)> {
         Sep,
         a("Enregistrer", SaveFile),
         a("Enregistrer sous…", SaveFileAs),
+        Sep,
+        a("Réglages du fichier…", OpenFileSettings),
     ];
     if !mac {
         file.extend([Sep, a("Quitter", Quit)]);
