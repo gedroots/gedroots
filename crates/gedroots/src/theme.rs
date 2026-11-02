@@ -1,6 +1,7 @@
 //! Design system GEDRoots : jetons de couleur (clair / sombre), typographie, espacements et rayons.
+//! Fonds neutres (blanc et ocre en clair, gris et noir en sombre) ; le violet n'est qu'un accent.
 //!
-//! Les valeurs viennent du kit de marque v1.0 (`docs/design-system.md`). Les vues n'emploient jamais
+//! Les valeurs viennent du kit de marque v1.0 (`design.md`). Les vues n'emploient jamais
 //! de couleur en dur : elles passent par les fonctions de ce module, qui lisent la palette du mode
 //! courant. Le mode suit l'apparence du système (`sync`), et chaque changement redessine les fenêtres.
 
@@ -39,13 +40,13 @@ struct Palette {
 
 const LIGHT: Palette = Palette {
     bg: 0xFFFFFF,
-    panel: 0xFAF7FF,
-    surface: 0xF3EDFF,
-    hover: 0xEEE5FF,
-    border: 0xE7DDF6,
-    border_strong: 0xD3C3EC,
-    text: 0x1B1133,
-    muted: 0x625878,
+    panel: 0xFAF7F1,
+    surface: 0xF4EFE6,
+    hover: 0xEEE7DA,
+    border: 0xE6DED0,
+    border_strong: 0xD5CAB7,
+    text: 0x1F1B16,
+    muted: 0x6B6257,
     accent: 0x6D3DF0,
     accent_hover: 0x5B2BDD,
     accent_pressed: 0x4C21B8,
@@ -58,18 +59,18 @@ const LIGHT: Palette = Palette {
 };
 
 const DARK: Palette = Palette {
-    bg: 0x160E2B,
-    panel: 0x1B1133,
-    surface: 0x251545,
-    hover: 0x301D57,
-    border: 0x3A2858,
-    border_strong: 0x493266,
-    text: 0xF7F1FF,
-    muted: 0xC8B7DF,
+    bg: 0x141414,
+    panel: 0x1A1A1A,
+    surface: 0x222222,
+    hover: 0x2B2B2B,
+    border: 0x2E2E2E,
+    border_strong: 0x3D3D3D,
+    text: 0xECECEC,
+    muted: 0xA3A3A3,
     accent: 0xB997FF,
     accent_hover: 0xC8AAFF,
     accent_pressed: 0xA77CF6,
-    on_accent: 0x1B1133,
+    on_accent: 0x1A1A1A,
     paternal: 0x8FA2FF,
     maternal: 0xE39BF0,
     ok: 0x6FD3A0,
@@ -130,7 +131,7 @@ pub fn accent() -> Hsla {
     c(p().accent)
 }
 pub fn accent_soft() -> Hsla {
-    with_alpha(accent(), if is_dark() { 0.18 } else { 0.12 })
+    with_alpha(accent(), if is_dark() { 0.16 } else { 0.10 })
 }
 pub fn on_accent() -> Hsla {
     c(p().on_accent)
@@ -152,19 +153,19 @@ pub fn warn() -> Hsla {
 pub fn danger() -> Hsla {
     c(p().danger)
 }
-/// Voile sous les fenêtres modales (encre de marque translucide).
+/// Voile sous les fenêtres modales.
 pub fn scrim() -> Hsla {
-    with_alpha(c(0x1B1133), if is_dark() { 0.6 } else { 0.4 })
+    with_alpha(c(0x000000), if is_dark() { 0.55 } else { 0.35 })
 }
 /// Fond des visionneuses d'images : sombre dans les deux modes, pour juger les documents.
 pub fn viewer() -> Hsla {
-    c(0x120B24)
+    c(0x0E0E0E)
 }
 
 /// Sur une image (cadres et étiquettes posés sur une photo ou un acte) : couleurs du mode sombre,
-/// quel que soit le mode, avec un fond d'étiquette encre.
+/// quel que soit le mode, sur un fond d'étiquette noir translucide.
 pub fn image_label_bg() -> Hsla {
-    with_alpha(c(0x1B1133), 0.75)
+    with_alpha(c(0x000000), 0.72)
 }
 pub fn image_text() -> Hsla {
     c(DARK.text)

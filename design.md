@@ -1,17 +1,18 @@
 # Design system GEDRoots
 
 Tiré du kit de marque GEDRoots v1.0 (« graphe organique, minimaliste, violet »). Le code
-de référence est [`crates/gedroots/src/theme.rs`](../crates/gedroots/src/theme.rs) : les vues
+de référence est [`crates/gedroots/src/theme.rs`](crates/gedroots/src/theme.rs) : les vues
 n'écrivent jamais de couleur, de rayon ni de police en dur, elles passent par ses jetons.
 
 | Clair | Sombre |
 |---|---|
-| ![Thème clair](capture-theme-clair.png) | ![Thème sombre](capture-theme-sombre.png) |
+| ![Thème clair](docs/capture-theme-clair.png) | ![Thème sombre](docs/capture-theme-sombre.png) |
 
 ## Principes
 
-- **Sobre** : une seule couleur forte, le violet primaire, réservée aux actions, liens et
-  sélections. Pas de dégradé sur les composants ; les grands aplats de violet sont évités.
+- **Fonds neutres, une pointe de violet** : les fonds restent blanc et ocre en clair, gris et
+  noir en sombre. Le violet primaire n'apparaît que par touches : action principale, lien,
+  sélection, symbole de marque. Jamais de fond ni de grand aplat violet, pas de dégradé.
 - **Commandes dans les menus** : pas de barre d'outils. Les seuls boutons visibles sont les
   petits « + » des en-têtes de section et les emplacements pointillés de l'arbre.
 - **Pas de texte explicatif** : un titre par élément ; les exemples de format vont dans le
@@ -26,32 +27,34 @@ force (captures, tests).
 
 | Jeton (`theme::`) | Rôle | Clair | Sombre |
 |---|---|---|---|
-| `bg()` | Canevas principal | `#FFFFFF` | `#160E2B` |
-| `panel()` | Barres, panneaux latéraux | `#FAF7FF` | `#1B1133` |
-| `surface()` | Cartes, champs | `#F3EDFF` | `#251545` |
-| `hover()` | Survol, sélection discrète | `#EEE5FF` | `#301D57` |
-| `border()` | Séparateurs | `#E7DDF6` | `#3A2858` |
-| `border_strong()` | Contours de champs, cases | `#D3C3EC` | `#493266` |
-| `text()` | Texte principal (Ink) | `#1B1133` | `#F7F1FF` |
-| `muted()` | Texte secondaire | `#625878` | `#C8B7DF` |
-| `accent()` | Primaire : actions, liens, sélection | `#6D3DF0` | `#B997FF` |
+| `bg()` | Canevas principal | `#FFFFFF` | `#141414` |
+| `panel()` | Barres, panneaux latéraux | `#FAF7F1` | `#1A1A1A` |
+| `surface()` | Cartes, champs | `#F4EFE6` | `#222222` |
+| `hover()` | Survol, sélection discrète | `#EEE7DA` | `#2B2B2B` |
+| `border()` | Séparateurs | `#E6DED0` | `#2E2E2E` |
+| `border_strong()` | Contours de champs, cases | `#D5CAB7` | `#3D3D3D` |
+| `text()` | Texte principal | `#1F1B16` | `#ECECEC` |
+| `muted()` | Texte secondaire | `#6B6257` | `#A3A3A3` |
+| `accent()` | Violet : actions, liens, sélection | `#6D3DF0` | `#B997FF` |
 | — survol / pressé | Boutons primaires | `#5B2BDD` / `#4C21B8` | `#C8AAFF` / `#A77CF6` |
-| `on_accent()` | Texte sur le primaire | `#FFFFFF` | `#1B1133` |
-| `accent_soft()` | Ligne sélectionnée | primaire 12 % | primaire 18 % |
+| `on_accent()` | Texte sur le violet | `#FFFFFF` | `#1A1A1A` |
+| `accent_soft()` | Ligne sélectionnée | violet 10 % | violet 16 % |
 | `paternal()` | Lignée paternelle | `#3F5BD8` | `#8FA2FF` |
 | `maternal()` | Lignée maternelle | `#9C36B5` | `#E39BF0` |
 | `ok()` | Succès, « sourcé » | `#1A7346` | `#6FD3A0` |
 | `warn()` | À vérifier | `#9A5B00` | `#F0B35A` |
 | `danger()` | Erreur, suppression | `#C42B48` | `#F2828E` |
-| `scrim()` | Voile sous les modales | Ink 40 % | Ink 60 % |
-| `viewer()` | Fond des visionneuses d'actes | `#120B24` | `#120B24` |
-| `image_*()` | Cadres et étiquettes posés sur une photo | couleurs sombres, fond Ink 75 % | idem |
+| `scrim()` | Voile sous les modales | noir 35 % | noir 55 % |
+| `viewer()` | Fond des visionneuses d'actes | `#0E0E0E` | `#0E0E0E` |
+| `image_*()` | Cadres et étiquettes posés sur une photo | couleurs sombres, fond noir 72 % | idem |
 
-Le de cujus (Sosa 1) prend le primaire ; les deux lignées restent dans la gamme violette
+Les neutres clairs tirent vers l'ocre, les sombres sont des gris purs.
+
+Le de cujus (Sosa 1) prend le violet ; les deux lignées restent dans la gamme violette
 (indigo côté père, orchidée côté mère) au lieu d'introduire d'autres couleurs fortes.
 
 Contrastes (WCAG) : tout texte courant dépasse 4,5:1 sur `bg`, `panel` et `surface` dans les
-deux modes (primaire sur blanc 5,9:1 ; muted 6,6:1 ; texte sombre 16,8:1). Les couleurs d'état
+deux modes (violet sur blanc 5,9:1 ; muted 5,2:1 sur surface ; texte sombre 13,5:1 sur surface). Les couleurs d'état
 et de lignée dépassent aussi 4,5:1 sur `bg`.
 
 Le thème des composants gpui-component (boutons, listes, menus, tableaux, champs) est rempli
