@@ -11,9 +11,10 @@ extension View {
     /// the whole query of the zone.
     /// `onClose`: the search was closed (Cancel), e.g. to clear a scope that only shows while
     /// searching.
+    /// `scoped`: a search scope narrows the results.
     func treeSearch(model: TreeModel, zone: SearchZone, prompt: LocalizedStringKey, query: Binding<String>,
-                    onClose: @escaping () -> Void = {}) -> some View {
-        modifier(TreeSearch(model: model, zone: zone, prompt: prompt, query: query, onClose: onClose))
+                    scoped: Bool = false, onClose: @escaping () -> Void = {}) -> some View {
+        modifier(TreeSearch(model: model, zone: zone, prompt: prompt, query: query, scoped: scoped, onClose: onClose))
     }
 }
 
@@ -22,6 +23,7 @@ private struct TreeSearch: ViewModifier {
     let zone: SearchZone
     let prompt: LocalizedStringKey
     @Binding var query: String
+    let scoped: Bool
     let onClose: () -> Void
     @State private var presented = false
     @State private var text = ""
@@ -56,7 +58,7 @@ private struct TreeSearch: ViewModifier {
                 text = ""
                 onClose()
             }
-            .task(id: "\(text)#\(tokens.map(\.criterion))#\(model.revision)") { await suggest() }
+            .task(id: "\(text)#\(tokens.map(\.criterion))#\(scoped)#\(model.revision)") { await suggest() }
     }
 
     /// Suggestions under their headings, in the order they come.
@@ -98,6 +100,12 @@ private struct TreeSearch: ViewModifier {
         let zone = zone
         let criteria = tokens.map(\.criterion)
         let text = text
+        // The zone's criteria show on an empty field only before anything narrows the results:
+        // afterwards, the results show.
+        if text.isEmpty && (!criteria.isEmpty || scoped) {
+            suggestions = []
+            return
+        }
         // Typing on: this call is cancelled before it searches.
         try? await Task.sleep(for: .milliseconds(120))
         if Task.isCancelled { return }
