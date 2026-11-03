@@ -128,7 +128,7 @@ impl std::fmt::Display for Years {
 pub enum RecordType {
     /// Civil registers (births, marriages, deaths).
     CivilRegistration,
-    /// Indexes of the civil registers by period (French decennial tables, 1793–1902).
+    /// Indexes of the civil registers by period (French decennial tables, from 1793).
     DecennialTables,
     /// Parish or church registers (baptisms, marriages, burials).
     ChurchRegisters,
@@ -140,6 +140,8 @@ pub enum RecordType {
     MarriageContracts,
     /// Military registers (French registres matricules), which name the parents.
     MilitaryRegisters,
+    /// National index of deaths (French INSEE file of deceased persons, from 1970).
+    DeathIndex,
 }
 
 impl RecordType {
@@ -153,6 +155,7 @@ impl RecordType {
             RecordType::Probate => "probate",
             RecordType::MarriageContracts => "marriage_contracts",
             RecordType::MilitaryRegisters => "military_registers",
+            RecordType::DeathIndex => "death_index",
         }
     }
 }
@@ -277,11 +280,14 @@ pub const DEFAULT_FOCUS: &str = "sosa:1-63";
 /// Oldest age considered for a death without a known date.
 const MAX_AGE: i32 = 105;
 
-/// First census years of France (every five years from 1836, none in 1916 and 1941).
+/// Nominative census years of France (every five years from 1836, none in 1916 and 1941).
 const FRENCH_CENSUS: &[i32] = &[
     1836, 1841, 1846, 1851, 1856, 1861, 1866, 1872, 1876, 1881, 1886, 1891, 1896, 1901, 1906, 1911, 1921, 1926, 1931,
-    1936,
+    1936, 1946,
 ];
+
+/// Last year of the French decennial tables that archives usually put online.
+const TABLES_ONLINE_UNTIL: i32 = 1942;
 
 /// Years of a GEDCOM date: (earliest, latest).
 fn years_of(raw: &str) -> Option<(i32, i32)> {
@@ -307,7 +313,10 @@ fn years_of(raw: &str) -> Option<(i32, i32)> {
 /// A dated sighting of a person, with its place.
 #[derive(Debug, Clone)]
 struct Seen {
+    /// Year the person was alive.
     year: i32,
+    /// Year of the event, for the reason (a father is alive 9 months before the birth).
+    shown: i32,
     place: String,
     /// “witness at the marriage of Louis MARCHAND”.
     what: String,
@@ -317,6 +326,8 @@ struct Seen {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum Country {
     France,
+    /// French civil registration until 1962, kept by the Archives nationales d'outre-mer.
+    Algeria,
     Other,
 }
 
@@ -336,8 +347,8 @@ const COUNTRIES: &[(&str, Country)] = &[
     ("deutschland", Country::Other),
     ("allemagne", Country::Other),
     ("germany", Country::Other),
-    ("algerie", Country::Other),
-    ("algeria", Country::Other),
+    ("algerie", Country::Algeria),
+    ("algeria", Country::Algeria),
     ("canada", Country::Other),
     ("united kingdom", Country::Other),
     ("england", Country::Other),
@@ -365,9 +376,33 @@ fn country_in(place: &str) -> Option<Country> {
         .find_map(|s| COUNTRIES.iter().find(|(n, _)| *n == s).map(|(_, c)| *c))
 }
 
-/// First filled level of a place, normalized (“Saint-Lô, Manche” → `saint-lo`).
-fn place_key(p: &str) -> String {
+/// Municipality of a place, normalized (“Saint-Lô, Manche” → `saint-lo`): the municipality
+/// jurisdiction of the place format (`town`: its index and the format's length) when the place
+/// follows it, so that a locality counts with its municipality, otherwise the first filled level.
+fn place_key(p: &str, town: Option<(usize, usize)>) -> String {
+    let parts: Vec<&str> = p.split(',').map(str::trim).collect();
+    if let Some((i, len)) = town
+        && parts.len() == len
+        && !parts[i].is_empty()
+    {
+        return sort_key(parts[i]);
+    }
     sort_key(p.split([',', '(']).map(str::trim).find(|s| !s.is_empty()).unwrap_or(""))
+}
+
+/// Whether a normalized text names a municipality (a whole word: `troyes`, not `troyesville`).
+fn names(text: &str, town: &str) -> bool {
+    !town.is_empty()
+        && text.match_indices(town).any(|(i, _)| {
+            let before = text[..i].chars().next_back();
+            let after = text[i + town.len()..].chars().next();
+            !before.is_some_and(char::is_alphanumeric) && !after.is_some_and(char::is_alphanumeric)
+        })
+}
+
+/// Letters and digits only, to compare call numbers and titles (“5MI 3679 - Décès”).
+fn compact(s: &str) -> String {
+    sort_key(s).chars().filter(|c| c.is_alphanumeric()).collect()
 }
 
 /// What the file says, read once for every lead.
@@ -383,6 +418,8 @@ struct Context<'g> {
     register_tags: HashMap<(String, String), BTreeMap<String, usize>>,
     /// Country of places that name none: the most frequent one of the file.
     default_country: Country,
+    /// Index of the municipality in the place format, and the format's length.
+    town: Option<(usize, usize)>,
 }
 
 impl<'g> Context<'g> {
@@ -397,7 +434,13 @@ impl<'g> Context<'g> {
             registers: HashMap::new(),
             register_tags: HashMap::new(),
             default_country: Country::Other,
+            town: None,
         };
+        let form = g.place_form();
+        ctx.town = form
+            .iter()
+            .position(|f| crate::gazetteer::Level::of(f) == crate::gazetteer::Level::Municipality)
+            .map(|i| (i, form.len()));
         ctx.read();
         ctx
     }
@@ -436,6 +479,7 @@ impl<'g> Context<'g> {
                     for p in &principals {
                         self.seen.entry(p.to_string()).or_default().push(Seen {
                             year: lo,
+                            shown: lo,
                             place: place.clone(),
                             what: label.to_lowercase(),
                         });
@@ -448,6 +492,7 @@ impl<'g> Context<'g> {
                     let whose = principals.iter().map(|p| name(p)).collect::<Vec<_>>().join(" and ");
                     self.seen.entry(a.to_string()).or_default().push(Seen {
                         year: lo,
+                        shown: lo,
                         place: place.clone(),
                         what: format!("present at the {} of {whose}", label.to_lowercase()),
                     });
@@ -466,12 +511,13 @@ impl<'g> Context<'g> {
                 if let Some(h) = fam.husband() {
                     self.seen.entry(h.to_string()).or_default().push(Seen {
                         year: lo - 1,
+                        shown: lo,
                         place: place.clone(),
                         what: what.clone(),
                     });
                 }
                 if let Some(w) = fam.wife() {
-                    self.seen.entry(w.to_string()).or_default().push(Seen { year: lo, place, what });
+                    self.seen.entry(w.to_string()).or_default().push(Seen { year: lo, shown: lo, place, what });
                 }
             }
         }
@@ -482,10 +528,20 @@ impl<'g> Context<'g> {
         let g = self.g;
         let Some(node) = g.get(source).filter(|n| n.tag == "SOUR") else { return };
         let src = crate::model::Source::new(node);
-        let register = src.publication().filter(|p| !p.trim().is_empty()).unwrap_or_else(|| src.title());
+        let pk = self.key(place);
+        // A register of the place names it: a national file, a single act or another town's
+        // register cited by an event of this place is not one of its registers.
+        let title = src.title();
+        let publ = src.publication().filter(|p| !p.trim().is_empty());
+        let text = sort_key(&format!("{title} {}", publ.as_deref().unwrap_or("")));
+        if !names(&text, &pk) {
+            return;
+        }
+        let register = publ.unwrap_or(title);
         let repo = src.repository();
-        let key = format!("{}|{}", repo.unwrap_or(""), sort_key(&register));
-        let pk = place_key(place);
+        let call = src.call_number().unwrap_or_default();
+        let id = if call.trim().is_empty() { compact(&register) } else { compact(call) };
+        let key = format!("{}|{id}", repo.unwrap_or(""));
         let reg = self.registers.entry(pk.clone()).or_default().entry(key.clone()).or_insert_with(|| UsedRegister {
             register: register.clone(),
             source_id: source.to_string(),
@@ -513,13 +569,17 @@ impl<'g> Context<'g> {
         self.seen.get(x).map(Vec::as_slice).unwrap_or(&[])
     }
 
+    fn key(&self, place: &str) -> String {
+        place_key(place, self.town)
+    }
+
     fn country(&self, place: &str) -> Country {
         country_in(place).unwrap_or(self.default_country)
     }
 
     /// Registers of `place` already cited, those of the same kind of event first.
     fn used_registers(&self, place: &str, goal: Goal, near: Option<Years>) -> Vec<UsedRegister> {
-        let pk = place_key(place);
+        let pk = self.key(place);
         let Some(all) = self.registers.get(&pk) else { return Vec::new() };
         let same_kind = |key: &str| {
             goal.tags()
@@ -529,11 +589,16 @@ impl<'g> Context<'g> {
                 .filter_map(|m| m.get(key))
                 .sum::<usize>()
         };
-        let mut regs: Vec<(usize, &String, &UsedRegister)> = all.iter().map(|(k, r)| (same_kind(k), k, r)).collect();
+        // Registers of other periods are other registers.
+        let close = |r: &UsedRegister| match (near, r.years) {
+            (Some(n), Some(y)) => y.overlaps(n.from - 20, n.to + 20),
+            _ => true,
+        };
+        let mut regs: Vec<(usize, &String, &UsedRegister)> =
+            all.iter().filter(|(_, r)| close(r)).map(|(k, r)| (same_kind(k), k, r)).collect();
         // Same kind of event, then close in time, then most cited.
         let distance = |r: &UsedRegister| match (near, r.years) {
             (Some(n), Some(y)) if y.overlaps(n.from - 10, n.to + 10) => 0,
-            (Some(_), Some(_)) => 1,
             _ => 1,
         };
         regs.sort_by(|a, b| {
@@ -544,10 +609,10 @@ impl<'g> Context<'g> {
 }
 
 /// Places, without duplicates, in order.
-fn dedup_places(places: impl IntoIterator<Item = String>) -> Vec<String> {
+fn dedup_places(ctx: &Context, places: impl IntoIterator<Item = String>) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for p in places {
-        if !p.trim().is_empty() && !out.iter().any(|o| place_key(o) == place_key(&p)) {
+        if !p.trim().is_empty() && !out.iter().any(|o| ctx.key(o) == ctx.key(&p)) {
             out.push(p);
         }
     }
@@ -581,12 +646,21 @@ fn rules(
     match country {
         Country::France => {
             // Decennial tables first when the period is long: one table gives the year of the act.
-            let tables = y.overlaps(1793, 1902) && (!known || y.to - y.from >= 3);
+            let tables = y.overlaps(1793, TABLES_ONLINE_UNTIL) && (!known || y.to - y.from >= 3);
             if tables && goal != Goal::Parents {
                 out.push((
                     RecordType::DecennialTables,
                     format!("Decennial tables (tables décennales): {what}"),
-                    clip(Some(1793), Some(1902)),
+                    clip(Some(1793), Some(TABLES_ONLINE_UNTIL)),
+                    Vec::new(),
+                ));
+            }
+            // The national index gives the date and place of every death since 1970.
+            if goal == Goal::Death && known && y.overlaps(1970, i32::MAX) {
+                out.push((
+                    RecordType::DeathIndex,
+                    "National death index (fichier des personnes décédées, INSEE)".to_string(),
+                    y.clip(Some(1970), None),
                     Vec::new(),
                 ));
             }
@@ -642,7 +716,31 @@ fn rules(
                 _ => {}
             }
         }
-        Country::Other => {
+        // French civil registration from 1830 to 1962, at the Archives nationales d'outre-mer.
+        Country::Algeria if y.overlaps(1830, 1962) => {
+            out.push((
+                RecordType::CivilRegistration,
+                format!("Civil registers (état civil), Archives nationales d'outre-mer: {what}"),
+                clip(Some(1830), Some(1962)),
+                Vec::new(),
+            ));
+            match goal {
+                Goal::Marriage => out.push((
+                    RecordType::MarriageContracts,
+                    "Marriage contracts (notarial records)".to_string(),
+                    clip(Some(1830), Some(1962)),
+                    Vec::new(),
+                )),
+                Goal::Parents if male && y.overlaps(1847, 1921) => out.push((
+                    RecordType::MilitaryRegisters,
+                    "Military registers (registres matricules), class of the year of birth + 20".to_string(),
+                    y.clip(Some(1847), Some(1921)).map(|v| Years::new(v.from + 20, v.to + 20)),
+                    Vec::new(),
+                )),
+                _ => {}
+            }
+        }
+        Country::Algeria | Country::Other => {
             out.push((
                 RecordType::CivilRegistration,
                 format!("Civil registration: {what}"),
@@ -797,6 +895,7 @@ impl Gedcom {
             );
             (l.years, l.years_reasons) = birth_years.clone();
             l.places = dedup_places(
+                ctx,
                 std::iter::once(l.place.clone()).chain(self.parents_places(x)).chain(self.earliest_places(ctx, x)),
             );
             out.push(l);
@@ -844,6 +943,7 @@ impl Gedcom {
                 .filter_map(|c| c.birth().and_then(|b| b.place().map(str::to_string)))
                 .collect();
             l.places = dedup_places(
+                ctx,
                 std::iter::once(l.place.clone())
                     .chain(wife_places)
                     .chain(fam.husband().map(|h| self.earliest_places(ctx, h)).unwrap_or_default())
@@ -864,7 +964,7 @@ impl Gedcom {
                 self.death_years(ctx, x, &ind, death.as_ref().and_then(|e| e.date_raw()), &birth_years.0);
             let mut seen: Vec<&Seen> = ctx.seen(x).iter().collect();
             seen.sort_by_key(|s| std::cmp::Reverse(s.year));
-            l.places = dedup_places(std::iter::once(l.place.clone()).chain(seen.iter().map(|s| s.place.clone())));
+            l.places = dedup_places(ctx, std::iter::once(l.place.clone()).chain(seen.iter().map(|s| s.place.clone())));
             out.push(l);
         }
         // Parents of an ancestor at the end of a line.
@@ -873,20 +973,22 @@ impl Gedcom {
         if sosa.is_some() && !has_parents {
             let mut l = new_lead(Goal::Parents, LeadKind::Missing, "", "");
             (l.years, l.years_reasons) = birth_years.clone();
+            // The parents are searched where the person was born; without a birth place, where
+            // they married (the act names the parents), then where they were first seen.
+            let birth_place = birth.as_ref().and_then(|e| e.place().map(str::to_string));
             let marriage_places = ind
                 .fams()
                 .iter()
                 .filter_map(|f| self.family(f))
                 .flat_map(|f| f.events().iter().filter_map(|e| e.place().map(str::to_string)).collect::<Vec<_>>())
                 .collect::<Vec<_>>();
-            l.places = dedup_places(
-                birth
-                    .as_ref()
-                    .and_then(|e| e.place().map(str::to_string))
+            l.places = match birth_place {
+                Some(p) => dedup_places(ctx, [p]),
+                None => dedup_places(ctx, marriage_places.into_iter().chain(self.earliest_places(ctx, x)))
                     .into_iter()
-                    .chain(marriage_places)
-                    .chain(self.earliest_places(ctx, x)),
-            );
+                    .take(1)
+                    .collect(),
+            };
             out.push(l);
         }
         let males = male;
@@ -913,10 +1015,14 @@ impl Gedcom {
                     place: place.clone(),
                     years,
                     census_years: census,
-                    used_registers: if place.is_empty() {
-                        Vec::new()
-                    } else {
-                        ctx.used_registers(place, l.goal, l.years)
+                    // Registers of the place: civil or church registers and their indexes.
+                    used_registers: match record {
+                        RecordType::CivilRegistration | RecordType::ChurchRegisters | RecordType::DecennialTables
+                            if !place.is_empty() =>
+                        {
+                            ctx.used_registers(place, l.goal, years.or(l.years))
+                        }
+                        _ => Vec::new(),
                     },
                 });
             }
@@ -933,7 +1039,7 @@ impl Gedcom {
         let mut hi: Option<i32> = None;
         if let Some(first) = ctx.seen(ind.xref()).iter().min_by_key(|s| s.year) {
             hi = Some(first.year - 15);
-            reasons.push(format!("{} in {}", first.what, first.year));
+            reasons.push(format!("{} in {}", first.what, first.shown));
         }
         let (f, m) = self.parents(ind.xref());
         let parent_birth = [f, m]
@@ -971,7 +1077,7 @@ impl Gedcom {
         let last = ctx.seen(x).iter().max_by_key(|s| s.year);
         let lo = match (last, birth) {
             (Some(s), _) => {
-                reasons.push(format!("{} in {}", s.what, s.year));
+                reasons.push(format!("{} in {}", s.what, s.shown));
                 s.year
             }
             (None, Some(b)) => b.from,
@@ -1332,5 +1438,50 @@ mod tests {
         let birth = leads.iter().find(|l| l.goal == Goal::Birth).unwrap();
         assert_eq!(birth.where_to_look[0].record, RecordType::CivilRegistration);
         assert!(birth.where_to_look[0].label.starts_with("Civil registration"));
+    }
+
+    #[test]
+    fn registers_of_the_town_only() {
+        let g = Gedcom::parse(
+            "0 HEAD\n1 GEDC\n2 VERS 7.0\n1 _GR_ROOT @I1@\n1 PLAC\n2 FORM Lieudit, Commune, Département, Pays\n\
+0 @I1@ INDI\n1 NAME Jean /OHL/\n1 SEX M\n1 BIRT\n2 DATE 1880\n2 PLAC , Troyes, Aube, France\n2 SOUR @S1@\n\
+1 RESI\n2 DATE 1905\n2 PLAC Les Noës, Troyes, Aube, France\n2 SOUR @S2@\n2 SOUR @S3@\n2 SOUR @S4@\n\
+0 @S1@ SOUR\n1 TITL Troyes - Naissances\n1 REPO @R1@\n2 CALN 4E 387\n\
+0 @S2@ SOUR\n1 TITL Troyes -Naissances 1880\n1 REPO @R1@\n2 CALN 4E387\n\
+0 @S3@ SOUR\n1 TITL Fichier des personnes décédées\n\
+0 @S4@ SOUR\n1 TITL Saint-Etienne, Mariages\n\
+0 @R1@ REPO\n1 NAME Archives de l'Aube\n0 TRLR\n",
+        )
+        .unwrap();
+        let death = g.lead("I1", Goal::Death, None, 2026).unwrap();
+        // The locality counts with its town.
+        assert_eq!(death.places.len(), 1, "{:?}", death.places);
+        let civil = death.where_to_look.iter().find(|w| w.record == RecordType::CivilRegistration).unwrap();
+        // One register under two spellings, and no national file or other town's register.
+        assert_eq!(civil.used_registers.len(), 1, "{:?}", civil.used_registers);
+        assert_eq!(civil.used_registers[0].cited, 2);
+        // Census and probate lists are other records.
+        assert!(
+            death.where_to_look.iter().filter(|w| w.record == RecordType::Census).all(|w| w.used_registers.is_empty())
+        );
+        // Decennial tables after 1902, the 1946 census, the national index of deaths since 1970.
+        let tables = death.where_to_look.iter().find(|w| w.record == RecordType::DecennialTables).unwrap();
+        assert_eq!(tables.years, Some(Years::new(1905, TABLES_ONLINE_UNTIL)));
+        let census = death.where_to_look.iter().find(|w| w.record == RecordType::Census).unwrap();
+        assert!(census.census_years.contains(&1946));
+        assert!(death.where_to_look.iter().any(|w| w.record == RecordType::DeathIndex));
+    }
+
+    #[test]
+    fn french_algeria_until_1962() {
+        let g = Gedcom::parse(
+            "0 HEAD\n1 GEDC\n2 VERS 7.0\n1 _GR_ROOT @I1@\n0 @I1@ INDI\n1 NAME José /MARTINEZ/\n1 SEX M\n\
+1 BIRT\n2 DATE 1891\n2 PLAC Nedroma, Tlemcen, Algérie\n0 TRLR\n",
+        )
+        .unwrap();
+        let parents = g.lead("I1", Goal::Parents, None, 2026).unwrap();
+        let kinds: Vec<RecordType> = parents.where_to_look.iter().map(|w| w.record).collect();
+        assert_eq!(kinds, vec![RecordType::CivilRegistration, RecordType::MilitaryRegisters]);
+        assert!(parents.where_to_look[0].label.contains("outre-mer"));
     }
 }

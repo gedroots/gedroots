@@ -78,14 +78,18 @@ its record is cited. A baptism counts as a birth, a burial as a death.
   before the first child; a birth 15 years before the first sighting, after a parent's birth.
   Searches that found nothing at an end of the period narrow it.
 - **Places**: the last places where the person was seen for a death, the bride's places for a
-  marriage, the parents' marriage and siblings' births for a birth.
+  marriage, the parents' marriage and siblings' births for a birth, the birth place for parents. A
+  locality counts with its municipality (place format).
 - **Where to look**: kinds of records by country and period. France (country named in the place,
-  otherwise the file's most frequent country): decennial tables (1793–1902) first, civil registers
-  from 1792, parish registers before, census lists (1836–1936) and probate tables for a death,
-  marriage contracts, military registers (men born 1847–1921) for parents. Elsewhere: civil
-  registration, church registers, census, probate. Each kind lists the registers of the same place
-  the file already cites (register, source, archive, call number, number of events, years), those
-  of the same kind of event first.
+  otherwise the file's most frequent country): decennial tables (from 1793, online until 1942)
+  first, civil registers from 1792, parish registers before; for a death, the national death index
+  (INSEE, from 1970), census lists (1836–1946) and probate tables; marriage contracts; military
+  registers (men born 1847–1921) for parents. Algeria from 1830 to 1962: French civil registers at
+  the Archives nationales d'outre-mer. Elsewhere: civil registration, church registers, census,
+  probate. Civil and church registers and their indexes list the registers of the same town the
+  file already cites (sources whose title or publication names the town, one per call number:
+  register, source, archive, call number, number of events, years), close in time, those of the
+  same kind of event first.
 
 What the agent plans and searches is kept in the file, under the person (or the family for a
 marriage), as a `_GR_TASK` structure ([extensions](extensions.md#_gr_task); `crates/gedcom/src/research_log.rs`).
