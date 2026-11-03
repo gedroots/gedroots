@@ -23,7 +23,9 @@
 "Not Found" = "Introuvable";
 "All" = "Tous";
 "Ancestors" = "Ascendants";
-"Name, born:1850-1900" = "Nom, born:1850-1900";
+"Search People" = "Rechercher un individu";
+"Search Sources" = "Rechercher une source";
+"Search Media" = "Rechercher un média";
 "Relatives’ Events" = "Événements des proches";
 "Union" = "Union";
 "Married %@" = "Mariage : %@";

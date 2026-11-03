@@ -52,7 +52,10 @@ struct PeopleView: View {
             .navigationDestination(for: String.self) { id in
                 PersonView(model: model, id: id)
             }
-            .searchable(text: $query, prompt: Text("Name, born:1850-1900"))
+            .overlay {
+                if model.tree != nil, results.isEmpty, !query.isEmpty { ContentUnavailableView.search }
+            }
+            .treeSearch(model: model, zone: .people, prompt: "Search People", query: $query)
             .searchScopes($scope, activation: .onSearchPresentation) {
                 Text("All").tag(Scope.all)
                 Text("Ancestors").tag(Scope.ancestors)

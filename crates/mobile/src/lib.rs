@@ -362,6 +362,61 @@ fn place_without_codes(name: &str) -> String {
     name.split(',').map(str::trim).filter(|s| !s.is_empty() && !is_code(s)).collect::<Vec<_>>().join(", ")
 }
 
+/// Tab being searched: each has the desktop's criteria for its zone.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum SearchZone {
+    People,
+    Places,
+    Sources,
+    Media,
+}
+
+impl SearchZone {
+    fn scope(self) -> gedcom::Scope {
+        match self {
+            SearchZone::People => gedcom::Scope::Individuals,
+            SearchZone::Places => gedcom::Scope::Places,
+            SearchZone::Sources => gedcom::Scope::Sources,
+            SearchZone::Media => gedcom::Scope::Media,
+        }
+    }
+}
+
+/// A criterion of a search (`born:1850-1900`), shown as a token that reads as a phrase (“Born
+/// 1850–1900”).
+#[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Record)]
+pub struct SearchToken {
+    pub criterion: String,
+    pub label: String,
+}
+
+/// A criterion offered under the search field, with the values of the file.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SearchSuggestion {
+    /// Heading it is listed under (“Dates”, “Place”…).
+    pub group: String,
+    pub label: String,
+    pub token: SearchToken,
+    /// The field's text once the token is added: the words it replaces are removed.
+    pub rest: String,
+}
+
+/// Criteria typed in full, taken out of the field's text as tokens.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct TypedQuery {
+    pub tokens: Vec<SearchToken>,
+    pub rest: String,
+}
+
+/// Words joined back, with the trailing space of a field still being typed in.
+fn rejoin(words: &[&str], spaced: bool) -> String {
+    let mut out = words.join(" ");
+    if spaced && !out.is_empty() {
+        out.push(' ');
+    }
+    out
+}
+
 /// Sort key of a date ([`gedcom::Date::sort_key`]).
 type SortKey = (i32, u8, u8);
 
@@ -375,6 +430,8 @@ pub struct Tree {
     source_media: std::collections::HashSet<String>,
     /// Coordinates of the places that have some, by full name.
     coords: HashMap<String, (f64, f64)>,
+    /// Types and contexts of the media, for their search.
+    media_index: gedcom::MediaIndex,
 }
 
 impl Tree {
@@ -394,7 +451,8 @@ impl Tree {
                 Some((p.name, (lat, lon)))
             })
             .collect();
-        Self { ged, dir, sosa, source_media, coords }
+        let media_index = ged.media_index();
+        Self { ged, dir, sosa, source_media, coords, media_index }
     }
 
     fn row(&self, i: &gedcom::Individual) -> PersonRow {
@@ -568,6 +626,82 @@ impl Tree {
 
     pub fn root(&self) -> Option<String> {
         self.ged.root()
+    }
+
+    /// Places matching `query`, by full name (the key of [`PlacePin::name`]).
+    pub fn search_places(&self, query: String) -> Vec<String> {
+        self.ged.search(gedcom::Scope::Places, &query, None, None).into_iter().collect()
+    }
+
+    pub fn search_sources(&self, query: String) -> Vec<SourceRow> {
+        let rows = self.sources();
+        if query.trim().is_empty() {
+            return rows;
+        }
+        let found = self.ged.search(gedcom::Scope::Sources, &query, None, None);
+        rows.into_iter().filter(|r| found.contains(&r.id)).collect()
+    }
+
+    pub fn search_media(&self, query: String, kind: MediaKind) -> Vec<MediaRow> {
+        let rows = self.media(kind);
+        if query.trim().is_empty() {
+            return rows;
+        }
+        let found = self.ged.search(gedcom::Scope::Media, &query, Some(&self.media_index), None);
+        rows.into_iter().filter(|r| found.contains(&r.id)).collect()
+    }
+
+    /// Criteria typed in full (followed by a space) become tokens, like suggestions picked.
+    pub fn typed_criteria(&self, zone: SearchZone, text: String) -> TypedQuery {
+        let chips = gedcom::chips(zone.scope(), &text, Some(&self.ged));
+        if chips.is_empty() {
+            return TypedQuery { tokens: Vec::new(), rest: text };
+        }
+        let words: Vec<&str> = gedcom::query::words(&text)
+            .into_iter()
+            .filter(|(r, _)| !chips.iter().any(|(c, _, _)| c == r))
+            .map(|(_, w)| w)
+            .collect();
+        TypedQuery {
+            tokens: chips.into_iter().map(|(_, criterion, label)| SearchToken { criterion, label }).collect(),
+            rest: rejoin(&words, text.ends_with(char::is_whitespace)),
+        }
+    }
+
+    /// Suggestions for the word being typed in `text`, with `tokens` already in the field: the
+    /// zone's criteria when nothing is typed, otherwise dates, places, names… from the file.
+    /// Only those that would find something are kept.
+    pub fn suggestions(&self, zone: SearchZone, tokens: Vec<String>, text: String) -> Vec<SearchSuggestion> {
+        let scope = zone.scope();
+        let words: Vec<&str> = gedcom::query::words(&text).into_iter().map(|(_, w)| w).collect();
+        let typing = !text.is_empty() && !text.ends_with(char::is_whitespace);
+        let (previous, partial) = match words.split_last() {
+            Some((last, before)) if typing => (before, *last),
+            _ => (&words[..], ""),
+        };
+        let free: Vec<&str> = previous.iter().copied().filter(|w| !w.contains(':')).collect();
+        let mut out = Vec::new();
+        for s in self.ged.suggest(scope, &free, partial, Some(&self.media_index)) {
+            // The current word and, for a person's relatives, the words that named them.
+            let replaced = if typing { s.consumes } else { s.consumes.saturating_sub(1) };
+            let kept = &words[..words.len() - replaced.min(words.len())];
+            let rest = rejoin(kept, true);
+            let query = tokens.iter().map(String::as_str).chain([s.insert.as_str(), rest.as_str()]).collect::<Vec<_>>();
+            if self.ged.search(scope, &query.join(" "), Some(&self.media_index), None).is_empty() {
+                continue;
+            }
+            let label = gedcom::chip_label(scope, &s.insert, Some(&self.ged)).unwrap_or_else(|| s.label.clone());
+            out.push(SearchSuggestion {
+                group: s.group.label().into_owned(),
+                label: s.label,
+                token: SearchToken { criterion: s.insert, label },
+                rest: rest.trim_end().to_string(),
+            });
+            if out.len() == 12 {
+                break;
+            }
+        }
+        out
     }
 
     pub fn person(&self, id: String) -> Option<PersonDetail> {
@@ -912,6 +1046,27 @@ mod tests {
         let ancestors: Vec<String> = t.search(String::new(), Scope::Ancestors).into_iter().map(|r| r.id).collect();
         assert!(!ancestors.contains(&"I5".to_string()));
         assert_eq!(ancestors.len(), 4);
+    }
+
+    #[test]
+    fn search_tokens_and_suggestions() {
+        let t = tree();
+        let typed = t.typed_criteria(SearchZone::People, "lemaire born:1860-1870 lou".into());
+        assert_eq!(typed.tokens.len(), 1);
+        assert_eq!(typed.tokens[0].criterion, "born:1860-1870");
+        assert_eq!(typed.rest, "lemaire lou");
+        // Nothing typed: the zone's criteria, only those that find someone.
+        let criteria = t.suggestions(SearchZone::People, vec![], String::new());
+        assert!(criteria.iter().any(|s| s.token.criterion == "without:source"));
+        assert!(!criteria.iter().any(|s| s.token.criterion == "with:note"));
+        // A year: born, died, alive, in a sentence, the year taken out of the text.
+        let years = t.suggestions(SearchZone::People, vec![], "lemaire 1868".into());
+        let born = years.iter().find(|s| s.token.criterion == "born:1868").unwrap();
+        assert_eq!(born.rest, "lemaire");
+        assert_ne!(born.token.label, born.token.criterion);
+        assert_eq!(t.search_places("agneaux".into()), ["Agneaux, Manche, Normandie, France"]);
+        assert_eq!(t.search_sources("marriages".into()).len(), 1);
+        assert_eq!(t.search_media("format:image".into(), MediaKind::All).len(), 2);
     }
 
     #[test]

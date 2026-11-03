@@ -6,6 +6,7 @@ struct MediaView: View {
     @State private var kind = MediaKind.all
     @State private var viewing: MediaRow?
     @State private var items: [MediaRow] = []
+    @State private var query = ""
     @Namespace private var zoom
 
     var body: some View {
@@ -26,7 +27,13 @@ struct MediaView: View {
                 }
             }
             .overlay {
-                if items.isEmpty { ContentUnavailableView("No Media", systemImage: "photo.on.rectangle") }
+                if items.isEmpty {
+                    if query.isEmpty {
+                        ContentUnavailableView("No Media", systemImage: "photo.on.rectangle")
+                    } else {
+                        ContentUnavailableView.search
+                    }
+                }
             }
             .safeAreaInset(edge: .top) {
                 Picker("Type", selection: $kind) {
@@ -39,6 +46,7 @@ struct MediaView: View {
                 .padding(.bottom, 8)
                 .background(.bar)
             }
+            .treeSearch(model: model, zone: .media, prompt: "Search Media", query: $query)
             .navigationTitle("Media")
             .navigationBarTitleDisplayMode(.inline)
             .refreshable { await model.syncIfPaired() }
@@ -47,7 +55,7 @@ struct MediaView: View {
             .onChange(of: model.jumps) { viewing = nil }
         }
         .tint(Theme.accent)
-        .task(id: "\(kind)#\(model.revision)") { items = model.tree?.media(kind: kind) ?? [] }
+        .task(id: "\(kind)#\(query)#\(model.revision)") { items = model.tree?.searchMedia(query: query, kind: kind) ?? [] }
     }
 }
 

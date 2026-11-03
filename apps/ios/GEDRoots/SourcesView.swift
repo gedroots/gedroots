@@ -4,12 +4,9 @@ import SwiftUI
 struct SourcesView: View {
     let model: TreeModel
     @State private var query = ""
+    @State private var found: [SourceRow]?
 
-    private var rows: [SourceRow] {
-        let all = model.sources
-        guard !query.isEmpty else { return all }
-        return all.filter { $0.title.localizedStandardContains(query) || $0.detail.localizedStandardContains(query) }
-    }
+    private var rows: [SourceRow] { found ?? model.sources }
 
     var body: some View {
         NavigationStack {
@@ -17,9 +14,16 @@ struct SourcesView: View {
                 NavigationLink(value: SourceLink(id: s.id)) { SourceLabel(source: s) }
             }
             .overlay {
-                if model.sources.isEmpty { ContentUnavailableView("No Sources", systemImage: "book.closed") }
+                if model.sources.isEmpty {
+                    ContentUnavailableView("No Sources", systemImage: "book.closed")
+                } else if rows.isEmpty {
+                    ContentUnavailableView.search
+                }
             }
-            .searchable(text: $query)
+            .treeSearch(model: model, zone: .sources, prompt: "Search Sources", query: $query)
+            .task(id: "\(query)#\(model.revision)") {
+                found = query.isEmpty ? nil : model.tree?.searchSources(query: query)
+            }
             .navigationTitle("Sources")
             .navigationDestination(for: SourceLink.self) { link in SourceView(model: model, id: link.id) }
             .navigationDestination(for: String.self) { id in PersonView(model: model, id: id) }

@@ -10,12 +10,12 @@ struct PlacesView: View {
     @State private var selection: String?
     @State private var ancestorsOnly = false
     @State private var query = ""
+    /// Places matching the search; all of them when nothing is searched.
+    @State private var matching: Set<String>?
 
     private var pins: [PlacePin] {
-        let all = model.places
-        return all.filter { pin in
-            (!ancestorsOnly || pin.ancestors)
-                && (query.isEmpty || pin.name.localizedStandardContains(query))
+        model.places.filter { pin in
+            (!ancestorsOnly || pin.ancestors) && (matching?.contains(pin.name) ?? true)
         }
     }
 
@@ -35,7 +35,10 @@ struct PlacesView: View {
                 }
                 .padding(.horizontal, 16)
             }
-            .searchable(text: $query, prompt: Text("Search Places"))
+            .treeSearch(model: model, zone: .places, prompt: "Search Places", query: $query)
+            .task(id: "\(query)#\(model.revision)") {
+                matching = query.isEmpty ? nil : Set(model.tree?.searchPlaces(query: query) ?? [])
+            }
             .navigationTitle("Places")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .topBarTrailing) { MoreMenu(model: model) } }
