@@ -43,7 +43,9 @@ How to work:
 6. Call `propose_act` with that `identity` for each person (and `not` for the candidates you
    checked and found to be someone else), and every other certain fact in that person's `facts`
    (birth date in a baptism, marginal mention, earlier residence…), each with its own date or
-   none. Check the `will_write` list of the answer against your inventory. Give the place as
+   none. Check the `will_write` list of the answer against your inventory: when it says the tree
+   writes a close occupation another way, and it is the same one, propose again with `replaces`
+   and the tree's wording. Give the place as
    the tree names it, the transcription, and both the downloaded file (`file`, with `pdf_page`
    for a PDF) and the act's page in the archive's viewer (`url`, its permanent link such as an
    ark when the viewer offers one): GEDRoots keeps the image and a web link, so the user can see

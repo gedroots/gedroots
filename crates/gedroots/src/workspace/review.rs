@@ -788,6 +788,20 @@ impl Workspace {
                                     .child(t!("review.also_in", titles = titles).into_owned()),
                             )
                         })
+                        .when(!row.close.is_empty(), |d| {
+                            let values = row
+                                .close
+                                .iter()
+                                .map(|c| t!("review.quoted", title = c).into_owned())
+                                .collect::<Vec<_>>()
+                                .join(", ");
+                            d.child(
+                                div()
+                                    .text_xs()
+                                    .text_color(theme::warn())
+                                    .child(t!("review.close", values = values).into_owned()),
+                            )
+                        })
                         .when(!row.similar.is_empty(), |d| {
                             let names = row.similar.join(", ");
                             d.child(

@@ -586,7 +586,16 @@ pub fn effects(proposal: &Proposal, ged: &Gedcom) -> Vec<String> {
             } else {
                 format!(" (tree: {})", r.current)
             };
-            format!("{} {what}{value}{tree}", verb(r.change))
+            let close = if r.close.is_empty() {
+                String::new()
+            } else {
+                let quoted: Vec<String> = r.close.iter().map(|c| format!("\"{c}\"")).collect();
+                format!(
+                    "; the tree writes a close one as {}: if it is the same, propose again with `replaces` and that wording",
+                    quoted.join(" or ")
+                )
+            };
+            format!("{} {what}{value}{tree}{close}", verb(r.change))
         })
         .collect()
 }
