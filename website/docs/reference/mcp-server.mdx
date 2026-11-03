@@ -20,7 +20,7 @@ The server refuses requests sent by a web page (with an `Origin` header). The se
 
 ## Tools
 
-The tools return structured JSON. All are read-only, including `propose_act`, which only adds a proposal to review.
+The tools return structured JSON. All are read-only, including `propose_act`, `propose_change` and `withdraw_proposal`, which only add or take back a proposal to review.
 
 | Tool | Returns |
 | --- | --- |
@@ -28,9 +28,13 @@ The tools return structured JSON. All are read-only, including `propose_act`, wh
 | `search_people` | People matching a search, with the syntax of the app's [search field](/reference/search-criteria) |
 | `person_sheet` | A person's events with date, place, cited sources and media; parents, unions, children; Sosa number |
 | `research_gaps` | Births, marriages and deaths missing or unsourced among the root person's direct ancestors, by Sosa number, with each person's known places |
+| `quality_issues` | The Data Quality page's issues, filtered by category, kind or record and paged: message, records and places involved, whether the page fixes it in one click, whether it can be hidden, counts per category |
 | `search_sources` | Sources (register, repository, call number, number of records) and repositories, to cite an existing one |
 | `match_people` | For the people named in a record (role, names, sex, age, record date), the people of the tree who could be them, with the reason and whether the match is likely |
-| `propose_act` | Adds a record to the To Review page: event, date, place, source, reference, transcription, people with their role and who they are (linked, created or only mentioned), downloaded file, address of the record's page |
+| `propose_act` | Adds a record to the To Review page: event, date, place, source, reference, transcription, people with their role and who they are (linked, created or only mentioned), the other facts the record gives about each person, downloaded file, address of the record's page. The answer gives the proposal's id, lists everything that will be written (`will_write`) and the temporary id of each new person (`new_people`). With `replaces`, it corrects a waiting proposal |
+| `list_proposals` | The proposals waiting for review, with their people and what each will write, and what became of the others: saved, rejected, opened in the record editor, withdrawn or replaced |
+| `withdraw_proposal` | Takes back a proposal still waiting for review |
+| `propose_change` | Adds a change for one Data Quality issue to the To Review page: the page's own fix, edits the issue allows, merging a possible duplicate (reviewed in the merge window), or hiding an issue that is correct, with the reason and the evidence. The change is checked on a copy first: it is refused if the issue would remain, and the answer lists the issues it would create |
 
 Identifiers such as `I12` are only for passing between tools. The server's instructions ask the agent not to show them to you.
 
@@ -40,8 +44,9 @@ Identifiers such as `I12` are only for passing between tools. The server's instr
 | --- | --- | --- |
 | `find_record` | `person`, `event`, both optional | Picks a gap with `research_gaps`, finds the archive and register, searches it at a human pace, downloads the record and continues with `read_record` |
 | `read_record` | `file`, `person`, both optional | Transcribes the record, checks it against the person's sheet, identifies each person with `match_people`, picks or describes the source with `search_sources`, then calls `propose_act` and corrects the proposal if it's refused |
+| `review_quality` | `category`, `person`, both optional | Goes through the Data Quality issues, checks each one against the sheets and sources, and proposes a fix, an edit or hiding it with `propose_change` |
 
-In Claude Code, prompts appear as commands: `/mcp__gedroots__find_record` and `/mcp__gedroots__read_record`.
+In Claude Code, prompts appear as commands: `/mcp__gedroots__find_record`, `/mcp__gedroots__read_record` and `/mcp__gedroots__review_quality`.
 
 ## Validation of proposals
 
@@ -54,8 +59,12 @@ In Claude Code, prompts appear as commands: `/mcp__gedroots__find_record` and `/
 - a linked person doesn't exist;
 - a date is invalid. Valid dates are rewritten in GEDCOM 7 syntax.
 
+A proposal is checked against your tree as if the proposals already waiting were saved. A person created by a waiting proposal has a temporary id, such as `new-3`: the agent links it to name the same person in another record, and creating them a second time is refused. Whichever of those records you save first creates the person, and the others link to them.
+
+Each answer of a tool also tells the agent what you did with its proposals since its last call (`news`): saved, with the identifiers the new people now have in your tree, rejected, or opened in the record editor.
+
 A place named like a place of the tree becomes that place. A PDF register page is extracted as a JPEG image when the file's other records are images. The address of the record's page in the archive's viewer becomes a web link of the source.
 
 ## Living people
 
-A person with no death, burial or cremation is treated as living, unless their birth, or a date that places it, is more than 100 years ago. The agent can find and link a living person, but only gets what identifies them: their name, their birth (date and place) and their close relatives. Their other events and notes are left out of their sheet, and they are not among the research gaps.
+A person with no death, burial or cremation is treated as living, unless they were born more than 100 years ago, as their birth shows or the rest of the tree places it (see [Privacy](/concepts/privacy)). The agent can find and link a living person, but only gets what identifies them: their name, their birth (date and place) and their close relatives. Their other events and notes are left out of their sheet, and they are not among the research gaps.

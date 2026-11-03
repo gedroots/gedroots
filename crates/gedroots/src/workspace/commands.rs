@@ -71,6 +71,13 @@ impl Workspace {
         let d = on!(d, cx, MobileDevices, |this, w, cx| this.open_mobile_dialog(w, cx));
         let d = if sample { d } else { on!(d, cx, SaveFileAs, |this, w, cx| this.save_file_as(w, cx)) };
         let d = on!(d, cx, ExportFile, |this, w, cx| this.export(w, cx));
+        let d = d.when(self.has_version_history(), |d| {
+            let d = on!(d, cx, SaveVersion, |this, w, cx| this.open_save_version(w, cx));
+            on!(d, cx, BrowseVersions, |this, w, cx| this.open_version_history(w, cx))
+        });
+        let d = d.when(self.changed_since_opened(), |d| {
+            on!(d, cx, RevertToOpened, |this, w, cx| this.revert_to_opened(w, cx))
+        });
         let d = on!(d, cx, EnterRecord, |this, w, cx| this.enter_act(w, cx));
         let d = on!(d, cx, FocusSearch, |this, w, cx| this.filter.update(cx, |f, cx| f.focus(w, cx)));
         let d = on!(d, cx, ClearSearch, |this, w, cx| this.set_query(String::new(), w, cx));
@@ -225,6 +232,8 @@ impl Workspace {
                 let d = on!(d, cx, LinkChild, |this, w, cx| this.relative(Relation::Child, true, w, cx));
                 let d = on!(d, cx, LinkSibling, |this, w, cx| this.relative(Relation::Sibling, true, w, cx));
                 let d = on!(d, cx, KinshipWith, |this, w, cx| this.ask_kinship(w, cx));
+                let d = on!(d, cx, MergeWithPerson, |this, w, cx| this.ask_merge_with(w, cx));
+                let d = on!(d, cx, FindDuplicates, |this, _w, cx| this.find_duplicates(cx));
                 let d = on!(d, cx, SearchAncestors, |this, w, cx| this.search_kin(Kin::Ancestors, w, cx));
                 let d = on!(d, cx, SearchDescendants, |this, w, cx| this.search_kin(Kin::Descendants, w, cx));
                 d.on_action(cx.listener(|this, a: &SearchWeb, _, cx| {
@@ -318,7 +327,7 @@ impl Workspace {
         let rx = cx.prompt_for_new_path(&dir, Some(&name));
         cx.spawn_in(window, async move |this, cx| {
             if let Ok(Ok(Some(p))) = rx.await {
-                let _ = this.update_in(cx, |this, _, cx| this.write_to(p, cx));
+                let _ = this.update_in(cx, |this, _, cx| this.write_to(p, Versioning::Now, cx));
             }
         })
         .detach();

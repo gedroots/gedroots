@@ -72,15 +72,6 @@ editor.sex:
 editor.occupation:
   en: Occupation
   fr: Profession
-editor.date:
-  en: Date
-  fr: Date
-editor.birth:
-  en: Birth
-  fr: Naissance
-editor.death:
-  en: Death
-  fr: Décès
 editor.note:
   en: Note
   fr: Note
@@ -189,6 +180,9 @@ picker.who:
 picker.kinship:
   en: "Relationship of %{name} With…"
   fr: "Lien de parenté de %{name} avec…"
+picker.merge_with:
+  en: "Merge %{name} With…"
+  fr: "Fusionner %{name} avec…"
 picker.merge_into:
   en: "Add to “%{name}” the Pages of the Media…"
   fr: "Ajouter à « %{name} » les pages du média…"

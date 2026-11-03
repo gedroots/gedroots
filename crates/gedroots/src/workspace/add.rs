@@ -21,6 +21,8 @@ pub(super) enum AddDialog {
     Gedzip(Box<super::export::GedzipReport>),
     Agent(Box<super::agent::AgentDialog>),
     Mobile(Box<super::mobile::MobileDialog>),
+    /// File › Save Version…: the name of the version.
+    SaveVersion(Entity<InputState>),
 }
 
 /// Action of a row of the relatives window.
@@ -305,6 +307,9 @@ impl Workspace {
             AddDialog::Gedzip(d) => (self.gedzip_title(d), self.gedzip_body(d, cx)),
             AddDialog::Agent(d) => (rust_i18n::t!("agent.title").into(), self.agent_body(d, cx)),
             AddDialog::Mobile(d) => (rust_i18n::t!("mobile.title").into(), self.mobile_body(d, cx)),
+            AddDialog::SaveVersion(input) => {
+                (t!("cmd.save_version").trim_end_matches('…').to_string(), self.save_version_body(input, cx))
+            }
         };
         Some(
             div()

@@ -455,3 +455,53 @@ fn swapped_surname_and_given_names_still_match() {
     assert!(act::names_swapped(&e.participants[1], &father));
     assert!(!act::names_swapped(&person(ActRole::Father, "MARCHAND", "Émile"), &father));
 }
+
+#[test]
+fn other_facts_are_written_with_the_citation_and_reread() {
+    french();
+    let mut g = Gedcom::parse(SAMPLE).unwrap();
+    let s = new_source(&mut g);
+    let mut e = Act::new(&s, "BAPM");
+    e.date = "22 APR 1796".into();
+    e.place = "Agneaux".into();
+    e.page = "f° 12".into();
+    let mut birth = Fact::new("BIRT");
+    birth.date = "19 APR 1796".into();
+    birth.place = "Agneaux".into();
+    let mut death = Fact::new("DEAT");
+    death.date = "12 MAR 1870".into();
+    death.place = "Saint-Lô".into();
+    let mut trade = Fact::new("OCCU");
+    trade.value = "Tisserand".into();
+    let mut child = person(ActRole::Principal, "MARCHAND", "Émile").with(PersonField::Sex, "M");
+    child.facts = vec![birth.clone(), death.clone(), trade.clone()];
+    e.participants = vec![
+        child,
+        person(ActRole::Father, "MARCHAND", "Jacques")
+            .with(PersonField::Age, "32 ans")
+            .with(PersonField::Occupation, "Laboureur"),
+    ];
+    let res = e.save(&mut g).unwrap();
+    let emile = res.persons[0].clone().unwrap();
+    let n = g.get(&emile).unwrap();
+    for (tag, date) in [("BAPM", "22 APR 1796"), ("BIRT", "19 APR 1796"), ("DEAT", "12 MAR 1870")] {
+        let ev = n.children_with(tag).next().unwrap_or_else(|| panic!("{tag} missing: {n:?}"));
+        assert_eq!(ev.child_val("DATE"), Some(date));
+        assert_eq!(ev.child("SOUR").and_then(|c| c.child_val("PAGE")), Some("f° 12"), "{tag}");
+    }
+    let occu = n.children_with("OCCU").next().unwrap();
+    assert_eq!((occu.val(), occu.child_val("DATE")), ("Tisserand", None), "an undated occupation stays undated");
+
+    // Reopened: the facts come back on the person, the father's occupation in its field.
+    let a = g.acts(&s).pop().unwrap();
+    assert_eq!(a.event, "BAPM");
+    assert_eq!(a.participants[0].facts, vec![birth, death, trade], "{:?}", a.participants[0]);
+    assert_eq!(a.participants[1].get(PersonField::Occupation), "Laboureur");
+    assert!(a.participants[1].facts.is_empty(), "{:?}", a.participants[1]);
+    // Saved again without change: nothing is duplicated.
+    a.save(&mut g).unwrap();
+    let n = g.get(&emile).unwrap();
+    assert_eq!(n.children_with("DEAT").count(), 1);
+    assert_eq!(n.children_with("OCCU").count(), 1);
+    assert_eq!(g.acts(&s).pop().unwrap().participants[0].facts.len(), 3);
+}

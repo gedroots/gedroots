@@ -1,0 +1,58 @@
+_version: 2
+# Merge window: possible duplicates compared side by side (workspace/merging.rs).
+
+merge:
+  title:
+    en: Merge Two People
+    fr: Fusionner deux individus
+  none_left:
+    en: No possible duplicate left
+    fr: Plus aucun doublon possible
+  no_duplicate:
+    en: "No possible duplicate of %{name}"
+    fr: "Aucun doublon possible de %{name}"
+  merged:
+    en: "Merged into %{name}"
+    fr: "Fusionné dans %{name}"
+  marked_distinct:
+    en: "%{name}: marked as not a duplicate"
+    fr: "%{name} : marqué comme n'étant pas un doublon"
+  previous:
+    en: Previous Pair
+    fr: Paire précédente
+  next:
+    en: Next Pair
+    fr: Paire suivante
+  position:
+    en: "%{n} of %{total}"
+    fr: "%{n} sur %{total}"
+  child_of:
+    en: "child of %{parents}"
+    fr: "enfant de %{parents}"
+  and:
+    en: " and "
+    fr: " et "
+  same:
+    en: same
+    fr: identique
+  combined:
+    en: combined
+    fr: combiné
+  merge:
+    en: Merge
+    fr: Fusionner
+  merge_tooltip:
+    en: Choose a value on each highlighted line first
+    fr: Choisissez d'abord une valeur sur chaque ligne surlignée
+  later:
+    en: Later
+    fr: Plus tard
+  cancel:
+    en: Cancel
+    fr: Annuler
+  possible_duplicate:
+    en: "Possible duplicate: %{name}"
+    fr: "Doublon possible : %{name}"
+  not_duplicate:
+    en: Not a Duplicate
+    fr: Pas un doublon

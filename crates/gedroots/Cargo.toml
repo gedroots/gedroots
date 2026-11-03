@@ -8,6 +8,8 @@ license.workspace = true
 
 [dependencies]
 gpui-kit = "=0.8.1"
+# Local time of the versions in File › Revert To › Browse All Versions… (already used by GPUI).
+chrono = { version = "0.4.45", default-features = false, features = ["clock"] }
 gedcom = { path = "../gedcom", features = ["serde"] }
 lsp-types = "0.97"
 # Already used by GPUI: image dimensions (cropping) and decoding at display size.

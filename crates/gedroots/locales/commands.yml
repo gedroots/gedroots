@@ -33,6 +33,9 @@ menu:
   open_recent:
     en: Open Recent
     fr: Ouvrir récent
+  revert_to:
+    en: Revert To
+    fr: Revenir à
   pages:
     en: Pages
     fr: Pages
@@ -75,6 +78,15 @@ cmd:
   save_as:
     en: Save As…
     fr: Enregistrer sous…
+  save_version:
+    en: Save Version…
+    fr: Enregistrer une version…
+  revert_to_opened:
+    en: Last Opened
+    fr: Dernière ouverture
+  browse_versions:
+    en: Browse All Versions…
+    fr: Parcourir toutes les versions…
   export:
     en: Export…
     fr: Exporter…
@@ -188,6 +200,12 @@ cmd:
   search_descendants:
     en: Find Descendants
     fr: Rechercher ses descendants
+  merge_with_person:
+    en: Merge With…
+    fr: Fusionner avec…
+  find_duplicates:
+    en: Find Duplicates
+    fr: Rechercher ses doublons
   # Source
   enter_act:
     en: Enter Record…

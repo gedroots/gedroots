@@ -23,6 +23,9 @@ actions!(
         OpenFileSettings,
         SaveFile,
         SaveFileAs,
+        SaveVersion,
+        RevertToOpened,
+        BrowseVersions,
         ExportFile,
         ConnectAgent,
         MobileDevices,
@@ -94,6 +97,8 @@ actions!(
         ShowQuality,
         ShowStats,
         KinshipWith,
+        MergeWithPerson,
+        FindDuplicates,
         ToggleIgnoredIssues,
         ToggleRelativeEvents,
         ShowTree,
@@ -460,6 +465,12 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
         Sep,
         a(t!("cmd.save"), SaveFile),
         a(t!("cmd.save_as"), SaveFileAs),
+        a(t!("cmd.save_version"), SaveVersion),
+        // Like macOS documents: Revert To › Last Opened, Browse All Versions….
+        Sub(
+            t!("menu.revert_to").into(),
+            vec![a(t!("cmd.revert_to_opened"), RevertToOpened), Sep, a(t!("cmd.browse_versions"), BrowseVersions)],
+        ),
         Sep,
         a(t!("cmd.export"), ExportFile),
         Sep,
@@ -520,6 +531,9 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
             a(t!("cmd.kinship_with"), KinshipWith),
             a(t!("cmd.search_ancestors"), SearchAncestors),
             a(t!("cmd.search_descendants"), SearchDescendants),
+            Sep,
+            a(t!("cmd.merge_with_person"), MergeWithPerson),
+            a(t!("cmd.find_duplicates"), FindDuplicates),
         ],
     ));
     // Search sites of the file; submenu hidden if there are none.

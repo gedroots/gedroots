@@ -6,52 +6,129 @@
 //! unchecked), the attachment (repository, source, file, event) and, on request, the exact GEDCOM
 //! lines that will change. “Save to Tree” writes everything at once (a single undo point) and
 //! organizes the file according to File Settings › Media; “Reject” removes it without writing
-//! anything.
+//! anything. Changes for a Data Quality issue are listed after the acts (`review_change.rs`).
 
 use super::*;
-use crate::agent::propose::Pending;
+use crate::agent::propose::{self, Outcome, Pending, Queued};
+use gedcom::Conflict;
 use gedcom::proposal::{Change, Field, Proposal, SourceChoice};
 use gpui_kit::component::checkbox::Checkbox;
+use gpui_kit::component::menu::{DropdownMenu, PopupMenuItem};
 use rust_i18n::t;
 use std::collections::BTreeSet;
 
-/// A proposal and the people the user unchecked.
+/// A person, or one of their facts, that the user can uncheck.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum Keep {
+    Person(usize),
+    Fact(usize, usize),
+}
+
+/// A proposal and what the user unchecked.
 pub(super) struct Item {
+    /// Given to the agent (`P3`), to correct or withdraw it.
+    id: String,
     pending: Pending,
-    excluded: BTreeSet<usize>,
+    excluded: BTreeSet<Keep>,
+    /// Choice for each value that contradicts the tree: the event (`None`) or a fact (person,
+    /// fact), as numbered in the agent's proposal.
+    conflicts: std::collections::BTreeMap<Option<(usize, usize)>, Conflict>,
     /// Prepared by the guided tour, not sent by an agent.
     demo: bool,
 }
 
 impl Item {
-    /// The proposal, without the unchecked people.
+    /// Temporary ids of the people kept by [`Item::proposal`], in its order.
+    fn kept_temps(&self) -> Vec<Option<String>> {
+        let temps = &self.pending.temps;
+        (0..self.pending.proposal.act.participants.len())
+            .filter(|i| !self.excluded.contains(&Keep::Person(*i)))
+            .map(|i| temps.get(i).cloned().flatten())
+            .collect()
+    }
+
+    /// The proposal, without the unchecked people and facts.
     fn proposal(&self) -> Proposal {
         let mut p = self.pending.proposal.clone();
+        p.conflicts.event = self.conflict(None);
+        // Facts are numbered again once the unchecked people and facts are left out.
+        let mut person = 0;
+        for (i, x) in p.act.participants.iter_mut().enumerate() {
+            if self.excluded.contains(&Keep::Person(i)) {
+                continue;
+            }
+            let mut fact = 0;
+            for k in 0..x.facts.len() {
+                if self.excluded.contains(&Keep::Fact(i, k)) {
+                    continue;
+                }
+                let c = self.conflict(Some((i, k)));
+                if c != Conflict::KeepBoth {
+                    p.conflicts.facts.insert((person, fact), c);
+                }
+                fact += 1;
+            }
+            person += 1;
+        }
+        for (i, person) in p.act.participants.iter_mut().enumerate() {
+            let mut k = 0;
+            person.facts.retain(|_| {
+                let keep = !self.excluded.contains(&Keep::Fact(i, k));
+                k += 1;
+                keep
+            });
+        }
         let mut i = 0;
         p.act.participants.retain(|_| {
-            let keep = !self.excluded.contains(&i);
+            let keep = !self.excluded.contains(&Keep::Person(i));
             i += 1;
             keep
         });
         p
+    }
+
+    fn conflict(&self, at: Option<(usize, usize)>) -> Conflict {
+        self.conflicts.get(&at).copied().unwrap_or_default()
+    }
+
+    /// Unchecking a person also leaves out their facts.
+    fn is_excluded(&self, k: Keep) -> bool {
+        self.excluded.contains(&k) || matches!(k, Keep::Fact(i, _) if self.excluded.contains(&Keep::Person(i)))
+    }
+
+    fn keep(&mut self, k: Keep, keep: bool) {
+        if keep {
+            self.excluded.remove(&k);
+        } else {
+            self.excluded.insert(k);
+        }
     }
 }
 
 #[derive(Default)]
 pub(super) struct Review {
     pub(super) items: Vec<Item>,
+    /// Changes for Data Quality issues, listed after the acts.
+    pub(super) changes: Vec<super::review_change::ChangeGroup>,
     /// Page displayed instead of the lists.
     pub(super) open: bool,
-    sel: usize,
+    pub(super) sel: usize,
     /// GEDCOM section expanded.
-    gedcom: bool,
+    pub(super) gedcom: bool,
     /// Zoom of the act's image.
     pub(super) zoom: crate::viewer::Zoom,
+    /// Last proposal id and temporary person id given.
+    last_id: usize,
+    last_temp: usize,
+    /// What became of the proposals no longer waiting, for the agent.
+    decided: Vec<propose::Decision>,
+    /// Temporary id → person saved in the tree.
+    saved: std::collections::HashMap<String, String>,
 }
 
 impl Review {
     pub(super) fn is_empty(&self) -> bool {
-        self.items.is_empty()
+        self.items.is_empty() && self.changes.is_empty()
     }
 }
 
@@ -79,6 +156,21 @@ fn or_dash(v: &str) -> String {
     if v.trim().is_empty() { "—".into() } else { v.to_string() }
 }
 
+fn decision(id: String, outcome: Outcome) -> propose::Decision {
+    propose::Decision { id, outcome, new_people: Vec::new() }
+}
+
+/// What became of a proposal, for the agent.
+fn outcome_text(o: Outcome) -> &'static str {
+    match o {
+        Outcome::Saved => "the user saved it",
+        Outcome::Rejected => "the user rejected it",
+        Outcome::Edited => "the user opened it in record entry",
+        Outcome::Withdrawn => "it was withdrawn",
+        Outcome::Replaced => "it was replaced",
+    }
+}
+
 fn change_tag(c: Change) -> (String, Hsla) {
     let (text, color) = match c {
         Change::Same => (t!("review.same"), theme::muted()),
@@ -92,31 +184,156 @@ fn change_tag(c: Change) -> (String, Hsla) {
     (text.into_owned(), color)
 }
 
+fn conflict_label(c: Conflict) -> String {
+    match c {
+        Conflict::KeepBoth => t!("review.keep_both"),
+        Conflict::Replace => t!("review.replace"),
+        Conflict::Ignore => t!("review.ignore"),
+    }
+    .into_owned()
+}
+
+/// “≠ Keep Both ▾”: what saving does with a value that contradicts the tree.
+fn conflict_menu(
+    current: Conflict,
+    at: Option<(usize, usize)>,
+    color: Hsla,
+    cx: &mut Context<Workspace>,
+) -> impl IntoElement {
+    let me = cx.entity().downgrade();
+    let id = match at {
+        None => "conflict-event".to_string(),
+        Some((i, k)) => format!("conflict-{i}-{k}"),
+    };
+    Button::new(SharedString::from(id))
+        .ghost()
+        .xsmall()
+        .dropdown_caret(true)
+        .child(
+            div()
+                .text_xs()
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(color)
+                .child(format!("≠ {}", conflict_label(current))),
+        )
+        .dropdown_menu(move |mut menu, _, _| {
+            for c in [Conflict::KeepBoth, Conflict::Replace, Conflict::Ignore] {
+                let me = me.clone();
+                menu =
+                    menu.item(PopupMenuItem::new(conflict_label(c)).checked(c == current).on_click(move |_, _, cx| {
+                        let _ = me.update(cx, |ws, cx| {
+                            let sel = ws.review.sel;
+                            if let Some(it) = ws.review.items.get_mut(sel) {
+                                it.conflicts.insert(at, c);
+                            }
+                            cx.notify();
+                        });
+                    }));
+            }
+            menu
+        })
+}
+
 impl Workspace {
     /// Proposal received from the agent: checked against the displayed file, then queued.
-    pub(crate) fn add_proposal(&mut self, pending: Pending, cx: &mut Context<Self>) -> Result<usize, String> {
+    pub(crate) fn add_proposal(&mut self, pending: Pending, cx: &mut Context<Self>) -> Result<Queued, String> {
         self.queue_proposal(pending, false, cx)
     }
 
-    /// Queues a proposal for review; `demo`: prepared by the guided tour, and labelled so.
+    /// Queues a proposal for review; `demo`: prepared by the guided tour, and labelled so. A
+    /// correction (`replaces`) takes the place of the proposal it corrects.
     pub(super) fn queue_proposal(
         &mut self,
         mut pending: Pending,
         demo: bool,
         cx: &mut Context<Self>,
-    ) -> Result<usize, String> {
+    ) -> Result<Queued, String> {
         let Some(doc) = &self.doc else { return Err("no file is open in GEDRoots".into()) };
         let g = &doc.ged;
+        let replaced = match &pending.replaces {
+            Some(r) => Some(self.review.items.iter().position(|it| &it.id == r).ok_or_else(|| {
+                match self.review.decided.iter().rev().find(|d| &d.id == r) {
+                    Some(d) => format!("proposal {r} is no longer waiting: {}", outcome_text(d.outcome)),
+                    None => format!("no proposal {r}"),
+                }
+            })?),
+            None => None,
+        };
+        propose::link_known(&mut pending.proposal, &pending.temps, &self.review.saved);
         pending.proposal.complete(g);
         pending.proposal.check(g)?;
-        self.review.items.push(Item { pending, excluded: BTreeSet::new(), demo });
-        let n = self.review.items.len();
-        match demo {
-            true => self.set_status(t!("review.demo"), false),
-            false => self.set_status(crate::tn!("review.received", n), false),
+        // Every new person gets a temporary id, for the agent to name them in its next proposals.
+        let n = pending.proposal.act.participants.len();
+        pending.temps.resize(n, None);
+        for (part, t) in pending.proposal.act.participants.iter().zip(pending.temps.iter_mut()) {
+            match part.choice {
+                gedcom::PersonChoice::Create if t.is_none() => {
+                    self.review.last_temp += 1;
+                    *t = Some(format!("{}{}", propose::TEMP, self.review.last_temp));
+                }
+                gedcom::PersonChoice::Create => {}
+                _ => *t = None,
+            }
+        }
+        self.review.last_id += 1;
+        let id = format!("P{}", self.review.last_id);
+        let temps = pending.temps.clone();
+        let item = Item { id: id.clone(), pending, excluded: BTreeSet::new(), conflicts: Default::default(), demo };
+        match replaced {
+            Some(i) => {
+                let old = std::mem::replace(&mut self.review.items[i], item);
+                self.review.decided.push(decision(old.id, Outcome::Replaced));
+                self.set_status(t!("review.replaced"), false);
+            }
+            None => {
+                self.review.items.push(item);
+                let n = self.review.items.len();
+                match demo {
+                    true => self.set_status(t!("review.demo"), false),
+                    false => self.set_status(crate::tn!("review.received", n), false),
+                }
+            }
         }
         cx.notify();
-        Ok(n)
+        Ok(Queued { id, waiting: self.review.items.len(), temps })
+    }
+
+    /// The agent takes back a waiting proposal.
+    pub(crate) fn withdraw_proposal(&mut self, id: &str, cx: &mut Context<Self>) -> Result<usize, String> {
+        let id = id.trim();
+        let Some(i) = self.review.items.iter().position(|it| it.id == id) else {
+            return Err(match self.review.decided.iter().rev().find(|d| d.id == id) {
+                Some(d) => format!("proposal {id} is no longer waiting: {}", outcome_text(d.outcome)),
+                None => format!("no proposal {id}"),
+            });
+        };
+        let sel = self.review.sel;
+        self.review.sel = i;
+        self.review_take(Outcome::Withdrawn);
+        let total = self.review.items.len() + self.review.changes.len();
+        self.review.sel = if i < sel { sel - 1 } else { sel.min(total.saturating_sub(1)) };
+        self.set_status(t!("review.withdrawn"), false);
+        cx.notify();
+        Ok(self.review.items.len())
+    }
+
+    /// The review page as the agent sees it.
+    pub(super) fn review_queue(&self) -> propose::Queue {
+        propose::Queue {
+            waiting: self
+                .review
+                .items
+                .iter()
+                .filter(|it| !it.demo)
+                .map(|it| propose::Waiting {
+                    id: it.id.clone(),
+                    proposal: it.pending.proposal.clone(),
+                    temps: it.pending.temps.clone(),
+                })
+                .collect(),
+            decided: self.review.decided.clone(),
+            saved: self.review.saved.clone(),
+        }
     }
 
     pub(super) fn open_review(&mut self, cx: &mut Context<Self>) {
@@ -135,14 +352,19 @@ impl Workspace {
         cx.notify();
     }
 
-    /// Removes the displayed proposal; closes the page if none is left.
-    fn review_take(&mut self) -> Option<Item> {
+    /// Removes the displayed proposal, remembering what became of it; closes the page if none is
+    /// left.
+    fn review_take(&mut self, outcome: Outcome) -> Option<Item> {
         if self.review.sel >= self.review.items.len() {
             return None;
         }
         let item = self.review.items.remove(self.review.sel);
-        self.review.sel = self.review.sel.min(self.review.items.len().saturating_sub(1));
-        if self.review.items.is_empty() {
+        if !item.demo {
+            self.review.decided.push(decision(item.id.clone(), outcome));
+        }
+        let total = self.review.items.len() + self.review.changes.len();
+        self.review.sel = self.review.sel.min(total.saturating_sub(1));
+        if total == 0 {
             self.review.open = false;
         }
         Some(item)
@@ -152,7 +374,11 @@ impl Workspace {
         if !self.review.open {
             return;
         }
-        if self.review_take().is_some() {
+        if let Some(i) = self.selected_change() {
+            self.reject_change(i, cx);
+            return;
+        }
+        if self.review_take(Outcome::Rejected).is_some() {
             self.set_status(t!("review.rejected"), false);
             self.tour_did(super::tour::Advance::Decide, cx);
         }
@@ -161,11 +387,20 @@ impl Workspace {
 
     /// Saves the displayed proposal: an undo point, then the file organized.
     pub(super) fn accept_proposal(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        // ⌘↩ also merges in the merge window.
+        if self.merge.is_some() {
+            return self.merge_current(window, cx);
+        }
         if !self.review.open || self.doc.is_none() {
+            return;
+        }
+        if let Some(i) = self.selected_change() {
+            self.accept_change(i, window, cx);
             return;
         }
         let Some(item) = self.review.items.get(self.review.sel) else { return };
         let proposal = item.proposal();
+        let temps = item.kept_temps();
         let base = self.ged_dir();
         // The extracted image lives in the app’s cache: it must join the .ged folder.
         if base.is_none() && item.pending.image.is_some() {
@@ -188,7 +423,23 @@ impl Workspace {
                     }
                     _ => String::new(),
                 };
-                self.review_take();
+                // The new people are linked in the other proposals that name them, and the agent
+                // learns their ids.
+                let mut saved = Vec::new();
+                for (t, x) in temps.iter().zip(&res.persons) {
+                    if let (Some(t), Some(x)) = (t, x) {
+                        self.review.saved.insert(t.clone(), x.clone());
+                        let name = doc.ged.individual(x).map(|i| i.display_name()).unwrap_or_default();
+                        saved.push(propose::SavedPerson { temp: t.clone(), id: x.clone(), name });
+                    }
+                }
+                for it in &mut self.review.items {
+                    propose::link_known(&mut it.pending.proposal, &it.pending.temps, &self.review.saved);
+                }
+                self.review_take(Outcome::Saved);
+                if let Some(d) = self.review.decided.last_mut().filter(|d| d.outcome == Outcome::Saved) {
+                    d.new_people = saved;
+                }
                 self.set_status(res.summary() + &note, false);
                 self.tour_did(super::tour::Advance::Decide, cx);
                 self.rebuild_rows(cx);
@@ -213,7 +464,7 @@ impl Workspace {
         let Some(item) = self.review.items.get(self.review.sel) else { return };
         let proposal = item.proposal();
         // New source: created first, with an undo point.
-        let act = match &proposal.source {
+        let mut act = match &proposal.source {
             SourceChoice::Existing(x) => gedcom::Act { source: x.clone(), ..proposal.act.clone() },
             SourceChoice::New(_) => {
                 self.checkpoint();
@@ -228,7 +479,9 @@ impl Workspace {
                 }
             }
         };
-        self.review_take();
+        // Record entry has its own fields for what the review lists as deduced facts.
+        act.fold_deduced_facts();
+        self.review_take(Outcome::Edited);
         self.review.open = false;
         self.rebuild_rows(cx);
         let source = act.source.clone();
@@ -269,7 +522,7 @@ impl Workspace {
                                 .text_xs()
                                 .font_weight(FontWeight::SEMIBOLD)
                                 .text_color(theme::accent())
-                                .child(self.review.items.len().to_string()),
+                                .child(self.review_count().to_string()),
                         )
                         .on_click(cx.listener(|this, _, _, cx| this.open_review(cx)))
                         .children(self.tour_anchor(super::tour::Target::ReviewZone, cx)),
@@ -311,17 +564,37 @@ impl Workspace {
                     .child(div().font_weight(FontWeight::MEDIUM).child(title(g, &p)))
                     .when(!meta.is_empty(), |d| d.child(div().text_xs().text_color(theme::muted()).child(meta)))
                     .on_click(cx.listener(move |this, _, _, cx| this.review_select(i, cx)))
-            }));
+            }))
+            .children(self.review.changes.iter().enumerate().map(|(i, group)| self.render_change_row(i, group, g, cx)));
+        if let Some(i) = self.selected_change() {
+            return h_flex()
+                .flex_1()
+                .min_w_0()
+                .items_stretch()
+                .child(list)
+                .child(self.render_change_detail(i, &self.review.changes[i], g, cx))
+                .into_any_element();
+        }
         let Some(item) = self.review.items.get(self.review.sel) else {
             return list.into_any_element();
         };
+        // No image: no empty viewer, the proposal takes a single centred column.
+        let image = item.pending.preview.is_some() || item.pending.image.is_some();
         h_flex()
             .flex_1()
             .min_w_0()
             .items_stretch()
             .child(list)
-            .child(self.review_viewer(item))
-            .child(self.review_detail(item, g, cx))
+            .map(|d| match image {
+                true => d.child(self.review_viewer(item)).child(self.review_detail(item, g, cx)),
+                false => d.child(
+                    v_flex()
+                        .flex_1()
+                        .min_w_0()
+                        .items_center()
+                        .child(self.review_detail(item, g, cx).max_w(px(640.)).size_full().border_l_0()),
+                ),
+            })
             .into_any_element()
     }
 
@@ -379,7 +652,7 @@ impl Workspace {
             .into_any_element()
     }
 
-    fn review_detail(&self, item: &Item, g: &Gedcom, cx: &mut Context<Self>) -> AnyElement {
+    fn review_detail(&self, item: &Item, g: &Gedcom, cx: &mut Context<Self>) -> Div {
         let full = &item.pending.proposal;
         let p = item.proposal();
         // The proposal may no longer fit the tree (changed since): it stays visible, but is not
@@ -402,7 +675,7 @@ impl Workspace {
 
         // Comparison. Columns: check box, field, “In the tree”, “Proposed”.
         let line = || h_flex().items_start().gap_2().px_2().py_1p5().border_t_1().border_color(theme::border());
-        let mut grid = v_flex().border_1().border_color(theme::border()).rounded(theme::RADIUS_SM).text_sm().child(
+        let header = || {
             h_flex()
                 .gap_2()
                 .px_2()
@@ -413,68 +686,126 @@ impl Workspace {
                 .child(div().w(px(16.)).flex_none())
                 .child(div().w(px(76.)).flex_none())
                 .child(div().flex_1().min_w_0().child(t!("review.in_tree").into_owned()))
-                .child(div().flex_1().min_w_0().child(t!("review.proposed").into_owned())),
-        );
+                .child(div().flex_1().min_w_0().child(t!("review.proposed").into_owned()))
+        };
+        let table = || v_flex().border_1().border_color(theme::border()).rounded(theme::RADIUS_SM).text_sm();
+        // A new person that other waiting proposals name too: whichever is saved first creates them.
+        let also_in = |field: &Field| {
+            let Field::Person { index, .. } = field else { return None };
+            let temp = item.pending.temps.get(*index)?.as_ref()?;
+            let titles: Vec<String> = self
+                .review
+                .items
+                .iter()
+                .filter(|it| it.id != item.id && it.pending.temps.iter().flatten().any(|t| t == temp))
+                .map(|it| t!("review.quoted", title = title(g, &it.pending.proposal)).into_owned())
+                .collect();
+            (!titles.is_empty()).then(|| titles.join(", "))
+        };
+        let (mut people_rows, mut fact_rows): (Vec<AnyElement>, Vec<AnyElement>) = (Vec::new(), Vec::new());
         for row in &rows {
-            let (label, current, proposed, index) = match &row.field {
+            // What a check box keeps: a person, or one of their facts.
+            let (label, detail, current, proposed, key) = match &row.field {
                 Field::Date => {
-                    (t!("review.date").into_owned(), show_date(&row.current), show_date(&row.proposed), None)
+                    (t!("review.date").into_owned(), None, show_date(&row.current), show_date(&row.proposed), None)
                 }
                 Field::Place => (
                     t!("review.place").into_owned(),
+                    None,
                     or_dash(&gedcom::short_place(&row.current)),
                     or_dash(&gedcom::short_place(&row.proposed)),
                     None,
                 ),
                 Field::Person { index, role } => {
-                    (role.clone(), or_dash(&row.current), or_dash(&row.proposed), Some(*index))
+                    let principal = full.act.participants[*index].role == gedcom::ActRole::Principal;
+                    let key = (!principal).then_some(Keep::Person(*index));
+                    (role.clone(), None, or_dash(&row.current), or_dash(&row.proposed), key)
                 }
+                Field::Fact { person, fact, label, name } => (
+                    label.clone(),
+                    Some(name.clone()),
+                    or_dash(&row.current),
+                    or_dash(&row.proposed),
+                    Some(Keep::Fact(*person, *fact)),
+                ),
             };
-            let principal = index.is_some_and(|i| full.act.participants[i].role == gedcom::ActRole::Principal);
-            let on = index.is_none_or(|i| !item.excluded.contains(&i));
-            let check: AnyElement = match index {
-                Some(i) if !principal => Checkbox::new(SharedString::from(format!("review-keep-{i}")))
+            let on = key.is_none_or(|k| !item.is_excluded(k));
+            let check: AnyElement = match key {
+                Some(k) => Checkbox::new(SharedString::from(format!("review-keep-{k:?}")))
                     .checked(on)
                     .on_click(cx.listener(move |this, keep: &bool, _, cx| {
                         let sel = this.review.sel;
                         if let Some(it) = this.review.items.get_mut(sel) {
-                            if *keep {
-                                it.excluded.remove(&i);
-                            } else {
-                                it.excluded.insert(i);
-                            }
+                            it.keep(k, *keep);
                         }
                         cx.notify();
                     }))
                     .into_any_element(),
-                _ => div().into_any_element(),
+                None => div().into_any_element(),
             };
             let (tag, color) = change_tag(row.change);
             let same = row.change == Change::Same;
-            grid = grid.child(
-                line()
-                    .child(div().w(px(16.)).flex_none().child(check))
-                    .child(div().w(px(76.)).flex_none().text_color(theme::muted()).child(label))
-                    .child(div().flex_1().min_w_0().child(current))
-                    .child(
-                        v_flex()
-                            .flex_1()
-                            .min_w_0()
-                            .when(!on, |d| d.opacity(0.45))
-                            .child(div().text_xs().font_weight(FontWeight::SEMIBOLD).text_color(color).child(tag))
-                            .when(!same, |d| d.child(div().text_color(color).child(proposed)))
-                            .when(!row.similar.is_empty(), |d| {
-                                let names = row.similar.join(", ");
-                                d.child(
-                                    div()
-                                        .text_xs()
-                                        .text_color(theme::warn())
-                                        .child(t!("review.similar", names = names).into_owned()),
-                                )
-                            }),
-                    ),
-            );
+            // A contradiction: keep both (default), prefer the record's, or keep the tree's.
+            let at = match &row.field {
+                Field::Date | Field::Place => Some(None),
+                Field::Fact { person, fact, .. } => Some(Some((*person, *fact))),
+                Field::Person { .. } => None,
+            }
+            .filter(|_| row.change == Change::Differs);
+            let tag: AnyElement = match at {
+                Some(at) => {
+                    h_flex().ml(px(-6.)).child(conflict_menu(item.conflict(at), at, color, cx)).into_any_element()
+                }
+                None => {
+                    div().text_xs().font_weight(FontWeight::SEMIBOLD).text_color(color).child(tag).into_any_element()
+                }
+            };
+            let el = line()
+                .child(div().w(px(16.)).flex_none().child(check))
+                .child(
+                    v_flex()
+                        .w(px(76.))
+                        .flex_none()
+                        .text_color(theme::muted())
+                        .child(label)
+                        .when_some(detail, |d, name| d.child(div().text_xs().child(name))),
+                )
+                .child(div().flex_1().min_w_0().child(current))
+                .child(
+                    v_flex()
+                        .flex_1()
+                        .min_w_0()
+                        .when(!on, |d| d.opacity(0.45))
+                        .child(tag)
+                        .when(!same, |d| d.child(div().text_color(color).child(proposed)))
+                        .when_some(also_in(&row.field), |d, titles| {
+                            d.child(
+                                div()
+                                    .text_xs()
+                                    .text_color(theme::muted())
+                                    .child(t!("review.also_in", titles = titles).into_owned()),
+                            )
+                        })
+                        .when(!row.similar.is_empty(), |d| {
+                            let names = row.similar.join(", ");
+                            d.child(
+                                div()
+                                    .text_xs()
+                                    .text_color(theme::warn())
+                                    .child(t!("review.similar", names = names).into_owned()),
+                            )
+                        }),
+                )
+                .into_any_element();
+            if matches!(row.field, Field::Fact { .. }) {
+                fact_rows.push(el);
+            } else {
+                people_rows.push(el);
+            }
         }
+        let grid = table().child(header()).children(people_rows);
+        // Hidden when the record gives no other fact.
+        let facts = (!fact_rows.is_empty()).then(|| table().child(header()).children(fact_rows));
 
         // Attachment: repository → source → file → event.
         let chain = p.chain(g);
@@ -610,6 +941,9 @@ impl Workspace {
                     .gap_4()
                     .when_some(problem, |d, e| d.child(div().text_sm().text_color(theme::danger()).child(e)))
                     .child(v_flex().gap_1().child(label_caps(t!("review.record").into_owned())).child(grid))
+                    .when_some(facts, |d, facts| {
+                        d.child(v_flex().gap_1().child(label_caps(t!("review.facts").into_owned())).child(facts))
+                    })
                     .child(v_flex().gap_1().child(label_caps(t!("review.attachment").into_owned())).child(links))
                     .when(!transcription.is_empty(), |d| {
                         d.child(
@@ -663,7 +997,6 @@ impl Workspace {
                             .on_click(cx.listener(|this, _, w, cx| this.accept_proposal(w, cx))),
                     ),
             )
-            .into_any_element()
     }
 }
 

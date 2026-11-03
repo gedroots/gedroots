@@ -54,16 +54,20 @@ fn rename_place_everywhere() {
 fn individual_form_edits_only_its_fields() {
     let mut g = Gedcom::parse(SAMPLE).unwrap();
     let node = g.get_mut("I00001").unwrap();
+    let before = node_to_string(node);
     let mut form = IndividualForm::read(node);
-    assert_eq!(form.birth.date, "14 MAR 1912");
     form.given = "Paul".into();
-    form.death = EventForm::default();
     form.note = "Ligne 1\nLigne 2".into();
     form.apply(node);
     let text = node_to_string(node);
     assert!(text.contains("1 NAME Paul /MARCHAND/\n2 GIVN Paul\n"));
     assert!(text.contains("3 PAGE Acte n° 112, vue 37"), "la citation de source est conservée");
-    assert!(!text.contains("DEAT"));
+    // Birth and death are events of the timeline: the form leaves them as they are.
+    for tag in ["BIRT", "DEAT"] {
+        let event = |t: &str| t.split("\n1 ").find(|b| b.starts_with(tag)).map(str::to_string);
+        assert!(event(&before).is_some());
+        assert_eq!(event(&text), event(&before));
+    }
     assert!(text.contains("1 NOTE Ligne 1\n2 CONT Ligne 2\n"));
     assert!(text.contains("1 _SOSADABOVILLE 1 G1"), "les balises propriétaires sont conservées");
 }

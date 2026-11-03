@@ -1,7 +1,7 @@
 //! Editors of a record: visual form + raw GEDCOM editor.
 
 use crate::completion::GedcomCompletion;
-use crate::date_field::{DateField, date_field};
+use crate::date_field::DateField;
 use gedcom::complete::Catalog;
 use gedcom::*;
 use gpui_kit::component::input::{EditorState, InputState, TextareaState};
@@ -240,28 +240,6 @@ impl RecordEditor {
                 })
             };
         }
-        macro_rules! date_field {
-            ($label:expr, $ev:expr) => {
-                fields.push(Field {
-                    label: $label.into(),
-                    state: FieldState::Date(date_field(&$ev.date, &$ev.phrase, window, cx)),
-                    place: false,
-                    shown: date_words(&$ev.date, &$ev.phrase),
-                    slot: Slot::Fact,
-                })
-            };
-        }
-        macro_rules! place_field {
-            ($label:expr, $v:expr) => {
-                fields.push(Field {
-                    label: $label.into(),
-                    state: FieldState::Text(input(window, cx, &place_label(&$v), "")),
-                    place: true,
-                    shown: place_label(&$v),
-                    slot: Slot::Fact,
-                })
-            };
-        }
         match &target {
             Target::Place(name) => {
                 let place = ged.places().into_iter().find(|p| &p.name == name);
@@ -322,13 +300,8 @@ impl RecordEditor {
                             shown: choice_label(&sexes, &f.sex),
                             slot: Slot::Fact,
                         });
-                        // The occupation is an event of the timeline (there can be several): not
-                        // in the form. Birth and death are here for quick entry, as in the
-                        // timeline below the fields.
-                        date_field!(t!("editor.date"), f.birth);
-                        place_field!(t!("editor.place"), f.birth.place);
-                        date_field!(t!("editor.date"), f.death);
-                        place_field!(t!("editor.place"), f.death.place);
+                        // Birth, death and occupation are events of the timeline, edited there:
+                        // not in the form.
                         long_text = Some((t!("editor.note").into(), textarea(window, cx, &f.note)));
                     }
                     // Unions are managed from the spouses' pages.
@@ -421,14 +394,6 @@ impl RecordEditor {
     }
 
     /// Event (date + place) of fields `n` (date) and `n + 1` (place).
-    fn event(&self, n: usize, v: &[String], cx: &App) -> Result<EventForm, String> {
-        let (date, phrase) = match &self.fields[n].state {
-            FieldState::Date(e) => e.read(cx).value(cx)?,
-            other => (other.value(cx), String::new()),
-        };
-        Ok(EventForm { date, phrase, place: v[n + 1].clone() })
-    }
-
     fn long_value(&self, cx: &App) -> String {
         self.long_text.as_ref().map(|(_, s)| s.read(cx).value().to_string()).unwrap_or_default()
     }
@@ -473,8 +438,6 @@ impl RecordEditor {
                         surname: v[1].clone(),
                         sex: v[2].clone(),
                         occupation: IndividualForm::read(node).occupation,
-                        birth: self.event(3, &v, cx)?,
-                        death: self.event(5, &v, cx)?,
                         note,
                     }
                     .apply(node),

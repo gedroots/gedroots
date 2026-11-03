@@ -42,6 +42,7 @@ impl Group {
 /// Category of problems, in page order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Category {
+    Duplicates,
     Dates,
     Family,
     Structure,
@@ -54,7 +55,8 @@ pub enum Category {
 }
 
 impl Category {
-    pub const ALL: [Category; 9] = [
+    pub const ALL: [Category; 10] = [
+        Category::Duplicates,
         Category::Dates,
         Category::Family,
         Category::Structure,
@@ -68,6 +70,7 @@ impl Category {
 
     pub fn label(self) -> Cow<'static, str> {
         match self {
+            Category::Duplicates => t!("quality.category.duplicates"),
             Category::Dates => t!("quality.category.dates"),
             Category::Family => t!("quality.category.family"),
             Category::Structure => t!("quality.category.structure"),
@@ -83,6 +86,7 @@ impl Category {
     /// Stable identifier (key of the list).
     pub fn id(self) -> &'static str {
         match self {
+            Category::Duplicates => "duplicates",
             Category::Dates => "dates",
             Category::Family => "family",
             Category::Structure => "structure",
@@ -122,6 +126,7 @@ pub fn category(code: &str) -> Category {
         "unattached_file" => Category::Files,
         "place_variant" | "place_hierarchy" | "bad_coords" => Category::Places,
         "missing_coords" => Category::Coords,
+        "possible_duplicate" => Category::Duplicates,
         _ => Category::Dates,
     }
 }
@@ -155,8 +160,43 @@ pub fn fix_of(code: &str) -> Option<Fix> {
         // Two places with the same name can be distinct: to check one by one.
         "place_variant" => Fix { label: t!("quality.fix.merge"), batch: None },
         "place_hierarchy" => Fix { label: t!("quality.fix.harmonize"), batch: None },
+        // Compared and merged in the merge window, never in bulk.
+        "possible_duplicate" => Fix { label: t!("quality.fix.compare"), batch: None },
         _ => return None,
     })
+}
+
+/// Identifier of a problem, stable while the file does not change around it: its code, its record,
+/// the position of the faulty structure and the other records or values involved
+/// (`death_before_birth:I214`, `empty_fact:I12@3`, `missing_backlink:I5>F2`,
+/// `missing_coords:>Agneaux, Manche`). Two problems can share it; [`issue_ids`] tells them apart.
+pub fn issue_key(i: &Issue) -> String {
+    let mut key = format!("{}:{}", i.code, i.xref);
+    if !i.path.is_empty() {
+        let path: Vec<String> = i.path.iter().map(usize::to_string).collect();
+        key.push('@');
+        key.push_str(&path.join("."));
+    }
+    if !i.related.is_empty() {
+        key.push('>');
+        key.push_str(&i.related.join("|"));
+    }
+    key
+}
+
+/// Identifiers of a list of problems, in the same order: [`issue_key`], followed by `#2`, `#3`…
+/// for the following problems with the same key.
+pub fn issue_ids(issues: &[Issue]) -> Vec<String> {
+    let mut seen: HashMap<String, usize> = HashMap::new();
+    issues
+        .iter()
+        .map(|i| {
+            let key = issue_key(i);
+            let n = seen.entry(key.clone()).or_default();
+            *n += 1;
+            if *n == 1 { key } else { format!("{key}#{n}") }
+        })
+        .collect()
 }
 
 /// Access to the media files, provided by the application (the library does not read the disk).
@@ -186,6 +226,8 @@ pub fn run_with(g: &Gedcom, files: Option<&Files>) -> Vec<Issue> {
     media(g, files, &mut more);
     places(g, &mut more);
     check::mark_ignored(g, &mut more);
+    // Hidden with `_GR_DISTINCT`, not `_GR_IGNORE`.
+    duplicates(g, &mut more);
     issues.extend(more);
     issues.sort_by(|a, b| {
         (category(a.code), a.severity, a.code, &a.message, &a.path).cmp(&(
@@ -201,7 +243,44 @@ pub fn run_with(g: &Gedcom, files: Option<&Files>) -> Vec<Issue> {
 }
 
 fn issue(severity: Severity, code: &'static str, xref: &str, path: Vec<usize>, message: String) -> Issue {
-    Issue { severity, code, xref: xref.to_string(), related: Vec::new(), message, path, ignored: false }
+    Issue {
+        severity,
+        code,
+        xref: xref.to_string(),
+        related: Vec::new(),
+        message,
+        detail: String::new(),
+        path,
+        ignored: false,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Possible duplicates
+// ---------------------------------------------------------------------------
+
+/// “Abraham DARMON · Abraham DARMON”: the pair, likely ones as warnings; pairs marked “not a
+/// duplicate” come back as hidden issues (View › Filter List › Hidden Issues).
+fn duplicates(g: &Gedcom, out: &mut Vec<Issue>) {
+    use crate::duplicates::Level;
+    let pair = |a: &str, b: &str| format!("{} · {}", g.record_label(a), g.record_label(b));
+    for d in g.duplicates() {
+        let severity = if d.level == Level::Likely { Severity::Warning } else { Severity::Info };
+        let mut i = issue(severity, "possible_duplicate", &d.a, vec![], pair(&d.a, &d.b));
+        i.related = vec![d.b.clone()];
+        let why: Vec<&str> = d.clues.iter().filter(|c| c.is_for()).take(3).map(|c| c.text.as_str()).collect();
+        i.detail = std::iter::once(d.level.label().into_owned())
+            .chain(why.into_iter().map(str::to_string))
+            .collect::<Vec<_>>()
+            .join(" · ");
+        out.push(i);
+    }
+    for (a, b) in g.distinct_pairs() {
+        let mut i = issue(Severity::Info, "possible_duplicate", &a, vec![], pair(&a, &b));
+        i.related = vec![b];
+        i.ignored = true;
+        out.push(i);
+    }
 }
 
 // ---------------------------------------------------------------------------
