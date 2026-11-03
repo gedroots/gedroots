@@ -225,6 +225,8 @@ impl Workspace {
                 let d = on!(d, cx, LinkChild, |this, w, cx| this.relative(Relation::Child, true, w, cx));
                 let d = on!(d, cx, LinkSibling, |this, w, cx| this.relative(Relation::Sibling, true, w, cx));
                 let d = on!(d, cx, KinshipWith, |this, w, cx| this.ask_kinship(w, cx));
+                let d = on!(d, cx, MergeWithPerson, |this, w, cx| this.ask_merge_with(w, cx));
+                let d = on!(d, cx, FindDuplicates, |this, _w, cx| this.find_duplicates(cx));
                 let d = on!(d, cx, SearchAncestors, |this, w, cx| this.search_kin(Kin::Ancestors, w, cx));
                 let d = on!(d, cx, SearchDescendants, |this, w, cx| this.search_kin(Kin::Descendants, w, cx));
                 d.on_action(cx.listener(|this, a: &SearchWeb, _, cx| {

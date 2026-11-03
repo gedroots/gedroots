@@ -45,6 +45,7 @@ pub mod i18n;
 pub mod act;
 pub mod analysis;
 pub mod associations;
+pub mod change;
 pub mod complete;
 pub mod crop;
 pub mod custom;
@@ -77,6 +78,7 @@ pub mod schema;
 pub mod search;
 pub mod settings;
 pub mod starter;
+pub mod versions;
 pub mod weblink;
 pub mod websearch;
 

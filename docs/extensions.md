@@ -1,6 +1,8 @@
 # GEDRoots GEDCOM extensions
 
-GEDRoots stores its own data **in the `.ged` file**, never in a sidecar file. All its tags
+GEDRoots stores its own data **in the `.ged` file**, never in a sidecar file (the version
+history, a hidden folder beside the file, holds copies of the tree, not data of its own: see
+[version-history.md](version-history.md)). All its tags
 start with `_GR_` and are declared in the header, as GEDCOM 7 requires:
 
 ```
@@ -207,12 +209,14 @@ tag).
 
 - **Under**: any record (`INDI`, `FAM`…), at level 1.
 - **Value**: the issue code (see below). One line per hidden issue.
-- **Substructures**: none.
+- **Substructures**: `NOTE` (optional): why the issue is correct, as written by an AI agent that
+  proposed hiding it (`propose_change`) and shown on the Data Quality page.
 
 ```
 0 @I263@ INDI
 1 NAME Antoine /GIRAUDON/
 1 _GR_IGNORE marriage_too_young
+2 NOTE The marriage act gives her age as 14, with her parents' consent
 ```
 
 Hidden issues are listed in **File › File Settings…**, where they can be shown again (the tag
@@ -264,6 +268,7 @@ with the right code.
 | `bad_coords` | Unreadable or incomplete coordinates |
 | `place_variant` | Same place written differently (case, accents, "St"/"Saint", codes), or a shortened form of exactly one other place |
 | `place_hierarchy` | The same division attached to two higher divisions ("Loire" in "Rhône-Alpes" and in "Auvergne-Rhône-Alpes"); "Harmonize" keeps the most frequent |
+| `possible_duplicate` | Two individuals that may be the same person; hidden with `_GR_DISTINCT` on the pair, not `_GR_IGNORE` |
 
 File and place issues cannot be hidden: they concern no record where `_GR_IGNORE` could be
 written.

@@ -37,6 +37,7 @@ mod import;
 mod insights;
 mod media_files;
 mod menus;
+mod merging;
 mod mobile;
 mod new_tree;
 mod pages;
@@ -46,6 +47,7 @@ mod quality;
 mod relatives;
 mod report;
 mod review;
+mod review_change;
 mod saved;
 mod settings;
 pub(crate) mod tour;
@@ -245,6 +247,23 @@ impl Document {
 
 /// Folder and name proposed by Save for a tree not saved yet: next to the imported file, under a
 /// name that does not replace it (`export copy.ged`); otherwise in the home folder.
+/// Records the tree in the history folder beside its file, on its own thread: as it was found
+/// on opening (`kind` none: first version, or changes made outside GEDRoots), or as saved. The
+/// old versions are pruned after a save.
+fn record_version(path: &std::path::Path, ged: &Gedcom, kind: Option<gedcom::versions::Kind>) {
+    let (path, ged) = (path.to_path_buf(), ged.clone());
+    std::thread::spawn(move || {
+        let store = gedcom::versions::Store::for_file(&path, ged.tree_id());
+        let result = match kind {
+            None => store.record_opened(&ged).map(|_| ()),
+            Some(k) => store.record(&ged, k, None, None).and_then(|_| store.prune().map(|_| ())),
+        };
+        if let Err(e) = result {
+            eprintln!("version history: {}: {e}", store.dir().display());
+        }
+    });
+}
+
 fn save_as_default(imported: Option<&std::path::Path>) -> (PathBuf, String) {
     let Some(p) = imported else { return (dirs_home(), format!("{}.ged", t!("file.default_name"))) };
     let dir = p.parent().map(std::path::Path::to_path_buf).unwrap_or_else(dirs_home);
@@ -357,6 +376,8 @@ pub struct Workspace {
     quality: quality::QualityState,
     /// Relationship shown in a modal window (A, B).
     kinship: Option<(String, String)>,
+    /// Merge window (possible duplicates, or two people chosen by the user).
+    merge: Option<merging::MergeDialog>,
     /// Guided tour in progress.
     tour: Option<tour::Tour>,
     /// Chapters of the tour offered (Help › Take the Tour).
@@ -449,6 +470,7 @@ impl Workspace {
             list_scroll: UniformListScrollHandle::new(),
             quality: quality::QualityState { stale: true, ..Default::default() },
             kinship: None,
+            merge: None,
             tour: None,
             tour_chooser: false,
             tour_pending: false,
@@ -526,6 +548,9 @@ impl Workspace {
         }
         let first = ged.root();
         let dirty = imported || path.is_none();
+        if let Some(p) = path.as_ref().filter(|_| !imported) {
+            record_version(p, &ged, None);
+        }
         self.doc = Some(Document {
             saved: ged.clone(),
             ged,
@@ -614,6 +639,7 @@ impl Workspace {
         match gedcom::save(&doc.ged, &path) {
             Ok(()) => {
                 doc.saved = doc.ged.clone();
+                record_version(&path, &doc.ged, Some(gedcom::versions::Kind::Saved));
                 if doc.imported || doc.path.as_ref() != Some(&path) {
                     crate::recent::add(&path, cx);
                 }
@@ -2416,6 +2442,39 @@ impl Workspace {
             .when(!facts.is_empty(), |d| d.child(v_flex().gap_2().children(facts)))
     }
 
+    /// “Possible duplicate: X” under the person's name, for each likely duplicate; a click opens
+    /// the merge window.
+    fn duplicate_lines(&self, g: &Gedcom, xref: &str, cx: &mut Context<Self>) -> Vec<AnyElement> {
+        let pairs = self
+            .quality
+            .issues
+            .iter()
+            .filter(|i| {
+                i.code == "possible_duplicate" && !i.ignored && i.severity == gedcom::analysis::check::Severity::Warning
+            })
+            .filter_map(|i| Some((i.xref.clone(), i.related.first()?.clone())))
+            .filter(|(a, b)| a == xref || b == xref);
+        pairs
+            .enumerate()
+            .map(|(n, (a, b))| {
+                let other = if a == xref { &b } else { &a };
+                let name = t!("merge.possible_duplicate", name = g.record_label(other)).to_string();
+                h_flex()
+                    .id(("card-duplicate", n))
+                    .gap_1()
+                    .items_center()
+                    .text_xs()
+                    .text_color(theme::warn())
+                    .cursor_pointer()
+                    .hover(|d| d.underline())
+                    .child(icon(IconName::Users))
+                    .child(name)
+                    .on_click(cx.listener(move |this, _, _, cx| this.open_merge(vec![(a.clone(), b.clone())], 0, cx)))
+                    .into_any_element()
+            })
+            .collect()
+    }
+
     /// Edit › Edit Record: the record's fields, in place; a second time, saves (like Done).
     pub(super) fn start_edit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.editing {
@@ -3075,6 +3134,7 @@ impl Workspace {
                                 .child(t!("settings.root")),
                         )
                     })
+                    .children(self.duplicate_lines(g, &xref, cx))
                     .child(
                         h_flex()
                             .gap_2()
@@ -3460,7 +3520,7 @@ impl Render for Workspace {
                     }
                     if this.photo_draw.is_some() {
                         this.cancel_draw(cx);
-                    } else if this.kinship.take().is_some() || this.close_event_detail(cx) {
+                    } else if this.kinship.take().is_some() || this.close_merge(cx) || this.close_event_detail(cx) {
                         cx.notify();
                     } else if this.editing {
                         this.cancel_edit(w, cx);
@@ -3474,6 +3534,7 @@ impl Render for Workspace {
             .child(div().flex_1().min_h_0().flex().relative().child(body).children(self.render_drawer(cx)))
             .children(self.render_picker(cx))
             .children(self.render_kinship(cx))
+            .children(self.render_merge(cx))
             .children(self.render_event_detail(cx))
             .children(self.render_media_gallery(cx))
             .children(self.render_add_dialog(cx))

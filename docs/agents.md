@@ -27,33 +27,36 @@ in the machine's settings. The commands and blocks are built in `crates/gedroots
 ## Tools
 
 The tools return structured JSON (`outputSchema`) and work on the file of the most recently
-active window. All are read-only (`readOnlyHint`) except `propose_act` and
+active window. All are read-only (`readOnlyHint`) except `propose_act`, `propose_change` and
 `withdraw_proposal`, which write nothing either: they only add or take back a proposal to review.
 
 | Tool | Returns |
 | --- | --- |
 | `file_info` | File name, counts, root person |
 | `search_people` | People matching a search, as in the app's search box |
-| `person_sheet` | Events with date, place, cited sources (`PAGE`) and media; parents, unions, children; Sosa number |
+| `person_sheet` | Events with their position in the record, date, place, cited sources (`PAGE`) and media; parents, unions, children; Sosa number |
 | `research_gaps` | Births, marriages and deaths missing or without a source among the root person's direct ancestors, by Sosa number, with each person's known places |
+| `quality_issues` | The Data Quality page's issues, filtered by category, kind or record and paged (`offset`, `limit`): message, records and places involved, whether the page fixes it in one click, whether it can be hidden, counts per category |
 | `search_sources` | Sources (register, repository, call number, number of acts) and repositories, to cite an existing one |
 | `match_people` | For the people named in an act (role, names, sex, age, act date), the people of the tree who could be them, with the reason and whether the match is likely |
 | `propose_act` | Adds an act to the To Review page: event, date, place, source, reference, transcription, people with their role, downloaded file. Answers its id, what it will write and the temporary id of each new person; with `replaces`, corrects a waiting proposal |
 | `list_proposals` | Proposals waiting for review (id, `kind`, people with their ids, what each will write), and what became of the others: saved, rejected, edited in record entry, withdrawn, replaced |
 | `withdraw_proposal` | Takes back a waiting proposal |
+| `propose_change` | Adds a change for one Data Quality issue to the To Review page: the page's own fix (`fix`), edits among those the issue allows (`edit`), or hiding a correct issue (`hide`), with the reason and the evidence. The answer lists the issues the change would create |
 
 Ids (`I12`, `F3`…) are only for passing between tools; the server's instructions ask the agent
 not to show them.
 
 ## Prompts
 
-The server also serves two working methods as MCP prompts, so no plugin is needed: in Claude
+The server also serves three working methods as MCP prompts, so no plugin is needed: in Claude
 Code they appear as slash commands once the server is connected.
 
 | Prompt | Arguments | Does |
 | --- | --- | --- |
 | `find_record` | `person`, `event` (both optional) | Picks a gap with `research_gaps`, finds the right archive and register, searches it in the browser at a human pace, downloads the act and goes on with `read_record` |
 | `read_record` | `file`, `person` (both optional) | Transcribes the act, checks it against the person's sheet, identifies each person with `match_people`, picks or describes the source with `search_sources`, then calls `propose_act` and fixes it if refused |
+| `review_quality` | `category`, `person` (both optional) | Goes through the Data Quality issues with `quality_issues`, checks each one against the sheets and sources, then proposes a fix, an edit or hiding it with `propose_change` |
 
 ```text
 /mcp__gedroots__find_record "Jean MARCHAND" birth
@@ -124,10 +127,29 @@ the act editor. Proposals live in memory: they are lost when the app closes.
   a union, a child's birth, a parent's birth), is more than 100 years ago. The agent can find and
   link a living person, but only gets their name, their birth (date and place, `born`) and their
   close relatives: their sheet leaves out their other events and notes, and `research_gaps` skips
-  them (`crates/gedcom/src/research.rs`).
+  them (`crates/gedcom/src/research.rs`). `quality_issues` lists their issues too, their records
+  marked `living`.
 - **Local only.** The server listens on `127.0.0.1:47280`, requires the token in the
   `Authorization` header and rejects requests sent by a web page (`Origin` header).
 - **Nothing is written by the agent.** It can only propose; a person reviews, compares and saves.
 - The setting, the token and the chosen agent belong to the machine, not to the file: they are kept in
   `GEDRoots/agents` in the platform's configuration folder (`~/Library/Application Support` on
   macOS, `~/.config` on Linux, `%APPDATA%` on Windows), never in the `.ged`.
+
+## Quality changes
+
+`propose_change` (`crates/gedcom/src/change.rs`) targets one issue by the id `quality_issues`
+gives it. Each issue lists the edits it accepts (`edits`): `set_event`, `delete_event`,
+`set_sex`, `set_coordinates`, `set_media_file`, `cite_source`, `set_value`,
+`delete_structure`. A change is refused, with the reason, when:
+
+- the issue no longer exists (the agent calls `quality_issues` again);
+- the edit is not one the issue accepts, or touches a record the issue does not involve;
+- `fix` is asked for an issue without an automatic fix, or `hide` without a reason;
+- a cited source does not exist, or coordinates are out of range;
+- after applying it on a copy, GEDRoots still reports the issue.
+
+Fixes of the same kind are grouped into one To Review item, applied together. The item shows the
+values in the tree and the proposed ones, the reason, the evidence and the GEDCOM diff; saving it
+is one undo step. Hiding keeps the reason as a `NOTE` under `_GR_IGNORE`, and a possible duplicate
+is hidden with `_GR_DISTINCT`. Filiations (parents, unions) cannot be changed this way.

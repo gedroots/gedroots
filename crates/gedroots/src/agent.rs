@@ -14,6 +14,7 @@
 //! The setting and the token belong to the machine: they live in the platform's configuration
 //! folder, never in the `.ged`.
 
+pub mod change;
 pub mod clients;
 mod prompts;
 pub mod propose;
@@ -36,6 +37,11 @@ pub fn url() -> String {
 /// What the app asks of the displayed document, from the server's thread.
 pub enum Request {
     Snapshot(tokio::sync::oneshot::Sender<Option<Snapshot>>),
+    /// Copy of the document with its Data Quality issues, as the Quality page computes them.
+    Quality(tokio::sync::oneshot::Sender<Option<(Snapshot, Vec<gedcom::analysis::check::Issue>)>>),
+    /// Change for a Data Quality issue: added to “To Review”, with the issues it would create, or
+    /// refused.
+    ProposeChange(Box<change::ChangeRequest>, tokio::sync::oneshot::Sender<Result<(usize, Vec<String>), String>>),
     /// Record proposal: added to the window's “To Review” page, or refused.
     Propose(Box<propose::Pending>, tokio::sync::oneshot::Sender<Result<propose::Queued, String>>),
     /// The agent withdraws a waiting proposal: the number still waiting, or why it cannot.
@@ -122,6 +128,23 @@ pub fn install(cx: &mut App) {
                         ws.read(cx).agent_snapshot()
                     });
                     let _ = reply.send(snap);
+                }
+                Request::Quality(reply) => {
+                    let res = cx.update(|cx| {
+                        let ws = cx.global::<Target>().0.as_ref()?.upgrade()?;
+                        ws.update(cx, |ws, _| ws.agent_quality())
+                    });
+                    let _ = reply.send(res);
+                }
+                Request::ProposeChange(req, reply) => {
+                    let res = cx.update(|cx| {
+                        let ws = cx.global::<Target>().0.as_ref().and_then(|w| w.upgrade());
+                        match ws {
+                            Some(ws) => ws.update(cx, |ws, cx| ws.add_change(*req, cx)),
+                            None => Err("no file is open in GEDRoots".to_string()),
+                        }
+                    });
+                    let _ = reply.send(res);
                 }
                 Request::Propose(pending, reply) => {
                     let res = cx.update(|cx| {

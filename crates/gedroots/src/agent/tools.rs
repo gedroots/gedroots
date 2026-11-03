@@ -1,6 +1,7 @@
-//! GEDRoots' MCP tools and the HTTP server that serves them. They read the file; the only writing
-//! tool, `propose_act`, adds a proposal to review in the app.
+//! GEDRoots' MCP tools and the HTTP server that serves them. They read the file; the writing tools,
+//! `propose_act` and `propose_change`, only add a proposal to review in the app.
 
+use super::change::{self, ChangeParams, ChangeProposed};
 use super::propose::{self, Decision, Hypothesis, MatchParams, Pending, ProposeParams};
 use super::{Request, Snapshot};
 use axum::extract::State;
@@ -8,7 +9,7 @@ use axum::http::{StatusCode, header};
 use axum::middleware::Next;
 use axum::response::Response;
 use gedcom::RecordKind;
-use gedcom::research::{Gap, PersonRef, PersonSheet, current_year};
+use gedcom::research::{Gap, PersonRef, PersonSheet, QualityFilter, QualityReport, current_year};
 use rmcp::handler::server::wrapper::{Json, Parameters};
 use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
 use rmcp::transport::streamable_http_server::{StreamableHttpServerConfig, StreamableHttpService};
@@ -44,6 +45,22 @@ pub struct GapsParams {
     /// Last generation examined (1: the root person, 2: their parents…). Default 6, at most 12.
     pub generations: Option<u32>,
     /// Maximum number of gaps returned (default 100).
+    pub limit: Option<usize>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct QualityParams {
+    /// Only this category: dates, family, structure, empty, media, places, sources, files, coords.
+    pub category: Option<String>,
+    /// Only this kind of issue (`death_before_birth`, `empty_fact`…).
+    pub code: Option<String>,
+    /// Only the issues about this record (person, family, source… id).
+    pub record: Option<String>,
+    /// Also the issues the user hid because they checked them (default false).
+    pub include_hidden: Option<bool>,
+    /// Issues to skip, to read the next page (default 0).
+    pub offset: Option<usize>,
+    /// Maximum number of issues (default 100, at most 500).
     pub limit: Option<usize>,
 }
 
@@ -307,6 +324,27 @@ impl GedrootsMcp {
     }
 
     #[tool(
+        name = "quality_issues",
+        description = "The Data Quality issues of the tree, as GEDRoots' Quality page lists them: inconsistent dates and ages, family links, GEDCOM structure, empty or unused items, media, places, events without a source, files to attach, places without coordinates. Each issue has its record, what is involved, whether the Quality page fixes it in one click, and whether the user can hide it. Filter by category, kind or record; `categories` counts every category. Records of people who may be living are marked `living`.",
+        annotations(read_only_hint = true, open_world_hint = false)
+    )]
+    async fn quality(&self, Parameters(p): Parameters<QualityParams>) -> Res<QualityReport> {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        self.bridge.send(Request::Quality(tx)).await.map_err(|_| "GEDRoots is closing".to_string())?;
+        let (s, issues) = rx.await.ok().flatten().ok_or_else(|| "no file is open in GEDRoots".to_string())?;
+        let trim = |v: Option<String>| v.map(|v| v.trim().trim_matches('@').to_string()).filter(|v| !v.is_empty());
+        let filter = QualityFilter {
+            category: trim(p.category),
+            code: trim(p.code),
+            record: trim(p.record),
+            include_hidden: p.include_hidden.unwrap_or(false),
+        };
+        let limit = p.limit.unwrap_or(100).min(500);
+        let report = s.ged.quality_report(&issues, &filter, p.offset.unwrap_or(0), limit, current_year())?;
+        self.answer(&s, report)
+    }
+
+    #[tool(
         name = "search_sources",
         description = "Searches the tree's sources (with their register, repository and number of acts) and repositories. Use it before proposing an act, to cite an existing source or repository.",
         annotations(read_only_hint = true, open_world_hint = false)
@@ -532,14 +570,36 @@ impl GedrootsMcp {
         let s = self.snapshot().await?;
         self.answer(&s, Withdrawn { waiting })
     }
+
+    #[tool(
+        name = "propose_change",
+        description = "Proposes a change for a Data Quality issue (`quality_issues`). Nothing is written: it waits in GEDRoots' review page, where the user saves or rejects it. `fix` applies the Quality page's own fix (issues with `automatic_fix`). `edit` changes the records the issue is about, with the edits the issue lists in `edits` (a date read in the act, the sex of a spouse, a place's coordinates, a citation of an existing source…). `hide` keeps the issue as right, for instance a marriage really celebrated very young, and saves the reason with it. Give `reason` (what you read) and, when you can, `evidence`. Never hide an issue only to clear the list. It is refused, with the reason, if the edit is not one the issue allows, touches another record, or does not make the issue go away: GEDRoots applies it to a copy first. The answer lists the issues the change would create.",
+        annotations(
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
+    )]
+    async fn propose_change(&self, Parameters(p): Parameters<ChangeParams>) -> Res<ChangeProposed> {
+        let req = change::to_request(&p)?;
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        self.bridge
+            .send(Request::ProposeChange(Box::new(req), tx))
+            .await
+            .map_err(|_| "GEDRoots is closing".to_string())?;
+        let (waiting, new_issues) = rx.await.map_err(|_| "GEDRoots is closing".to_string())??;
+        let s = self.snapshot().await?;
+        self.answer(&s, ChangeProposed { status: "waiting for review".into(), waiting, new_issues })
+    }
 }
 
 // Instructions given to the agent on connection.
 #[tool_handler(
     name = "gedroots",
     instructions = "GEDRoots is a genealogy app. These tools read the GEDCOM 7 family tree open in \
-the app (its active window). They never change it: `propose_act` only adds an act to the \
-app's review page, where the user compares it with the tree before saving it. Of a living person, only \
+the app (its active window). They never change it: `propose_act` and `propose_change` only add \
+a proposal to the app's review page, where the user compares it with the tree before saving it. Of a living person, only \
 what identifies them is given (name, birth, close relatives). Ids (I12, F3, S4…) are \
 only for passing between tools: never show them to the user. To look for records (birth, marriage, \
 death acts), call `research_gaps`, then `person_sheet` on the person to learn their places, dates \
@@ -547,10 +607,12 @@ and the sources already cited. When you find an act, read it, check it matches t
 call `match_people` to know who each person named is in the tree (link them, create them or only \
 mention them), `search_sources` to reuse the source or repository, then `propose_act`. A person \
 that a waiting proposal creates has a temporary id (new-3): link it to name them again. To correct a \
-waiting proposal, propose it again with `replaces`; `list_proposals` says which are still waiting. \
+waiting act, propose it again with `replaces`; `list_proposals` says which are still waiting. \
 Every answer carries `news` when the user saved, rejected or edited a proposal since your last call: \
 a saved proposal gives the ids its new people now have in the tree, to link from then on. \
-The prompts `find_record` and `read_record` give the full method."
+The prompts `find_record` and `read_record` give the full method. To improve the data, `quality_issues` lists \
+the tree's Data Quality issues and `propose_change` fixes, edits or hides one; the prompt \
+`review_quality` gives the method."
 )]
 #[prompt_handler(router = self.prompt_router)]
 impl ServerHandler for GedrootsMcp {
@@ -650,12 +712,19 @@ mod tests {
         let (tx, rx) = async_channel::unbounded::<Request>();
         // Fake app loop: always returns the same document.
         std::thread::spawn(move || {
-            while let Ok(Request::Snapshot(reply)) = rx.recv_blocking() {
-                let _ = reply.send(Some(Snapshot {
-                    path: None,
-                    ged: gedcom::Gedcom::parse(FILE).unwrap(),
-                    queue: Default::default(),
-                }));
+            let ged = || gedcom::Gedcom::parse(FILE).unwrap();
+            while let Ok(req) = rx.recv_blocking() {
+                match req {
+                    Request::Snapshot(reply) => {
+                        let _ = reply.send(Some(Snapshot { path: None, ged: ged(), queue: Default::default() }));
+                    }
+                    Request::Quality(reply) => {
+                        let issues = gedcom::quality::run(&ged());
+                        let _ =
+                            reply.send(Some((Snapshot { path: None, ged: ged(), queue: Default::default() }, issues)));
+                    }
+                    _ => break,
+                }
             }
         });
         // Any free port: the app can run alongside on the usual port.
@@ -682,11 +751,11 @@ mod tests {
         let (_, _, list) =
             post(port, "secret", Some(&sid), serde_json::json!({"jsonrpc":"2.0","id":2,"method":"tools/list"}));
         let tools = list["result"]["tools"].as_array().expect("tools");
-        assert_eq!(tools.len(), 9);
-        // Only the proposals' tools are not read only, and they write nothing.
+        assert_eq!(tools.len(), 11);
+        // Only the proposals are not read only, and they write nothing.
         let writers: Vec<_> =
             tools.iter().filter(|t| t["annotations"]["readOnlyHint"] != true).map(|t| t["name"].clone()).collect();
-        assert_eq!(writers, ["propose_act", "withdraw_proposal"]);
+        assert_eq!(writers, ["propose_act", "propose_change", "withdraw_proposal"]);
         let (_, _, call) = post(
             port,
             "secret",
@@ -697,12 +766,24 @@ mod tests {
         let sheet = &call["result"]["structuredContent"];
         assert_eq!(sheet["person"]["name"], "Jean MARCHAND", "{call}");
         assert_eq!(sheet["events"][0]["place"], "Rennes");
+        // Data Quality: the place of the birth has no coordinates.
+        let (_, _, call) = post(
+            port,
+            "secret",
+            Some(&sid),
+            serde_json::json!({"jsonrpc":"2.0","id":7,"method":"tools/call",
+            "params":{"name":"quality_issues","arguments":{"category":"coords"}}}),
+        );
+        let report = &call["result"]["structuredContent"];
+        assert_eq!(report["issues"][0]["code"], "missing_coords", "{call}");
+        assert_eq!(report["issues"][0]["values"][0], "Rennes");
+        assert!(report["categories"].as_array().is_some_and(|c| !c.is_empty()));
         // The working methods are served as prompts, with or without an argument.
         let (_, _, prompts) =
             post(port, "secret", Some(&sid), serde_json::json!({"jsonrpc":"2.0","id":4,"method":"prompts/list"}));
         let names: Vec<_> =
             prompts["result"]["prompts"].as_array().expect("prompts").iter().map(|p| p["name"].clone()).collect();
-        assert_eq!(names.len(), 2, "{prompts}");
+        assert_eq!(names.len(), 3, "{prompts}");
         assert!(names.contains(&"find_record".into()) && names.contains(&"read_record".into()));
         let (_, _, got) = post(
             port,

@@ -137,3 +137,35 @@ review:
   save_ged_first:
     en: Save the .ged file first, so the act's image can be stored next to it
     fr: Enregistrez d'abord le fichier .ged, pour ranger l'image de l'acte à côté
+  # Changes for a Data Quality issue (crates/gedroots/src/workspace/review_change.rs).
+  change_received:
+    one:
+      en: "An AI agent proposed a change: it is waiting in To Review"
+      fr: "Un agent IA a proposé une correction : elle attend dans À relire"
+    other:
+      en: "An AI agent proposed a change: %{n} proposals are waiting in To Review"
+      fr: "Un agent IA a proposé une correction : %{n} propositions attendent dans À relire"
+  why:
+    en: Why
+    fr: Pourquoi
+  evidence:
+    en: Evidence
+    fr: Preuve
+  new_issues:
+    en: "This change also creates: %{list}"
+    fr: "Cette correction crée aussi : %{list}"
+  hide_issue:
+    en: Hide Issue
+    fr: Masquer la remarque
+  apply:
+    en: "Apply %{n}"
+    fr: "Appliquer (%{n})"
+  change_saved:
+    en: "Change saved: %{title}"
+    fr: "Correction enregistrée : %{title}"
+  automatic:
+    en: Automatic fixes
+    fr: Corrections automatiques
+  outdated:
+    en: The tree changed since this change was proposed
+    fr: L'arbre a changé depuis que cette correction a été proposée

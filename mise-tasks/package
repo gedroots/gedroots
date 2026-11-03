@@ -9,8 +9,13 @@
 # and the update packages (*.nupkg) with their feed (releases.<channel>.json), which the app reads
 # to update itself (crates/gedroots/src/updates.rs).
 #
-# Not signed with a certificate (Apple Developer ID, Windows code signing): macOS asks to confirm
-# the first launch in System Settings › Privacy & Security, Windows SmartScreen in “More info”.
+# Not signed with a trusted certificate (Apple Developer ID, Windows code signing): macOS asks to
+# confirm the first launch in System Settings › Privacy & Security, Windows SmartScreen in “More
+# info”. On macOS the app is signed with GEDRoots' self-signed certificate when
+# MACOS_CERTIFICATE (base64 .p12) and MACOS_CERTIFICATE_PASSWORD are set (secrets created by
+# `mise run release:certificate`): its code identity then stays the same from one version to the
+# next, so macOS keeps the permissions given to the app (folders, local network…) after an
+# update. Without them it is signed ad hoc, and each version is a new app for macOS.
 set -euo pipefail
 
 ID=GEDRoots
@@ -35,13 +40,43 @@ common=(-u "$ID" -v "$VERSION" -o "$DIST" --packTitle GEDRoots --packAuthors "Th
 case "$(uname -s)" in
 Darwin)
 	mise run bundle
-	# Ad hoc signature (no Apple Developer ID): vpk signs the bundle again after adding its
-	# updater to it.
-	vpk pack "${common[@]}" -p "$TARGET/release/GEDRoots.app" -e gedroots --signAppIdentity -
+	# vpk signs the bundle again after adding its updater to it.
+	identity=-
+	keychain=()
+	if [ -n "${MACOS_CERTIFICATE:-}" ]; then
+		# A throwaway keychain holding the certificate, unlocked for codesign.
+		KEYCHAIN="${RUNNER_TEMP:-$(mktemp -d)}/gedroots-signing.keychain-db"
+		KEYCHAIN_PASSWORD=$(openssl rand -hex 16)
+		P12=$(mktemp)
+		trap 'rm -f "$P12"; security delete-keychain "$KEYCHAIN" 2> /dev/null || true' EXIT
+		printf '%s' "$MACOS_CERTIFICATE" | base64 --decode > "$P12"
+		security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+		security set-keychain-settings -lut 21600 "$KEYCHAIN"
+		security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+		# `-f`: the temporary file has no .p12 extension to tell the format.
+		security import "$P12" -k "$KEYCHAIN" -f pkcs12 -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+		security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" > /dev/null
+		# codesign only looks for identities in the search list.
+		security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+		# Common name given by `mise run release:certificate`.
+		identity="GEDRoots Code Signing"
+		keychain=(--keychain "$KEYCHAIN")
+	else
+		echo "warning: MACOS_CERTIFICATE is not set, signing ad hoc: macOS will ask for its permissions again after the update" >&2
+	fi
+	vpk pack "${common[@]}" -p "$TARGET/release/GEDRoots.app" -e gedroots --signAppIdentity "$identity" ${keychain[@]+"${keychain[@]}"}
 	# Disk image: the app and a link to Applications, to drag one onto the other.
 	STAGE=$(mktemp -d)
 	ditto -x -k "$DIST/$ID-osx-Portable.zip" "$STAGE"
 	codesign --verify --deep --strict "$STAGE/GEDRoots.app"
+	# The designated requirement is the identity macOS remembers the permissions for: it must not
+	# be the hash of this build.
+	codesign --display --requirements - "$STAGE/GEDRoots.app" 2>&1 | tee "$DIST/requirement.txt"
+	if [ "$identity" != - ] && grep -q 'cdhash' "$DIST/requirement.txt"; then
+		echo "error: the app's designated requirement depends on this build" >&2
+		exit 1
+	fi
+	rm "$DIST/requirement.txt"
 	ln -s /Applications "$STAGE/Applications"
 	hdiutil create -volname GEDRoots -srcfolder "$STAGE" -ov -format UDZO "$DIST/GEDRoots.dmg" > /dev/null
 	rm -rf "$STAGE"

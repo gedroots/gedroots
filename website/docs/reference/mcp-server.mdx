@@ -20,7 +20,7 @@ The server refuses requests sent by a web page (with an `Origin` header). The se
 
 ## Tools
 
-The tools return structured JSON. All are read-only, including `propose_act` and `withdraw_proposal`, which only add or take back a proposal to review.
+The tools return structured JSON. All are read-only, including `propose_act`, `propose_change` and `withdraw_proposal`, which only add or take back a proposal to review.
 
 | Tool | Returns |
 | --- | --- |
@@ -28,11 +28,13 @@ The tools return structured JSON. All are read-only, including `propose_act` and
 | `search_people` | People matching a search, with the syntax of the app's [search field](/reference/search-criteria) |
 | `person_sheet` | A person's events with date, place, cited sources and media; parents, unions, children; Sosa number |
 | `research_gaps` | Births, marriages and deaths missing or unsourced among the root person's direct ancestors, by Sosa number, with each person's known places |
+| `quality_issues` | The Data Quality page's issues, filtered by category, kind or record and paged: message, records and places involved, whether the page fixes it in one click, whether it can be hidden, counts per category |
 | `search_sources` | Sources (register, repository, call number, number of records) and repositories, to cite an existing one |
 | `match_people` | For the people named in a record (role, names, sex, age, record date), the people of the tree who could be them, with the reason and whether the match is likely |
 | `propose_act` | Adds a record to the To Review page: event, date, place, source, reference, transcription, people with their role and who they are (linked, created or only mentioned), the other facts the record gives about each person, downloaded file, address of the record's page. The answer gives the proposal's id, lists everything that will be written (`will_write`) and the temporary id of each new person (`new_people`). With `replaces`, it corrects a waiting proposal |
 | `list_proposals` | The proposals waiting for review, with their people and what each will write, and what became of the others: saved, rejected, opened in the record editor, withdrawn or replaced |
 | `withdraw_proposal` | Takes back a proposal still waiting for review |
+| `propose_change` | Adds a change for one Data Quality issue to the To Review page: the page's own fix, edits the issue allows, or hiding an issue that is correct, with the reason and the evidence. The change is checked on a copy first: it is refused if the issue would remain, and the answer lists the issues it would create |
 
 Identifiers such as `I12` are only for passing between tools. The server's instructions ask the agent not to show them to you.
 
@@ -42,8 +44,9 @@ Identifiers such as `I12` are only for passing between tools. The server's instr
 | --- | --- | --- |
 | `find_record` | `person`, `event`, both optional | Picks a gap with `research_gaps`, finds the archive and register, searches it at a human pace, downloads the record and continues with `read_record` |
 | `read_record` | `file`, `person`, both optional | Transcribes the record, checks it against the person's sheet, identifies each person with `match_people`, picks or describes the source with `search_sources`, then calls `propose_act` and corrects the proposal if it's refused |
+| `review_quality` | `category`, `person`, both optional | Goes through the Data Quality issues, checks each one against the sheets and sources, and proposes a fix, an edit or hiding it with `propose_change` |
 
-In Claude Code, prompts appear as commands: `/mcp__gedroots__find_record` and `/mcp__gedroots__read_record`.
+In Claude Code, prompts appear as commands: `/mcp__gedroots__find_record`, `/mcp__gedroots__read_record` and `/mcp__gedroots__review_quality`.
 
 ## Validation of proposals
 
