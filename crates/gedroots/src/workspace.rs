@@ -2545,20 +2545,38 @@ impl Workspace {
             .border_color(theme::border())
             .child(
                 h_flex().gap_3().items_center().child(portrait).child(
+                    // Name parts sit in the name block, in reading order (title, given names,
+                    // nickname, particle + surname, suffix), like Contacts or Google Contacts:
+                    // a part only gets a field once it has been added.
                     v_flex()
                         .flex_1()
                         .min_w_0()
                         .gap_2()
+                        .children(name_part_field(ed, NamePart::Title))
                         .child(self.render_field(&f[0], cx))
+                        .children(name_part_field(ed, NamePart::Nickname))
                         // The sex is short: next to the surname, like the name line of most
-                        // genealogy software, rather than a full-width row.
-                        .child(
-                            h_flex()
-                                .gap_2()
-                                .items_start()
-                                .child(self.render_field(&f[1], cx).flex_1())
-                                .child(self.render_field(&f[2], cx).w(px(116.)).flex_none()),
-                        ),
+                        // genealogy software, rather than a full-width row. A particle takes its
+                        // place before the surname; the sex then moves under it, beside the suffix.
+                        .map(|block| {
+                            let sex = self.render_field(&f[2], cx).w(px(116.)).flex_none();
+                            let surname = self.render_field(&f[1], cx).flex_1();
+                            let suffix = name_part_field(ed, NamePart::Suffix).map(|d| d.flex_1());
+                            match name_part_field(ed, NamePart::Particle) {
+                                None => block
+                                    .child(h_flex().gap_2().items_start().child(surname).child(sex))
+                                    .children(suffix),
+                                Some(particle) => block
+                                    .child(
+                                        h_flex()
+                                            .gap_2()
+                                            .items_start()
+                                            .child(particle.w(px(72.)).flex_none())
+                                            .child(surname),
+                                    )
+                                    .child(h_flex().gap_2().items_start().children(suffix).child(sex)),
+                            }
+                        }),
                 ),
             )
             .when_some(ed.names.as_ref(), |d, names| d.children(self.render_name_extras(names, cx)))
@@ -2575,22 +2593,9 @@ impl Workspace {
             )
     }
 
-    /// Parts of the main name that are filled (two per row), then the other names: each one a
-    /// line, unfolded into its fields when clicked.
+    /// The other names of the person: each one a line, unfolded into its fields when clicked.
     fn render_name_extras(&self, names: &NamesEditor, cx: &mut Context<Self>) -> Vec<AnyElement> {
         let mut out = Vec::new();
-        if !names.parts.is_empty() {
-            out.push(
-                div()
-                    .grid()
-                    .grid_cols(2)
-                    .gap_2()
-                    .children(names.parts.iter().map(|(part, state)| {
-                        v_flex().gap_1().min_w_0().child(label_caps(part.label())).child(Input::new(state).small())
-                    }))
-                    .into_any_element(),
-            );
-        }
         if names.others.is_empty() {
             return out;
         }
@@ -3965,6 +3970,12 @@ impl Workspace {
         }
         cx.notify();
     }
+}
+
+/// The field of a main-name part, when it has been added to the record being edited.
+fn name_part_field(ed: &RecordEditor, part: NamePart) -> Option<Div> {
+    let state = ed.names.as_ref()?.parts.iter().find(|(p, _)| *p == part)?.1.clone();
+    Some(v_flex().gap_1().min_w_0().child(label_caps(part.label())).child(Input::new(&state).small()))
 }
 
 /// Words joined by spaces, empty ones left out.
