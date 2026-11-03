@@ -14,6 +14,7 @@ mod gedzip;
 mod i18n;
 mod images;
 mod map;
+mod mobile;
 mod recent;
 mod report;
 mod sample;
@@ -74,6 +75,8 @@ gpui_kit::assets::icon_assets!(
         Import,
         UserSearch,
         Quote,
+        Smartphone,
+        Tablet,
     ]
 );
 
@@ -140,6 +143,7 @@ fn main() {
         commands::bind_keys(cx);
         commands::install_menus(cx);
         agent::install(cx);
+        mobile::install(cx);
         updates::install(cx);
         cx.on_action(|_: &Quit, cx| {
             updates::apply_on_quit();

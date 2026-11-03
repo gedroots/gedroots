@@ -42,6 +42,11 @@ impl Render for PagePreview {
 
 /// Absolute path of a media file (`FILE` is relative to the .ged folder).
 pub(super) fn file_path(doc: &Document, f: &str) -> Option<PathBuf> {
+    file_path_in(doc.path.as_ref().and_then(|p| p.parent()), f)
+}
+
+/// Path of a `FILE` value relative to `dir` (the .ged folder).
+pub(super) fn file_path_in(dir: Option<&std::path::Path>, f: &str) -> Option<PathBuf> {
     if f.is_empty() || (f.contains("://") && !f.starts_with("file://")) {
         return None;
     }
@@ -49,7 +54,7 @@ pub(super) fn file_path(doc: &Document, f: &str) -> Option<PathBuf> {
     if p.is_absolute() {
         return Some(p);
     }
-    Some(doc.path.as_ref()?.parent()?.join(p))
+    Some(dir?.join(p))
 }
 
 /// Path of page `page` (from 1) of a media.

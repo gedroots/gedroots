@@ -20,6 +20,7 @@ pub(super) enum AddDialog {
     RenameMedia(Box<super::media_files::RenameDialog>),
     Gedzip(Box<super::export::GedzipReport>),
     Agent(Box<super::agent::AgentDialog>),
+    Mobile(Box<super::mobile::MobileDialog>),
 }
 
 /// Action of a row of the relatives window.
@@ -174,7 +175,9 @@ impl Workspace {
         if matches!(self.add_dialog, Some(AddDialog::Settings(_))) {
             return self.save_settings(window, cx);
         }
-        self.add_dialog = None;
+        if let Some(AddDialog::Mobile(d)) = self.add_dialog.take() {
+            Self::mobile_dialog_closed(&d);
+        }
         self.new_place = None;
         window.focus(&self.focus, cx);
         cx.notify();
@@ -278,7 +281,7 @@ impl Workspace {
 
     pub(super) fn render_add_dialog(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let g = &self.doc.as_ref()?.ged;
-        let agent = matches!(self.add_dialog, Some(AddDialog::Agent(_)));
+        let wide = matches!(self.add_dialog, Some(AddDialog::Agent(_) | AddDialog::Mobile(_)));
         let (title, body): (String, AnyElement) = match self.add_dialog.as_ref()? {
             AddDialog::Event(d) => {
                 let what = match d.editing.and_then(|ix| g.event_title(&d.owner, ix)) {
@@ -301,6 +304,7 @@ impl Workspace {
             }
             AddDialog::Gedzip(d) => (self.gedzip_title(d), self.gedzip_body(d, cx)),
             AddDialog::Agent(d) => (rust_i18n::t!("agent.title").into(), self.agent_body(d, cx)),
+            AddDialog::Mobile(d) => (rust_i18n::t!("mobile.title").into(), self.mobile_body(d, cx)),
         };
         Some(
             div()
@@ -315,7 +319,7 @@ impl Workspace {
                     v_flex()
                         .id("add-dialog")
                         .occlude()
-                        .w(px(if agent { super::agent::WIDTH } else { 520. }))
+                        .w(px(if wide { super::agent::WIDTH } else { 520. }))
                         .rounded(theme::RADIUS_LG)
                         .border_1()
                         .border_color(theme::border_strong())
@@ -352,7 +356,7 @@ impl Workspace {
                                         .on_click(cx.listener(|this, _, w, cx| this.close_add_dialog(w, cx))),
                                 ),
                         )
-                        .child(div().when(!agent, |d| d.p_3()).child(body)),
+                        .child(div().when(!wide, |d| d.p_3()).child(body)),
                 )
                 .into_any_element(),
         )

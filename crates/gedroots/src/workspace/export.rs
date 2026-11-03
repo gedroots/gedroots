@@ -239,6 +239,11 @@ impl Workspace {
 
 /// File of a `FILE` value on the disk (relative to the .ged folder).
 fn find_file(doc: &Document, file: &str) -> Option<PathBuf> {
+    find_file_in(doc.path.as_ref().and_then(|p| p.parent()), file)
+}
+
+/// File of a `FILE` value on the disk, relative to `dir` (the .ged folder).
+pub(super) fn find_file_in(dir: Option<&Path>, file: &str) -> Option<PathBuf> {
     let unix = file.replace('\\', "/");
-    [file, unix.as_str()].into_iter().filter_map(|f| super::pages::file_path(doc, f)).find(|p| p.is_file())
+    [file, unix.as_str()].into_iter().filter_map(|f| super::pages::file_path_in(dir, f)).find(|p| p.is_file())
 }

@@ -37,6 +37,7 @@ mod import;
 mod insights;
 mod media_files;
 mod menus;
+mod mobile;
 mod new_tree;
 mod pages;
 mod photo;
@@ -392,6 +393,13 @@ impl Workspace {
                 crate::agent::set_target(cx.entity().downgrade(), cx);
             }
         });
+        // Mobile devices: a file closed with its window is no longer served.
+        let me = cx.entity_id();
+        let release_sub = cx.on_release(move |this: &mut Self, cx| {
+            if let Some(share) = this.mobile_share() {
+                Self::mobile_unpublish(&share, me, cx);
+            }
+        });
         let mut this = Self {
             focus: cx.focus_handle(),
             doc: None,
@@ -459,7 +467,7 @@ impl Workspace {
             new_tree: None,
             gallery: None,
             review: review::Review::default(),
-            _subs: vec![sub, map_sub, appearance_sub, activation_sub],
+            _subs: vec![sub, map_sub, appearance_sub, activation_sub, release_sub],
         };
         if let Some(p) = path {
             this.load(p, window, cx);
@@ -511,6 +519,9 @@ impl Workspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if let Some(share) = self.mobile_share() {
+            Self::mobile_unpublish(&share, cx.entity_id(), cx);
+        }
         let first = ged.root();
         let dirty = imported || path.is_none();
         self.doc = Some(Document {
@@ -532,6 +543,7 @@ impl Workspace {
         if let Some(x) = first {
             self.select(x, window, cx);
         }
+        self.mobile_publish(cx);
     }
 
     /// Shows the sample tree (in a window of its own, see `main.rs`).
@@ -591,6 +603,7 @@ impl Workspace {
     }
 
     fn write_to(&mut self, path: PathBuf, cx: &mut Context<Self>) {
+        let before = self.mobile_share();
         let Some(doc) = &mut self.doc else { return };
         doc.ged.stamp_header();
         match gedcom::save(&doc.ged, &path) {
@@ -603,6 +616,11 @@ impl Workspace {
                 doc.dirty = false;
                 self.rescan_media();
                 self.set_status(t!("ws.saved", path = path.display()), false);
+                // Mobile devices get the saved version; after Save As, the previous file is closed.
+                if let Some(old) = before.filter(|b| self.mobile_share().as_ref() != Some(b)) {
+                    Self::mobile_unpublish(&old, cx.entity_id(), cx);
+                }
+                self.mobile_publish(cx);
             }
             Err(e) => self.set_error("ws.save_failed", t!("ws.save_failed", error = e)),
         }

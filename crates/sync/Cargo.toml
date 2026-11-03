@@ -1,0 +1,17 @@
+[package]
+name = "gedroots-sync"
+version = "0.1.0"
+edition = "2024"
+description = "One-way peer-to-peer sync of a GEDCOM tree to mobile devices (iroh)"
+repository.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+gedcom = { path = "../gedcom" }
+iroh = "1.4.1"
+iroh-blobs = "0.104.0"
+iroh-tickets = "1.0.0"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }
+anyhow = "1"
+data-encoding = "2"

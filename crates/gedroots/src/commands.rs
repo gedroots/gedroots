@@ -25,6 +25,7 @@ actions!(
         SaveFileAs,
         ExportFile,
         ConnectAgent,
+        MobileDevices,
         ReviewProposals,
         AcceptProposal,
         RejectProposal,
@@ -461,6 +462,8 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
         a(t!("cmd.save_as"), SaveFileAs),
         Sep,
         a(t!("cmd.export"), ExportFile),
+        Sep,
+        a(t!("cmd.mobile_devices"), MobileDevices),
     ]);
     if !mac {
         file.extend([Sep, a(t!("cmd.file_settings"), OpenFileSettings), Sep, a(t!("cmd.quit"), Quit)]);

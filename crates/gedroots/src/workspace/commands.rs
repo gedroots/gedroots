@@ -68,6 +68,7 @@ impl Workspace {
         let d = on!(d, cx, AcceptProposal, |this, w, cx| this.accept_proposal(w, cx));
         let d = on!(d, cx, RejectProposal, |this, w, cx| this.reject_proposal(cx));
         let d = on!(d, cx, ConnectAgent, |this, w, cx| this.open_agent_dialog(cx));
+        let d = on!(d, cx, MobileDevices, |this, w, cx| this.open_mobile_dialog(w, cx));
         let d = if sample { d } else { on!(d, cx, SaveFileAs, |this, w, cx| this.save_file_as(w, cx)) };
         let d = on!(d, cx, ExportFile, |this, w, cx| this.export(w, cx));
         let d = on!(d, cx, EnterRecord, |this, w, cx| this.enter_act(w, cx));
