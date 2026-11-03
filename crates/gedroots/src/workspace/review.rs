@@ -161,6 +161,10 @@ impl Workspace {
 
     /// Saves the displayed proposal: an undo point, then the file organized.
     pub(super) fn accept_proposal(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        // ⌘↩ also merges in the merge window.
+        if self.merge.is_some() {
+            return self.merge_current(window, cx);
+        }
         if !self.review.open || self.doc.is_none() {
             return;
         }

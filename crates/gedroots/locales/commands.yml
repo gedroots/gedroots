@@ -188,6 +188,12 @@ cmd:
   search_descendants:
     en: Find Descendants
     fr: Rechercher ses descendants
+  merge_with_person:
+    en: Merge With…
+    fr: Fusionner avec…
+  find_duplicates:
+    en: Find Duplicates
+    fr: Rechercher ses doublons
   # Source
   enter_act:
     en: Enter Record…

@@ -86,6 +86,10 @@ impl Workspace {
     }
 
     pub(super) fn fix_issue(&mut self, issue: Issue, window: &mut Window, cx: &mut Context<Self>) {
+        // A possible duplicate is never fixed blindly: Compare… opens the merge window.
+        if issue.code == "possible_duplicate" {
+            return self.merge_from_quality(&issue, cx);
+        }
         let Some(fix) = quality::fix_of(issue.code) else { return };
         let msg = t!("quality.labelled", label = fix.label, message = issue.message).to_string();
         self.quality_edit(|g| g.fix_issue(&issue), msg, window, cx);
@@ -158,8 +162,15 @@ impl Workspace {
         let msg =
             if ignore { t!("quality.hidden", label = label) } else { t!("quality.shown", label = label) }.to_string();
         let (x, code) = (issue.xref.clone(), issue.code);
+        // A pair of people is hidden as “not a duplicate” (`_GR_DISTINCT`), not per record.
+        let other = issue.related.first().cloned().filter(|_| code == "possible_duplicate");
         self.quality_edit(
-            move |g| if ignore { g.ignore_issue(&x, code) } else { g.unignore_issue(&x, code) },
+            move |g| match (&other, ignore) {
+                (Some(o), true) => g.mark_distinct(&x, o),
+                (Some(o), false) => g.unmark_distinct(&x, o),
+                (None, true) => g.ignore_issue(&x, code),
+                (None, false) => g.unignore_issue(&x, code),
+            },
             msg,
             window,
             cx,
@@ -283,7 +294,14 @@ impl Workspace {
                                                     div()
                                                         .text_xs()
                                                         .text_color(theme::muted())
-                                                        .child(check::code_label(i.code)),
+                                                        .overflow_hidden()
+                                                        .whitespace_nowrap()
+                                                        .text_ellipsis()
+                                                        .child(if i.detail.is_empty() {
+                                                            check::code_label(i.code).to_string()
+                                                        } else {
+                                                            i.detail.clone()
+                                                        }),
                                                 ),
                                         )
                                         .when(locatable(i.code) && !i.ignored, |d| {
@@ -312,7 +330,13 @@ impl Workspace {
                                         })
                                         .on_click(move |_, w, cx| {
                                             let x = x.clone();
-                                            let _ = open.update(cx, |this, cx| this.open_issue(&x, w, cx));
+                                            let _ = open.update(cx, |this, cx| {
+                                                if x.code == "possible_duplicate" {
+                                                    this.merge_from_quality(&x, cx)
+                                                } else {
+                                                    this.open_issue(&x, w, cx)
+                                                }
+                                            });
                                         })
                                         .on_mouse_down(MouseButton::Right, move |_, _, _| {
                                             *menu_issue.borrow_mut() = Some(for_menu.clone());

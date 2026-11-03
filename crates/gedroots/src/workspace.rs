@@ -37,6 +37,7 @@ mod import;
 mod insights;
 mod media_files;
 mod menus;
+mod merging;
 mod mobile;
 mod new_tree;
 mod pages;
@@ -357,6 +358,8 @@ pub struct Workspace {
     quality: quality::QualityState,
     /// Relationship shown in a modal window (A, B).
     kinship: Option<(String, String)>,
+    /// Merge window (possible duplicates, or two people chosen by the user).
+    merge: Option<merging::MergeDialog>,
     /// Guided tour in progress.
     tour: Option<tour::Tour>,
     /// Chapters of the tour offered (Help › Take the Tour).
@@ -449,6 +452,7 @@ impl Workspace {
             list_scroll: UniformListScrollHandle::new(),
             quality: quality::QualityState { stale: true, ..Default::default() },
             kinship: None,
+            merge: None,
             tour: None,
             tour_chooser: false,
             tour_pending: false,
@@ -2416,6 +2420,39 @@ impl Workspace {
             .when(!facts.is_empty(), |d| d.child(v_flex().gap_2().children(facts)))
     }
 
+    /// “Possible duplicate: X” under the person's name, for each likely duplicate; a click opens
+    /// the merge window.
+    fn duplicate_lines(&self, g: &Gedcom, xref: &str, cx: &mut Context<Self>) -> Vec<AnyElement> {
+        let pairs = self
+            .quality
+            .issues
+            .iter()
+            .filter(|i| {
+                i.code == "possible_duplicate" && !i.ignored && i.severity == gedcom::analysis::check::Severity::Warning
+            })
+            .filter_map(|i| Some((i.xref.clone(), i.related.first()?.clone())))
+            .filter(|(a, b)| a == xref || b == xref);
+        pairs
+            .enumerate()
+            .map(|(n, (a, b))| {
+                let other = if a == xref { &b } else { &a };
+                let name = t!("merge.possible_duplicate", name = g.record_label(other)).to_string();
+                h_flex()
+                    .id(("card-duplicate", n))
+                    .gap_1()
+                    .items_center()
+                    .text_xs()
+                    .text_color(theme::warn())
+                    .cursor_pointer()
+                    .hover(|d| d.underline())
+                    .child(icon(IconName::Users))
+                    .child(name)
+                    .on_click(cx.listener(move |this, _, _, cx| this.open_merge(vec![(a.clone(), b.clone())], 0, cx)))
+                    .into_any_element()
+            })
+            .collect()
+    }
+
     /// Edit › Edit Record: the record's fields, in place; a second time, saves (like Done).
     pub(super) fn start_edit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.editing {
@@ -3075,6 +3112,7 @@ impl Workspace {
                                 .child(t!("settings.root")),
                         )
                     })
+                    .children(self.duplicate_lines(g, &xref, cx))
                     .child(
                         h_flex()
                             .gap_2()
@@ -3460,7 +3498,7 @@ impl Render for Workspace {
                     }
                     if this.photo_draw.is_some() {
                         this.cancel_draw(cx);
-                    } else if this.kinship.take().is_some() || this.close_event_detail(cx) {
+                    } else if this.kinship.take().is_some() || this.close_merge(cx) || this.close_event_detail(cx) {
                         cx.notify();
                     } else if this.editing {
                         this.cancel_edit(w, cx);
@@ -3474,6 +3512,7 @@ impl Render for Workspace {
             .child(div().flex_1().min_h_0().flex().relative().child(body).children(self.render_drawer(cx)))
             .children(self.render_picker(cx))
             .children(self.render_kinship(cx))
+            .children(self.render_merge(cx))
             .children(self.render_event_detail(cx))
             .children(self.render_media_gallery(cx))
             .children(self.render_add_dialog(cx))

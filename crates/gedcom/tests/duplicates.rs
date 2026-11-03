@@ -266,3 +266,21 @@ fn the_root_person_is_always_kept() {
     g.merge_individuals(&plan, &[]).unwrap();
     assert_eq!(g.root().as_deref(), Some("I11"));
 }
+
+#[test]
+fn the_quality_page_lists_duplicates_and_hides_distinct_pairs() {
+    use gedcom::analysis::check::Severity;
+    use gedcom::quality::{self, Category};
+    let mut g = ged();
+    let dup = |g: &Gedcom| -> Vec<_> {
+        quality::run(g).into_iter().filter(|i| i.code == "possible_duplicate").collect::<Vec<_>>()
+    };
+    let issues = dup(&g);
+    assert!(issues.iter().all(|i| quality::category(i.code) == Category::Duplicates && !i.detail.is_empty()));
+    let blanc = issues.iter().find(|i| i.xref == "I20" || i.related.first().is_some_and(|r| r == "I20")).unwrap();
+    assert_eq!(blanc.severity, Severity::Warning);
+    assert!(!blanc.ignored);
+    assert!(g.mark_distinct("I20", "I21"));
+    let blanc = dup(&g).into_iter().find(|i| i.xref == "I20" || i.related.first().is_some_and(|r| r == "I20"));
+    assert!(blanc.is_some_and(|i| i.ignored));
+}

@@ -6,6 +6,9 @@ quality.group.fix:
 quality.group.complete:
   en: "To Complete"
   fr: "À compléter"
+quality.category.duplicates:
+  en: "Possible Duplicates"
+  fr: "Doublons possibles"
 quality.category.dates:
   en: "Dates and Ages"
   fr: "Dates et âges"
@@ -81,6 +84,9 @@ quality.fix.create_media:
 quality.fix.create_all_media:
   en: "Create All Media"
   fr: "Créer tous les médias"
+quality.fix.compare:
+  en: "Compare…"
+  fr: "Comparer…"
 quality.fix.harmonize:
   en: "Harmonize"
   fr: "Harmoniser"
