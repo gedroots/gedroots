@@ -72,6 +72,7 @@ pub mod phonetic;
 pub mod proposal;
 pub mod quality;
 pub mod query;
+pub mod record_diff;
 pub mod relations;
 pub mod research;
 pub mod saved;

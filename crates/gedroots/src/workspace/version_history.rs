@@ -67,11 +67,8 @@ pub(super) fn date_time_label(time: u64) -> String {
 /// Name of a version: the name given by the user, otherwise what made it.
 fn title(v: &Version) -> String {
     match (v.kind, v.label.as_deref()) {
-        (Kind::Named | Kind::RestorePoint, Some(l)) => l.to_string(),
-        (Kind::Restored, Some(from)) => match restored_from(from) {
-            Some(from) => t!("versions.restored_from", from = from).into(),
-            None => t!("versions.restored").into(),
-        },
+        (Kind::Named | Kind::RestorePoint | Kind::Agent, Some(l)) => l.to_string(),
+        (Kind::Restored, Some(from)) => restored_from(from).unwrap_or_else(|| t!("versions.restored").into()),
         (Kind::Opened, _) => t!("versions.opened").into(),
         (Kind::Saved | Kind::Named, _) => t!("versions.saved").into(),
         (Kind::Agent, _) => t!("versions.agent").into(),
@@ -92,13 +89,23 @@ fn current_title(h: &VersionHistory, i: usize, v: &Version) -> String {
 /// Label of a restored version: the version it brought back, by its id, or the tree as opened.
 const OPENED: &str = "opened";
 
+/// Label of a version that took back the changes of another: `undo <id>`.
+const UNDO: &str = "undo ";
+
+/// Time of a version, from its id.
+fn time_of(id: &str) -> Option<u64> {
+    Some(id.split('-').next()?.parse::<u64>().ok()? / 1000)
+}
+
 /// What a restored version brought back, from its label.
 fn restored_from(label: &str) -> Option<String> {
     if label == OPENED {
         return Some(t!("versions.last_opened").into());
     }
-    let millis: u64 = label.split('-').next()?.parse().ok()?;
-    Some(date_time_label(millis / 1000))
+    if let Some(id) = label.strip_prefix(UNDO) {
+        return Some(t!("versions.undone_from", from = date_time_label(time_of(id)?)).into());
+    }
+    Some(t!("versions.restored_from", from = date_time_label(time_of(label)?)).into())
 }
 
 /// “2 added · 3 changed”, or the number of records of the oldest version.
@@ -153,6 +160,11 @@ impl Workspace {
     /// File › Revert To › Browse All Versions…. The changes not recorded yet become the latest
     /// version first, so that the list starts with the current tree.
     pub(super) fn open_version_history(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.open_version_history_at(None, window, cx);
+    }
+
+    /// The version history, on the version `id` (the latest one when `None`).
+    pub(super) fn open_version_history_at(&mut self, id: Option<String>, window: &mut Window, cx: &mut Context<Self>) {
         let Some(doc) = &mut self.doc else { return };
         let Some(path) = doc.own_file().map(std::path::Path::to_path_buf) else { return };
         doc.flush();
@@ -189,7 +201,8 @@ impl Workspace {
                 let Some(h) = &mut this.version_history else { return };
                 (h.versions, h.latest_is_current) = read;
                 h.loaded = true;
-                this.select_version(0, window, cx);
+                let at = id.and_then(|id| h.versions.iter().position(|(v, _)| v.id == id)).unwrap_or(0);
+                this.select_version(at, window, cx);
             });
         })
         .detach();
@@ -276,7 +289,7 @@ impl Workspace {
                 let status = t!("versions.restored_status", from = date_time_label(v.time)).into();
                 let from = v.id.clone();
                 self.version_history = None;
-                self.restore_tree(ged, from, status, window, cx);
+                self.restore_tree(ged, Versioning::Restored(from), status, window, cx);
             }
             Err(e) => self.set_error("versions.read_failed", t!("versions.read_failed", error = e)),
         }
@@ -287,11 +300,82 @@ impl Workspace {
     pub(super) fn revert_to_opened(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(doc) = &self.doc else { return };
         let ged = doc.opened.clone();
-        self.restore_tree(ged, OPENED.into(), t!("versions.reverted_opened").into(), window, cx);
+        self.restore_tree(ged, Versioning::Restored(OPENED.into()), t!("versions.reverted_opened").into(), window, cx);
+    }
+
+    /// The selected version has changes that Undo This Change can take back.
+    fn can_undo_version(h: &VersionHistory) -> bool {
+        h.loaded && h.versions.get(h.selected).is_some_and(|(_, c)| c.as_ref().is_some_and(|c| !c.is_empty()))
+    }
+
+    /// Undo This Change: the records the selected version changed go back to the version before
+    /// it, unless they changed again since.
+    fn undo_selected_version(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(h) = self.version_history.as_ref().filter(|h| Self::can_undo_version(h)) else { return };
+        let (Some((v, _)), Some((earlier, _))) = (h.versions.get(h.selected), h.versions.get(h.selected + 1)) else {
+            return;
+        };
+        let Some(current) = self.doc.as_ref().map(|d| d.ged.clone()) else { return };
+        match h.store.undo_changes(v, earlier, &current) {
+            Ok((_, 0, _)) => self.set_status(t!("versions.nothing_to_undo"), false),
+            Ok((ged, done, left)) => {
+                let mut status: String = crate::tn!("versions.undone", done).into();
+                if left > 0 {
+                    status = format!("{status} · {}", crate::tn!("versions.left", left));
+                }
+                let label = format!("{UNDO}{}", v.id);
+                self.version_history = None;
+                self.restore_tree(ged, Versioning::Restored(label), status, window, cx);
+            }
+            Err(e) => self.set_error("versions.read_failed", t!("versions.read_failed", error = e)),
+        }
+        cx.notify();
+    }
+
+    /// Before an operation that changes many records: the tree as it is, saved and kept as a
+    /// restore point (30 days), named after the operation.
+    pub(super) fn restore_point(&mut self, what: String) {
+        let Some(doc) = &mut self.doc else { return };
+        let Some(path) = doc.own_file().map(std::path::Path::to_path_buf) else { return };
+        match doc.write(&path, Versioning::RestorePoint(what), true) {
+            Ok(_) => doc.dirty = false,
+            Err(e) => eprintln!("restore point: {}: {e}", path.display()),
+        }
+    }
+
+    /// Before an AI agent's proposal is saved: the changes not recorded yet become a version, so
+    /// that the agent's version holds only its own changes.
+    pub(super) fn before_agent_change(&mut self) {
+        if let Some(doc) = &mut self.doc {
+            doc.flush();
+        }
+    }
+
+    /// After an AI agent's proposal is saved: saved at once, as a version of its own named after
+    /// what it did and the agent.
+    pub(super) fn record_agent_change(&mut self, what: String, cx: &mut Context<Self>) {
+        let Some(path) = self.doc.as_ref().and_then(|d| d.own_file()).map(std::path::Path::to_path_buf) else { return };
+        let status = self.status.clone();
+        let author = crate::agent::last_client().map(|(name, _)| {
+            let client = crate::agent::clients::Client::from_client_info(&name);
+            client.product().map(str::to_string).unwrap_or(name)
+        });
+        self.write_to(path, Versioning::Agent(what, author), cx);
+        // The proposal's own message stays.
+        if status.is_some() && self.status.as_ref().is_none_or(|(_, error)| !error) {
+            self.status = status;
+        }
     }
 
     /// Makes `ged` the current tree: one undo point, saved at once and recorded as a version.
-    fn restore_tree(&mut self, ged: Gedcom, from: String, status: String, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn restore_tree(
+        &mut self,
+        ged: Gedcom,
+        versioning: Versioning,
+        status: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let Some(path) = self.doc.as_ref().and_then(|d| d.own_file()).map(std::path::Path::to_path_buf) else { return };
         // The changes not recorded yet stay in the history.
         if let Some(doc) = &mut self.doc {
@@ -301,7 +385,7 @@ impl Workspace {
         if let Some(doc) = &mut self.doc {
             doc.ged = ged;
         }
-        self.write_to(path, Versioning::Restored(from), cx);
+        self.write_to(path, versioning, cx);
         self.rebuild_rows(cx);
         self.refresh_editor(window, cx);
         if self.status.as_ref().is_none_or(|(_, error)| !error) {
@@ -598,6 +682,10 @@ impl Workspace {
             .label(t!("versions.save_copy"))
             .disabled(selected.is_none())
             .on_click(cx.listener(|this, _, w, cx| this.save_version_copy(w, cx)));
+        let undo = Button::new("versions-undo")
+            .label(t!("versions.undo"))
+            .disabled(!Self::can_undo_version(h))
+            .on_click(cx.listener(|this, _, w, cx| this.undo_selected_version(w, cx)));
         let foot = h_flex()
             .px_6()
             .py_4()
@@ -606,6 +694,7 @@ impl Workspace {
             .border_t_1()
             .border_color(theme::border())
             .child(copy)
+            .child(undo)
             .child(div().flex_1())
             .children(buttons);
 

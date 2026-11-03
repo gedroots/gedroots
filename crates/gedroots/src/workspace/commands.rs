@@ -75,6 +75,9 @@ impl Workspace {
             let d = on!(d, cx, SaveVersion, |this, w, cx| this.open_save_version(w, cx));
             on!(d, cx, BrowseVersions, |this, w, cx| this.open_version_history(w, cx))
         });
+        let d = d.when(self.can_show_record_history(), |d| {
+            on!(d, cx, RecordHistory, |this, w, cx| this.open_record_history_of_selection(w, cx))
+        });
         let d = d.when(self.changed_since_opened(), |d| {
             on!(d, cx, RevertToOpened, |this, w, cx| this.revert_to_opened(w, cx))
         });

@@ -169,6 +169,8 @@ impl Workspace {
         let plan = d.plan.clone().unwrap();
         let choices: Vec<Side> = d.choices.iter().map(|c| c.unwrap()).collect();
         let name = self.doc.as_ref().map(|d| d.ged.record_label(&plan.keep)).unwrap_or_default();
+        let other = self.doc.as_ref().map(|d| d.ged.record_label(&plan.other)).unwrap_or_default();
+        self.restore_point(t!("versions.before_merge", a = name, b = other).into());
         let mut kept = None;
         self.edit_ged(
             |g| {

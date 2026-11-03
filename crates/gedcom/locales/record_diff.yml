@@ -1,0 +1,10 @@
+_version: 2
+# Field-by-field changes of a record (src/record_diff.rs).
+
+record_diff:
+  text:
+    en: Text
+    fr: Texte
+  present:
+    en: Present
+    fr: Présent
