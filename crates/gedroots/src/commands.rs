@@ -94,6 +94,8 @@ actions!(
         ShowQuality,
         ShowStats,
         KinshipWith,
+        MergeWithPerson,
+        FindDuplicates,
         ToggleIgnoredIssues,
         ToggleRelativeEvents,
         ShowTree,
@@ -520,6 +522,9 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
             a(t!("cmd.kinship_with"), KinshipWith),
             a(t!("cmd.search_ancestors"), SearchAncestors),
             a(t!("cmd.search_descendants"), SearchDescendants),
+            Sep,
+            a(t!("cmd.merge_with_person"), MergeWithPerson),
+            a(t!("cmd.find_duplicates"), FindDuplicates),
         ],
     ));
     // Search sites of the file; submenu hidden if there are none.

@@ -301,6 +301,7 @@ pub(super) fn person_menu(ws: Ws, x: String, from: From) -> MenuBuilder {
         .collect();
         let rels2 = rels.clone();
         let (x1, x2, x3, x4, x5, x6) = (x.clone(), x.clone(), x.clone(), x.clone(), x.clone(), x.clone());
+        let (x7, x8) = (x.clone(), x.clone());
         let (wa, wb) = (ws.clone(), ws.clone());
         let sites = read(&ws, cx, |_, g| g.search_sites()).unwrap_or_default();
         let (ws_sites, x_sites) = (ws.clone(), x.clone());
@@ -342,6 +343,12 @@ pub(super) fn person_menu(ws: Ws, x: String, from: From) -> MenuBuilder {
                 })
             })
         };
+        let menu = menu
+            .separator()
+            .item(act(&ws, t!("cmd.merge_with_person"), move |this, w, cx| {
+                this.open_picker(PickPurpose::MergeWith { indi: x7.clone() }, w, cx)
+            }))
+            .item(act(&ws, t!("cmd.find_duplicates"), move |this, _, cx| this.find_duplicates_of(&x8, cx)));
         menu.when_some(
             match &from {
                 From::Relative(indi, fam, label) => Some((indi.clone(), fam.clone(), label.clone())),

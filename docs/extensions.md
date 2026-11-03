@@ -266,6 +266,7 @@ with the right code.
 | `bad_coords` | Unreadable or incomplete coordinates |
 | `place_variant` | Same place written differently (case, accents, "St"/"Saint", codes), or a shortened form of exactly one other place |
 | `place_hierarchy` | The same division attached to two higher divisions ("Loire" in "Rhône-Alpes" and in "Auvergne-Rhône-Alpes"); "Harmonize" keeps the most frequent |
+| `possible_duplicate` | Two individuals that may be the same person; hidden with `_GR_DISTINCT` on the pair, not `_GR_IGNORE` |
 
 File and place issues cannot be hidden: they concern no record where `_GR_IGNORE` could be
 written.
