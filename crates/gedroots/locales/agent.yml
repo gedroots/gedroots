@@ -1,6 +1,16 @@
 _version: 2
 # Source › Connecter un agent IA… (crates/gedroots/src/workspace/agent.rs)
 agent:
+  planned:
+    one:
+      en: An AI agent planned %{n} search
+      fr: Un agent IA a prévu %{n} recherche
+    other:
+      en: An AI agent planned %{n} searches
+      fr: Un agent IA a prévu %{n} recherches
+  logged:
+    en: "An AI agent noted a search: %{what}"
+    fr: "Un agent IA a noté une recherche : %{what}"
   title:
     en: AI Agents
     fr: Agents IA

@@ -15,6 +15,7 @@ start with `_GR_` and are declared in the header, as GEDCOM 7 requires:
 2 TAG _GR_FIND https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_find
 2 TAG _GR_WEB https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_web
 2 TAG _GR_DISTINCT https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_distinct
+2 TAG _GR_TASK https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_task
 ```
 
 Other software ignores these tags without losing data.
@@ -407,3 +408,49 @@ and no `_GR_URL`, means no site is wanted.
 1 _GR_WEB Google
 2 _GR_URL https://www.google.com/search?q=%22{given}%20{surname}%22%20{place}
 ```
+
+## `_GR_TASK`
+
+Research log of a record still to find (a *lead*: birth, marriage, death, parents): whether it is
+planned, ignored or found, and every search made, including those that found nothing, so that
+nobody searches the same register twice. Written by an AI agent (`plan_research`, `log_search`)
+and, later, by the research page. The leads themselves are computed, not stored.
+
+- **Under**: the `INDI` concerned, or the `FAM` for a marriage, at level 1. One per lead.
+- **Value**: the record to find: `BIRT` (birth or baptism), `MARR`, `DEAT` (death or burial) or
+  `FAMC` (the parents of a person whose parents are unknown).
+- **Substructures**:
+  - `_GR_STAT <state>`: `PLANNED`, `NOT_FOUND` (searched in vain for now), `FOUND`, `IGNORED`;
+    absent: only suggested;
+  - `NOTE <text>`: why it is planned or ignored;
+  - `_GR_LOG`, one per search, oldest first:
+    - `DATE <date>`: day of the search;
+    - `TEXT <text>`: what was searched (archive, register or index, years, names tried);
+    - `_GR_RES <result>`: `FOUND`, `NONE` or `PARTIAL` (a clue, not the record);
+    - `_GR_SPAN <years>`: years searched (`1853`, `FROM 1853 TO 1862`);
+    - `PLAC <place>`, `WWW <url>` (page of the archive's viewer), `NOTE <text>`;
+    - `_GR_AGENT`: noted by an AI agent.
+
+```
+0 HEAD
+1 SCHMA
+2 TAG _GR_TASK https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_task
+2 TAG _GR_STAT https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_task
+2 TAG _GR_LOG https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_task
+2 TAG _GR_RES https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_task
+2 TAG _GR_SPAN https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_task
+2 TAG _GR_AGENT https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_task
+0 @I4@ INDI
+1 _GR_TASK DEAT
+2 _GR_STAT PLANNED
+2 NOTE Last seen in 1852, his widow remarried in 1860
+2 _GR_LOG
+3 DATE 3 NOV 2026
+3 TEXT Decennial tables of Saint-Lô, deaths, MARCHAND and MARCHANT
+3 _GR_RES NONE
+3 _GR_SPAN FROM 1853 TO 1862
+3 PLAC Saint-Lô, Manche, France
+3 _GR_AGENT
+```
+
+Legacy and RootsMagic keep their to-do items in `_TODO`; GEDRoots does not read or write it.

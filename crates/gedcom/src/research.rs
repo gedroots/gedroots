@@ -1,11 +1,10 @@
-//! Research data for AI agents (GEDRoots' MCP server): summarized record of an individual, search,
-//! gaps in the ancestry and hiding of living people.
+//! Research data for AI agents (GEDRoots' MCP server): summarized record of an individual, search
+//! and hiding of living people. The records still to find are in [`crate::leads`].
 //!
 //! Everything is read only: these functions never modify the document.
 
 use crate::document::{Gedcom, RecordKind};
 use crate::model::{Event, Media};
-use std::collections::HashMap;
 
 /// A person named in a result. A living person is given only what identifies them: their name and
 /// their birth.
@@ -82,42 +81,6 @@ pub struct PersonSheet {
     pub mother: Option<PersonRef>,
     pub unions: Vec<Union>,
     pub notes: Vec<String>,
-}
-
-/// Why an event is among the gaps.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, schemars::JsonSchema))]
-#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
-pub enum GapKind {
-    /// The event is not in the file.
-    Missing,
-    /// The event is there, without a source.
-    Unsourced,
-}
-
-/// A record to look for, for a direct ancestor.
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, schemars::JsonSchema))]
-pub struct Gap {
-    pub person: PersonRef,
-    pub sosa: u64,
-    /// Generation (1: the root individual, 2: their parents…).
-    pub generation: u32,
-    /// `BIRT`, `MARR` or `DEAT`.
-    pub event: String,
-    pub kind: GapKind,
-    /// For a marriage: the family and the spouse.
-    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
-    pub family_id: Option<String>,
-    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
-    pub spouse: Option<PersonRef>,
-    /// Date and place of the event already known (“without source” gap).
-    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "String::is_empty"))]
-    pub date: String,
-    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "String::is_empty"))]
-    pub place: String,
-    /// Places of the person's other events, to know where to look.
-    pub known_places: Vec<String>,
 }
 
 /// A person born less than this number of years ago, without a death, is living.
@@ -280,73 +243,6 @@ impl Gedcom {
         };
         ids.iter().take(limit).map(|x| self.person_ref(x, this_year)).collect()
     }
-
-    /// Records to look for, for the direct ancestors up to generation `max_generation`: birth,
-    /// marriage (held by the father) and death missing or without a source. Living people are
-    /// ignored. Sorted by Sosa number.
-    pub fn research_gaps(&self, max_generation: u32, this_year: i32) -> Vec<Gap> {
-        let numbers = self.sosa_numbers();
-        let mut ancestors: Vec<(&String, u64)> =
-            numbers.iter().filter(|(_, n)| n.branch.is_empty()).map(|(x, n)| (x, n.sosa)).collect();
-        ancestors.sort_by_key(|(_, k)| *k);
-        let by_sosa: HashMap<u64, &String> = ancestors.iter().map(|(x, k)| (*k, *x)).collect();
-        let mut out = Vec::new();
-        for (xref, sosa) in ancestors {
-            let generation = 64 - sosa.leading_zeros();
-            if generation > max_generation || self.is_living(xref, this_year) {
-                continue;
-            }
-            let Some(ind) = self.individual(xref) else { continue };
-            let events = ind.events();
-            let known_places = {
-                let mut p: Vec<String> = events.iter().filter_map(|e| e.place()).map(str::to_string).collect();
-                p.dedup();
-                p
-            };
-            let gap = |event: &str, found: Option<&Event>| {
-                let kind = match found {
-                    None => GapKind::Missing,
-                    Some(e) if !e.is_sourced() => GapKind::Unsourced,
-                    Some(_) => return None,
-                };
-                Some(Gap {
-                    person: self.person_ref(xref, this_year),
-                    sosa,
-                    generation,
-                    event: event.to_string(),
-                    kind,
-                    family_id: None,
-                    spouse: None,
-                    date: found.and_then(|e| e.date_raw()).unwrap_or("").to_string(),
-                    place: found.and_then(|e| e.place()).unwrap_or("").to_string(),
-                    known_places: known_places.clone(),
-                })
-            };
-            // A sourced baptism counts as a birth record; a burial, as a death record.
-            let pick = |tags: &[&str]| {
-                let all: Vec<&Event> = events.iter().filter(|e| tags.contains(&e.tag())).collect();
-                all.iter().find(|e| e.is_sourced()).or(all.first()).copied()
-            };
-            out.extend(gap("BIRT", pick(&["BIRT", "BAPM", "CHR"])));
-            // Marriage of the parents: held by the father (even Sosa), with the mother (Sosa + 1).
-            if sosa % 2 == 0
-                && let Some(wife) = by_sosa.get(&(sosa + 1))
-            {
-                let fam =
-                    ind.fams().into_iter().filter_map(|f| self.family(f)).find(|f| f.wife() == Some(wife.as_str()));
-                let fam_events = fam.map(|f| f.events()).unwrap_or_default();
-                let marr: Vec<&Event> = fam_events.iter().filter(|e| e.tag() == "MARR").collect();
-                let found = marr.iter().find(|e| e.is_sourced()).or(marr.first()).copied();
-                if let Some(mut g) = gap("MARR", found) {
-                    g.family_id = fam.map(|f| f.xref().to_string());
-                    g.spouse = Some(self.person_ref(wife, this_year));
-                    out.push(g);
-                }
-            }
-            out.extend(gap("DEAT", pick(&DEATH_TAGS)));
-        }
-        out
-    }
 }
 
 #[cfg(test)]
@@ -434,29 +330,5 @@ mod tests {
         assert_eq!(s.father.as_ref().unwrap().id, "I4");
         assert_eq!(s.unions[0].spouse.as_ref().unwrap().name, "Marie DURAND");
         assert!(s.unions[0].children[0].living);
-    }
-
-    #[test]
-    fn gaps_skip_sourced_events_and_living_people() {
-        let g = ged();
-        let gaps = g.research_gaps(3, 2026);
-        let keys: Vec<(u64, &str, GapKind)> = gaps.iter().map(|g| (g.sosa, g.event.as_str(), g.kind)).collect();
-        assert_eq!(
-            keys,
-            vec![
-                (2, "MARR", GapKind::Unsourced),
-                (2, "DEAT", GapKind::Unsourced),
-                (3, "BIRT", GapKind::Unsourced),
-                (3, "DEAT", GapKind::Missing),
-                (4, "BIRT", GapKind::Missing),
-                (4, "DEAT", GapKind::Missing),
-            ]
-        );
-        let marr = &gaps[0];
-        assert_eq!(marr.family_id.as_deref(), Some("F1"));
-        assert_eq!(marr.spouse.as_ref().unwrap().id, "I3");
-        assert_eq!(gaps[3].known_places, vec!["Vitré".to_string()]);
-        // Generation 2 only: the root's parents.
-        assert!(g.research_gaps(2, 2026).iter().all(|g| g.generation == 2));
     }
 }
