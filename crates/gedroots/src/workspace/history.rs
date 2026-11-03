@@ -98,6 +98,7 @@ impl Workspace {
         Some(match loc.view {
             View::Places => short_place(&loc.key),
             View::Quality | View::Stats => loc.view.label().to_string(),
+            View::Research => self.lead_title(&loc.key).unwrap_or_else(|| loc.view.label().to_string()),
             _ => doc.ged.record_label(&loc.key),
         })
     }
@@ -109,6 +110,7 @@ impl Workspace {
             View::Places => doc.ged.places().iter().any(|p| p.name == loc.key),
             View::Quality => gedcom::quality::Category::from_id(&loc.key).is_some(),
             View::Stats => true,
+            View::Research => self.research.leads.iter().any(|l| research::lead_key(l) == loc.key),
             _ => doc.ged.get(&loc.key).is_some(),
         }
     }

@@ -47,6 +47,7 @@ mod quality;
 mod record_history;
 mod relatives;
 mod report;
+mod research;
 mod review;
 mod review_change;
 mod saved;
@@ -84,6 +85,7 @@ pub enum View {
     Media,
     Repositories,
     Notes,
+    Research,
     Quality,
     Stats,
 }
@@ -92,7 +94,7 @@ impl View {
     /// The main sidebar zones.
     const SIDEBAR: [View; 4] = [View::Individuals, View::Sources, View::Places, View::Media];
     /// The secondary group of the sidebar, under a separator.
-    const SECONDARY: [View; 4] = [View::Repositories, View::Notes, View::Quality, View::Stats];
+    const SECONDARY: [View; 5] = [View::Repositories, View::Notes, View::Research, View::Quality, View::Stats];
 
     fn label(self) -> SharedString {
         match self {
@@ -102,6 +104,7 @@ impl View {
             View::Media => t!("cmd.media_list"),
             View::Repositories => t!("cmd.repositories"),
             View::Notes => t!("cmd.notes"),
+            View::Research => t!("ws.research"),
             View::Quality => t!("ws.quality"),
             View::Stats => t!("ws.stats"),
         }
@@ -116,6 +119,7 @@ impl View {
             View::Media => IconName::Image,
             View::Repositories => IconName::Landmark,
             View::Notes => IconName::StickyNote,
+            View::Research => IconName::Compass,
             View::Quality => IconName::CircleCheck,
             View::Stats => IconName::ChartPie,
         }
@@ -127,9 +131,9 @@ impl View {
         matches!(self, View::Individuals | View::Places)
     }
 
-    /// Pages without a record (Quality, Statistics).
+    /// Pages without a record (Research, Quality, Statistics).
     fn page(self) -> Option<View> {
-        matches!(self, View::Quality | View::Stats).then_some(self)
+        matches!(self, View::Research | View::Quality | View::Stats).then_some(self)
     }
 
     /// Zone with search by criteria (the other lists filter the text).
@@ -139,6 +143,8 @@ impl View {
             View::Sources => Scope::Sources,
             View::Places => Scope::Places,
             View::Media => Scope::Media,
+            // The focus of the leads is a search of individuals (`sosa:1-63`).
+            View::Research => Scope::Individuals,
             _ => return None,
         })
     }
@@ -150,7 +156,7 @@ impl View {
             View::Media => RecordKind::Media,
             View::Repositories => RecordKind::Repository,
             View::Notes => RecordKind::SharedNote,
-            View::Places | View::Quality | View::Stats => return None,
+            View::Places | View::Research | View::Quality | View::Stats => return None,
         })
     }
 
@@ -492,6 +498,7 @@ pub struct Workspace {
     list_scroll: UniformListScrollHandle,
     /// Quality page: problems of the file.
     quality: quality::QualityState,
+    research: research::ResearchState,
     /// Relationship shown in a modal window (A, B).
     kinship: Option<(String, String)>,
     /// Merge window (possible duplicates, or two people chosen by the user).
@@ -615,6 +622,7 @@ impl Workspace {
             history: Default::default(),
             list_scroll: UniformListScrollHandle::new(),
             quality: quality::QualityState { stale: true, ..Default::default() },
+            research: research::ResearchState::default(),
             kinship: None,
             merge: None,
             version_history: None,
@@ -970,13 +978,23 @@ impl Workspace {
             View::Repositories => t!("ws.search_repositories"),
             View::Notes => t!("ws.search_notes"),
             View::Quality => t!("ws.search_quality"),
+            View::Research => t!("research.focus_placeholder"),
             View::Individuals | View::Stats => t!("ws.search_people"),
         };
+        // Research: the field holds the focus of the leads, kept while the file is open.
+        // A trailing space makes its last criterion a token.
+        let initial = match view {
+            View::Research if !self.research.focus.is_empty() => format!("{} ", self.research.focus),
+            _ => String::new(),
+        };
         self.filter.update(cx, |f, cx| {
-            f.set_value("", window, cx);
+            f.set_value(initial, window, cx);
             f.set_placeholder(placeholder, window, cx);
         });
         self.suggestions.clear();
+        if view == View::Research {
+            self.tokenize_search(window, cx);
+        }
         self.tab = match view {
             View::Individuals => CenterTab::Tree,
             View::Places => CenterTab::Map,
@@ -1267,8 +1285,49 @@ impl Workspace {
             .filter(|x| self.view == View::Sources && doc.ged.get(x).is_some_and(|n| n.tag == "SOUR"));
         match source {
             Some(s) => self.open_act(s, None, window, cx),
-            None => self.open_picker(relatives::PickPurpose::ActSource, window, cx),
+            None => match self.selected_lead().cloned() {
+                // Research: the record of the chosen lead.
+                Some(lead) => self.enter_lead_record(lead, window, cx),
+                None => self.open_picker(relatives::PickPurpose::ActSource { prefill: None }, window, cx),
+            },
         }
+    }
+
+    /// Opens a new record of `source` with its event and principal people already chosen.
+    pub(super) fn open_new_act(
+        &mut self,
+        source: String,
+        event: &str,
+        people: &[String],
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.selected.as_deref() != Some(source.as_str()) || self.view != View::Sources {
+            self.goto(source.clone(), window, cx);
+        }
+        self.tab = CenterTab::Form;
+        let Some(doc) = &self.doc else { return };
+        let g = &doc.ged;
+        let mut act = Act::new(&source, event);
+        // The empty principals the event offers (the deceased, the two spouses) are filled first.
+        let mut free =
+            act.participants.iter().enumerate().filter(|(_, p)| p.role == ActRole::Principal).map(|(i, _)| i);
+        let slots: Vec<usize> = people.iter().map_while(|_| free.next()).collect();
+        for (n, x) in people.iter().enumerate() {
+            let Some(ind) = g.individual(x) else { continue };
+            let mut p = Participant::new(ActRole::Principal);
+            p.set(PersonField::Surname, ind.surname());
+            p.set(PersonField::Given, ind.given());
+            if matches!(ind.sex(), "M" | "F") {
+                p.set(PersonField::Sex, ind.sex());
+            }
+            p.choice = PersonChoice::Link(x.clone());
+            match slots.get(n) {
+                Some(&i) => act.participants[i] = p,
+                None => act.participants.push(p),
+            }
+        }
+        self.show_act_editor(act, window, cx);
     }
 
     /// Opens a record of the source in its page (`key`: existing record; otherwise an empty
@@ -1454,6 +1513,7 @@ impl Workspace {
         self.quality.stale = true;
         self.media_index = None;
         self.refresh_quality();
+        self.refresh_research();
         self.refresh_saved();
         self.build_rows(cx);
     }
@@ -1463,6 +1523,15 @@ impl Workspace {
         let q = self.filter.read(cx).value().to_lowercase();
         if self.view == View::Quality {
             self.rows = Rc::new(self.quality_rows(q.trim()));
+            return;
+        }
+        if self.view == View::Research {
+            let focus = Self::committed_query(&self.filter.read(cx).value()).trim().to_string();
+            if focus != self.research.focus {
+                self.research.focus = focus;
+                self.refresh_research();
+            }
+            self.rows = Rc::new(self.research_rows());
             return;
         }
         if self.view == View::Stats {
@@ -1587,7 +1656,7 @@ impl Workspace {
                     }
                 })
                 .collect(),
-            View::Quality | View::Stats => Vec::new(),
+            View::Research | View::Quality | View::Stats => Vec::new(),
             View::Notes => g
                 .records_of(RecordKind::SharedNote)
                 .map(|r| {
@@ -1983,6 +2052,8 @@ impl Workspace {
         let count = |v: View| -> Option<usize> {
             let d = doc?;
             Some(match v {
+                // Leads still to search in the focus, whatever the field shows.
+                View::Research => return self.research_count(),
                 _ if v == self.view && filtered => self.rows.len(),
                 View::Places => d.ged.places().len(),
                 // Only once the checks have run: a stale count would mislead.
@@ -2245,6 +2316,9 @@ impl Workspace {
     fn render_center(&self, cx: &mut Context<Self>) -> AnyElement {
         if self.view == View::Quality {
             return v_flex().flex_1().min_w_0().bg(theme::bg()).child(self.render_quality(cx)).into_any_element();
+        }
+        if self.view == View::Research {
+            return v_flex().flex_1().min_w_0().bg(theme::bg()).child(self.render_research(cx)).into_any_element();
         }
         if self.view == View::Stats {
             return self.render_stats(cx);
@@ -3858,7 +3932,8 @@ impl Render for Workspace {
                 .min_h_0()
                 .items_stretch()
                 .when(self.sidebar && !self.compact.sidebar, |d| d.child(self.render_sidebar(cx)))
-                .when(self.view != View::Stats, |d| d.child(self.render_list(cx)))
+                .when(self.view == View::Research, |d| d.child(self.render_research_list(cx)))
+                .when(!matches!(self.view, View::Stats | View::Research), |d| d.child(self.render_list(cx)))
                 .child(self.render_center(cx))
                 .when(self.inspector && !self.compact.inspector, |d| d.child(self.render_detail(cx)))
                 .into_any_element()

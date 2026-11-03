@@ -1,0 +1,206 @@
+_version: 2
+# Research page (crates/gedroots/src/workspace/research.rs).
+research.focus_placeholder:
+  en: Focus…
+  fr: Focus…
+research.group.to_find:
+  en: To Find
+  fr: À chercher
+research.group.not_found:
+  en: No Result
+  fr: Sans résultat
+research.group.ignored:
+  en: Ignored
+  fr: Ignorées
+research.title.birth:
+  en: "Birth of %{name}"
+  fr: "Naissance de %{name}"
+research.title.marriage:
+  en: "Marriage of %{name}"
+  fr: "Mariage de %{name}"
+research.title.marriage_of:
+  en: "Marriage of %{name} and %{spouse}"
+  fr: "Mariage de %{name} et %{spouse}"
+research.title.death:
+  en: "Death of %{name}"
+  fr: "Décès de %{name}"
+research.title.parents:
+  en: "Parents of %{name}"
+  fr: "Parents de %{name}"
+research.goal.birth:
+  en: Birth
+  fr: Naissance
+research.goal.marriage:
+  en: Marriage
+  fr: Mariage
+research.goal.death:
+  en: Death
+  fr: Décès
+research.goal.parents:
+  en: Parents
+  fr: Parents
+research.sosa:
+  en: "Sosa %{n}"
+  fr: "Sosa %{n}"
+research.planned:
+  en: planned
+  fr: prévue
+research.state.found:
+  en: found
+  fr: trouvée
+research.state.not_found:
+  en: no result
+  fr: sans résultat
+research.state.ignored:
+  en: ignored
+  fr: ignorée
+research.period:
+  en: Estimated period
+  fr: Période estimée
+research.known:
+  en: What is known
+  fr: Ce que l’on sait
+research.sourced:
+  en: sourced
+  fr: sourcé
+research.unsourced:
+  en: no source
+  fr: sans source
+research.to_find:
+  en: to find
+  fr: à trouver
+research.where:
+  en: Where to look
+  fr: Où chercher
+research.public_until:
+  en: "Open to everyone until %{year}, later on request"
+  fr: "Libre accès jusqu’en %{year}, sur demande ensuite"
+research.log:
+  en: Log
+  fr: Journal
+research.by_agent:
+  en: AI agent
+  fr: agent IA
+research.result:
+  en: Result
+  fr: Résultat
+research.result.found:
+  en: Found
+  fr: Trouvé
+research.result.nothing:
+  en: Nothing found
+  fr: Rien trouvé
+research.result.partial:
+  en: Partly
+  fr: En partie
+research.searched:
+  en: Searched
+  fr: Recherché
+research.searched_placeholder:
+  en: Decennial tables of Saint-Lô, deaths, MARCHAND
+  fr: Tables décennales de Saint-Lô, décès, MARCHAND
+research.years:
+  en: Years
+  fr: Années
+research.from_placeholder:
+  en: "1853"
+  fr: "1853"
+research.to_placeholder:
+  en: "1862"
+  fr: "1862"
+research.link:
+  en: Link
+  fr: Lien
+research.note:
+  en: Note
+  fr: Note
+research.note_placeholder:
+  en: A clue, a namesake ruled out, a gap…
+  fr: Un indice, un homonyme écarté, une lacune…
+research.finished:
+  en: Nothing left to search online
+  fr: Plus rien à chercher en ligne
+research.note_button:
+  en: Note
+  fr: Noter
+research.noted:
+  en: "Search noted: %{lead}"
+  fr: "Recherche notée : %{lead}"
+research.ignored:
+  en: "Lead ignored: %{lead}"
+  fr: "Piste ignorée : %{lead}"
+research.resumed:
+  en: "Lead resumed: %{lead}"
+  fr: "Piste reprise : %{lead}"
+research.request_copied:
+  en: Request copied, paste it in your agent’s conversation
+  fr: Demande copiée, colle-la dans la conversation de ton agent
+research.agent_request:
+  en: "Find the record of this lead in GEDRoots: %{lead} (person %{person}, goal %{goal}). Read it with research_leads, follow the research_session method, note every search with log_search and propose the record you find with propose_act."
+  fr: "Trouve l’acte de cette piste dans GEDRoots : %{lead} (personne %{person}, objectif %{goal}). Lis-la avec research_leads, suis la méthode research_session, note chaque recherche avec log_search et propose l’acte trouvé avec propose_act."
+research.open_person:
+  en: Open Person
+  fr: Ouvrir l’individu
+research.no_root:
+  en: Choose a root person to see the records to find
+  fr: Choisis une personne de référence pour voir les actes à chercher
+research.no_lead:
+  en: Nothing to search in this focus
+  fr: Rien à chercher dans ce focus
+research.choose_lead:
+  en: Choose a lead
+  fr: Choisis une piste
+research.record.civil_registration:
+  en: Civil registration
+  fr: État civil
+research.record.registration_index:
+  en: Registration indexes
+  fr: Tables et index
+research.record.church_registers:
+  en: Church registers
+  fr: Registres paroissiaux
+research.record.census:
+  en: Census lists
+  fr: Recensements
+research.record.probate:
+  en: Probate records
+  fr: Successions
+research.record.marriage_contracts:
+  en: Marriage contracts
+  fr: Contrats de mariage
+research.record.military_registers:
+  en: Military registers
+  fr: Registres militaires
+research.record.death_index:
+  en: Death index
+  fr: Fichier des décès
+research.record.population_registers:
+  en: Population registers
+  fr: Registres de population
+research.record.local:
+  en: "%{kind} (%{local})"
+  fr: "%{kind} (%{local})"
+research.record.what:
+  en: "%{kind}: %{what}"
+  fr: "%{kind} : %{what}"
+research.what.births:
+  en: births
+  fr: naissances
+research.what.marriages:
+  en: marriages
+  fr: mariages
+research.what.deaths:
+  en: deaths
+  fr: décès
+research.what.all:
+  en: births, marriages and deaths
+  fr: naissances, mariages et décès
+research.what.baptisms:
+  en: baptisms
+  fr: baptêmes
+research.what.burials:
+  en: burials
+  fr: sépultures
+research.what.baptisms_marriages:
+  en: baptisms and marriages
+  fr: baptêmes et mariages

@@ -49,7 +49,8 @@ impl Workspace {
 
     /// Displayed search: zone, confirmed criteria, media type. `None` without a search.
     fn current_search(&self, cx: &App) -> Option<(Scope, String, Option<String>)> {
-        let scope = self.view.scope()?;
+        // The focus of the leads is not a saved search.
+        let scope = self.view.scope().filter(|_| self.view != View::Research)?;
         let query = Self::committed_query(&self.filter.read(cx).value()).trim().to_string();
         let media_type = self.active_media_type();
         (!query.is_empty() || media_type.is_some()).then_some((scope, query, media_type))

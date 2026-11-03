@@ -109,6 +109,11 @@ It is written at once, not reviewed: it is the trace of the research, not data o
 change is one undo step, and the top bar says what the agent noted. A found record is still
 proposed with `propose_act` and reviewed.
 
+The same leads and log are on the app's Research page (Go › Research): the list of the focus by
+state (to find, no result, ignored), and for each lead its period and why, what is known, where to
+look and the log, the agent's searches marked “AI agent”. Person › Research › Copy Request for the
+Agent puts a request for one lead on the clipboard, to paste in the agent's conversation.
+
 ## Proposals and review
 
 `propose_act` takes the same model as Source › Enter Record… (`crates/gedcom/src/act.rs`): an
