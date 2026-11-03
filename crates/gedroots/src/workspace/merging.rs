@@ -40,6 +40,29 @@ impl Workspace {
         cx.notify();
     }
 
+    /// Opens the window on one pair with the values an agent proposed already chosen
+    /// (`(fact, person whose value is kept)`).
+    pub(super) fn open_merge_prefilled(
+        &mut self,
+        pair: (String, String),
+        choices: &[(String, String)],
+        cx: &mut Context<Self>,
+    ) {
+        self.open_merge(vec![pair], 0, cx);
+        if let Some(d) = self.merge.as_mut()
+            && let Some(plan) = &d.plan
+        {
+            for (k, c) in plan.conflicts.iter().enumerate() {
+                let who = choices.iter().find(|(tag, _)| tag.eq_ignore_ascii_case(&c.tag)).map(|(_, w)| w);
+                d.choices[k] = match who {
+                    Some(w) if *w == plan.keep => Some(Side::Keep),
+                    Some(w) if *w == plan.other => Some(Side::Other),
+                    _ => None,
+                };
+            }
+        }
+    }
+
     /// Prepares the pair at `d.at`, or the next one that still exists. `false` when none is left.
     fn load_pair(&self, d: &mut MergeDialog) -> bool {
         let Some(g) = self.doc.as_ref().map(|d| &d.ged) else { return false };
@@ -156,6 +179,9 @@ impl Workspace {
             window,
             cx,
         );
+        if kept.is_some() {
+            self.drop_merge_changes(&plan.keep, &plan.other);
+        }
         // The open record was the merged-away person: show the kept one.
         if self.selected.as_deref() == Some(plan.other.as_str())
             && let Some(k) = kept
@@ -170,6 +196,7 @@ impl Workspace {
         let Some((a, b)) = self.merge.as_ref().and_then(|d| d.current().cloned()) else { return };
         let name = self.doc.as_ref().map(|d| d.ged.record_label(&a)).unwrap_or_default();
         self.edit_ged(|g| g.mark_distinct(&a, &b), t!("merge.marked_distinct", name = name).to_string(), window, cx);
+        self.drop_merge_changes(&a, &b);
         self.merge_advance(true, cx);
     }
 

@@ -11,10 +11,14 @@ pub struct ChangeParams {
     pub issue: String,
     /// `fix`: the Quality page's own fix (only when the issue has `automatic_fix`). `edit`: the
     /// edits in `edits`. `hide`: the issue is right (e.g. a marriage really celebrated very young),
-    /// and the reason says why.
+    /// and the reason says why; for a possible duplicate, they are two different people. `merge`:
+    /// a possible duplicate is one person, the two records become one.
     pub action: String,
     /// For `edit`: what to change, among the issue's `edits`.
     pub edits: Option<Vec<EditParams>>,
+    /// For `merge`: for each fact of the issue's `merge.conflicts`, the person (`keep` or `other`)
+    /// whose value is right, e.g. `{"BIRT": "I12"}`.
+    pub choices: Option<std::collections::BTreeMap<String, String>>,
     /// Why: what you read, in a sentence the user can check. Required for `edit` and `hide`.
     pub reason: Option<String>,
     /// What supports the change.
@@ -132,7 +136,14 @@ pub fn to_request(p: &ChangeParams) -> Result<ChangeRequest, String> {
         "fix" => Action::Fix,
         "hide" => Action::Hide,
         "edit" => Action::Edit(p.edits.iter().flatten().map(edit).collect::<Result<_, _>>()?),
-        other => return Err(format!("unknown action `{other}`: use fix, edit or hide")),
+        "merge" => Action::Merge(
+            p.choices
+                .iter()
+                .flatten()
+                .map(|(fact, who)| (fact.trim().to_uppercase(), who.trim().trim_matches('@').to_string()))
+                .collect(),
+        ),
+        other => return Err(format!("unknown action `{other}`: use fix, edit, merge or hide")),
     };
     let evidence = p
         .evidence
@@ -181,5 +192,11 @@ mod tests {
             serde_json::from_value(serde_json::json!({"issue": "x", "action": "edit", "edits": [{"kind": "set_sex"}]}))
                 .unwrap();
         assert!(to_request(&bad).unwrap_err().contains("record"));
+        let merge: ChangeParams = serde_json::from_value(serde_json::json!({
+            "issue": "possible_duplicate:I10", "action": "merge", "choices": {"birt": "@I11@"},
+            "reason": "Same witness of two acts a year apart"
+        }))
+        .unwrap();
+        assert_eq!(to_request(&merge).unwrap().action, Action::Merge(vec![("BIRT".into(), "I11".into())]));
     }
 }

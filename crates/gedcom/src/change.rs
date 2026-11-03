@@ -6,12 +6,14 @@
 //! applies it to a copy of the file and checks the issue is gone. A change that does not fix its
 //! issue, or that edits records the issue is not about, is refused with the reason, which the
 //! agent reads to correct it. Edits are typed (never raw GEDCOM) and each kind of issue allows only
-//! some of them ([`edits_for`]).
+//! some of them ([`edits_for`]). A possible duplicate is merged (`Action::Merge`), with the value
+//! to keep for each contradictory fact, which the user reviews in the merge window.
 
 use crate::analysis::check::{IGNORE_TAG, Issue, code_label};
 use crate::date::Date;
 use crate::document::Gedcom;
 use crate::geo::{format_latitude, format_longitude};
+use crate::merge::{MergePlan, RowKind, Side};
 use crate::node::Node;
 use crate::parse::node_to_string;
 use crate::proposal::{Change, DiffLine, line_diff};
@@ -87,6 +89,9 @@ pub enum Action {
     /// The issue is right: hidden (`_GR_IGNORE`), with the reason.
     Hide,
     Edit(Vec<Edit>),
+    /// Two possible duplicates become one person. For each contradictory fact (`NAME`, `BIRT`…),
+    /// the person whose value is kept.
+    Merge(Vec<(String, String)>),
 }
 
 /// What supports a change: a source of the tree and the reference in it, a web page, a quote.
@@ -132,6 +137,7 @@ pub struct ChangeRow {
 pub fn edits_for(code: &str) -> &'static [&'static str] {
     match code {
         "husband_not_male" | "wife_not_female" | "role_sex_mismatch" => &["set_sex"],
+        // A possible duplicate is merged (`Action::Merge`) or marked as two people (`Action::Hide`).
         "own_ancestor" | "disconnected" | "possible_duplicate" => &[],
         "tag_not_allowed" | "missing_required" | "too_many" | "wrong_pointer" | "invalid_value" => {
             &["set_value", "delete_structure"]
@@ -214,6 +220,15 @@ impl QualityChange {
                     return Err("give the reason the issue is right in `reason`".into());
                 }
             }
+            Action::Merge(_) => {
+                if code != "possible_duplicate" {
+                    return Err(format!("only a `possible_duplicate` can be merged, not `{code}`"));
+                }
+                if self.reason.trim().is_empty() {
+                    return Err("give the reason they are the same person in `reason`".into());
+                }
+                self.merge_choices(g)?;
+            }
             Action::Edit(edits) => {
                 if edits.is_empty() {
                     return Err("give at least one edit".into());
@@ -286,6 +301,10 @@ impl QualityChange {
                     return Err(t!("change.outdated").into());
                 }
             }
+            Action::Merge(_) => {
+                let (plan, sides) = self.merge_choices(g)?;
+                g.merge_individuals(&plan, &sides)?;
+            }
             Action::Edit(edits) => {
                 // Removals last, from the end, so the positions given stay right.
                 let mut order: Vec<&Edit> = edits.iter().collect();
@@ -305,6 +324,49 @@ impl QualityChange {
             }
         }
         Ok(())
+    }
+
+    /// The two people of a possible duplicate, if they can still be merged.
+    pub fn merge_pair(&self) -> Option<(String, String)> {
+        (self.issue.code == "possible_duplicate")
+            .then(|| Some((self.issue.xref.clone(), self.issue.related.first()?.clone())))
+            .flatten()
+    }
+
+    /// The merge plan and, for each of its conflicts, the side the agent chose.
+    pub fn merge_choices(&self, g: &Gedcom) -> Result<(MergePlan, Vec<Side>), String> {
+        let Action::Merge(choices) = &self.action else { return Err("not a merge".into()) };
+        let (a, b) = self.merge_pair().ok_or_else(|| t!("change.outdated").to_string())?;
+        if let Err(e) = g.compare_individuals(&a, &b) {
+            return Err(format!("these two people cannot be the same: {}", e.label()));
+        }
+        let plan = g.merge_plan(&a, &b)?;
+        for (tag, _) in choices {
+            if !plan.conflicts.iter().any(|c| c.tag.eq_ignore_ascii_case(tag)) {
+                return Err(format!("`{tag}` does not differ between them: choose only for {}", conflict_list(&plan)));
+            }
+        }
+        let sides = plan
+            .conflicts
+            .iter()
+            .map(|c| {
+                let who = choices
+                    .iter()
+                    .find(|(tag, _)| tag.eq_ignore_ascii_case(&c.tag))
+                    .map(|(_, who)| who.trim().trim_matches('@'))
+                    .ok_or_else(|| {
+                        format!("choose whose `{}` to keep ({} or {}) in `choices`", c.tag, plan.keep, plan.other)
+                    })?;
+                if who == plan.keep {
+                    Ok(Side::Keep)
+                } else if who == plan.other {
+                    Ok(Side::Other)
+                } else {
+                    Err(format!("`{}`: give {} or {}, not {who}", c.tag, plan.keep, plan.other))
+                }
+            })
+            .collect::<Result<Vec<_>, String>>()?;
+        Ok((plan, sides))
     }
 
     fn apply_edit(&self, g: &mut Gedcom, e: &Edit) -> Result<(), String> {
@@ -432,6 +494,38 @@ impl QualityChange {
             Action::Hide => {
                 vec![row(t!("change.issue").into(), issue.message.clone(), t!("change.hidden").into(), Change::Same)]
             }
+            // What the person will have: kept, added, or the chosen value.
+            Action::Merge(_) => {
+                let Ok((plan, sides)) = self.merge_choices(g) else { return vec![] };
+                plan.rows
+                    .iter()
+                    .map(|r| {
+                        let both = |v: &[String]| v.join(", ");
+                        let current = match r.kind {
+                            RowKind::Same => both(&r.keep),
+                            _ => [both(&r.keep), both(&r.other)]
+                                .into_iter()
+                                .filter(|s| !s.is_empty())
+                                .collect::<Vec<_>>()
+                                .join(" / "),
+                        };
+                        let (proposed, change) = match r.kind {
+                            RowKind::Same => (both(&r.keep), Change::Same),
+                            RowKind::Combined => (both(&r.keep), Change::Refined),
+                            RowKind::Added => {
+                                let mut all = r.keep.clone();
+                                all.extend(r.other.iter().filter(|v| !r.keep.contains(v)).cloned());
+                                (all.join(" / "), Change::Added)
+                            }
+                            RowKind::Conflict(c) => match sides.get(c) {
+                                Some(Side::Other) => (both(&r.other), Change::Differs),
+                                _ => (both(&r.keep), Change::Differs),
+                            },
+                        };
+                        row(r.label.clone(), or_dash(current), or_dash(proposed), change)
+                    })
+                    .collect()
+            }
             Action::Edit(edits) => edits
                 .iter()
                 .map(|e| match e {
@@ -550,7 +644,18 @@ fn sex_label(sex: &str) -> String {
     .into_owned()
 }
 
+fn conflict_list(plan: &MergePlan) -> String {
+    if plan.conflicts.is_empty() {
+        "nothing: they do not contradict each other, give empty `choices`".into()
+    } else {
+        plan.conflicts.iter().map(|c| c.tag.as_str()).collect::<Vec<_>>().join(", ")
+    }
+}
+
 fn allowed_list(code: &str) -> String {
+    if code == "possible_duplicate" {
+        return "nothing: merge them (`merge`, with `choices`) or, if they are two people, hide it".into();
+    }
     let e = edits_for(code);
     if e.is_empty() { "nothing: this issue can only be hidden, or fixed by the user".into() } else { e.join(", ") }
 }

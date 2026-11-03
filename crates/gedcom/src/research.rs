@@ -175,6 +175,32 @@ pub struct QualityIssue {
     pub can_hide: bool,
     /// Hidden by the user.
     pub hidden: bool,
+    /// For a possible duplicate: `propose_change` can merge them. Facts that contradict each
+    /// other, for which `choices` must say whose value to keep.
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
+    pub merge: Option<MergeInfo>,
+}
+
+/// What merging a possible duplicate involves.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, schemars::JsonSchema))]
+pub struct MergeInfo {
+    /// Person kept (the root person, otherwise the one with the most links) and person merged
+    /// into it.
+    pub keep: String,
+    pub other: String,
+    pub conflicts: Vec<MergeConflict>,
+}
+
+/// A fact the two people both have, with different values.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, schemars::JsonSchema))]
+pub struct MergeConflict {
+    /// `NAME`, `SEX`, `BIRT`… (the key in `choices`).
+    pub fact: String,
+    /// Value of `keep`, value of `other`.
+    pub keep: String,
+    pub other: String,
 }
 
 /// Number of issues of a category.
@@ -470,6 +496,18 @@ impl Gedcom {
                     edits: crate::change::edits_for(i.code).iter().map(|e| e.to_string()).collect(),
                     can_hide: self.get(&i.xref).is_some(),
                     hidden: i.ignored,
+                    merge: (i.code == "possible_duplicate")
+                        .then(|| self.merge_plan(&i.xref, i.related.first()?).ok())
+                        .flatten()
+                        .map(|p| MergeInfo {
+                            keep: p.keep,
+                            other: p.other,
+                            conflicts: p
+                                .conflicts
+                                .into_iter()
+                                .map(|c| MergeConflict { fact: c.tag, keep: c.keep, other: c.other })
+                                .collect(),
+                        }),
                 }
             })
             .collect();
