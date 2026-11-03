@@ -8,6 +8,7 @@ license.workspace = true
 
 [dependencies]
 rust-i18n = "4.2.4"
+uuid = { version = "1.29", features = ["v4"] }
 serde = { version = "1", features = ["derive"], optional = true }
 schemars = { version = "1", optional = true }
 
