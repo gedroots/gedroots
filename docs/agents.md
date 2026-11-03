@@ -27,8 +27,8 @@ in the machine's settings. The commands and blocks are built in `crates/gedroots
 ## Tools
 
 The tools return structured JSON (`outputSchema`) and work on the file of the most recently
-active window. All are read-only (`readOnlyHint`) except `propose_act`, which writes nothing
-either: it only adds a proposal to review.
+active window. All are read-only (`readOnlyHint`) except `propose_act` and `propose_change`, which write
+nothing either: they only add a proposal to review.
 
 | Tool | Returns |
 | --- | --- |
@@ -40,19 +40,21 @@ either: it only adds a proposal to review.
 | `search_sources` | Sources (register, repository, call number, number of acts) and repositories, to cite an existing one |
 | `match_people` | For the people named in an act (role, names, sex, age, act date), the people of the tree who could be them, with the reason and whether the match is likely |
 | `propose_act` | Adds an act to the To Review page: event, date, place, source, reference, transcription, people with their role, downloaded file |
+| `propose_change` | Adds a change for one Data Quality issue to the To Review page: the page's own fix (`fix`), edits among those the issue allows (`edit`), or hiding a correct issue (`hide`), with the reason and the evidence. The answer lists the issues the change would create |
 
 Ids (`I12`, `F3`…) are only for passing between tools; the server's instructions ask the agent
 not to show them.
 
 ## Prompts
 
-The server also serves two working methods as MCP prompts, so no plugin is needed: in Claude
+The server also serves three working methods as MCP prompts, so no plugin is needed: in Claude
 Code they appear as slash commands once the server is connected.
 
 | Prompt | Arguments | Does |
 | --- | --- | --- |
 | `find_record` | `person`, `event` (both optional) | Picks a gap with `research_gaps`, finds the right archive and register, searches it in the browser at a human pace, downloads the act and goes on with `read_record` |
 | `read_record` | `file`, `person` (both optional) | Transcribes the act, checks it against the person's sheet, identifies each person with `match_people`, picks or describes the source with `search_sources`, then calls `propose_act` and fixes it if refused |
+| `review_quality` | `category`, `person` (both optional) | Goes through the Data Quality issues with `quality_issues`, checks each one against the sheets and sources, then proposes a fix, an edit or hiding it with `propose_change` |
 
 ```text
 /mcp__gedroots__find_record "Jean MARCHAND" birth
@@ -121,3 +123,21 @@ the act editor. Proposals live in memory: they are lost when the app closes.
 - The setting, the token and the chosen agent belong to the machine, not to the file: they are kept in
   `GEDRoots/agents` in the platform's configuration folder (`~/Library/Application Support` on
   macOS, `~/.config` on Linux, `%APPDATA%` on Windows), never in the `.ged`.
+
+## Quality changes
+
+`propose_change` (`crates/gedcom/src/change.rs`) targets one issue by the id `quality_issues`
+gives it. Each issue lists the edits it accepts (`edits`): `set_event`, `delete_event`,
+`set_sex`, `set_coordinates`, `set_media_file`, `cite_source`, `set_value`,
+`delete_structure`. A change is refused, with the reason, when:
+
+- the issue no longer exists (the agent calls `quality_issues` again);
+- the edit is not one the issue accepts, or touches a record the issue does not involve;
+- `fix` is asked for an issue without an automatic fix, or `hide` without a reason;
+- a cited source does not exist, or coordinates are out of range;
+- after applying it on a copy, GEDRoots still reports the issue.
+
+Fixes of the same kind are grouped into one To Review item, applied together. The item shows the
+values in the tree and the proposed ones, the reason, the evidence and the GEDCOM diff; saving it
+is one undo step. Hiding keeps the reason as a `NOTE` under `_GR_IGNORE`, and a possible duplicate
+is hidden with `_GR_DISTINCT`. Filiations (parents, unions) cannot be changed this way.

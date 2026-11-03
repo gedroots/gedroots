@@ -211,6 +211,24 @@ impl Workspace {
                 .cloned()
                 .collect(),
         );
+        // Under the issue's name: a change waiting in To Review, or why it was hidden.
+        let notes: Rc<Vec<Option<(String, bool)>>> =
+            Rc::new(
+                shown
+                    .iter()
+                    .map(|i| {
+                        if self.change_pending(i) {
+                            return Some((t!("quality.pending").into_owned(), true));
+                        }
+                        let doc = self.doc.as_ref()?;
+                        let tag =
+                            doc.ged.get(&i.xref)?.children.iter().find(|c| {
+                                i.ignored && c.tag == gedcom::analysis::check::IGNORE_TAG && c.val() == i.code
+                            })?;
+                        tag.child("NOTE").map(|n| (n.text(), false))
+                    })
+                    .collect(),
+            );
         // Bulk fixes: one per code that has one, with the number concerned.
         let mut batches: Vec<(&'static str, std::borrow::Cow<'static, str>, usize)> = Vec::new();
         for i in shown.iter().filter(|i| !i.ignored) {
@@ -224,6 +242,7 @@ impl Workspace {
         batches.retain(|b| b.2 > 1);
         let entity = cx.entity().downgrade();
         let menu_issue = self.quality.menu_issue.clone();
+        let notes = notes.clone();
         // One readable column, like the records.
         let column = v_flex()
             .size_full()
@@ -291,16 +310,26 @@ impl Workspace {
                                                         .child(i.message.clone()),
                                                 )
                                                 .child(
-                                                    div()
+                                                    h_flex()
+                                                        .gap_1()
+                                                        .min_w_0()
                                                         .text_xs()
                                                         .text_color(theme::muted())
-                                                        .overflow_hidden()
                                                         .whitespace_nowrap()
-                                                        .text_ellipsis()
                                                         .child(if i.detail.is_empty() {
                                                             check::code_label(i.code).to_string()
                                                         } else {
                                                             i.detail.clone()
+                                                        })
+                                                        .when_some(notes[n].clone(), |d, (note, pending)| {
+                                                            d.child("·").child(
+                                                                div()
+                                                                    .min_w_0()
+                                                                    .overflow_hidden()
+                                                                    .text_ellipsis()
+                                                                    .when(pending, |d| d.text_color(theme::accent()))
+                                                                    .child(note),
+                                                            )
                                                         }),
                                                 ),
                                         )

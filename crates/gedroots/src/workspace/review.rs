@@ -6,7 +6,7 @@
 //! unchecked), the attachment (repository, source, file, event) and, on request, the exact GEDCOM
 //! lines that will change. “Save to Tree” writes everything at once (a single undo point) and
 //! organizes the file according to File Settings › Media; “Reject” removes it without writing
-//! anything.
+//! anything. Changes for a Data Quality issue are listed after the acts (`review_change.rs`).
 
 use super::*;
 use crate::agent::propose::Pending;
@@ -68,18 +68,20 @@ impl Item {
 #[derive(Default)]
 pub(super) struct Review {
     pub(super) items: Vec<Item>,
+    /// Changes for Data Quality issues, listed after the acts.
+    pub(super) changes: Vec<super::review_change::ChangeGroup>,
     /// Page displayed instead of the lists.
     pub(super) open: bool,
-    sel: usize,
+    pub(super) sel: usize,
     /// GEDCOM section expanded.
-    gedcom: bool,
+    pub(super) gedcom: bool,
     /// Zoom of the act's image.
     pub(super) zoom: crate::viewer::Zoom,
 }
 
 impl Review {
     pub(super) fn is_empty(&self) -> bool {
-        self.items.is_empty()
+        self.items.is_empty() && self.changes.is_empty()
     }
 }
 
@@ -169,8 +171,9 @@ impl Workspace {
             return None;
         }
         let item = self.review.items.remove(self.review.sel);
-        self.review.sel = self.review.sel.min(self.review.items.len().saturating_sub(1));
-        if self.review.items.is_empty() {
+        let total = self.review.items.len() + self.review.changes.len();
+        self.review.sel = self.review.sel.min(total.saturating_sub(1));
+        if total == 0 {
             self.review.open = false;
         }
         Some(item)
@@ -178,6 +181,10 @@ impl Workspace {
 
     pub(super) fn reject_proposal(&mut self, cx: &mut Context<Self>) {
         if !self.review.open {
+            return;
+        }
+        if let Some(i) = self.selected_change() {
+            self.reject_change(i, cx);
             return;
         }
         if self.review_take().is_some() {
@@ -194,6 +201,10 @@ impl Workspace {
             return self.merge_current(window, cx);
         }
         if !self.review.open || self.doc.is_none() {
+            return;
+        }
+        if let Some(i) = self.selected_change() {
+            self.accept_change(i, window, cx);
             return;
         }
         let Some(item) = self.review.items.get(self.review.sel) else { return };
@@ -303,7 +314,7 @@ impl Workspace {
                                 .text_xs()
                                 .font_weight(FontWeight::SEMIBOLD)
                                 .text_color(theme::accent())
-                                .child(self.review.items.len().to_string()),
+                                .child(self.review_count().to_string()),
                         )
                         .on_click(cx.listener(|this, _, _, cx| this.open_review(cx)))
                         .children(self.tour_anchor(super::tour::Target::ReviewZone, cx)),
@@ -345,7 +356,17 @@ impl Workspace {
                     .child(div().font_weight(FontWeight::MEDIUM).child(title(g, &p)))
                     .when(!meta.is_empty(), |d| d.child(div().text_xs().text_color(theme::muted()).child(meta)))
                     .on_click(cx.listener(move |this, _, _, cx| this.review_select(i, cx)))
-            }));
+            }))
+            .children(self.review.changes.iter().enumerate().map(|(i, group)| self.render_change_row(i, group, g, cx)));
+        if let Some(i) = self.selected_change() {
+            return h_flex()
+                .flex_1()
+                .min_w_0()
+                .items_stretch()
+                .child(list)
+                .child(self.render_change_detail(i, &self.review.changes[i], g, cx))
+                .into_any_element();
+        }
         let Some(item) = self.review.items.get(self.review.sel) else {
             return list.into_any_element();
         };
