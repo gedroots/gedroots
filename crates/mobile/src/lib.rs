@@ -255,6 +255,21 @@ pub struct EventDetail {
     pub note: Option<String>,
 }
 
+/// The Tree tab around one person: two generations of ancestors above, their unions and children
+/// below.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct FamilyView {
+    pub person: PersonRow,
+    pub portrait: Option<String>,
+    /// Father, mother (each may be unknown).
+    pub parents: Vec<Option<PersonRow>>,
+    /// Father's father, father's mother, mother's father, mother's mother.
+    pub grandparents: Vec<Option<PersonRow>>,
+    /// Is there anyone above the grandparents?
+    pub more_ancestors: bool,
+    pub unions: Vec<UnionRow>,
+}
+
 /// A received tree, read-only.
 #[derive(uniffi::Object)]
 pub struct Tree {
@@ -334,6 +349,22 @@ impl Tree {
             .map(|p| p.display().to_string())
     }
 
+    fn unions(&self, id: &str) -> Vec<UnionRow> {
+        let Some(ind) = self.ged.individual(id) else { return Vec::new() };
+        ind.fams()
+            .into_iter()
+            .filter_map(|f| self.ged.family(f))
+            .map(|f| {
+                let spouse = [f.husband(), f.wife()].into_iter().flatten().find(|x| *x != id);
+                UnionRow {
+                    spouse: spouse.and_then(|s| self.row_of(s)),
+                    married: f.marriage().and_then(|m| m.date()).map(|d| d.display()).unwrap_or_default(),
+                    children: f.children().into_iter().filter_map(|c| self.row_of(c)).collect(),
+                }
+            })
+            .collect()
+    }
+
     fn timeline_rows(&self, id: &str) -> Vec<TimelineRow> {
         timeline::timeline(&self.ged, id)
             .into_iter()
@@ -394,19 +425,7 @@ impl Tree {
         let ind = self.ged.individual(&id)?;
         let (father, mother) = self.ged.parents(&id);
         let parents = [father, mother].into_iter().flatten().map(|p| self.row(&p)).collect();
-        let unions = ind
-            .fams()
-            .into_iter()
-            .filter_map(|f| self.ged.family(f))
-            .map(|f| {
-                let spouse = [f.husband(), f.wife()].into_iter().flatten().find(|x| *x != id);
-                UnionRow {
-                    spouse: spouse.and_then(|s| self.row_of(s)),
-                    married: f.marriage().and_then(|m| m.date()).map(|d| d.display()).unwrap_or_default(),
-                    children: f.children().into_iter().filter_map(|c| self.row_of(c)).collect(),
-                }
-            })
-            .collect();
+        let unions = self.unions(&id);
         let root = self.ged.root();
         let kinship = root
             .as_deref()
@@ -441,6 +460,21 @@ impl Tree {
             media: self.media_rows(&media_xrefs),
             notes: ind.notes(),
             portrait,
+        })
+    }
+
+    /// The family around `id` for the Tree tab.
+    pub fn family(&self, id: String) -> Option<FamilyView> {
+        let ind = self.ged.individual(&id)?;
+        let up = self.ged.ancestry(&id, 4);
+        let at = |k: usize| up.get(k).cloned().flatten().and_then(|x| self.row_of(&x));
+        Some(FamilyView {
+            person: self.row(&ind),
+            portrait: self.ged.portrait(&id).and_then(|m| self.file_path(m.file())),
+            parents: (2..4).map(at).collect(),
+            grandparents: (4..8).map(at).collect(),
+            more_ancestors: up[8..16].iter().any(Option::is_some),
+            unions: self.unions(&id),
         })
     }
 
@@ -614,6 +648,19 @@ mod tests {
         assert_eq!(p.sources.iter().map(|s| s.id.as_str()).collect::<Vec<_>>(), Vec::<&str>::new());
         // The root person has no kinship to themselves.
         assert!(t.person("I1".into()).unwrap().kinship.is_none());
+    }
+
+    #[test]
+    fn family_view_has_two_generations_up_and_the_unions() {
+        let t = tree();
+        let f = t.family("I1".into()).unwrap();
+        let ids = |v: &[Option<PersonRow>]| v.iter().map(|r| r.as_ref().map(|r| r.id.clone())).collect::<Vec<_>>();
+        assert_eq!(ids(&f.parents), [Some("I2".into()), Some("I3".into())]);
+        assert_eq!(ids(&f.grandparents), [Some("I4".into()), None, None, None]);
+        assert!(!f.more_ancestors);
+        assert!(f.unions.is_empty());
+        let louis = t.family("I2".into()).unwrap();
+        assert_eq!(louis.unions[0].children[0].id, "I1");
     }
 
     #[test]

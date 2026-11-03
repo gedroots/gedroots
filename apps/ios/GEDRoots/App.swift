@@ -15,7 +15,13 @@ struct GEDRootsApp: App {
                 if model.desktop == nil || model.removed {
                     PairView(model: model)
                 } else {
-                    PeopleView(model: model)
+                    TabView {
+                        TreeView(model: model)
+                            .tabItem { Label("Tree", systemImage: "point.3.connected.trianglepath.dotted") }
+                        PeopleView(model: model)
+                            .tabItem { Label("People", systemImage: "person.2") }
+                    }
+                    .tint(Theme.accent)
                 }
             }
             .task { await model.syncIfPaired() }

@@ -55,14 +55,7 @@ struct PeopleView: View {
             }
             .refreshable { await model.syncIfPaired() }
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Menu("More", systemImage: "ellipsis.circle") {
-                        Button("Sync Now", systemImage: "arrow.triangle.2.circlepath") {
-                            Task { await model.syncIfPaired() }
-                        }
-                        Button("Forget This Computer", systemImage: "link.badge.minus", role: .destructive) { model.unpair() }
-                    }
-                }
+                ToolbarItem(placement: .topBarTrailing) { MoreMenu(model: model) }
             }
         }
         .tint(Theme.accent)
