@@ -1,9 +1,11 @@
 //! Recently opened files, for File › Open Recent and the welcome page.
 //!
-//! The list belongs to the machine, not to the file: so it cannot live in the .ged.
-//! - macOS: the system's list (`NSDocumentController`), the same as the Dock's and the Finder's;
-//! - Linux and Windows: a small text file (one path per line) in the platform's configuration
-//!   folder (`~/.config/GEDRoots/recents`, `%APPDATA%\GEDRoots\recents`).
+//! The list belongs to the machine, not to the file: so it cannot live in the .ged. It is a small
+//! text file (one path per line) in the platform's configuration folder
+//! (`~/Library/Application Support/GEDRoots/recents`, `~/.config/GEDRoots/recents`,
+//! `%APPDATA%\GEDRoots\recents`), which updates do not touch. On macOS each file is also given
+//! to the system's list (`NSDocumentController`), for the Dock and the Finder; that list is not
+//! read back, because macOS can reset it when an update changes the app's code signature.
 
 use gpui_kit::App;
 use std::path::{Path, PathBuf};
@@ -21,7 +23,16 @@ static GENERATION: AtomicU64 = AtomicU64::new(0);
 /// Existing recent files, most recent first.
 pub fn list() -> Vec<PathBuf> {
     let mut cache = CACHE.lock().unwrap_or_else(|e| e.into_inner());
-    cache.get_or_insert_with(|| store::read().into_iter().filter(|p| p.is_file()).take(MAX).collect()).clone()
+    cache.get_or_insert_with(|| store::read().into_iter().filter(|p| !is_gone(p)).take(MAX).collect()).clone()
+}
+
+/// The file no longer exists. A file that cannot be read for now (folder that macOS has not yet
+/// authorized) stays in the list: opening it asks for the authorization again.
+fn is_gone(path: &Path) -> bool {
+    match std::fs::metadata(path) {
+        Ok(m) => !m.is_file(),
+        Err(e) => e.kind() == std::io::ErrorKind::NotFound,
+    }
 }
 
 /// Version number of the list.
@@ -32,19 +43,18 @@ pub fn generation() -> u64 {
 /// Records `path` as the most recent file.
 pub fn add(path: &Path, cx: &mut App) {
     let path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
-    // macOS: the system's list; elsewhere, no effect (we write our own file).
+    // macOS: also the system's list (Dock, Finder); elsewhere, no effect.
     cx.add_recent_document(&path);
-    #[cfg(not(target_os = "macos"))]
-    {
-        let mut paths = store::read();
-        store::write(&push_front(&mut paths, path));
-    }
+    let mut paths = store::read();
+    store::write(&push_front(&mut paths, path));
     changed(cx);
 }
 
 /// Clears the list.
 pub fn clear(cx: &mut App) {
     store::clear();
+    #[cfg(target_os = "macos")]
+    clear_system_list();
     changed(cx);
 }
 
@@ -55,7 +65,6 @@ fn changed(cx: &mut App) {
 }
 
 /// Puts `path` first, without duplicates, keeping at most `MAX` entries.
-#[cfg_attr(target_os = "macos", allow(dead_code))]
 fn push_front(paths: &mut Vec<PathBuf>, path: PathBuf) -> Vec<PathBuf> {
     paths.retain(|p| p != &path);
     paths.insert(0, path);
@@ -92,27 +101,16 @@ pub fn folder(path: &Path) -> String {
     dir.display().to_string()
 }
 
+/// Clears the system's list (Dock, Finder). Called from the main thread (menu command).
 #[cfg(target_os = "macos")]
-mod store {
+fn clear_system_list() {
     use objc2::MainThreadMarker;
     use objc2_app_kit::NSDocumentController;
-    use std::path::PathBuf;
-
-    /// The system's list. Called from the main thread (menus, rendering).
-    pub fn read() -> Vec<PathBuf> {
-        let Some(mtm) = MainThreadMarker::new() else { return Vec::new() };
-        let dc = NSDocumentController::sharedDocumentController(mtm);
-        dc.recentDocumentURLs().iter().filter_map(|u| u.to_file_path()).collect()
-    }
-
-    pub fn clear() {
-        let Some(mtm) = MainThreadMarker::new() else { return };
-        // SAFETY: `clearRecentDocuments:` accepts a null sender.
-        unsafe { NSDocumentController::sharedDocumentController(mtm).clearRecentDocuments(None) };
-    }
+    let Some(mtm) = MainThreadMarker::new() else { return };
+    // SAFETY: `clearRecentDocuments:` accepts a null sender.
+    unsafe { NSDocumentController::sharedDocumentController(mtm).clearRecentDocuments(None) };
 }
 
-#[cfg(not(target_os = "macos"))]
 mod store {
     use std::path::PathBuf;
 
@@ -156,6 +154,18 @@ mod tests {
         let v = push_front(&mut v, PathBuf::from("/b/new.ged"));
         assert_eq!(v.len(), MAX);
         assert!(!v.contains(&PathBuf::from("/a/9.ged")));
+    }
+
+    #[test]
+    fn only_missing_files_leave_the_list() {
+        let dir = std::env::temp_dir().join(format!("gedroots-recent-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("tree.ged");
+        std::fs::write(&file, "0 HEAD\n").unwrap();
+        assert!(!is_gone(&file));
+        assert!(is_gone(&dir));
+        assert!(is_gone(&dir.join("missing.ged")));
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
