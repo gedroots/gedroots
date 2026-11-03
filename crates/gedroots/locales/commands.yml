@@ -188,6 +188,24 @@ cmd:
   add_event:
     en: Add Event…
     fr: Ajouter un événement…
+  add_to_name:
+    en: Add to Name
+    fr: Ajouter au nom
+  other_name:
+    en: Other Name
+    fr: Autre nom
+  nickname:
+    en: Nickname
+    fr: Surnom
+  name_title:
+    en: Title
+    fr: Titre
+  name_particle:
+    en: Surname Prefix
+    fr: Particule
+  name_suffix:
+    en: Suffix
+    fr: Suffixe
   go_to_root:
     en: Go to Root Person
     fr: Aller à l'individu racine

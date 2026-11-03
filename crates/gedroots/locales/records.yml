@@ -69,6 +69,75 @@ editor.name:
 editor.sex:
   en: Sex
   fr: Sexe
+editor.nickname:
+  en: Nickname
+  fr: Surnom
+editor.name_title:
+  en: Title
+  fr: Titre
+editor.particle:
+  en: Surname prefix
+  fr: Particule
+editor.suffix:
+  en: Suffix
+  fr: Suffixe
+editor.other_names:
+  en: Other names
+  fr: Autres noms
+editor.name_type:
+  en: Type
+  fr: Type
+editor.fold_name:
+  en: OK
+  fr: OK
+editor.remove_name:
+  en: Remove This Name
+  fr: Supprimer ce nom
+name_type.birth:
+  en: Birth name
+  fr: Nom de naissance
+name_type.married:
+  en: Married name
+  fr: Nom marital
+name_type.aka:
+  en: Also known as
+  fr: Aussi connu sous
+name_type.maiden:
+  en: Maiden name
+  fr: Nom de jeune fille
+name_type.immigrant:
+  en: Immigrant name
+  fr: Nom d'immigration
+name_type.professional:
+  en: Professional name
+  fr: Nom professionnel
+name_type.other:
+  en: Other
+  fr: Autre
+names.called:
+  en: called %{name}
+  fr: dit %{name}
+names.also:
+  en: also %{names}
+  fr: aussi %{names}
+names.born:
+  en: born %{names}
+  fr: né %{names}
+names.born_f:
+  en: born %{names}
+  fr: née %{names}
+names.maiden:
+  en: née %{names}
+  fr: née %{names}
+names.married:
+  en: married name %{names}
+  fr: nom marital %{names}
+names.immigrant:
+  en: immigrant name %{names}
+  fr: nom d'immigration %{names}
+names.professional:
+  en: professional name %{names}
+  fr: nom professionnel %{names}
 editor.occupation:
   en: Occupation
   fr: Profession
