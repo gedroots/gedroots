@@ -737,7 +737,7 @@ impl GedrootsMcp {
 
     #[tool(
         name = "propose_act",
-        description = "Proposes an act found in the archives (birth, marriage, death…), with its source, people and image. Nothing is written: the proposal waits in GEDRoots' review page, where the user compares it with the tree and saves or rejects it. Each person says who they are: identity link (in the tree, with id), create or mention; call match_people first. Give every other fact the act states about a person in their `facts` (birth date in a baptism, marginal mention of a death, occupations, residences), each with its own date or none; the answer lists everything that will be written, the proposal's id (to correct it, propose it again with `replaces`) and the temporary id of each new person (link it to name the same person in another proposal: never create them twice). It is refused, with the reason, if it does not fit the tree (unknown source or person, a parent other than the tree's, a person to create who resembles someone of the tree, impossible date): fix it and propose again. Give the place as the tree names it, the date in GEDCOM format, the downloaded file (a PDF register needs pdf_page) and the act's page in the archive's viewer (url): both are kept, the image and a web link.",
+        description = "Proposes an act found in the archives (birth, marriage, death…), with its source, people and image. Nothing is written: the proposal waits in GEDRoots' review page, where the user compares it with the tree and saves or rejects it. Each person says who they are: identity link (in the tree, with id), create or mention; call match_people first. Give every other fact the act states about a person in their `facts` (birth date in a baptism, marginal mention of a death, occupations, residences), each with its own date or none; the answer lists everything that will be written, the proposal's id (to correct it, propose it again with `replaces`) and the temporary id of each new person (link it to name the same person in another proposal: never create them twice). It is refused, with the reason, if it does not fit the tree (unknown source or person, a parent other than the tree's, a person to create who resembles someone of the tree, impossible date): fix it and propose again. Write facts in the tree's language and wording (an occupation the tree already has keeps the tree's text; only the transcription keeps the act's language and spelling); an occupation or residence at another date is another attestation, not a duplicate. Give the place as the tree names it, the date in GEDCOM format, the downloaded file (a PDF register needs pdf_page) and the act's page in the archive's viewer (url): both are kept, the image and a web link.",
         annotations(
             read_only_hint = false,
             destructive_hint = false,
@@ -909,7 +909,10 @@ a proposal to the app's review page, where the user compares it with the tree be
 the research log (`plan_research`, `log_search`: what you plan and search, even in vain) is written \
 at once. \
 Start with `file_context`: it shows how this file is written (the user's own conventions, source \
-titles, names, event types), so that what you propose looks like the rest of the file. Of a living person, only \
+titles, names, event types), so that what you propose looks like the rest of the file: write in its language, even when the act \
+is in another one, and reuse its wording (only the transcription keeps the act's language and spelling). \
+As genealogists do, a woman is recorded under her maiden name, even when an act names her by her \
+husband's: look for her under both, never create her again under her married name. Of a living person, only \
 what identifies them is given (name, birth, close relatives). Ids (I12, F3, S4…) are \
 only for passing between tools: never show them to the user. To look for records (birth, marriage, \
 death acts), call `research_leads`: each lead gives the estimated years, the places, where to look \

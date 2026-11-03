@@ -76,6 +76,7 @@ pub struct PersonParams {
     #[serde(default)]
     pub not: Vec<String>,
     pub given: Option<String>,
+    /// Birth surname: a woman's maiden name, even when the act names her by her husband's.
     pub surname: Option<String>,
     /// M or F.
     pub sex: Option<String>,
@@ -441,6 +442,7 @@ pub struct MatchPersonParams {
     /// others (the father of a linked child…).
     pub id: Option<String>,
     pub given: Option<String>,
+    /// Birth surname: a woman's maiden name, even when the act names her by her husband's.
     pub surname: Option<String>,
     /// M or F.
     pub sex: Option<String>,

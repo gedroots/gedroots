@@ -408,6 +408,11 @@ impl Participant {
     }
 }
 
+/// An event a person has once (birth, death…): a second one contradicts the first.
+pub(crate) fn is_unique_event(tag: &str) -> bool {
+    matches!(tag, "BIRT" | "CHR" | "BAPM" | "DEAT" | "BURI" | "CREM")
+}
+
 /// Identifies a record among a source's citations: reference (`PAGE`) and record date
 /// (`DATA.DATE`).
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
@@ -1690,7 +1695,7 @@ impl Writer<'_> {
     /// A date or place that contradicts the existing event's is settled by `conflict`. Returns its
     /// index.
     fn add_event(&mut self, x: &str, mut ev: Node, conflict: Conflict) -> usize {
-        let unique = matches!(ev.tag.as_str(), "BIRT" | "CHR" | "BAPM" | "DEAT" | "BURI" | "CREM");
+        let unique = is_unique_event(&ev.tag);
         let node = self.ged.get_mut(x).unwrap();
         let existing = node.children.iter().position(|c| {
             c.tag == ev.tag
@@ -1766,7 +1771,8 @@ impl Writer<'_> {
         idx
     }
 
-    /// Adds a fact (occupation, residence), unless it already exists with the same value and date.
+    /// Adds a fact (occupation, residence), unless it already exists with the same value and date
+    /// (and the same place, or one of them without).
     fn add_fact(&mut self, x: &str, fact: Node) {
         self.add_fact_with(x, fact, Conflict::KeepBoth)
     }
@@ -1779,10 +1785,18 @@ impl Writer<'_> {
             c.tag == fact.tag
                 && c.val() == fact.val()
                 && c.child_val("DATE") == fact.child_val("DATE")
-                && c.child_val("PLAC") == fact.child_val("PLAC")
+                && (c.child_val("PLAC") == fact.child_val("PLAC")
+                    || c.child("PLAC").is_none()
+                    || fact.child("PLAC").is_none())
         });
         match same {
             Some(existing) => {
+                if existing.child("PLAC").is_none()
+                    && let Some(place) = fact.child("PLAC")
+                {
+                    let at = existing.children.iter().position(|c| c.tag == "SOUR").unwrap_or(existing.children.len());
+                    existing.children.insert(at, place.clone());
+                }
                 let cite = fact.children.into_iter().find(|c| c.tag == "SOUR").unwrap();
                 if !existing.children.contains(&cite) {
                     existing.children.push(cite);
