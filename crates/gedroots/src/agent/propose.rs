@@ -548,7 +548,7 @@ pub fn to_proposal(p: &ProposeParams) -> Result<Proposal, String> {
             call_number: opt(&s.call_number).to_string(),
         }),
     };
-    Ok(Proposal { source, act, url: opt(&p.url).to_string() })
+    Ok(Proposal { source, act, url: opt(&p.url).to_string(), conflicts: Default::default() })
 }
 
 /// What saving the proposal will write, one line per row of the review: people created, linked or

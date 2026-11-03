@@ -10,8 +10,10 @@
 
 use super::*;
 use crate::agent::propose::{self, Outcome, Pending, Queued};
+use gedcom::Conflict;
 use gedcom::proposal::{Change, Field, Proposal, SourceChoice};
 use gpui_kit::component::checkbox::Checkbox;
+use gpui_kit::component::menu::{DropdownMenu, PopupMenuItem};
 use rust_i18n::t;
 use std::collections::BTreeSet;
 
@@ -28,6 +30,9 @@ pub(super) struct Item {
     id: String,
     pending: Pending,
     excluded: BTreeSet<Keep>,
+    /// Choice for each value that contradicts the tree: the event (`None`) or a fact (person,
+    /// fact), as numbered in the agent's proposal.
+    conflicts: std::collections::BTreeMap<Option<(usize, usize)>, Conflict>,
     /// Prepared by the guided tour, not sent by an agent.
     demo: bool,
 }
@@ -45,6 +50,26 @@ impl Item {
     /// The proposal, without the unchecked people and facts.
     fn proposal(&self) -> Proposal {
         let mut p = self.pending.proposal.clone();
+        p.conflicts.event = self.conflict(None);
+        // Facts are numbered again once the unchecked people and facts are left out.
+        let mut person = 0;
+        for (i, x) in p.act.participants.iter_mut().enumerate() {
+            if self.excluded.contains(&Keep::Person(i)) {
+                continue;
+            }
+            let mut fact = 0;
+            for k in 0..x.facts.len() {
+                if self.excluded.contains(&Keep::Fact(i, k)) {
+                    continue;
+                }
+                let c = self.conflict(Some((i, k)));
+                if c != Conflict::KeepBoth {
+                    p.conflicts.facts.insert((person, fact), c);
+                }
+                fact += 1;
+            }
+            person += 1;
+        }
         for (i, person) in p.act.participants.iter_mut().enumerate() {
             let mut k = 0;
             person.facts.retain(|_| {
@@ -60,6 +85,10 @@ impl Item {
             keep
         });
         p
+    }
+
+    fn conflict(&self, at: Option<(usize, usize)>) -> Conflict {
+        self.conflicts.get(&at).copied().unwrap_or_default()
     }
 
     /// Unchecking a person also leaves out their facts.
@@ -155,6 +184,56 @@ fn change_tag(c: Change) -> (String, Hsla) {
     (text.into_owned(), color)
 }
 
+fn conflict_label(c: Conflict) -> String {
+    match c {
+        Conflict::KeepBoth => t!("review.keep_both"),
+        Conflict::Replace => t!("review.replace"),
+        Conflict::Ignore => t!("review.ignore"),
+    }
+    .into_owned()
+}
+
+/// “≠ Keep Both ▾”: what saving does with a value that contradicts the tree.
+fn conflict_menu(
+    current: Conflict,
+    at: Option<(usize, usize)>,
+    color: Hsla,
+    cx: &mut Context<Workspace>,
+) -> impl IntoElement {
+    let me = cx.entity().downgrade();
+    let id = match at {
+        None => "conflict-event".to_string(),
+        Some((i, k)) => format!("conflict-{i}-{k}"),
+    };
+    Button::new(SharedString::from(id))
+        .ghost()
+        .xsmall()
+        .dropdown_caret(true)
+        .child(
+            div()
+                .text_xs()
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(color)
+                .child(format!("≠ {}", conflict_label(current))),
+        )
+        .dropdown_menu(move |mut menu, _, _| {
+            for c in [Conflict::KeepBoth, Conflict::Replace, Conflict::Ignore] {
+                let me = me.clone();
+                menu =
+                    menu.item(PopupMenuItem::new(conflict_label(c)).checked(c == current).on_click(move |_, _, cx| {
+                        let _ = me.update(cx, |ws, cx| {
+                            let sel = ws.review.sel;
+                            if let Some(it) = ws.review.items.get_mut(sel) {
+                                it.conflicts.insert(at, c);
+                            }
+                            cx.notify();
+                        });
+                    }));
+            }
+            menu
+        })
+}
+
 impl Workspace {
     /// Proposal received from the agent: checked against the displayed file, then queued.
     pub(crate) fn add_proposal(&mut self, pending: Pending, cx: &mut Context<Self>) -> Result<Queued, String> {
@@ -199,7 +278,7 @@ impl Workspace {
         self.review.last_id += 1;
         let id = format!("P{}", self.review.last_id);
         let temps = pending.temps.clone();
-        let item = Item { id: id.clone(), pending, excluded: BTreeSet::new(), demo };
+        let item = Item { id: id.clone(), pending, excluded: BTreeSet::new(), conflicts: Default::default(), demo };
         match replaced {
             Some(i) => {
                 let old = std::mem::replace(&mut self.review.items[i], item);
@@ -499,13 +578,23 @@ impl Workspace {
         let Some(item) = self.review.items.get(self.review.sel) else {
             return list.into_any_element();
         };
+        // No image: no empty viewer, the proposal takes a single centred column.
+        let image = item.pending.preview.is_some() || item.pending.image.is_some();
         h_flex()
             .flex_1()
             .min_w_0()
             .items_stretch()
             .child(list)
-            .child(self.review_viewer(item))
-            .child(self.review_detail(item, g, cx))
+            .map(|d| match image {
+                true => d.child(self.review_viewer(item)).child(self.review_detail(item, g, cx)),
+                false => d.child(
+                    v_flex()
+                        .flex_1()
+                        .min_w_0()
+                        .items_center()
+                        .child(self.review_detail(item, g, cx).max_w(px(640.)).size_full().border_l_0()),
+                ),
+            })
             .into_any_element()
     }
 
@@ -563,7 +652,7 @@ impl Workspace {
             .into_any_element()
     }
 
-    fn review_detail(&self, item: &Item, g: &Gedcom, cx: &mut Context<Self>) -> AnyElement {
+    fn review_detail(&self, item: &Item, g: &Gedcom, cx: &mut Context<Self>) -> Div {
         let full = &item.pending.proposal;
         let p = item.proposal();
         // The proposal may no longer fit the tree (changed since): it stays visible, but is not
@@ -656,6 +745,21 @@ impl Workspace {
             };
             let (tag, color) = change_tag(row.change);
             let same = row.change == Change::Same;
+            // A contradiction: keep both (default), prefer the record's, or keep the tree's.
+            let at = match &row.field {
+                Field::Date | Field::Place => Some(None),
+                Field::Fact { person, fact, .. } => Some(Some((*person, *fact))),
+                Field::Person { .. } => None,
+            }
+            .filter(|_| row.change == Change::Differs);
+            let tag: AnyElement = match at {
+                Some(at) => {
+                    h_flex().ml(px(-6.)).child(conflict_menu(item.conflict(at), at, color, cx)).into_any_element()
+                }
+                None => {
+                    div().text_xs().font_weight(FontWeight::SEMIBOLD).text_color(color).child(tag).into_any_element()
+                }
+            };
             let el = line()
                 .child(div().w(px(16.)).flex_none().child(check))
                 .child(
@@ -672,7 +776,7 @@ impl Workspace {
                         .flex_1()
                         .min_w_0()
                         .when(!on, |d| d.opacity(0.45))
-                        .child(div().text_xs().font_weight(FontWeight::SEMIBOLD).text_color(color).child(tag))
+                        .child(tag)
                         .when(!same, |d| d.child(div().text_color(color).child(proposed)))
                         .when_some(also_in(&row.field), |d, titles| {
                             d.child(
@@ -893,7 +997,6 @@ impl Workspace {
                             .on_click(cx.listener(|this, _, w, cx| this.accept_proposal(w, cx))),
                     ),
             )
-            .into_any_element()
     }
 }
 

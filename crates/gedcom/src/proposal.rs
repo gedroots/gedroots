@@ -13,7 +13,8 @@
 //! [`Proposal::diff`] gives the exact GEDCOM lines that will change, computed on a copy of the
 //! file.
 
-use crate::act::{Act, ActResult, ActRole, PersonChoice, PersonField, Suggestion};
+use crate::DateKind;
+use crate::act::{Act, ActResult, ActRole, Conflicts, PersonChoice, PersonField, Suggestion};
 use crate::document::{Gedcom, RecordKind};
 use crate::node::Node;
 use crate::parse::node_to_string;
@@ -50,6 +51,8 @@ pub struct Proposal {
     pub act: Act,
     /// Web page of the record (the archives' viewer), kept as a web link of the source.
     pub url: String,
+    /// What to do with the values that contradict the tree, chosen in To Review.
+    pub conflicts: Conflicts,
 }
 
 /// What a line of the comparison changes.
@@ -213,7 +216,7 @@ impl Proposal {
     pub fn apply(&self, ged: &mut Gedcom) -> Result<ActResult, String> {
         let mut copy = ged.clone();
         let act = self.materialize(&mut copy)?;
-        let mut res = act.save(&mut copy)?;
+        let mut res = act.save_with(&mut copy, &self.conflicts)?;
         if (matches!(self.source, SourceChoice::New(_)) || !self.url.trim().is_empty())
             && !res.touched.contains(&act.source)
         {
@@ -503,7 +506,7 @@ fn norm(s: &str) -> String {
     s.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase()
 }
 
-fn text_change(current: &str, proposed: &str) -> Change {
+pub(crate) fn text_change(current: &str, proposed: &str) -> Change {
     let (c, p) = (norm(current), norm(proposed));
     if c.is_empty() {
         Change::Added
@@ -518,7 +521,7 @@ fn text_change(current: &str, proposed: &str) -> Change {
 
 /// Proposed date against the tree's: identical, more precise (within the interval of the tree's, or
 /// close to an approximate date) or contrary.
-fn date_change(current: &str, proposed: &str) -> Change {
+pub(crate) fn date_change(current: &str, proposed: &str) -> Change {
     let (c, p) = (current.trim(), proposed.trim());
     if c.is_empty() {
         return Change::Added;
@@ -532,7 +535,12 @@ fn date_change(current: &str, proposed: &str) -> Change {
         (Some((c0, c1)), Some((p0, p1))) if p0 >= c0 && p1 <= c1 => Change::Refined,
         _ => match (dc.year(), dp.year()) {
             // “about 1802”, “1802”: a date of the same order refines it.
-            (Some(a), Some(b)) if dc.kind().is_some() && (a - b).abs() <= 2 => Change::Refined,
+            (Some(a), Some(b))
+                if matches!(dc.kind(), Some(DateKind::About | DateKind::Calculated | DateKind::Estimated))
+                    && (a - b).abs() <= 2 =>
+            {
+                Change::Refined
+            }
             _ => Change::Differs,
         },
     }
@@ -637,7 +645,7 @@ mod tests {
             Participant { choice: PersonChoice::Link("I3".into()), ..Participant::new(ActRole::Father) },
             Participant::new(ActRole::Mother).with(PersonField::Given, "Marie").with(PersonField::Surname, "DURAND"),
         ];
-        Proposal { source, act, url: String::new() }
+        Proposal { source, act, url: String::new(), conflicts: Conflicts::default() }
     }
 
     fn new_source() -> SourceChoice {
@@ -647,6 +655,34 @@ mod tests {
             call_number: "10 NUM 35238".into(),
             ..Default::default()
         })
+    }
+
+    #[test]
+    fn contradicting_date_is_settled_by_the_choice() {
+        use crate::act::Conflict;
+        let g = ged();
+        let mut p = birth(SourceChoice::Existing("S1".into()));
+        p.act.date = "4 APR 1812".into();
+        p.complete(&g);
+        assert_eq!(p.compare(&g)[0].change, Change::Differs);
+        let births = |c: Conflict| {
+            let mut p = p.clone();
+            p.conflicts.event = c;
+            let mut g2 = g.clone();
+            p.apply(&mut g2).unwrap();
+            g2.get("I2")
+                .unwrap()
+                .children
+                .iter()
+                .filter(|c| c.tag == "BIRT")
+                .map(|b| (b.child_val("DATE").unwrap_or("").to_string(), b.child("SOUR").is_some()))
+                .collect::<Vec<_>>()
+        };
+        let (old, new) = (("ABT 1802".to_string(), false), ("4 APR 1812".to_string(), true));
+        assert_eq!(births(Conflict::KeepBoth), vec![old.clone(), new.clone()]);
+        assert_eq!(births(Conflict::Replace), vec![new, old]);
+        // The tree's date stays, the record's citation is added to it.
+        assert_eq!(births(Conflict::Ignore), vec![("ABT 1802".to_string(), true)]);
     }
 
     #[test]
@@ -846,6 +882,8 @@ mod tests {
         assert_eq!(date_change("ABT 1802", "4 APR 1802"), Change::Refined);
         assert_eq!(date_change("1802", "4 APR 1802"), Change::Refined);
         assert_eq!(date_change("1810", "4 APR 1802"), Change::Differs);
+        // An exact date a year apart contradicts it.
+        assert_eq!(date_change("4 MAY 1796", "4 MAY 1797"), Change::Differs);
         assert_eq!(date_change("", "1802"), Change::Added);
         assert_eq!(date_change("FRENCH_R 30 GERM 4", "@#DFRENCH R@ 30 GERM 4"), Change::Same);
     }
