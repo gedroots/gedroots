@@ -112,9 +112,17 @@ struct FamilyChart: View {
         if let p = person {
             Button { center(p.id) } label: {
                 VStack(alignment: .leading, spacing: 2) {
+                    // Grandparents: the given names on two lines at most, one word per line so that a
+                    // long name shrinks a little rather than breaking in the middle.
+                    let words = compact ? given(p).split(separator: " ").map(String.init) : [p.name]
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
-                        LineageDot(lineage: p.lineage)
-                        Text(compact ? given(p) : p.name).font(.caption).fontWeight(.semibold).lineLimit(2)
+                        if p.lineage != .other { LineageDot(lineage: p.lineage) }
+                        Text(words.first ?? "").font(.caption).fontWeight(.semibold)
+                            .lineLimit(compact ? 1 : 2).minimumScaleFactor(compact ? 0.75 : 1)
+                    }
+                    if compact, words.count > 1 {
+                        Text(words.dropFirst().joined(separator: " ")).font(.caption).fontWeight(.semibold)
+                            .lineLimit(1).minimumScaleFactor(0.75)
                     }
                     if compact {
                         Text(p.surname).font(.caption).fontWeight(.semibold).lineLimit(1).minimumScaleFactor(0.8)

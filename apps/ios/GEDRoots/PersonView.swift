@@ -133,7 +133,6 @@ struct TimelineLabel: View {
         }
         // Buttons tint their label: concrete colours keep the row readable in both appearances.
         .foregroundStyle(Color.primary)
-        .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
     }
 }
 
@@ -194,7 +193,7 @@ struct MediaStrip: View {
             }
         }
         // Aligned with the list's content and section headers.
-        .contentMargins(.horizontal, 20, for: .scrollContent)
+        .contentMargins(.horizontal, 16, for: .scrollContent)
     }
 }
 

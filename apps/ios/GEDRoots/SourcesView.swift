@@ -72,10 +72,11 @@ struct SourceView: View {
                 .listRowBackground(Color.clear)
                 if !s.media.isEmpty {
                     Section("Images") {
+                        // Insets on the row only: on the section they would move its header too.
                         MediaStrip(media: s.media, open: { viewing = $0 })
+                            .listRowInsets(EdgeInsets())
+                            .listRowBackground(Color.clear)
                     }
-                    .listRowInsets(EdgeInsets())
-                    .listRowBackground(Color.clear)
                 }
                 if !s.acts.isEmpty {
                     Section("Acts") {
