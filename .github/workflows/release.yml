@@ -100,10 +100,18 @@ jobs:
           restore-keys: |
             release-${{ runner.os }}-${{ hashFiles('mise.lock', 'Cargo.lock') }}-
             release-${{ runner.os }}-
-      # Pull requests without the secret test the signature with a throwaway certificate.
+      # Pull requests without the secret (forks) test the signature with a throwaway certificate,
+      # masked in the logs.
       - name: Throwaway signing certificate
         if: runner.os == 'macOS' && github.event_name == 'pull_request'
-        run: mise run release:certificate --throwaway >> "$GITHUB_ENV"
+        env:
+          HAS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE != '' }}
+        run: |
+          [ "$HAS_CERTIFICATE" = true ] && exit 0
+          mise run release:certificate --throwaway | while IFS='=' read -r name value; do
+            echo "::add-mask::$value"
+            echo "$name=$value" >> "$GITHUB_ENV"
+          done
       - name: Installers and update packages
         shell: bash
         run: mise run package ${{ github.event_name != 'pull_request' && '--upload' || '' }}
