@@ -295,19 +295,65 @@ pub struct PlaceEvent {
     pub event: EventRef,
 }
 
+/// Events that cite a source at the same place in it (the same `PAGE`): one act.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SourceAct {
+    /// Where in the source (“View 112”), empty when the citations don't say.
+    pub page: String,
+    pub events: Vec<PlaceEvent>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SourceDetail {
+    pub row: SourceRow,
+    pub author: Option<String>,
+    pub publication: Option<String>,
+    /// Web page of the source (the archives' viewer).
+    pub url: Option<String>,
+    pub media: Vec<MediaRow>,
+    pub acts: Vec<SourceAct>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum MediaKind {
+    All,
+    Photos,
+    /// Scans of records: media attached to a source or cited.
+    Documents,
+}
+
+/// A record a media is linked to, for the viewer.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct MediaLink {
+    pub title: String,
+    /// Set when the record is an individual, to open their record.
+    pub person: Option<String>,
+    /// Set when the record is a source.
+    pub source: Option<String>,
+}
+
+/// Sort key of a date ([`gedcom::Date::sort_key`]).
+type SortKey = (i32, u8, u8);
+
 /// A received tree, read-only.
 #[derive(uniffi::Object)]
 pub struct Tree {
     ged: Gedcom,
     dir: PathBuf,
     sosa: HashMap<String, u64>,
+    /// Media attached to a source record: scans of documents.
+    source_media: std::collections::HashSet<String>,
 }
 
 impl Tree {
     fn from_gedcom(ged: Gedcom, dir: PathBuf) -> Self {
         let sosa =
             ged.sosa_numbers().into_iter().filter(|(_, n)| n.branch.is_empty()).map(|(x, n)| (x, n.sosa)).collect();
-        Self { ged, dir, sosa }
+        let source_media = ged
+            .records_of(RecordKind::Source)
+            .flat_map(|r| Source::new(r).media_xrefs().into_iter().map(str::to_string))
+            .collect();
+        Self { ged, dir, sosa, source_media }
     }
 
     fn row(&self, i: &gedcom::Individual) -> PersonRow {
@@ -387,6 +433,26 @@ impl Tree {
                     .filter(|(_, n)| gedcom::event_label(&n.tag).is_some())
                     .map(move |(i, n)| (x, i, gedcom::Event { node: n }))
             })
+    }
+
+    fn place_event(&self, owner: &str, index: usize, e: &gedcom::Event) -> Option<PlaceEvent> {
+        let date = e.date();
+        Some(PlaceEvent {
+            title: self.ged.event_title(owner, index)?,
+            year: date.as_ref().and_then(|d| d.year()).map(|y| y.to_string()).unwrap_or_default(),
+            date: date.map(|d| d.display()).unwrap_or_default(),
+            people: self.ged.event_principals(owner).iter().filter_map(|x| self.row_of(x)).collect(),
+            event: EventRef { owner: owner.to_string(), index: index as u32 },
+        })
+    }
+
+    /// Is this media a scan of a record rather than a photo?
+    fn is_document(&self, m: &Media) -> bool {
+        match gedcom::medium(m.node) {
+            Some("PHOTO") => false,
+            Some(_) => true,
+            None => self.source_media.contains(m.xref()),
+        }
     }
 
     fn unions(&self, id: &str) -> Vec<UnionRow> {
@@ -546,21 +612,86 @@ impl Tree {
             .all_events()
             .filter(|(_, _, e)| e.place() == Some(name.as_str()))
             .filter_map(|(owner, index, e)| {
-                let date = e.date();
-                Some((
-                    date.as_ref().map(|d| d.sort_key()).unwrap_or((i32::MAX, 0, 0)),
-                    PlaceEvent {
-                        title: self.ged.event_title(owner, index)?,
-                        year: date.as_ref().and_then(|d| d.year()).map(|y| y.to_string()).unwrap_or_default(),
-                        date: date.map(|d| d.display()).unwrap_or_default(),
-                        people: self.ged.event_principals(owner).iter().filter_map(|x| self.row_of(x)).collect(),
-                        event: EventRef { owner: owner.to_string(), index: index as u32 },
-                    },
-                ))
+                let key = e.date().map(|d| d.sort_key()).unwrap_or((i32::MAX, 0, 0));
+                Some((key, self.place_event(owner, index, &e)?))
             })
             .collect();
         out.sort_by_key(|(k, _)| *k);
         out.into_iter().map(|(_, e)| e).collect()
+    }
+
+    /// Every source, sorted by title.
+    pub fn sources(&self) -> Vec<SourceRow> {
+        let mut rows: Vec<SourceRow> = self
+            .ged
+            .records_of(RecordKind::Source)
+            .filter_map(|r| r.xref.as_deref())
+            .filter_map(|x| self.source_row(x))
+            .collect();
+        rows.sort_by_cached_key(|r| gedcom::sort_key(&r.title));
+        rows
+    }
+
+    /// A source with the acts read in it: the events citing it, grouped by page.
+    pub fn source(&self, id: String) -> Option<SourceDetail> {
+        let row = self.source_row(&id)?;
+        let s = Source::new(self.ged.get(&id)?);
+        // Page, earliest date (to sort the acts), events.
+        let mut acts: Vec<(String, SortKey, Vec<PlaceEvent>)> = Vec::new();
+        for (owner, index, e) in self.all_events() {
+            for c in e.node.children_with("SOUR").filter(|c| c.pointer() == Some(id.as_str())) {
+                let page = c.child_val("PAGE").unwrap_or_default().trim().to_string();
+                let Some(ev) = self.place_event(owner, index, &e) else { continue };
+                let key = e.date().map(|d| d.sort_key()).unwrap_or((i32::MAX, 0, 0));
+                match acts.iter_mut().find(|a| !page.is_empty() && a.0 == page) {
+                    Some(a) => {
+                        a.1 = a.1.min(key);
+                        a.2.push(ev);
+                    }
+                    None => acts.push((page, key, vec![ev])),
+                }
+            }
+        }
+        acts.sort_by_key(|a| a.1);
+        Some(SourceDetail {
+            row,
+            author: s.author(),
+            publication: s.publication(),
+            url: s.url().map(str::to_string),
+            media: self.media_rows(&s.media_xrefs()),
+            acts: acts.into_iter().map(|(page, _, events)| SourceAct { page, events }).collect(),
+        })
+    }
+
+    /// Every media, photos or documents, in file order.
+    pub fn media(&self, kind: MediaKind) -> Vec<MediaRow> {
+        let xrefs: Vec<&str> = self
+            .ged
+            .records_of(RecordKind::Media)
+            .filter(|r| match kind {
+                MediaKind::All => true,
+                MediaKind::Photos => !self.is_document(&Media::new(r)),
+                MediaKind::Documents => self.is_document(&Media::new(r)),
+            })
+            .filter_map(|r| r.xref.as_deref())
+            .collect();
+        self.media_rows(&xrefs)
+    }
+
+    /// Records a media is linked to, for the viewer.
+    pub fn media_links(&self, id: String) -> Vec<MediaLink> {
+        self.ged
+            .referrers(&id)
+            .into_iter()
+            .filter_map(|r| {
+                let x = r.xref.as_deref()?;
+                Some(MediaLink {
+                    title: self.ged.record_label(x),
+                    person: (r.tag == "INDI").then(|| x.to_string()),
+                    source: (r.tag == "SOUR").then(|| x.to_string()),
+                })
+            })
+            .collect()
     }
 
     /// An event, opened from a timeline row.
@@ -637,6 +768,7 @@ mod tests {
 4 LATI N49.1157
 4 LONG W1.0906
 1 OCCU Cultivateur
+1 OBJE @M2@
 1 FAMS @F1@
 1 FAMC @F2@
 0 @I3@ INDI
@@ -671,6 +803,13 @@ mod tests {
 1 CHIL @I2@
 0 @S1@ SOUR
 1 TITL Agneaux — Marriages 1893–1902
+1 OBJE @M1@
+0 @M1@ OBJE
+1 FILE Actes/mariage.jpg
+2 FORM image/jpeg
+0 @M2@ OBJE
+1 FILE Photos/louis.jpg
+2 FORM image/jpeg
 0 TRLR
 ";
 
@@ -758,6 +897,24 @@ mod tests {
         assert_eq!(events.iter().map(|e| e.year.as_str()).collect::<Vec<_>>(), ["1868", "1902"]);
         assert_eq!(events[0].people[0].id, "I2");
         assert!(t.event(events[1].event.clone()).is_some());
+    }
+
+    #[test]
+    fn sources_acts_and_media() {
+        let t = tree();
+        assert_eq!(t.sources().len(), 1);
+        let s = t.source("S1".into()).unwrap();
+        assert_eq!(s.acts.len(), 1);
+        assert_eq!(s.acts[0].page, "View 12");
+        assert_eq!(s.acts[0].events[0].people.len(), 2);
+        assert_eq!(s.media.iter().map(|m| m.id.as_str()).collect::<Vec<_>>(), ["M1"]);
+        let ids = |k| t.media(k).into_iter().map(|m| m.id).collect::<Vec<_>>();
+        assert_eq!(ids(MediaKind::Documents), ["M1"]);
+        assert_eq!(ids(MediaKind::Photos), ["M2"]);
+        assert_eq!(ids(MediaKind::All).len(), 2);
+        let links = t.media_links("M2".into());
+        assert_eq!(links[0].person.as_deref(), Some("I2"));
+        assert_eq!(t.media_links("M1".into())[0].source.as_deref(), Some("S1"));
     }
 
     #[test]

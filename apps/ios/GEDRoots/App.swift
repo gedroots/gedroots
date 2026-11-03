@@ -22,6 +22,10 @@ struct GEDRootsApp: App {
                             .tabItem { Label("People", systemImage: "person.2") }
                         PlacesView(model: model)
                             .tabItem { Label("Places", systemImage: "mappin.and.ellipse") }
+                        SourcesView(model: model)
+                            .tabItem { Label("Sources", systemImage: "book") }
+                        MediaView(model: model)
+                            .tabItem { Label("Media", systemImage: "photo.on.rectangle") }
                     }
                     .tint(Theme.accent)
                 }

@@ -1,3 +1,4 @@
+import ImageIO
 import SwiftUI
 
 /// Read-only record of an individual, like the desktop's: header, media, timeline (with the
@@ -8,6 +9,7 @@ struct PersonView: View {
     let id: String
     @AppStorage("relativesEvents") private var relativesEvents = true
     @State private var openEvent: EventRef?
+    @State private var viewing: MediaRow?
 
     var body: some View {
         if let p = model.tree?.person(id: id) {
@@ -16,7 +18,7 @@ struct PersonView: View {
                     .listRowBackground(Color.clear)
                     .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
                 if !p.media.isEmpty {
-                    Section { MediaStrip(media: p.media) }
+                    Section { MediaStrip(media: p.media, open: { viewing = $0 }) }
                         .listRowInsets(EdgeInsets())
                         .listRowBackground(Color.clear)
                 }
@@ -63,6 +65,7 @@ struct PersonView: View {
                 EventSheet(model: model, ref: ref)
                     .presentationDetents([.medium, .large])
             }
+            .fullScreenCover(item: $viewing) { m in ImageViewer(model: model, media: m) }
         } else {
             ContentUnavailableView("Not Found", systemImage: "person.slash")
         }
@@ -140,7 +143,7 @@ struct Portrait: View {
     let size: CGFloat
     var body: some View {
         Group {
-            if let path, let image = UIImage(contentsOfFile: path) {
+            if let path, let image = Thumbnails.image(path) {
                 Image(uiImage: image).resizable().scaledToFill()
             } else {
                 Text(initials).font(.system(size: size / 3.6, weight: .semibold)).foregroundStyle(.secondary)
@@ -160,33 +163,60 @@ struct Portrait: View {
     }
 }
 
-/// Horizontal strip of the record's images (the portrait first).
+/// Horizontal strip of the record's images (the portrait first); a tap opens the viewer.
 struct MediaStrip: View {
     let media: [MediaRow]
+    var open: ((MediaRow) -> Void)?
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 ForEach(media.filter(\.isImage), id: \.id) { m in
-                    Thumbnail(path: m.path)
-                        .frame(width: 96, height: 72)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                        .accessibilityLabel(m.title)
+                    Button { open?(m) } label: {
+                        Thumbnail(path: m.path)
+                            .frame(width: 96, height: 72)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(open == nil)
+                    .accessibilityLabel(m.title)
                 }
             }
         }
     }
 }
 
+/// Small image, decoded at its display size (scans are large) and kept in memory.
 struct Thumbnail: View {
     let path: String?
     var body: some View {
-        if let path, let image = UIImage(contentsOfFile: path) {
+        if let path, let image = Thumbnails.image(path) {
             Image(uiImage: image).resizable().scaledToFill()
         } else {
             Theme.hover
         }
     }
 }
+
+enum Thumbnails {
+    private static let cache = NSCache<NSString, UIImage>()
+
+    static func image(_ path: String, side: CGFloat = 320) -> UIImage? {
+        if let hit = cache.object(forKey: path as NSString) { return hit }
+        let options = [kCGImageSourceShouldCache: false] as CFDictionary
+        guard let source = CGImageSourceCreateWithURL(URL(fileURLWithPath: path) as CFURL, options),
+              let cg = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                  kCGImageSourceCreateThumbnailFromImageAlways: true,
+                  kCGImageSourceCreateThumbnailWithTransform: true,
+                  kCGImageSourceThumbnailMaxPixelSize: side,
+              ] as CFDictionary)
+        else { return nil }
+        let image = UIImage(cgImage: cg)
+        cache.setObject(image, forKey: path as NSString)
+        return image
+    }
+}
+
+extension MediaRow: Identifiable {}
 
 extension EventRef: Identifiable {
     public var id: String { "\(owner)#\(index)" }
