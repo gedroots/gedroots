@@ -213,6 +213,8 @@ struct Document {
     sample: bool,
     dirty: bool,
     dirty_before_checkpoint: bool,
+    /// The tree as it was last opened or saved: Save stamps the records changed since.
+    saved: Gedcom,
     /// Previous states, for Undo (the last one is the most recent).
     history: Vec<Gedcom>,
     /// Undone states, for Redo; cleared by any new change.
@@ -525,6 +527,7 @@ impl Workspace {
         let first = ged.root();
         let dirty = imported || path.is_none();
         self.doc = Some(Document {
+            saved: ged.clone(),
             ged,
             path,
             imported,
@@ -605,9 +608,12 @@ impl Workspace {
     fn write_to(&mut self, path: PathBuf, cx: &mut Context<Self>) {
         let before = self.mobile_share();
         let Some(doc) = &mut self.doc else { return };
+        doc.ged.ensure_tree_id();
+        doc.ged.stamp_changes(&doc.saved);
         doc.ged.stamp_header();
         match gedcom::save(&doc.ged, &path) {
             Ok(()) => {
+                doc.saved = doc.ged.clone();
                 if doc.imported || doc.path.as_ref() != Some(&path) {
                     crate::recent::add(&path, cx);
                 }

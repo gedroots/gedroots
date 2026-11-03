@@ -2390,6 +2390,7 @@ dependencies = [
  "rust-i18n",
  "schemars",
  "serde",
+ "uuid",
 ]
 
 [[package]]

@@ -8,6 +8,7 @@ start with `_GR_` and are declared in the header, as GEDCOM 7 requires:
 1 SCHMA
 2 TAG _GR_IGNORE https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_ignore
 2 TAG _GR_ROOT https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_root
+2 TAG _GR_TREE https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_tree
 2 TAG _GR_FILE https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_file
 2 TAG _GR_EVEN https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_even
 2 TAG _GR_MEDIA https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_media
@@ -36,6 +37,22 @@ Root person of the tree: the one GEDRoots opens when the file loads and the one
 Without this tag (or if it points to a deleted person), GEDRoots takes the Sosa 1 declared
 by Ancestris (`_SOSADABOVILLE 1`), otherwise the first person in the file. Deleting the root
 person also removes the tag.
+
+## `_GR_TREE`
+
+Identifier of the tree, so GEDRoots recognizes it after the file is renamed, moved or synced to
+another computer.
+
+- **Under**: `HEAD`.
+- **Value**: a random UUID (version 4), written at the first save and never changed after.
+- **Substructures**: none.
+
+```
+0 HEAD
+1 SCHMA
+2 TAG _GR_TREE https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_tree
+1 _GR_TREE 3f2b8c1e-9a4d-4e57-b0c2-6d1f8e7a9b40
+```
 
 ## `_GR_EVEN`
 
