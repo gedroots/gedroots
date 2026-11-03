@@ -9,7 +9,6 @@ struct PlacesView: View {
     @State private var selection: String?
     @State private var ancestorsOnly = false
     @State private var query = ""
-    @State private var position: MapCameraPosition = .automatic
 
     private var pins: [PlacePin] {
         let all = model.places
@@ -21,19 +20,8 @@ struct PlacesView: View {
 
     var body: some View {
         NavigationStack {
-            Map(position: $position, selection: $selection) {
-                ForEach(pins, id: \.name) { pin in
-                    Marker(pin.short, monogram: Text(verbatim: "\(pin.events)"),
-                           coordinate: CLLocationCoordinate2D(latitude: pin.latitude, longitude: pin.longitude))
-                        .tint(pin.ancestors ? Theme.accent : .gray)
-                        .tag(pin.name)
-                }
-                UserAnnotation()
-            }
-            .mapControls {
-                MapUserLocationButton()
-                MapCompass()
-            }
+            PlacesMap(pins: pins, selection: $selection)
+            .ignoresSafeArea(edges: .bottom)
             .overlay {
                 if model.places.isEmpty {
                     ContentUnavailableView("No Located Places", systemImage: "mappin.slash")
@@ -65,6 +53,103 @@ extension PlacePin: Identifiable {
     public var id: String { name }
 }
 
+/// The map itself, in MapKit's own view: SwiftUI's `Map` can't cluster, and hundreds of places
+/// in one region pile up. Pins merge into a count as they crowd; a tap on a group zooms in, a
+/// tap on a place centres on it and opens its sheet.
+struct PlacesMap: UIViewRepresentable {
+    let pins: [PlacePin]
+    @Binding var selection: String?
+
+    func makeUIView(context: Context) -> MKMapView {
+        let map = MKMapView()
+        map.delegate = context.coordinator
+        map.pointOfInterestFilter = .excludingAll
+        // Under the floating tab bar it would be half hidden; the map is never rotated here anyway.
+        map.showsCompass = false
+        map.register(PlaceMarker.self, forAnnotationViewWithReuseIdentifier: MKMapViewDefaultAnnotationViewReuseIdentifier)
+        map.register(GroupMarker.self, forAnnotationViewWithReuseIdentifier: MKMapViewDefaultClusterAnnotationViewReuseIdentifier)
+        let locate = MKUserTrackingButton(mapView: map)
+        locate.translatesAutoresizingMaskIntoConstraints = false
+        locate.backgroundColor = .systemBackground
+        locate.layer.cornerRadius = 8
+        map.addSubview(locate)
+        NSLayoutConstraint.activate([
+            locate.trailingAnchor.constraint(equalTo: map.safeAreaLayoutGuide.trailingAnchor, constant: -16),
+            locate.topAnchor.constraint(equalTo: map.safeAreaLayoutGuide.topAnchor, constant: 16),
+        ])
+        return map
+    }
+
+    func updateUIView(_ map: MKMapView, context: Context) {
+        context.coordinator.parent = self
+        let shown = map.annotations.compactMap { $0 as? PlaceAnnotation }
+        let names = Set(pins.map(\.name))
+        if Set(shown.map(\.pin.name)) != names {
+            map.removeAnnotations(shown)
+            map.addAnnotations(pins.map(PlaceAnnotation.init))
+            // Once laid out: fitting a map that has no size yet leaves places outside.
+            DispatchQueue.main.async {
+                map.showAnnotations(map.annotations.filter { $0 is PlaceAnnotation }, animated: false)
+            }
+        }
+        if selection == nil {
+            map.selectedAnnotations.forEach { map.deselectAnnotation($0, animated: true) }
+        }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
+
+    final class Coordinator: NSObject, MKMapViewDelegate {
+        var parent: PlacesMap
+        init(parent: PlacesMap) { self.parent = parent }
+
+        func mapView(_ map: MKMapView, didSelect annotation: MKAnnotation) {
+            if let group = annotation as? MKClusterAnnotation {
+                map.deselectAnnotation(group, animated: false)
+                map.showAnnotations(group.memberAnnotations, animated: true)
+            } else if let place = annotation as? PlaceAnnotation {
+                map.setCenter(place.coordinate, animated: true)
+                parent.selection = place.pin.name
+            }
+        }
+    }
+}
+
+final class PlaceAnnotation: NSObject, MKAnnotation {
+    let pin: PlacePin
+    init(_ pin: PlacePin) { self.pin = pin }
+    var coordinate: CLLocationCoordinate2D { CLLocationCoordinate2D(latitude: pin.latitude, longitude: pin.longitude) }
+    var title: String? { pin.short }
+}
+
+/// A place: the number of its events in the pin, the accent when ancestors lived there.
+final class PlaceMarker: MKMarkerAnnotationView {
+    override var annotation: MKAnnotation? {
+        didSet {
+            guard let place = annotation as? PlaceAnnotation else { return }
+            clusteringIdentifier = "place"
+            displayPriority = place.pin.ancestors ? .defaultHigh : .defaultLow
+            glyphText = place.pin.events > 999 ? "999+" : "\(place.pin.events)"
+            markerTintColor = place.pin.ancestors ? UIColor(Theme.accent) : .systemGray
+        }
+    }
+}
+
+/// Places grouped as they crowd: how many, in the accent when one of them is an ancestor's.
+final class GroupMarker: MKMarkerAnnotationView {
+    override var annotation: MKAnnotation? {
+        didSet {
+            guard let group = annotation as? MKClusterAnnotation else { return }
+            let places = group.memberAnnotations.compactMap { $0 as? PlaceAnnotation }
+            glyphText = "\(places.count)"
+            titleVisibility = .hidden
+            subtitleVisibility = .hidden
+            markerTintColor = places.contains { $0.pin.ancestors } ? UIColor(Theme.accent) : .systemGray
+            displayPriority = .defaultHigh
+        }
+    }
+}
+
 /// A place's sheet: its name, then its events by date.
 struct PlaceSheet: View {
     let model: TreeModel
@@ -90,6 +175,7 @@ struct PlaceSheet: View {
                     }
                 }
             }
+            .contentMargins(.top, 8, for: .scrollContent)
             .navigationTitle(pin.short)
             .navigationBarTitleDisplayMode(.inline)
             .sheet(item: $openEvent) { ref in
