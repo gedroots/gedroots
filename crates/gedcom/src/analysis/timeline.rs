@@ -27,6 +27,8 @@ pub struct Entry {
     /// Person linked to the event (spouse, child…).
     pub related: Option<String>,
     pub sourced: bool,
+    /// The event itself: the record holding it and its position there, to open it.
+    pub event: Option<(String, usize)>,
     sort: (i32, u8, u8),
 }
 
@@ -48,7 +50,7 @@ pub fn timeline(g: &Gedcom, xref: &str) -> Vec<Entry> {
     let birth = me.birth().and_then(|e| e.date_raw().and_then(Span::parse));
     let death = me.death().and_then(|e| e.date_raw().and_then(Span::parse));
     let mut out: Vec<Entry> = Vec::new();
-    let mut add = |kind, label: String, node: &crate::node::Node, related: Option<String>| {
+    let mut add = |kind, label: String, owner: &str, node: &crate::node::Node, related: Option<String>| {
         let date = node.child_val("DATE").map(Date::parse);
         let span = date.as_ref().and_then(Span::of);
         // Relatives' events: only during the person's life.
@@ -75,6 +77,10 @@ pub fn timeline(g: &Gedcom, xref: &str) -> Vec<Entry> {
             age,
             related,
             sourced: node.child("SOUR").is_some(),
+            event: g
+                .get(owner)
+                .and_then(|r| r.children.iter().position(|c| std::ptr::eq(c, node)))
+                .map(|i| (owner.to_string(), i)),
         });
     };
 
@@ -83,7 +89,7 @@ pub fn timeline(g: &Gedcom, xref: &str) -> Vec<Entry> {
             Some(v) => rust_i18n::t!("timeline.value", label = e.label(), value = v).into_owned(),
             None => e.label(),
         };
-        add(EntryKind::Own, label, e.node, None);
+        add(EntryKind::Own, label, xref, e.node, None);
     }
 
     let name = |x: &str| g.record_label(x);
@@ -96,6 +102,7 @@ pub fn timeline(g: &Gedcom, xref: &str) -> Vec<Entry> {
             add(
                 EntryKind::Relative,
                 pick!(sex, "timeline.death_parent", p.display_name()),
+                p.xref(),
                 d.node,
                 Some(p.xref().into()),
             );
@@ -108,6 +115,7 @@ pub fn timeline(g: &Gedcom, xref: &str) -> Vec<Entry> {
                 add(
                     EntryKind::Relative,
                     pick!(s.sex(), "timeline.birth_sibling", s.given()),
+                    s.xref(),
                     b.node,
                     Some(s.xref().into()),
                 );
@@ -116,6 +124,7 @@ pub fn timeline(g: &Gedcom, xref: &str) -> Vec<Entry> {
                 add(
                     EntryKind::Relative,
                     pick!(s.sex(), "timeline.death_sibling", s.given()),
+                    s.xref(),
                     d.node,
                     Some(s.xref().into()),
                 );
@@ -131,7 +140,7 @@ pub fn timeline(g: &Gedcom, xref: &str) -> Vec<Entry> {
                 Some(s) => rust_i18n::t!("timeline.with", event = e.label(), name = name(s)).into_owned(),
                 None => e.label(),
             };
-            add(EntryKind::Family, label, e.node, spouse.map(str::to_string));
+            add(EntryKind::Family, label, f, e.node, spouse.map(str::to_string));
         }
         if let Some(s) = spouse.and_then(|s| g.individual(s))
             && let Some(d) = s.event("DEAT")
@@ -139,6 +148,7 @@ pub fn timeline(g: &Gedcom, xref: &str) -> Vec<Entry> {
             add(
                 EntryKind::Relative,
                 pick!(s.sex(), "timeline.death_spouse", s.display_name()),
+                s.xref(),
                 d.node,
                 Some(s.xref().into()),
             );
@@ -148,6 +158,7 @@ pub fn timeline(g: &Gedcom, xref: &str) -> Vec<Entry> {
                 add(
                     EntryKind::Relative,
                     pick!(c.sex(), "timeline.birth_child", c.given()),
+                    c.xref(),
                     b.node,
                     Some(c.xref().into()),
                 );
@@ -156,6 +167,7 @@ pub fn timeline(g: &Gedcom, xref: &str) -> Vec<Entry> {
                 add(
                     EntryKind::Relative,
                     pick!(c.sex(), "timeline.death_child", c.given()),
+                    c.xref(),
                     d.node,
                     Some(c.xref().into()),
                 );
@@ -167,6 +179,7 @@ pub fn timeline(g: &Gedcom, xref: &str) -> Vec<Entry> {
                         add(
                             EntryKind::Relative,
                             pick!(gc.sex(), "timeline.birth_grandchild", gc.display_name()),
+                            gc.xref(),
                             b.node,
                             Some(gc.xref().into()),
                         );

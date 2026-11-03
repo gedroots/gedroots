@@ -1,0 +1,5 @@
+Generated/
+*.xcodeproj/
+build/
+# Written by XcodeGen from project.yml.
+GEDRoots/Info.plist

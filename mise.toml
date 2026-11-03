@@ -33,6 +33,15 @@ run = "cargo fmt --all --check"
 description = "Every CI check"
 depends = ["fmt:check", "test", "clippy"]
 
+[tasks."ios:build"]
+description = "Build the iOS app for the simulator, unsigned (macOS, needs Xcode and XcodeGen)"
+dir = "apps/ios"
+run = [
+  "./build-rust.sh",
+  "xcodegen generate",
+  "xcodebuild -project GEDRoots.xcodeproj -scheme GEDRoots -destination 'generic/platform=iOS Simulator' -derivedDataPath build CODE_SIGNING_ALLOWED=NO build",
+]
+
 # `bundle` and the platform installers are file tasks in mise-tasks/.
 [tasks.install]
 description = "Install GEDRoots on this machine"

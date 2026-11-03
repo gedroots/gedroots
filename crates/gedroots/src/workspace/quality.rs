@@ -41,7 +41,10 @@ impl Workspace {
             let doc = self.doc.as_ref().unwrap();
             let exists = |f: &str| pages::file_path(doc, f).is_some_and(|p| p.exists());
             let files = quality::Files { exists: &exists, folder: &self.media_files };
-            self.quality.issues = Rc::new(quality::run_with(&doc.ged, Some(&files)));
+            let mut issues = quality::run_with(&doc.ged, Some(&files));
+            // Events without a source are leads of the Research page (agents still get them).
+            issues.retain(|i| i.code != "unsourced");
+            self.quality.issues = Rc::new(issues);
             self.quality.stale = false;
             self.quality.confirm = None;
         }

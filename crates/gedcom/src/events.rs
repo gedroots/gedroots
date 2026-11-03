@@ -155,7 +155,7 @@ impl Gedcom {
     pub fn event_title(&self, owner: &str, index: usize) -> Option<String> {
         let e = Event { node: self.event_node(owner, index)? };
         Some(match e.value() {
-            Some(v) => format!("{} : {v}", e.label()),
+            Some(v) => crate::act::labelled(&e.label(), v),
             None => e.label(),
         })
     }
