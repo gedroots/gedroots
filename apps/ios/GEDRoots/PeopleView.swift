@@ -1,13 +1,26 @@
 import SwiftUI
 
-/// List of individuals, searchable; pull to sync again.
+/// List of individuals by surname, searchable with the same keywords as the desktop
+/// (`born:1850-1900`, `place:saint-lô`…); pull to sync again.
 struct PeopleView: View {
     let model: TreeModel
     @State private var query = ""
+    @State private var scope = Scope.all
 
-    private var filtered: [PersonRow] {
-        guard !query.isEmpty else { return model.people }
-        return model.people.filter { $0.name.localizedStandardContains(query) }
+    private var results: [PersonRow] {
+        guard let tree = model.tree else { return [] }
+        if query.isEmpty && scope == .all { return model.people }
+        return tree.search(query: query, scope: scope)
+    }
+
+    /// Sections by the first letter of the surname, like Contacts.
+    private var sections: [(String, [PersonRow])] {
+        var out: [(String, [PersonRow])] = []
+        for p in results {
+            let letter = p.surname.first.map { String($0).folding(options: .diacriticInsensitive, locale: nil).uppercased() } ?? "#"
+            if out.last?.0 == letter { out[out.count - 1].1.append(p) } else { out.append((letter, [p])) }
+        }
+        return out
     }
 
     var body: some View {
@@ -20,9 +33,11 @@ struct PeopleView: View {
                         if let error = model.error { Text(error) }
                     }
                 }
-                ForEach(filtered) { person in
-                    NavigationLink(value: person.id) {
-                        PersonLabel(person: person)
+                ForEach(sections, id: \.0) { letter, people in
+                    Section(letter) {
+                        ForEach(people) { person in
+                            NavigationLink(value: person.id) { PersonLabel(person: person) }
+                        }
                     }
                 }
                 if model.tree != nil {
@@ -33,7 +48,11 @@ struct PeopleView: View {
             .navigationDestination(for: String.self) { id in
                 PersonView(model: model, id: id)
             }
-            .searchable(text: $query)
+            .searchable(text: $query, prompt: Text("Name, place:saint-lô, born:1850-1900"))
+            .searchScopes($scope, activation: .onSearchPresentation) {
+                Text("All").tag(Scope.all)
+                Text("Ancestors").tag(Scope.ancestors)
+            }
             .refreshable { await model.syncIfPaired() }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -46,22 +65,28 @@ struct PeopleView: View {
                 }
             }
         }
+        .tint(Theme.accent)
     }
 }
 
+/// A person in a list: lineage dot, name, then years and place.
 struct PersonLabel: View {
     let person: PersonRow
     var body: some View {
-        VStack(alignment: .leading) {
-            Text(person.name)
-            if !person.years.isEmpty {
-                Text(person.years).font(.subheadline).foregroundStyle(.secondary)
+        HStack(spacing: 8) {
+            LineageDot(lineage: person.lineage)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(person.name).fontWeight(person.lineage == .root ? .semibold : .regular)
+                let detail = [person.years, person.place].filter { !$0.isEmpty }.joined(separator: " · ")
+                if !detail.isEmpty {
+                    Text(detail).font(.footnote).foregroundStyle(.secondary).monospacedDigit()
+                }
             }
         }
     }
 }
 
-/// Last sync, and the measurements of the proof of concept.
+/// Last sync.
 struct SyncFooter: View {
     let model: TreeModel
     var body: some View {
