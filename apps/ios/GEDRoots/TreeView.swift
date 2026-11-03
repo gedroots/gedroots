@@ -58,10 +58,10 @@ struct FamilyChart: View {
     var body: some View {
         VStack(spacing: 24) {
             HStack(spacing: 8) {
-                ForEach(0..<4, id: \.self) { i in box(family.grandparents[i], compact: true).card("g\(i)") }
+                ForEach(0..<4, id: \.self) { i in box(family.grandparents[i], compact: true).card(family.grandparents[i] == nil ? nil : "g\(i)") }
             }
             HStack(spacing: 8) {
-                ForEach(0..<2, id: \.self) { i in box(family.parents[i], compact: false).card("p\(i)") }
+                ForEach(0..<2, id: \.self) { i in box(family.parents[i], compact: false).card(family.parents[i] == nil ? nil : "p\(i)") }
             }
             Button { open(family.person.id) } label: {
                 HStack(spacing: 12) {
@@ -86,6 +86,9 @@ struct FamilyChart: View {
                         VStack(spacing: 4) {
                             if !union.married.isEmpty {
                                 Text("⚭ \(union.married)").font(.footnote).foregroundStyle(.secondary).monospacedDigit()
+                                    // Over the line to the spouse, which it interrupts.
+                                    .padding(.horizontal, 6)
+                                    .background(Color(UIColor.systemBackground))
                             }
                             box(s, compact: false).frame(maxWidth: 280).card("s\(u)")
                         }
@@ -176,8 +179,9 @@ struct CardBounds: PreferenceKey {
 }
 
 extension View {
-    fileprivate func card(_ key: String) -> some View {
-        anchorPreference(key: CardBounds.self, value: .bounds) { [key: $0] }
+    /// Records where a card is, for the lines; `nil` for an empty slot, which no line reaches.
+    fileprivate func card(_ key: String?) -> some View {
+        anchorPreference(key: CardBounds.self, value: .bounds) { anchor in key.map { [$0: anchor] } ?? [:] }
     }
 }
 

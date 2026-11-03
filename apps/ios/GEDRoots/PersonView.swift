@@ -116,7 +116,10 @@ struct PersonView: View {
         var parts: [String] = []
         if let sosa = p.row.sosa { parts.append(String(localized: "Sosa \(sosa)")) }
         if let kin = p.kinship, let root = p.rootName {
-            let phrase = String(localized: "\(kin) of \(root)")
+            // “ancestor, 6 generations above” → “Ancestor of Marcel Lemaire, 6 generations above”.
+            let pieces = kin.split(separator: ",", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
+            var phrase = String(localized: "\(pieces[0]) of \(root)")
+            if pieces.count > 1 { phrase += ", " + pieces[1] }
             parts.append(phrase.prefix(1).uppercased() + phrase.dropFirst())
         }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
