@@ -40,6 +40,23 @@ pub enum Identity {
     Mention,
 }
 
+/// Another fact the act gives about a person, besides its event.
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct FactParams {
+    /// GEDCOM tag: BIRT, BAPM, DEAT, BURI, OCCU (occupation), RESI (residence), EDUC, RELI, EVEN…
+    pub event: String,
+    /// Required with EVEN ("Military service"); optional detail otherwise.
+    #[serde(rename = "type")]
+    pub event_type: Option<String>,
+    /// For OCCU and other attributes: the value as written ("weaver").
+    pub value: Option<String>,
+    /// Date in GEDCOM 7 format. Leave empty when the act does not date the fact (an occupation
+    /// from a photo caption): never give the act's date by default.
+    pub date: Option<String>,
+    /// Place, as named in the tree when it exists there (the residence for RESI).
+    pub place: Option<String>,
+}
+
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct PersonParams {
     /// principal (the child, the deceased, each spouse), father, mother, spouse, witness,
@@ -66,6 +83,11 @@ pub struct PersonParams {
     pub birthplace: Option<String>,
     /// Relationship as written ("son", "neighbour"…).
     pub kinship: Option<String>,
+    /// Other facts the act gives about this person: the birth date in a baptism, a death in a
+    /// marginal mention, an earlier residence… (not for a mention). `occupation` and `residence`
+    /// above are those at the act's date.
+    #[serde(default)]
+    pub facts: Vec<FactParams>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -278,6 +300,15 @@ pub fn to_proposal(p: &ProposeParams) -> Result<Proposal, String> {
                 part.set(f, opt(v));
             }
         }
+        for f in &person.facts {
+            part.facts.push(gedcom::Fact {
+                tag: f.event.trim().to_uppercase(),
+                event_type: opt(&f.event_type).to_string(),
+                value: opt(&f.value).to_string(),
+                date: opt(&f.date).to_string(),
+                place: opt(&f.place).to_string(),
+            });
+        }
         let id = person.id.as_deref().map(clean_id).filter(|x| !x.is_empty());
         let who = || format!("people[{}] ({})", act.participants.len(), person.role.trim());
         part.choice = match (person.identity, id) {
@@ -289,6 +320,9 @@ pub fn to_proposal(p: &ProposeParams) -> Result<Proposal, String> {
             (Identity::Create, None) => PersonChoice::Create,
             (Identity::Mention, None) => PersonChoice::Mention,
         };
+        if part.choice == PersonChoice::Mention && !part.facts.is_empty() {
+            return Err(format!("{}: a mentioned person has no facts; link or create them", who()));
+        }
         act.participants.push(part);
     }
     let s = &p.source;
@@ -306,6 +340,44 @@ pub fn to_proposal(p: &ProposeParams) -> Result<Proposal, String> {
         }),
     };
     Ok(Proposal { source, act, url: opt(&p.url).to_string() })
+}
+
+/// What saving the proposal will write, one line per row of the review: people created, linked or
+/// mentioned, the event, and each fact, deduced ones included.
+pub fn effects(proposal: &Proposal, ged: &Gedcom) -> Vec<String> {
+    use gedcom::proposal::{Change, Field};
+    let verb = |c: Change| match c {
+        Change::Same => "unchanged",
+        Change::Added => "add",
+        Change::Refined => "refine",
+        Change::Differs => "add, differs from the tree",
+        Change::Create => "create",
+        Change::Link => "link",
+        Change::Mention => "mention",
+    };
+    let event = proposal.act.event.as_str();
+    proposal
+        .compare(ged)
+        .into_iter()
+        .map(|r| {
+            let what = match &r.field {
+                Field::Date => format!("{event} date"),
+                Field::Place => format!("{event} place"),
+                Field::Person { role, .. } => role.clone(),
+                Field::Fact { person, fact, name, .. } => {
+                    let tag = &proposal.act.participants[*person].facts[*fact].tag;
+                    format!("{tag} of {name}")
+                }
+            };
+            let value = if r.proposed.is_empty() { String::new() } else { format!(": {}", r.proposed) };
+            let tree = if r.current.is_empty() || r.change == Change::Same {
+                String::new()
+            } else {
+                format!(" (tree: {})", r.current)
+            };
+            format!("{} {what}{value}{tree}", verb(r.change))
+        })
+        .collect()
 }
 
 /// Are the records already attached to the file's sources images rather than PDFs?
@@ -487,6 +559,34 @@ mod tests {
         // Checked and found to be someone else: accepted.
         let p = params(serde_json::json!(["@I2@"]));
         check_identities(&to_proposal(&p).unwrap(), &ruled_out(&p), &ged).unwrap();
+    }
+
+    #[test]
+    fn other_facts_of_the_act_are_proposed_and_listed() {
+        let ged = gedcom::Gedcom::parse(
+            "0 HEAD\n1 GEDC\n2 VERS 7.0\n0 @I1@ INDI\n1 NAME Jean /BLANC/\n1 SEX M\n1 BIRT\n2 DATE ABT 1800\n\
+             1 DEAT\n2 DATE 1870\n0 TRLR\n",
+        )
+        .unwrap();
+        let p: ProposeParams = serde_json::from_value(
+            serde_json::json!({"event": "BAPM", "date": "2 MAR 1800", "source": {"register": "Rennes"},
+            "people": [{"role": "principal", "identity": "link", "id": "I1",
+                        "facts": [{"event": "birt", "date": "1 MAR 1800"}, {"event": "OCCU", "value": "weaver"}]}]}),
+        )
+        .unwrap();
+        let mut prop = to_proposal(&p).unwrap();
+        prop.complete(&ged);
+        let facts = &prop.act.participants[0].facts;
+        assert_eq!(facts.len(), 2);
+        assert_eq!((facts[0].tag.as_str(), facts[1].value.as_str(), facts[1].date.as_str()), ("BIRT", "weaver", ""));
+        let lines = super::effects(&prop, &ged);
+        assert!(lines.iter().any(|l| l.starts_with("refine BIRT of Jean")), "{lines:?}");
+        assert!(lines.iter().any(|l| l.starts_with("add OCCU of Jean: weaver")), "{lines:?}");
+        // A mentioned person has no facts.
+        let p: ProposeParams = serde_json::from_value(serde_json::json!({"event": "BAPM", "source": {},
+            "people": [{"role": "witness", "identity": "mention", "given": "Joseph", "facts": [{"event": "OCCU", "value": "smith"}]}]}))
+        .unwrap();
+        assert!(to_proposal(&p).unwrap_err().contains("mentioned"));
     }
 
     #[test]

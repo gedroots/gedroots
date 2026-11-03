@@ -59,10 +59,20 @@ enum Kind {
     Name,
 }
 
+/// Another fact of a person: its kind is chosen when it is added.
+struct FactRow {
+    tag: String,
+    event_type: String,
+    date: Entity<DateField>,
+    /// The occupation of `OCCU` (attributes), otherwise the place.
+    text: Entity<InputState>,
+}
+
 struct PersonRow {
     role: ActRole,
     of: usize,
     inputs: Vec<(PersonField, Entity<InputState>)>,
+    facts: Vec<FactRow>,
     /// Sex chosen with buttons; `None`: set by the role or not applicable.
     sex: Option<String>,
     choice: PersonChoice,
@@ -120,6 +130,10 @@ const INDIVIDUAL_ACT_EVENTS: &[&str] = &[
     "BIRT", "BAPM", "DEAT", "BURI", "CREM", "CENS", "CONF", "FCOM", "ADOP", "NATU", "EMIG", "IMMI", "EDUC", "GRAD",
     "RETI", "WILL", "PROB",
 ];
+
+/// Facts offered in a person's “+” menu, before the file's custom types.
+const FACT_KINDS: &[&str] =
+    &["BIRT", "BAPM", "DEAT", "BURI", "OCCU", "RESI", "CENS", "CONF", "EDUC", "GRAD", "RETI", "EMIG", "IMMI", "NATU"];
 
 /// Value of the event list → (tag, type, family event).
 fn parse_event(v: &str) -> (String, String, bool) {
@@ -333,10 +347,27 @@ impl ActEditor {
                 subs.push(self.watch(&e, kind, window, cx));
                 inputs.push((f, e));
             }
+            let mut facts = Vec::new();
+            for f in &p.facts {
+                let date = cx.new(|cx| {
+                    DateField::new(&f.date, "", window, cx).with_placeholder(t!("act.date_placeholder"), window, cx)
+                });
+                let (ph, v, kind) = if f.has_value() {
+                    (f.label(), f.value.clone(), Kind::Plain)
+                } else {
+                    (t!("event_dialog.town").into_owned(), place_label(&f.place), Kind::Place)
+                };
+                let text = cx.new(|cx| InputState::new(window, cx).placeholder(ph).default_value(v));
+                let d = date.read(cx).input().clone();
+                subs.push(self.watch(&d, Kind::Plain, window, cx));
+                subs.push(self.watch(&text, kind, window, cx));
+                facts.push(FactRow { tag: f.tag.clone(), event_type: f.event_type.clone(), date, text });
+            }
             self.rows.push(PersonRow {
                 role: p.role,
                 of: p.of,
                 inputs,
+                facts,
                 sex,
                 choice: p.choice.clone(),
                 suggestions: Vec::new(),
@@ -388,6 +419,22 @@ impl ActEditor {
                     .chain(r.sex.clone().map(|s| (PersonField::Sex, s)))
                     .collect(),
                 choice: r.choice.clone(),
+                facts: r
+                    .facts
+                    .iter()
+                    .map(|f| {
+                        let field = f.date.read(cx);
+                        let date = field.value(cx).map(|(d, _)| d).unwrap_or_else(|_| v(field.input()));
+                        let mut fact =
+                            Fact { tag: f.tag.clone(), event_type: f.event_type.clone(), date, ..Default::default() };
+                        if fact.has_value() {
+                            fact.value = v(&f.text);
+                        } else {
+                            fact.place = v(&f.text);
+                        }
+                        fact
+                    })
+                    .collect(),
             })
             .collect();
         a
@@ -424,6 +471,27 @@ impl ActEditor {
             _ => people.len(),
         };
         people.insert(at, Participant::new(role));
+        self.set_rows(people, window, cx);
+        cx.notify();
+    }
+
+    /// One more fact for the person at `idx`, of this kind (`EVEN` with its type).
+    fn add_fact(&mut self, idx: usize, tag: &str, ty: &str, window: &mut Window, cx: &mut Context<Self>) {
+        let mut people = self.collect(cx).participants;
+        if let Some(p) = people.get_mut(idx) {
+            p.facts.push(Fact { tag: tag.to_string(), event_type: ty.to_string(), ..Default::default() });
+        }
+        self.set_rows(people, window, cx);
+        cx.notify();
+    }
+
+    fn remove_fact(&mut self, idx: usize, k: usize, window: &mut Window, cx: &mut Context<Self>) {
+        let mut people = self.collect(cx).participants;
+        if let Some(p) = people.get_mut(idx)
+            && k < p.facts.len()
+        {
+            p.facts.remove(k);
+        }
         self.set_rows(people, window, cx);
         cx.notify();
     }
@@ -1145,9 +1213,68 @@ impl ActEditor {
             .into_any_element()
     }
 
+    /// “+” of a person: another fact the record gives about them.
+    fn add_fact_button(&self, idx: usize, cx: &mut Context<Self>) -> impl IntoElement {
+        let me = cx.entity().downgrade();
+        let mut kinds: Vec<(String, String, String)> =
+            FACT_KINDS.iter().map(|t| (t.to_string(), String::new(), event_name(t))).collect();
+        kinds.extend(
+            self.ged
+                .event_types()
+                .into_iter()
+                .filter(|t| !t.family)
+                .map(|t| ("EVEN".to_string(), t.ty.clone(), t.label.clone())),
+        );
+        Button::new(SharedString::from(format!("add-fact-{idx}")))
+            .ghost()
+            .xsmall()
+            .icon(IconName::Plus)
+            .tooltip(t!("act.add_fact"))
+            .dropdown_menu(move |mut menu, _, _| {
+                for (tag, ty, label) in &kinds {
+                    let (tag, ty) = (tag.clone(), ty.clone());
+                    menu = menu
+                        .item(menu_action(label.clone(), &me, move |this, w, cx| this.add_fact(idx, &tag, &ty, w, cx)));
+                }
+                menu
+            })
+    }
+
+    fn render_facts(&self, idx: usize, row: &PersonRow, cx: &mut Context<Self>) -> Option<AnyElement> {
+        if row.facts.is_empty() {
+            return None;
+        }
+        let rows = row.facts.iter().enumerate().map(|(k, f)| {
+            let label =
+                if f.tag == "EVEN" && !f.event_type.is_empty() { f.event_type.clone() } else { event_name(&f.tag) };
+            h_flex()
+                .gap_2()
+                .items_center()
+                .child(div().w(px(96.)).flex_none().text_sm().text_color(theme::muted()).child(label))
+                .child(div().w(px(150.)).flex_none().child(f.date.clone()))
+                .child(div().flex_1().min_w_0().child(Input::new(&f.text).small()))
+                .child(
+                    Button::new(SharedString::from(format!("remove-fact-{idx}-{k}")))
+                        .ghost()
+                        .xsmall()
+                        .icon(IconName::Close)
+                        .tooltip(t!("act.remove_fact"))
+                        .on_click(cx.listener(move |this, _, w, cx| this.remove_fact(idx, k, w, cx))),
+                )
+        });
+        Some(v_flex().gap_1().child(caps(t!("act.other_facts"))).children(rows).into_any_element())
+    }
+
     fn render_person(&self, act: &Act, idx: usize, row: &PersonRow, cx: &mut Context<Self>) -> impl IntoElement {
-        let place_hints: Vec<AnyElement> =
-            row.inputs.iter().filter_map(|(_, e)| self.place_suggestions(e, cx)).collect();
+        let place_hints: Vec<AnyElement> = row
+            .inputs
+            .iter()
+            .map(|(_, e)| e)
+            .chain(row.facts.iter().map(|f| &f.text))
+            .filter_map(|e| self.place_suggestions(e, cx))
+            .collect();
+        let can_have_facts = row.choice != PersonChoice::Mention;
+        let facts = self.render_facts(idx, row, cx);
         let sex = row.sex.clone().map(|current| {
             ButtonGroup::new(SharedString::from(format!("sex-{idx}")))
                 .outline()
@@ -1177,7 +1304,9 @@ impl ActEditor {
                     .items_center()
                     .child(self.role_label(act, idx, row, cx))
                     .child(self.status_button(idx, row, cx))
-                    .when_some(sex, |d, s| d.child(div().flex_1()).child(s)),
+                    .child(div().flex_1())
+                    .when_some(sex, |d, s| d.child(s))
+                    .when(can_have_facts, |d| d.child(self.add_fact_button(idx, cx))),
             )
             .child(
                 div().grid().grid_cols(PERSON_GRID).gap_2().children(
@@ -1187,6 +1316,7 @@ impl ActEditor {
                         .map(|((f, e), span)| inline_field(f.label(), e).col_span(span)),
                 ),
             )
+            .children(facts)
             .children(place_hints)
             .context_menu(self.person_menu(idx, row, cx))
     }

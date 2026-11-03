@@ -180,6 +180,12 @@ act.error.no_event:
 act.error.no_event_type:
   en: "specify the event type"
   fr: "précisez le type d'événement"
+act.error.fact_type:
+  en: "%{role}: specify the type of each fact"
+  fr: "%{role} : précisez le type de chaque fait"
+act.error.fact_date:
+  en: "%{role}, %{fact}: unrecognized date “%{text}”"
+  fr: "%{role}, %{fact} : date non reconnue « %{text} »"
 act.error.no_media:
   en: "the chosen media no longer exists"
   fr: "le média choisi n'existe plus"

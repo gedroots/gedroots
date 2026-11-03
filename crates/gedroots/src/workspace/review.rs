@@ -15,25 +15,53 @@ use gpui_kit::component::checkbox::Checkbox;
 use rust_i18n::t;
 use std::collections::BTreeSet;
 
-/// A proposal and the people the user unchecked.
+/// A person, or one of their facts, that the user can uncheck.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum Keep {
+    Person(usize),
+    Fact(usize, usize),
+}
+
+/// A proposal and what the user unchecked.
 pub(super) struct Item {
     pending: Pending,
-    excluded: BTreeSet<usize>,
+    excluded: BTreeSet<Keep>,
     /// Prepared by the guided tour, not sent by an agent.
     demo: bool,
 }
 
 impl Item {
-    /// The proposal, without the unchecked people.
+    /// The proposal, without the unchecked people and facts.
     fn proposal(&self) -> Proposal {
         let mut p = self.pending.proposal.clone();
+        for (i, person) in p.act.participants.iter_mut().enumerate() {
+            let mut k = 0;
+            person.facts.retain(|_| {
+                let keep = !self.excluded.contains(&Keep::Fact(i, k));
+                k += 1;
+                keep
+            });
+        }
         let mut i = 0;
         p.act.participants.retain(|_| {
-            let keep = !self.excluded.contains(&i);
+            let keep = !self.excluded.contains(&Keep::Person(i));
             i += 1;
             keep
         });
         p
+    }
+
+    /// Unchecking a person also leaves out their facts.
+    fn is_excluded(&self, k: Keep) -> bool {
+        self.excluded.contains(&k) || matches!(k, Keep::Fact(i, _) if self.excluded.contains(&Keep::Person(i)))
+    }
+
+    fn keep(&mut self, k: Keep, keep: bool) {
+        if keep {
+            self.excluded.remove(&k);
+        } else {
+            self.excluded.insert(k);
+        }
     }
 }
 
@@ -213,7 +241,7 @@ impl Workspace {
         let Some(item) = self.review.items.get(self.review.sel) else { return };
         let proposal = item.proposal();
         // New source: created first, with an undo point.
-        let act = match &proposal.source {
+        let mut act = match &proposal.source {
             SourceChoice::Existing(x) => gedcom::Act { source: x.clone(), ..proposal.act.clone() },
             SourceChoice::New(_) => {
                 self.checkpoint();
@@ -228,6 +256,8 @@ impl Workspace {
                 }
             }
         };
+        // Record entry has its own fields for what the review lists as deduced facts.
+        act.fold_deduced_facts();
         self.review_take();
         self.review.open = false;
         self.rebuild_rows(cx);
@@ -402,7 +432,7 @@ impl Workspace {
 
         // Comparison. Columns: check box, field, “In the tree”, “Proposed”.
         let line = || h_flex().items_start().gap_2().px_2().py_1p5().border_t_1().border_color(theme::border());
-        let mut grid = v_flex().border_1().border_color(theme::border()).rounded(theme::RADIUS_SM).text_sm().child(
+        let header = || {
             h_flex()
                 .gap_2()
                 .px_2()
@@ -413,68 +443,90 @@ impl Workspace {
                 .child(div().w(px(16.)).flex_none())
                 .child(div().w(px(76.)).flex_none())
                 .child(div().flex_1().min_w_0().child(t!("review.in_tree").into_owned()))
-                .child(div().flex_1().min_w_0().child(t!("review.proposed").into_owned())),
-        );
+                .child(div().flex_1().min_w_0().child(t!("review.proposed").into_owned()))
+        };
+        let table = || v_flex().border_1().border_color(theme::border()).rounded(theme::RADIUS_SM).text_sm();
+        let (mut people_rows, mut fact_rows): (Vec<AnyElement>, Vec<AnyElement>) = (Vec::new(), Vec::new());
         for row in &rows {
-            let (label, current, proposed, index) = match &row.field {
+            // What a check box keeps: a person, or one of their facts.
+            let (label, detail, current, proposed, key) = match &row.field {
                 Field::Date => {
-                    (t!("review.date").into_owned(), show_date(&row.current), show_date(&row.proposed), None)
+                    (t!("review.date").into_owned(), None, show_date(&row.current), show_date(&row.proposed), None)
                 }
                 Field::Place => (
                     t!("review.place").into_owned(),
+                    None,
                     or_dash(&gedcom::short_place(&row.current)),
                     or_dash(&gedcom::short_place(&row.proposed)),
                     None,
                 ),
                 Field::Person { index, role } => {
-                    (role.clone(), or_dash(&row.current), or_dash(&row.proposed), Some(*index))
+                    let principal = full.act.participants[*index].role == gedcom::ActRole::Principal;
+                    let key = (!principal).then_some(Keep::Person(*index));
+                    (role.clone(), None, or_dash(&row.current), or_dash(&row.proposed), key)
                 }
+                Field::Fact { person, fact, label, name } => (
+                    label.clone(),
+                    Some(name.clone()),
+                    or_dash(&row.current),
+                    or_dash(&row.proposed),
+                    Some(Keep::Fact(*person, *fact)),
+                ),
             };
-            let principal = index.is_some_and(|i| full.act.participants[i].role == gedcom::ActRole::Principal);
-            let on = index.is_none_or(|i| !item.excluded.contains(&i));
-            let check: AnyElement = match index {
-                Some(i) if !principal => Checkbox::new(SharedString::from(format!("review-keep-{i}")))
+            let on = key.is_none_or(|k| !item.is_excluded(k));
+            let check: AnyElement = match key {
+                Some(k) => Checkbox::new(SharedString::from(format!("review-keep-{k:?}")))
                     .checked(on)
                     .on_click(cx.listener(move |this, keep: &bool, _, cx| {
                         let sel = this.review.sel;
                         if let Some(it) = this.review.items.get_mut(sel) {
-                            if *keep {
-                                it.excluded.remove(&i);
-                            } else {
-                                it.excluded.insert(i);
-                            }
+                            it.keep(k, *keep);
                         }
                         cx.notify();
                     }))
                     .into_any_element(),
-                _ => div().into_any_element(),
+                None => div().into_any_element(),
             };
             let (tag, color) = change_tag(row.change);
             let same = row.change == Change::Same;
-            grid = grid.child(
-                line()
-                    .child(div().w(px(16.)).flex_none().child(check))
-                    .child(div().w(px(76.)).flex_none().text_color(theme::muted()).child(label))
-                    .child(div().flex_1().min_w_0().child(current))
-                    .child(
-                        v_flex()
-                            .flex_1()
-                            .min_w_0()
-                            .when(!on, |d| d.opacity(0.45))
-                            .child(div().text_xs().font_weight(FontWeight::SEMIBOLD).text_color(color).child(tag))
-                            .when(!same, |d| d.child(div().text_color(color).child(proposed)))
-                            .when(!row.similar.is_empty(), |d| {
-                                let names = row.similar.join(", ");
-                                d.child(
-                                    div()
-                                        .text_xs()
-                                        .text_color(theme::warn())
-                                        .child(t!("review.similar", names = names).into_owned()),
-                                )
-                            }),
-                    ),
-            );
+            let el = line()
+                .child(div().w(px(16.)).flex_none().child(check))
+                .child(
+                    v_flex()
+                        .w(px(76.))
+                        .flex_none()
+                        .text_color(theme::muted())
+                        .child(label)
+                        .when_some(detail, |d, name| d.child(div().text_xs().child(name))),
+                )
+                .child(div().flex_1().min_w_0().child(current))
+                .child(
+                    v_flex()
+                        .flex_1()
+                        .min_w_0()
+                        .when(!on, |d| d.opacity(0.45))
+                        .child(div().text_xs().font_weight(FontWeight::SEMIBOLD).text_color(color).child(tag))
+                        .when(!same, |d| d.child(div().text_color(color).child(proposed)))
+                        .when(!row.similar.is_empty(), |d| {
+                            let names = row.similar.join(", ");
+                            d.child(
+                                div()
+                                    .text_xs()
+                                    .text_color(theme::warn())
+                                    .child(t!("review.similar", names = names).into_owned()),
+                            )
+                        }),
+                )
+                .into_any_element();
+            if matches!(row.field, Field::Fact { .. }) {
+                fact_rows.push(el);
+            } else {
+                people_rows.push(el);
+            }
         }
+        let grid = table().child(header()).children(people_rows);
+        // Hidden when the record gives no other fact.
+        let facts = (!fact_rows.is_empty()).then(|| table().child(header()).children(fact_rows));
 
         // Attachment: repository → source → file → event.
         let chain = p.chain(g);
@@ -610,6 +662,9 @@ impl Workspace {
                     .gap_4()
                     .when_some(problem, |d, e| d.child(div().text_sm().text_color(theme::danger()).child(e)))
                     .child(v_flex().gap_1().child(label_caps(t!("review.record").into_owned())).child(grid))
+                    .when_some(facts, |d, facts| {
+                        d.child(v_flex().gap_1().child(label_caps(t!("review.facts").into_owned())).child(facts))
+                    })
                     .child(v_flex().gap_1().child(label_caps(t!("review.attachment").into_owned())).child(links))
                     .when(!transcription.is_empty(), |d| {
                         d.child(
