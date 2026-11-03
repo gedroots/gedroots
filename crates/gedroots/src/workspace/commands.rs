@@ -113,7 +113,38 @@ impl Workspace {
         let d = on!(d, cx, ShowMedia, |this, w, cx| this.show_view(View::Media, w, cx));
         let d = on!(d, cx, ShowRepositories, |this, w, cx| this.show_view(View::Repositories, w, cx));
         let d = on!(d, cx, ShowNotes, |this, w, cx| this.show_view(View::Notes, w, cx));
+        let d = on!(d, cx, ShowResearch, |this, w, cx| this.show_view(View::Research, w, cx));
         let d = on!(d, cx, ShowQuality, |this, w, cx| this.show_view(View::Quality, w, cx));
+        // Research: the commands of the chosen lead.
+        let d = match self.selected_lead().map(|l| l.state) {
+            Some(state) => {
+                let d = on!(d, cx, NoteSearch, |this, w, cx| {
+                    if let Some(k) = this.selected.clone() {
+                        this.open_search_dialog(k, w, cx)
+                    }
+                });
+                let d = on!(d, cx, CopyAgentRequest, |this, w, cx| {
+                    if let Some(k) = this.selected.clone() {
+                        this.copy_agent_request(k, cx)
+                    }
+                });
+                let ignored = state == gedcom::research_log::TaskState::Ignored;
+                if ignored {
+                    on!(d, cx, ResumeLead, |this, w, cx| {
+                        if let Some(k) = this.selected.clone() {
+                            this.set_lead_ignored(k, false, w, cx)
+                        }
+                    })
+                } else {
+                    on!(d, cx, IgnoreLead, |this, w, cx| {
+                        if let Some(k) = this.selected.clone() {
+                            this.set_lead_ignored(k, true, w, cx)
+                        }
+                    })
+                }
+            }
+            None => d,
+        };
         let d = on!(d, cx, ShowStats, |this, w, cx| this.show_view(View::Stats, w, cx));
         let d = on!(d, cx, ToggleIgnoredIssues, |this, _w, cx| this.toggle_ignored_issues(cx));
         let d = on!(d, cx, ToggleRelativeEvents, |this, _w, cx| this.toggle_relative_events(cx));
