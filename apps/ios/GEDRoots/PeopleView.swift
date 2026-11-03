@@ -39,11 +39,13 @@ struct PeopleView: View {
                             NavigationLink(value: person.id) { PersonLabel(person: person) }
                         }
                     }
+                    .indexLabel(letter)
                 }
                 if model.tree != nil {
                     Section { SyncFooter(model: model) }
                 }
             }
+            .sectionIndex()
             .navigationTitle("People")
             .navigationDestination(for: String.self) { id in
                 PersonView(model: model, id: id)
@@ -94,5 +96,17 @@ struct SyncFooter: View {
             }
         }
         .foregroundStyle(.secondary)
+    }
+}
+
+/// The letters along the edge of the list, like Contacts: drag along them to jump to a
+/// surname (iOS 26 and later).
+private extension View {
+    @ViewBuilder func indexLabel(_ letter: String) -> some View {
+        if #available(iOS 26.0, *) { sectionIndexLabel(Text(verbatim: letter)) } else { self }
+    }
+
+    @ViewBuilder func sectionIndex() -> some View {
+        if #available(iOS 26.0, *) { listSectionIndexVisibility(.visible) } else { self }
     }
 }
