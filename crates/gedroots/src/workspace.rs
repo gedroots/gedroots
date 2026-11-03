@@ -52,6 +52,7 @@ mod saved;
 mod settings;
 pub(crate) mod tour;
 mod tree;
+mod version_history;
 mod weblinks;
 
 /// Window widths below which a column folds away (like libadwaita's breakpoints and Mail's
@@ -217,6 +218,8 @@ struct Document {
     dirty_before_checkpoint: bool,
     /// The tree as it was last opened or saved: Save stamps the records changed since.
     saved: Gedcom,
+    /// The tree as it was opened, for File › Revert To › Last Opened.
+    opened: Gedcom,
     /// The file as GEDRoots last read or wrote it, to notice that something else wrote it.
     disk: Option<(std::time::SystemTime, u64)>,
     /// When the last version was recorded, and whether a save happened since.
@@ -256,12 +259,13 @@ impl Document {
         self.disk = disk_stamp(path);
         self.settling = None;
         let due = self.versioned_at.is_none_or(|t| t.elapsed() >= VERSION_EVERY);
-        let versioned = versioning == Versioning::Now || due;
+        let versioned = versioning != Versioning::Throttled || due;
         if versioned {
-            let kind = Some(gedcom::versions::Kind::Saved);
+            let (kind, label) = versioning.kind();
+            let kind = Some(kind);
             match wait {
-                true => record_version_now(path, &self.ged, kind),
-                false => record_version(path, &self.ged, kind),
+                true => record_version_now(path, &self.ged, kind, label),
+                false => record_version(path, &self.ged, kind, label),
             }
             self.versioned_at = Some(std::time::Instant::now());
         }
@@ -278,7 +282,7 @@ impl Document {
                 Err(e) => eprintln!("save before closing: {}: {e}", path.display()),
             }
         } else if self.unversioned {
-            record_version_now(&path, &self.ged, Some(gedcom::versions::Kind::Saved));
+            record_version_now(&path, &self.ged, Some(gedcom::versions::Kind::Saved), None);
             self.unversioned = false;
         }
     }
@@ -300,28 +304,34 @@ impl Document {
 /// Records the tree in the history folder beside its file, on its own thread: as it was found
 /// on opening (`kind` none: first version, or changes made outside GEDRoots), or as saved. The
 /// old versions are pruned after a save.
-fn record_version(path: &std::path::Path, ged: &Gedcom, kind: Option<gedcom::versions::Kind>) {
+fn record_version(path: &std::path::Path, ged: &Gedcom, kind: Option<gedcom::versions::Kind>, label: Option<String>) {
     let (path, ged) = (path.to_path_buf(), ged.clone());
-    std::thread::spawn(move || record_version_now(&path, &ged, kind));
+    std::thread::spawn(move || record_version_now(&path, &ged, kind, label));
 }
 
-/// [`record_version`] on the calling thread: when the window closes or the app quits.
-fn record_version_now(path: &std::path::Path, ged: &Gedcom, kind: Option<gedcom::versions::Kind>) {
+/// [`record_version`] on the calling thread: when the window closes or the app quits, or before
+/// the version history is shown.
+fn record_version_now(
+    path: &std::path::Path,
+    ged: &Gedcom,
+    kind: Option<gedcom::versions::Kind>,
+    label: Option<String>,
+) {
     let store = gedcom::versions::Store::for_file(path, ged.tree_id());
     let result = match kind {
         None => store.record_opened(ged).map(|_| ()),
-        Some(k) => store.record(ged, k, None, None).and_then(|_| store.prune().map(|_| ())),
+        Some(k) => store.record(ged, k, label.as_deref(), None).and_then(|_| store.prune().map(|_| ())),
     };
     if let Err(e) = result {
         eprintln!("version history: {}: {e}", store.dir().display());
     }
 }
 
-/// While editing, a version is recorded at most this often; the file itself is saved after each
-/// change.
 /// How often the window looks for changes to save and for a file changed outside GEDRoots.
 const AUTOSAVE_CHECK: std::time::Duration = std::time::Duration::from_secs(1);
 
+/// While editing, a version is recorded at most this often; the file itself is saved after each
+/// change.
 const VERSION_EVERY: std::time::Duration = std::time::Duration::from_secs(5 * 60);
 
 /// Modification time and size of a file, to notice that something else wrote it.
@@ -331,12 +341,27 @@ fn disk_stamp(path: &std::path::Path) -> Option<(std::time::SystemTime, u64)> {
 }
 
 /// How a save records a version.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 enum Versioning {
     /// File › Save, window closed, app quit: a version now.
     Now,
+    /// File › Save Version…: a version with this name, kept until deleted.
+    Named(String),
+    /// An earlier version brought back: its id, or `opened` for Revert To › Last Opened.
+    Restored(String),
     /// Automatic save: a version if the last one is old enough.
     Throttled,
+}
+
+impl Versioning {
+    fn kind(&self) -> (gedcom::versions::Kind, Option<String>) {
+        use gedcom::versions::Kind;
+        match self {
+            Versioning::Now | Versioning::Throttled => (Kind::Saved, None),
+            Versioning::Named(n) => (Kind::Named, Some(n.clone())),
+            Versioning::Restored(from) => (Kind::Restored, Some(from.clone())),
+        }
+    }
 }
 
 /// Folder and name proposed by Save for a tree not saved yet: next to the imported file, under a
@@ -455,6 +480,8 @@ pub struct Workspace {
     kinship: Option<(String, String)>,
     /// Merge window (possible duplicates, or two people chosen by the user).
     merge: Option<merging::MergeDialog>,
+    /// File › Revert To › Browse All Versions… window.
+    version_history: Option<version_history::VersionHistory>,
     /// Guided tour in progress.
     tour: Option<tour::Tour>,
     /// Chapters of the tour offered (Help › Take the Tour).
@@ -572,6 +599,7 @@ impl Workspace {
             quality: quality::QualityState { stale: true, ..Default::default() },
             kinship: None,
             merge: None,
+            version_history: None,
             tour: None,
             tour_chooser: false,
             tour_pending: false,
@@ -651,11 +679,12 @@ impl Workspace {
         let first = ged.root();
         let dirty = imported || path.is_none();
         if let Some(p) = path.as_ref().filter(|_| !imported) {
-            record_version(p, &ged, None);
+            record_version(p, &ged, None, None);
         }
         let disk = path.as_deref().filter(|_| !imported).and_then(disk_stamp);
         self.doc = Some(Document {
             saved: ged.clone(),
+            opened: ged.clone(),
             disk,
             versioned_at: Some(std::time::Instant::now()),
             unversioned: false,
@@ -740,6 +769,7 @@ impl Workspace {
     fn write_to(&mut self, path: PathBuf, versioning: Versioning, cx: &mut Context<Self>) {
         let before = self.mobile_share();
         let Some(doc) = &mut self.doc else { return };
+        let explicit = versioning == Versioning::Now;
         match doc.write(&path, versioning, false) {
             Ok(versioned) => {
                 if doc.imported || doc.path.as_ref() != Some(&path) {
@@ -749,7 +779,7 @@ impl Workspace {
                 doc.imported = false;
                 doc.dirty = false;
                 self.rescan_media();
-                if versioning == Versioning::Now {
+                if explicit {
                     self.set_status(t!("ws.saved", path = path.display()), false);
                 }
                 // Mobile devices get the saved version (with each version while editing); after
@@ -814,14 +844,14 @@ impl Workspace {
             return;
         }
         if doc.unsaved() {
-            record_version(&path, &theirs, Some(gedcom::versions::Kind::Outside));
+            record_version(&path, &theirs, Some(gedcom::versions::Kind::Outside), None);
             self.set_status(t!("ws.outside_kept"), false);
         } else {
             // Undo goes back to the tree before the reload.
             doc.history.push(std::mem::replace(&mut doc.ged, theirs));
             doc.future.clear();
             doc.saved = doc.ged.clone();
-            record_version(&path, &doc.ged, None);
+            record_version(&path, &doc.ged, None, None);
             self.rebuild_rows(cx);
             self.refresh_editor(window, cx);
             self.set_status(t!("ws.outside_reloaded"), false);
@@ -3663,6 +3693,14 @@ impl Render for Workspace {
                 cx.listener(|this, _, w, cx| this.go_forward(w, cx)),
             )
             .on_key_down(cx.listener(|this, ev: &KeyDownEvent, w, cx| {
+                // Version history: ↑ ↓ move in the list.
+                if this.version_history.is_some() && this.add_dialog.is_none() {
+                    match ev.keystroke.key.as_str() {
+                        "down" => return this.step_version(1, w, cx),
+                        "up" => return this.step_version(-1, w, cx),
+                        _ => {}
+                    }
+                }
                 if ev.keystroke.key == "escape" {
                     if this.tour_chooser {
                         this.tour_chooser = false;
@@ -3683,7 +3721,11 @@ impl Render for Workspace {
                     }
                     if this.photo_draw.is_some() {
                         this.cancel_draw(cx);
-                    } else if this.kinship.take().is_some() || this.close_merge(cx) || this.close_event_detail(cx) {
+                    } else if this.kinship.take().is_some()
+                        || this.close_merge(cx)
+                        || this.close_version_history(cx)
+                        || this.close_event_detail(cx)
+                    {
                         cx.notify();
                     } else if this.editing {
                         this.cancel_edit(w, cx);
@@ -3698,6 +3740,7 @@ impl Render for Workspace {
             .children(self.render_picker(cx))
             .children(self.render_kinship(cx))
             .children(self.render_merge(cx))
+            .children(self.render_version_history(cx))
             .children(self.render_event_detail(cx))
             .children(self.render_media_gallery(cx))
             .children(self.render_add_dialog(cx))
@@ -3752,6 +3795,7 @@ mod autosave_tests {
         let ged = gedcom::load(path).unwrap();
         Document {
             saved: ged.clone(),
+            opened: ged.clone(),
             disk: disk_stamp(path),
             versioned_at: Some(std::time::Instant::now()),
             unversioned: false,
@@ -3821,6 +3865,23 @@ mod autosave_tests {
         imported.ged.get_mut("I00003").unwrap().set_child_val("SEX", "F");
         imported.flush();
         assert_eq!(gedcom::load(&path).unwrap().get("I00003").unwrap().child_val("SEX"), Some("M"));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[::core::prelude::v1::test]
+    fn named_and_restored_versions_keep_their_label() {
+        use gedcom::versions::Kind;
+        let (dir, path) = temp_tree();
+        let mut doc = opened(&path);
+        let store = Store::for_file(&path, None);
+        // A named version is recorded even without a change, and at once.
+        doc.write(&path, Versioning::Named("Before the merge".into()), true).unwrap();
+        doc.ged.get_mut("I00003").unwrap().set_child_val("SEX", "M");
+        doc.write(&path, Versioning::Restored("01793724394512-3f2b8c1e9a4d".into()), true).unwrap();
+        let v = store.versions().unwrap();
+        assert_eq!(v.len(), 2);
+        assert_eq!((v[0].kind, v[0].label.as_deref()), (Kind::Named, Some("Before the merge")));
+        assert_eq!((v[1].kind, v[1].label.as_deref()), (Kind::Restored, Some("01793724394512-3f2b8c1e9a4d")));
         std::fs::remove_dir_all(dir).unwrap();
     }
 }

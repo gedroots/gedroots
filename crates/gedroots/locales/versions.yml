@@ -1,0 +1,136 @@
+_version: 2
+# Version history: File › Revert To › Browse All Versions…, File › Save Version…
+# (workspace/version_history.rs).
+
+versions:
+  title:
+    en: "%{file} — Version History"
+    fr: "%{file} — Historique des versions"
+  today:
+    en: Today
+    fr: Aujourd’hui
+  yesterday:
+    en: Yesterday
+    fr: Hier
+  date_time:
+    en: "%{date}, %{time}"
+    fr: "%{date}, %{time}"
+  current:
+    en: Current Tree
+    fr: Arbre actuel
+  opened:
+    en: First Opened in GEDRoots
+    fr: Première ouverture dans GEDRoots
+  saved:
+    en: Saved
+    fr: Enregistré
+  named:
+    en: Named
+    fr: Nommée
+  agent:
+    en: Accepted in To Review
+    fr: Accepté dans À relire
+  agent_badge:
+    en: AI agent
+    fr: Agent IA
+  restore_point:
+    en: Restore Point
+    fr: Point de restauration
+  outside:
+    en: Changed Outside GEDRoots
+    fr: Modifié hors de GEDRoots
+  restored:
+    en: Restored
+    fr: Restauré
+  restored_from:
+    en: "Restored: %{from}"
+    fr: "Restauré : %{from}"
+  last_opened:
+    en: Last Opened
+    fr: Dernière ouverture
+  records:
+    one:
+      en: "%{n} record"
+      fr: "%{n} fiche"
+    other:
+      en: "%{n} records"
+      fr: "%{n} fiches"
+  added:
+    one:
+      en: "%{n} added"
+      fr: "%{n} ajoutée"
+    other:
+      en: "%{n} added"
+      fr: "%{n} ajoutées"
+  changed:
+    one:
+      en: "%{n} changed"
+      fr: "%{n} modifiée"
+    other:
+      en: "%{n} changed"
+      fr: "%{n} modifiées"
+  removed:
+    one:
+      en: "%{n} removed"
+      fr: "%{n} supprimée"
+    other:
+      en: "%{n} removed"
+      fr: "%{n} supprimées"
+  more:
+    one:
+      en: "and %{n} more"
+      fr: "et %{n} autre"
+    other:
+      en: "and %{n} more"
+      fr: "et %{n} autres"
+  no_change:
+    en: No change
+    fr: Aucun changement
+  section_added:
+    en: Added
+    fr: Ajoutées
+  section_changed:
+    en: Changed
+    fr: Modifiées
+  section_removed:
+    en: Removed
+    fr: Supprimées
+  empty:
+    en: No versions yet
+    fr: Aucune version pour l’instant
+  restore:
+    en: Restore This Version
+    fr: Restaurer cette version
+  done:
+    en: Done
+    fr: Terminé
+  save_copy:
+    en: Save a Copy…
+    fr: Enregistrer une copie…
+  copy_name:
+    en: "%{name} (%{date})"
+    fr: "%{name} (%{date})"
+  copy_saved:
+    en: "Copy saved to %{path}"
+    fr: "Copie enregistrée dans %{path}"
+  copy_failed:
+    en: "The copy could not be saved: %{error}"
+    fr: "La copie n’a pas pu être enregistrée : %{error}"
+  read_failed:
+    en: "This version could not be read: %{error}"
+    fr: "Cette version n’a pas pu être lue : %{error}"
+  restored_status:
+    en: "Version of %{from} restored"
+    fr: "Version du %{from} restaurée"
+  reverted_opened:
+    en: Tree as last opened restored
+    fr: Arbre restauré tel qu’à la dernière ouverture
+  name_placeholder:
+    en: Before merging the Martin branch
+    fr: Avant la fusion de la branche Martin
+  save:
+    en: Save Version
+    fr: Enregistrer la version
+  named_status:
+    en: "Version “%{name}” saved"
+    fr: "Version « %{name} » enregistrée"
