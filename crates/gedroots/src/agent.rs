@@ -3,7 +3,7 @@
 //! When the setting is on (Source › Connect an AI Agent…), the app serves the MCP protocol over HTTP
 //! on `127.0.0.1`: an agent such as Claude Code reads the open file (records, search, gaps),
 //! without ever writing to it: the records it finds become proposals, reviewed in the “To Review”
-//! page before being saved. Living people are hidden.
+//! page before being saved. Of living people, only what identifies them is given.
 //!
 //! - the server runs on its own thread (tokio runtime);
 //! - each tool call asks the app's loop for a copy of the displayed document (a cheap copy: records
@@ -37,7 +37,9 @@ pub fn url() -> String {
 pub enum Request {
     Snapshot(tokio::sync::oneshot::Sender<Option<Snapshot>>),
     /// Record proposal: added to the window's “To Review” page, or refused.
-    Propose(Box<propose::Pending>, tokio::sync::oneshot::Sender<Result<usize, String>>),
+    Propose(Box<propose::Pending>, tokio::sync::oneshot::Sender<Result<propose::Queued, String>>),
+    /// The agent withdraws a waiting proposal: the number still waiting, or why it cannot.
+    Withdraw(String, tokio::sync::oneshot::Sender<Result<usize, String>>),
     /// An agent has just opened a session: the “AI Agents” window updates.
     Connected,
 }
@@ -46,6 +48,8 @@ pub enum Request {
 pub struct Snapshot {
     pub path: Option<PathBuf>,
     pub ged: Gedcom,
+    /// The review page: waiting proposals and what became of the others.
+    pub queue: propose::Queue,
 }
 
 /// Window whose file the agent reads: the last one activated.
@@ -124,6 +128,16 @@ pub fn install(cx: &mut App) {
                         let ws = cx.global::<Target>().0.as_ref().and_then(|w| w.upgrade());
                         match ws {
                             Some(ws) => ws.update(cx, |ws, cx| ws.add_proposal(*pending, cx)),
+                            None => Err("no file is open in GEDRoots".to_string()),
+                        }
+                    });
+                    let _ = reply.send(res);
+                }
+                Request::Withdraw(id, reply) => {
+                    let res = cx.update(|cx| {
+                        let ws = cx.global::<Target>().0.as_ref().and_then(|w| w.upgrade());
+                        match ws {
+                            Some(ws) => ws.update(cx, |ws, cx| ws.withdraw_proposal(&id, cx)),
                             None => Err("no file is open in GEDRoots".to_string()),
                         }
                     });

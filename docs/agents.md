@@ -27,8 +27,8 @@ in the machine's settings. The commands and blocks are built in `crates/gedroots
 ## Tools
 
 The tools return structured JSON (`outputSchema`) and work on the file of the most recently
-active window. All are read-only (`readOnlyHint`) except `propose_act`, which writes nothing
-either: it only adds a proposal to review.
+active window. All are read-only (`readOnlyHint`) except `propose_act` and
+`withdraw_proposal`, which write nothing either: they only add or take back a proposal to review.
 
 | Tool | Returns |
 | --- | --- |
@@ -38,7 +38,9 @@ either: it only adds a proposal to review.
 | `research_gaps` | Births, marriages and deaths missing or without a source among the root person's direct ancestors, by Sosa number, with each person's known places |
 | `search_sources` | Sources (register, repository, call number, number of acts) and repositories, to cite an existing one |
 | `match_people` | For the people named in an act (role, names, sex, age, act date), the people of the tree who could be them, with the reason and whether the match is likely |
-| `propose_act` | Adds an act to the To Review page: event, date, place, source, reference, transcription, people with their role, downloaded file |
+| `propose_act` | Adds an act to the To Review page: event, date, place, source, reference, transcription, people with their role, downloaded file. Answers its id, what it will write and the temporary id of each new person; with `replaces`, corrects a waiting proposal |
+| `list_proposals` | Proposals waiting for review (id, `kind`, people with their ids, what each will write), and what became of the others: saved, rejected, edited in record entry, withdrawn, replaced |
+| `withdraw_proposal` | Takes back a waiting proposal |
 
 Ids (`I12`, `F3`…) are only for passing between tools; the server's instructions ask the agent
 not to show them.
@@ -86,6 +88,14 @@ reason, which the agent reads to fix it:
   else. The review page still shows “Resembles …” under such a person;
 - linked people must exist; dates must be valid, and are rewritten in
   GEDCOM 7 syntax; a place named like a place of the tree becomes that place.
+
+A proposal is checked against the tree as if every waiting proposal were saved
+(`propose::Hypothesis`). Each new person gets a temporary id (`new-3`), returned in `new_people`:
+another proposal links that id to name the same person, and creating them again is refused like
+any other likely duplicate. Both proposals then create the person; whichever the user saves
+first does, and the other is relinked to the saved person. The review page shows “Also in …”
+under such a person. A correction (`replaces: "P3"`) takes the place of the waiting proposal, and
+the people of the replaced proposal keep their temporary ids when linked again.
 
 The downloaded file takes the format of the acts already attached to the file's sources: the
 act's page of a PDF register becomes a JPEG image (rendered in pure Rust, on every platform) kept

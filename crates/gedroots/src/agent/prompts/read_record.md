@@ -40,7 +40,11 @@ How to work:
 7. If GEDRoots refuses the proposal, read the reason, fix the proposal and propose it again.
    Nothing is written until the user compares and saves it: tell them it is waiting in GEDRoots'
    To Review page, and list the facts you left out and why.
-8. Before the next proposal, read the people again (`person_sheet`): the user may have saved,
-   changed or rejected the previous one in the meantime.
+8. The answer gives the proposal's id and the temporary id of each new person (`new_people`). A
+   person found in another act before the user saved the first one (a father in two baptisms) is
+   linked with that temporary id, never created twice. If you find a mistake in a proposal still
+   waiting, propose it again with `replaces` (its id), or withdraw it with `withdraw_proposal`.
+9. Before the next proposal, call `list_proposals` and read the people again (`person_sheet`):
+   the user may have saved, changed or rejected the previous one in the meantime.
 
 Never show GEDRoots ids (I12, S4…) to the user.
