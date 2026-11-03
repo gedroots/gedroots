@@ -36,6 +36,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: org.gedroots.mobile
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         OTHER_LDFLAGS: ["-lc++"]
         # build-rust.sh only builds the Apple silicon simulator slice.
         "EXCLUDED_ARCHS[sdk=iphonesimulator*]": x86_64
