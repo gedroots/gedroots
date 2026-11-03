@@ -532,6 +532,7 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
         t!("menu.source").into(),
         vec![
             a(label::enter_act(), EnterRecord),
+            a(t!("cmd.record_preview"), ToggleRecordPreview),
             Sep,
             a(t!("cmd.review_proposals"), ReviewProposals),
             a(t!("cmd.accept_proposal"), AcceptProposal),
@@ -577,7 +578,6 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
             a(t!("cmd.show_tree"), ShowTree),
             a(t!("cmd.show_form"), ShowForm),
             a(t!("cmd.show_raw"), ShowRaw),
-            a(t!("cmd.record_preview"), ToggleRecordPreview),
             Sep,
             a(t!("cmd.toggle_sidebar"), ToggleSidebar),
             a(t!("cmd.toggle_inspector"), ToggleInspector),
