@@ -56,6 +56,15 @@ review:
   differs:
     en: "≠ Different"
     fr: "≠ Différent"
+  keep_both:
+    en: "Keep Both"
+    fr: "Garder les deux"
+  replace:
+    en: "Use the Record's"
+    fr: "Préférer l'acte"
+  ignore:
+    en: "Keep the Tree's"
+    fr: "Garder l'arbre"
   create:
     en: "+ Create"
     fr: "+ Créer"

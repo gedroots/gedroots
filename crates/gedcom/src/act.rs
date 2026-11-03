@@ -19,6 +19,7 @@ use crate::model::{Individual, sort_key};
 use crate::node::Node;
 use rust_i18n::t;
 use std::borrow::Cow;
+use std::collections::BTreeMap;
 
 // ----------------------------------------------------------------------
 // Events and roles
@@ -413,6 +414,32 @@ impl Participant {
 pub struct ActKey {
     pub page: String,
     pub date: String,
+}
+
+/// What to do with a value of the record that contradicts the tree's (a different date or place).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum Conflict {
+    /// The record's event is added after the tree's, which stays preferred (GEDCOM order).
+    #[default]
+    KeepBoth,
+    /// The record's event is added first, preferred; the tree's is kept after it.
+    Replace,
+    /// The tree's values stay: the record only adds its citation and what does not contradict.
+    Ignore,
+}
+
+/// Choices for a record's contradictions: its event, and each person's other facts (index in
+/// `participants`, index in their `facts`).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Conflicts {
+    pub event: Conflict,
+    pub facts: BTreeMap<(usize, usize), Conflict>,
+}
+
+impl Conflicts {
+    fn fact(&self, person: usize, fact: usize) -> Conflict {
+        self.facts.get(&(person, fact)).copied().unwrap_or_default()
+    }
 }
 
 /// A record of a source.
@@ -924,13 +951,18 @@ impl Act {
     /// Writes the record into the document. A reopened record replaces its old version. Nothing is
     /// changed on error.
     pub fn save(&self, ged: &mut Gedcom) -> Result<ActResult, String> {
+        self.save_with(ged, &Conflicts::default())
+    }
+
+    /// Like [`Act::save`], with a choice for each value that contradicts the tree.
+    pub fn save_with(&self, ged: &mut Gedcom, conflicts: &Conflicts) -> Result<ActResult, String> {
         self.validate(ged)?;
         let mut copy = ged.clone();
         let mut removed = Vec::new();
         if let Some(k) = &self.original {
             removed = copy.unlink_act(&self.source, k, true);
         }
-        let mut res = self.apply(&mut copy)?;
+        let mut res = self.apply(&mut copy, conflicts)?;
         copy.drop_empty_events(&removed);
         for x in removed {
             if !res.touched.contains(&x) {
@@ -941,7 +973,7 @@ impl Act {
         Ok(res)
     }
 
-    fn apply(&self, ged: &mut Gedcom) -> Result<ActResult, String> {
+    fn apply(&self, ged: &mut Gedcom, conflicts: &Conflicts) -> Result<ActResult, String> {
         self.validate(ged)?;
         let mut w = Writer { ged, res: ActResult::default() };
         let source = self.source.clone();
@@ -1116,7 +1148,7 @@ impl Act {
                     ev.children.insert(at, Node::new(tag).push(Node::with_value("AGE", age)));
                 }
             }
-            let i = w.add_event(fam, ev);
+            let i = w.add_event(fam, ev, conflicts.event);
             main_event = Some((fam.clone(), i));
         }
 
@@ -1132,7 +1164,7 @@ impl Act {
                     cite.children.push(Node::with_value("NOTE", &note));
                 }
                 ev.children.push(cite);
-                let at = w.add_event(x, ev);
+                let at = w.add_event(x, ev, conflicts.event);
                 if first_principal {
                     main_event = Some((x.clone(), at));
                 }
@@ -1196,13 +1228,14 @@ impl Act {
             }
 
             // Other facts of the record, with its citation.
-            for f in p.facts.iter().filter(|f| !f.is_blank()) {
+            for (k, f) in p.facts.iter().enumerate().filter(|(_, f)| !f.is_blank()) {
                 let mut n = f.node();
                 n.children.push(self.citation(media.as_deref(), role.clone(), false));
+                let conflict = conflicts.fact(i, k);
                 if f.has_value() || f.tag == "RESI" {
-                    w.add_fact(x, n);
+                    w.add_fact_with(x, n, conflict);
                 } else {
-                    w.add_event(x, n);
+                    w.add_event(x, n, conflict);
                 }
             }
         }
@@ -1654,8 +1687,9 @@ impl Writer<'_> {
 
     /// Adds the record's event, or merges it with an existing event: a unique event (birth, death…)
     /// with compatible dates, or an event of the same type that is still empty (no date or source).
-    /// Returns its index.
-    fn add_event(&mut self, x: &str, ev: Node) -> usize {
+    /// A date or place that contradicts the existing event's is settled by `conflict`. Returns its
+    /// index.
+    fn add_event(&mut self, x: &str, mut ev: Node, conflict: Conflict) -> usize {
         let unique = matches!(ev.tag.as_str(), "BIRT" | "CHR" | "BAPM" | "DEAT" | "BURI" | "CREM");
         let node = self.ged.get_mut(x).unwrap();
         let existing = node.children.iter().position(|c| {
@@ -1663,6 +1697,26 @@ impl Writer<'_> {
                 && c.child_val("TYPE") == ev.child_val("TYPE")
                 && (unique || (c.child("DATE").is_none() && c.child("SOUR").is_none()))
         });
+        if let Some(i) = existing {
+            let old = &node.children[i];
+            let date = old.child_val("DATE").is_some_and(|d| {
+                crate::proposal::date_change(d, ev.child_val("DATE").unwrap_or("")) == crate::proposal::Change::Differs
+            });
+            let place = old.child_val("PLAC").is_some_and(|p| {
+                crate::proposal::text_change(p, ev.child_val("PLAC").unwrap_or("")) == crate::proposal::Change::Differs
+            });
+            if date || place {
+                match conflict {
+                    Conflict::KeepBoth | Conflict::Replace => {
+                        let at = if conflict == Conflict::Replace { i } else { i + 1 };
+                        node.children.insert(at, ev);
+                        self.touch(x);
+                        return at;
+                    }
+                    Conflict::Ignore => ev.children.retain(|c| !(date && c.tag == "DATE" || place && c.tag == "PLAC")),
+                }
+            }
+        }
         let idx = match existing {
             Some(i) if compatible_dates(node.children[i].child_val("DATE"), ev.child_val("DATE")) => {
                 let target = &mut node.children[i];
@@ -1714,6 +1768,12 @@ impl Writer<'_> {
 
     /// Adds a fact (occupation, residence), unless it already exists with the same value and date.
     fn add_fact(&mut self, x: &str, fact: Node) {
+        self.add_fact_with(x, fact, Conflict::KeepBoth)
+    }
+
+    /// Like `add_fact`; with [`Conflict::Replace`], a new value goes before the person's other
+    /// facts of the same kind, preferred.
+    fn add_fact_with(&mut self, x: &str, fact: Node, conflict: Conflict) {
         let node = self.ged.get_mut(x).unwrap();
         let same = node.children.iter_mut().find(|c| {
             c.tag == fact.tag
@@ -1728,7 +1788,17 @@ impl Writer<'_> {
                     existing.children.push(cite);
                 }
             }
-            None => node.insert_child(fact),
+            None => {
+                let first = node
+                    .children
+                    .iter()
+                    .position(|c| c.tag == fact.tag && c.child_val("TYPE") == fact.child_val("TYPE"));
+                match (conflict, first) {
+                    (Conflict::Replace, Some(at)) => node.children.insert(at, fact),
+                    (Conflict::Ignore, Some(_)) => {}
+                    _ => node.insert_child(fact),
+                }
+            }
         }
         self.touch(x);
     }

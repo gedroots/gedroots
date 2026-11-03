@@ -127,7 +127,7 @@ pub fn demo_proposal(ged_path: &Path) -> Result<Pending, String> {
         call_number: "3 E 4/2".into(),
         ..Default::default()
     });
-    let mut proposal = Proposal { source, act, url: String::new() };
+    let mut proposal = Proposal { source, act, url: String::new(), conflicts: Default::default() };
     proposal.act.media = MediaChoice::NewFiles(vec![file.into()]);
     Ok(Pending { proposal, original: None, pdf_page: None, image: Some(image.clone()), preview: Some(image) })
 }
