@@ -8,14 +8,14 @@ import SwiftUI
 struct PlacesView: View {
     let model: TreeModel
     @State private var selection: String?
-    @State private var ancestorsOnly = false
+    @State private var scope = Scope.all
     @State private var query = ""
     /// Places matching the search; all of them when nothing is searched.
     @State private var matching: Set<String>?
 
     private var pins: [PlacePin] {
         model.places.filter { pin in
-            (!ancestorsOnly || pin.ancestors) && (matching?.contains(pin.name) ?? true)
+            (scope == .all || pin.ancestors) && (matching?.contains(pin.name) ?? true)
         }
     }
 
@@ -28,14 +28,12 @@ struct PlacesView: View {
                     ContentUnavailableView("No Located Places", systemImage: "mappin.slash")
                 }
             }
-            .safeAreaInset(edge: .top) {
-                HStack {
-                    Toggle("Ancestors", isOn: $ancestorsOnly).toggleStyle(.button).buttonStyle(.bordered)
-                    Spacer()
-                }
-                .padding(.horizontal, 16)
-            }
             .treeSearch(model: model, zone: .places, prompt: "Search Places", query: $query)
+            // Like People: everyone's places, or only the ancestors'.
+            .searchScopes($scope, activation: .onSearchPresentation) {
+                Text("All").tag(Scope.all)
+                Text("Ancestors").tag(Scope.ancestors)
+            }
             .task(id: "\(query)#\(model.revision)") {
                 matching = query.isEmpty ? nil : Set(model.tree?.searchPlaces(query: query) ?? [])
             }
