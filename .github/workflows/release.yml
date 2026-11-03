@@ -88,9 +88,15 @@ jobs:
         with:
           version: 2026.10.25
           install_args: rust dotnet dotnet:vpk
+          # Saved by releases only, like the build outputs below.
+          cache_save: ${{ github.event_name != 'pull_request' }}
       # Downloaded crates and release build outputs, per system: the next release only
-      # recompiles what changed. Unused caches are dropped after 7 days.
-      - uses: actions/cache@v6
+      # recompiles what changed. Unused caches are dropped after 7 days. Only releases save them:
+      # a pull request's copy could only be read by that pull request, and three of them per push
+      # filled the repository's 10 GB, evicting the caches of main.
+      - name: Restore the crates and build outputs
+        id: cache
+        uses: actions/cache/restore@v6
         with:
           path: |
             ~/.cargo/registry/index
@@ -122,6 +128,17 @@ jobs:
           # macOS keeps the app's permissions after an update.
           MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE || env.MACOS_CERTIFICATE }}
           MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD || env.MACOS_CERTIFICATE_PASSWORD }}
+      - name: Save the crates and build outputs
+        if: github.event_name != 'pull_request' && steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+            !target/dist
+          key: ${{ steps.cache.outputs.cache-primary-key }}
       - if: github.event_name == 'pull_request'
         uses: actions/upload-artifact@v7
         with:
