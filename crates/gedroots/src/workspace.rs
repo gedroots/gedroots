@@ -245,6 +245,23 @@ impl Document {
 
 /// Folder and name proposed by Save for a tree not saved yet: next to the imported file, under a
 /// name that does not replace it (`export copy.ged`); otherwise in the home folder.
+/// Records the tree in the history folder beside its file, on its own thread: as it was found
+/// on opening (`kind` none: first version, or changes made outside GEDRoots), or as saved. The
+/// old versions are pruned after a save.
+fn record_version(path: &std::path::Path, ged: &Gedcom, kind: Option<gedcom::versions::Kind>) {
+    let (path, ged) = (path.to_path_buf(), ged.clone());
+    std::thread::spawn(move || {
+        let store = gedcom::versions::Store::for_file(&path, ged.tree_id());
+        let result = match kind {
+            None => store.record_opened(&ged).map(|_| ()),
+            Some(k) => store.record(&ged, k, None, None).and_then(|_| store.prune().map(|_| ())),
+        };
+        if let Err(e) = result {
+            eprintln!("version history: {}: {e}", store.dir().display());
+        }
+    });
+}
+
 fn save_as_default(imported: Option<&std::path::Path>) -> (PathBuf, String) {
     let Some(p) = imported else { return (dirs_home(), format!("{}.ged", t!("file.default_name"))) };
     let dir = p.parent().map(std::path::Path::to_path_buf).unwrap_or_else(dirs_home);
@@ -526,6 +543,9 @@ impl Workspace {
         }
         let first = ged.root();
         let dirty = imported || path.is_none();
+        if let Some(p) = path.as_ref().filter(|_| !imported) {
+            record_version(p, &ged, None);
+        }
         self.doc = Some(Document {
             saved: ged.clone(),
             ged,
@@ -614,6 +634,7 @@ impl Workspace {
         match gedcom::save(&doc.ged, &path) {
             Ok(()) => {
                 doc.saved = doc.ged.clone();
+                record_version(&path, &doc.ged, Some(gedcom::versions::Kind::Saved));
                 if doc.imported || doc.path.as_ref() != Some(&path) {
                     crate::recent::add(&path, cx);
                 }

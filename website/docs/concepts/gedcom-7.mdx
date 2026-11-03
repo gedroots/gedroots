@@ -25,13 +25,14 @@ When you save, GEDRoots updates two lines of the header: the software that saved
 
 - **Undo.** Every change, including bulk fixes and imports, can be undone, up to 50 steps.
 - **Backup copy.** Each time you save, the previous version is kept as `yourtree.ged.bak` next to the file.
+- **Version history.** Each save is also kept in a hidden folder next to the file, `.yourtree.ged.history`, so that earlier versions of the tree can be brought back. Only the records that changed take room.
 - **Validation.** The raw GEDCOM editor checks what you type against the official GEDCOM 7 schema before applying it. The [Data Quality](/workflows/quality) page checks the whole file.
 
 ## When GEDCOM 7 has no field
 
 GEDRoots stores everything in standard structures whenever GEDCOM 7 has one: crops, multi-page media, roles, web links, source contents. For the few things GEDCOM 7 has no field for, such as your media naming templates or your saved searches, GEDRoots uses extension tags that start with `_GR_`. They are declared in the file's header, as the standard requires, and documented in [GEDCOM extensions](/reference/gedcom-extensions). Other software ignores them without losing anything.
 
-GEDRoots never writes a sidecar file next to your tree. Settings that belong to your computer rather than to the tree, such as the AI agent token or recent files, are kept in your system's settings folder.
+Apart from the backup copy and the version history, GEDRoots never writes a sidecar file next to your tree. Both stay next to the file so that a sync service such as Dropbox or iCloud Drive keeps them with it. Settings that belong to your computer rather than to the tree, such as the AI agent token or recent files, are kept in your system's settings folder.
 
 ## Media stay files
 

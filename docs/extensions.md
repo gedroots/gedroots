@@ -1,6 +1,8 @@
 # GEDRoots GEDCOM extensions
 
-GEDRoots stores its own data **in the `.ged` file**, never in a sidecar file. All its tags
+GEDRoots stores its own data **in the `.ged` file**, never in a sidecar file (the version
+history, a hidden folder beside the file, holds copies of the tree, not data of its own: see
+[version-history.md](version-history.md)). All its tags
 start with `_GR_` and are declared in the header, as GEDCOM 7 requires:
 
 ```
