@@ -129,7 +129,15 @@ pub fn demo_proposal(ged_path: &Path) -> Result<Pending, String> {
     });
     let mut proposal = Proposal { source, act, url: String::new() };
     proposal.act.media = MediaChoice::NewFiles(vec![file.into()]);
-    Ok(Pending { proposal, original: None, pdf_page: None, image: Some(image.clone()), preview: Some(image) })
+    Ok(Pending {
+        proposal,
+        original: None,
+        pdf_page: None,
+        image: Some(image.clone()),
+        preview: Some(image),
+        temps: Vec::new(),
+        replaces: None,
+    })
 }
 
 #[cfg(test)]
