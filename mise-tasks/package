@@ -53,7 +53,8 @@ Darwin)
 		security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
 		security set-keychain-settings -lut 21600 "$KEYCHAIN"
 		security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
-		security import "$P12" -k "$KEYCHAIN" -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+		# `-f`: the temporary file has no .p12 extension to tell the format.
+		security import "$P12" -k "$KEYCHAIN" -f pkcs12 -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
 		security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" > /dev/null
 		# codesign only looks for identities in the search list.
 		security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
