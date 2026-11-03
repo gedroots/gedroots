@@ -28,7 +28,9 @@ in the machine's settings. The commands and blocks are built in `crates/gedroots
 
 The tools return structured JSON (`outputSchema`) and work on the file of the most recently
 active window. All are read-only (`readOnlyHint`) except `propose_act`, `propose_change` and
-`withdraw_proposal`, which write nothing either: they only add or take back a proposal to review.
+`withdraw_proposal`, which write nothing either: they only add or take back a proposal to review;
+and `plan_research` and `log_search`, which write only the research log (see below), never the
+tree's data.
 
 | Tool | Returns |
 | --- | --- |
@@ -36,7 +38,10 @@ active window. All are read-only (`readOnlyHint`) except `propose_act`, `propose
 | `file_context` | How the file is written: the description the user wrote (File Settings › General, `HEAD.NOTE`, word for word), language, place format, events, custom event types and occupations in use with their counts, media folders and naming, and the latest sources, people, families, media and repositories changed as raw GEDCOM (`examples`, never a living person). Also served as the resource `gedroots://file/context` |
 | `search_people` | People matching a search, as in the app's search box |
 | `person_sheet` | Events with their position in the record, date, place, cited sources (`PAGE`) and media; parents, unions, children; Sosa number |
-| `research_gaps` | Births, marriages and deaths missing or without a source among the root person's direct ancestors, by Sosa number, with each person's known places |
+| `research_leads` | Records still to find for the people of a focus (search syntax, default `sosa:1-63`) or one person: births, marriages and deaths missing or without a source, parents of ancestors at the end of a line. Each lead has estimated years and why, places to search first, where to look, its state and the searches already noted |
+| `research_log` | Everything noted for a person and their unions: plan, searches, records found, ignored leads |
+| `plan_research` | Saves the agent's plan: the leads it will search, in order, each with a reason (state `planned`) |
+| `log_search` | Notes one search, whatever its result (`found`, `nothing`, `partial`): what was searched, years, place, viewer page; `finished` when nothing is left to search |
 | `quality_issues` | The Data Quality page's issues, filtered by category, kind or record and paged (`offset`, `limit`): message, records and places involved, whether the page fixes it in one click, whether it can be hidden, counts per category |
 | `search_sources` | Sources (register, repository, call number, number of acts) and repositories, to cite an existing one |
 | `match_people` | For the people named in an act (role, names, sex, age, act date), the people of the tree who could be them, with the reason and whether the match is likely |
@@ -59,17 +64,51 @@ Code they appear as slash commands once the server is connected.
 
 | Prompt | Arguments | Does |
 | --- | --- | --- |
-| `find_record` | `person`, `event` (both optional) | Picks a gap with `research_gaps`, finds the right archive and register, searches it in the browser at a human pace, downloads the act and goes on with `read_record` |
+| `research_session` | `focus`, `count` (both optional) | The research loop: reads the leads, saves a plan with `plan_research`, searches each lead in the browser, notes every search with `log_search`, proposes the acts found (`read_record`), then sums up what was found, what was searched in vain and what to try next |
+| `find_record` | `person`, `event` (both optional) | Picks a lead with `research_leads`, finds the right archive and register, searches it in the browser at a human pace, downloads the act and goes on with `read_record` |
 | `read_record` | `file`, `person` (both optional) | Transcribes the act, checks it against the person's sheet, identifies each person with `match_people`, picks or describes the source with `search_sources`, then calls `propose_act` and fixes it if refused |
 | `review_quality` | `category`, `person` (both optional) | Goes through the Data Quality issues with `quality_issues`, checks each one against the sheets and sources, then proposes a fix, an edit or hiding it with `propose_change` |
 
 ```text
+/mcp__gedroots__research_session sosa:1-15
 /mcp__gedroots__find_record "Jean MARCHAND" birth
 /mcp__gedroots__read_record ~/Downloads/act.pdf
 ```
 
 Their text lives in `crates/gedroots/src/agent/prompts/`. They tell the agent never to bypass a
 login or a captcha, and never to show ids.
+
+## Research leads and log
+
+A lead is computed from the file, never stored (`crates/gedcom/src/leads.rs`), and disappears once
+its record is cited. A baptism counts as a birth, a burial as a death.
+
+- **Estimated years**: a death falls after the last time the person was seen alive (their events,
+  the events they attended as a witness or godparent, their children's births) and before a
+  spouse's remarriage, at most 105 years after the birth; a marriage after both spouses were 15 and
+  before the first child; a birth 15 years before the first sighting, after a parent's birth.
+  Searches that found nothing at an end of the period narrow it.
+- **Places**: the last places where the person was seen for a death, the bride's places for a
+  marriage, the parents' marriage and siblings' births for a birth, the birth place for parents. A
+  locality counts with its municipality (place format).
+- **Where to look**: kinds of records by country and period. France (country named in the place,
+  otherwise the file's most frequent country): decennial tables (from 1793, online until 1942)
+  first, civil registers from 1792, parish registers before; for a death, the national death index
+  (INSEE, from 1970), census lists (1836–1946) and probate tables; marriage contracts; military
+  registers (men born 1847–1921) for parents. Algeria from 1830 to 1962: French civil registers at
+  the Archives nationales d'outre-mer. Elsewhere: civil registration, church registers, census,
+  probate. Civil and church registers and their indexes list the registers of the same town the
+  file already cites (sources whose title or publication names the town, “St” read as “Saint”,
+  and acts filed in its registers: same call number cited twice or same series; one per call
+  number and period:
+  register, source, archive, call number, number of events, years), close in time, those of the
+  same kind of event first.
+
+What the agent plans and searches is kept in the file, under the person (or the family for a
+marriage), as a `_GR_TASK` structure ([extensions](extensions.md#_gr_task); `crates/gedcom/src/research_log.rs`).
+It is written at once, not reviewed: it is the trace of the research, not data of the tree. Each
+change is one undo step, and the top bar says what the agent noted. A found record is still
+proposed with `propose_act` and reviewed.
 
 ## Proposals and review
 
@@ -133,12 +172,13 @@ the act editor. Proposals live in memory: they are lost when the app closes.
   dead), spouses (30 years apart), and the dated events where they are a witness or godparent
   (`ASSO`, 15 years earlier). An open date (“after 1850”) places nobody; an approximate one is taken 10 years later. The agent can find and
   link a living person, but only gets their name, their birth (date and place, `born`) and their
-  close relatives: their sheet leaves out their other events and notes, and `research_gaps` skips
-  them (`crates/gedcom/src/research.rs`). `quality_issues` lists their issues too, their records
-  marked `living`.
+  close relatives: their sheet leaves out their other events and notes, and they never get a
+  research lead (`crates/gedcom/src/research.rs`). `quality_issues` lists their issues too, their
+  records marked `living`.
 - **Local only.** The server listens on `127.0.0.1:47280`, requires the token in the
   `Authorization` header and rejects requests sent by a web page (`Origin` header).
-- **Nothing is written by the agent.** It can only propose; a person reviews, compares and saves.
+- **The agent never writes the tree's data.** It can only propose; a person reviews, compares and
+  saves. Only its research log (plan and searches) is written directly, with an undo point.
 - The setting, the token and the chosen agent belong to the machine, not to the file: they are kept in
   `GEDRoots/agents` in the platform's configuration folder (`~/Library/Application Support` on
   macOS, `~/.config` on Linux, `%APPDATA%` on Windows), never in the `.ged`.

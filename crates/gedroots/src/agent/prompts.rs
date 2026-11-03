@@ -10,6 +10,7 @@ use serde::Deserialize;
 
 const FIND_RECORD: &str = include_str!("prompts/find_record.md");
 const READ_RECORD: &str = include_str!("prompts/read_record.md");
+const RESEARCH_SESSION: &str = include_str!("prompts/research_session.md");
 const REVIEW_QUALITY: &str = include_str!("prompts/review_quality.md");
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -26,6 +27,15 @@ pub struct ReadArgs {
     pub file: Option<String>,
     /// Person the act is about.
     pub person: Option<String>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct SessionArgs {
+    /// People to research, in the syntax of GEDRoots' search (`sosa:1-15`, `place:manche`,
+    /// `descendants:@I12@`…); nothing: the ancestors over six generations.
+    pub focus: Option<String>,
+    /// Number of leads to plan (default 5).
+    pub count: Option<String>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -59,6 +69,19 @@ impl GedrootsMcp {
             (None, None) => String::new(),
         };
         text(FIND_RECORD, target)
+    }
+
+    #[prompt(
+        name = "research_session",
+        description = "Plan the records to find in the tree open in GEDRoots, then search them one by one in the online archives, noting every search."
+    )]
+    async fn research_session(&self, Parameters(a): Parameters<SessionArgs>) -> Vec<PromptMessage> {
+        let count = some(&a.count).and_then(|c| c.parse::<usize>().ok()).unwrap_or(5);
+        let target = match some(&a.focus) {
+            Some(f) => format!("Focus: `{f}`. Plan {count} leads."),
+            None => format!("Plan {count} leads."),
+        };
+        text(RESEARCH_SESSION, target)
     }
 
     #[prompt(

@@ -4,11 +4,11 @@ Find a record (birth, marriage, death) for my family tree open in GEDRoots, in t
 
 How to work:
 
-1. Use the GEDRoots tools to know what to look for. Without a person given above, call
-   `research_gaps` and pick the closest ancestor (lowest Sosa number) whose record is missing.
-   Call `person_sheet` on the person: dates, places, parents, spouses and sources already cited.
-   Work out the parish or town, the period to search (a few years around an estimated date) and
-   the names to look for, with their spelling variants.
+1. Use the GEDRoots tools to know what to look for. Call `research_leads` (with `person` when a
+   person is given above; otherwise pick the closest ancestor, lowest Sosa number): each lead gives
+   the estimated years, the places to search first, where to look and the searches already made,
+   never to repeat. Call `person_sheet` on the person: dates, places, parents, spouses and sources
+   already cited. Work out the names to look for, with their spelling variants.
 2. Find the archive holding the registers: for France, the archives départementales of the
    département of the place (civil registers from 1792, parish registers before; decennial
    tables, from 1793, give the date of an act in a town). Elsewhere, the regional or national
@@ -22,7 +22,8 @@ How to work:
    note the address of the act's page (the viewer's permanent link, ark or permalink, when there
    is one), the register's call number and the image or page number. Then read the act and
    propose it, following the `read_record` prompt.
-5. If you cannot find it, say where you looked (archive, registers, years) so the next search
-   does not start over.
+5. Note every search with `log_search` as soon as it is done, found or not (archive, register,
+   years, names tried, viewer page): the next search starts from there. If nothing is left to
+   search online, set `finished` and tell me where you looked.
 
 Never show GEDRoots ids (I12, S4…) to the user.
