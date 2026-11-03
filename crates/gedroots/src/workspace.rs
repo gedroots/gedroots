@@ -2328,23 +2328,10 @@ impl Workspace {
     }
 
     /// Edit › Edit Record on an individual: their panel's header becomes fields, in place: names
-    /// next to the portrait, sex, birth and death for quick entry, note. The timeline and the
-    /// family stay below.
+    /// next to the portrait, sex, note. Birth and death are events of the timeline below, edited
+    /// there like the others.
     fn render_individual_fields(&self, ed: &RecordEditor, portrait: Div, cx: &mut Context<Self>) -> Div {
         let f = &ed.fields;
-        let event = |title: SharedString, n: usize, cx: &mut Context<Self>| {
-            v_flex()
-                .gap_2()
-                .child(div().text_xs().font_weight(FontWeight::SEMIBOLD).text_color(theme::muted()).child(title))
-                // The place takes the room: its names are long.
-                .child(
-                    h_flex()
-                        .gap_2()
-                        .items_start()
-                        .child(self.render_field(&f[n], cx).w(px(136.)).flex_none())
-                        .child(self.render_field(&f[n + 1], cx).flex_1()),
-                )
-        };
         v_flex()
             .p_4()
             .gap_3()
@@ -2361,8 +2348,6 @@ impl Workspace {
                 ),
             )
             .child(self.render_field(&f[2], cx))
-            .child(event(t!("editor.birth").into(), 3, cx))
-            .child(event(t!("editor.death").into(), 5, cx))
             .when_some(ed.long_text.as_ref(), |d, (label, state)| {
                 d.child(v_flex().gap_1().child(label_caps(label.clone())).child(Textarea::new(state).h(px(80.))))
             })
@@ -3054,7 +3039,7 @@ impl Workspace {
         // Edit › Edit Record: the header becomes fields, in place.
         let fields = self
             .panel_editor(&xref)
-            .filter(|ed| self.editing && ed.fields.len() >= 7)
+            .filter(|ed| self.editing && ed.fields.len() >= 3)
             .map(|ed| self.render_individual_fields(ed, avatar(doc, &i, 64., lineage), cx));
         let confirm = self.pending_delete.as_deref() == Some(xref.as_str());
 
