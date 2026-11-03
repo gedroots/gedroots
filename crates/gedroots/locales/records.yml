@@ -99,6 +99,9 @@ editor.call_number:
 editor.acts:
   en: Records
   fr: Actes
+editor.record_types:
+  en: Record types
+  fr: Types d’actes
 editor.acts_placeholder:
   en: Births, marriages, deaths
   fr: Naissances, mariages, décès
@@ -214,8 +217,8 @@ picker.source_hint:
   en: Title of the source, or of a new source…
   fr: "Titre de la source, ou d'une nouvelle source…"
 picker.person_hint:
-  en: "Name, given name… (criteria: born:1850 place:troyes)"
-  fr: "Nom, prénom… (critères : born:1850 place:troyes)"
+  en: Search for a person
+  fr: Rechercher une personne
 picker.linked_as:
   en: "%{who} linked as %{rel} of %{name}"
   fr: "%{who} lié(e) comme %{rel} de %{name}"
@@ -246,9 +249,6 @@ picker.pages:
 picker.new_source:
   en: + New Source
   fr: + Nouvelle source
-picker.keys:
-  en: "Enter: first result · Esc: close"
-  fr: "Entrée : premier résultat · Échap : fermer"
 event_dialog.other:
   en: Other…
   fr: Autre…
@@ -308,10 +308,10 @@ event_dialog.search:
   fr: Rechercher…
 event_dialog.new_person:
   en: New Person
-  fr: Nouvelle personne
+  fr: Nouvel individu
 event_dialog.existing_person:
-  en: Existing Person…
-  fr: Personne existante…
+  en: Link to Existing Person…
+  fr: Lier à une personne existante…
 event_dialog.child_with:
   en: "Child with %{name}"
   fr: "Enfant avec %{name}"

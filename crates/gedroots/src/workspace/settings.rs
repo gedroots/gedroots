@@ -234,7 +234,8 @@ impl Workspace {
         }
     }
 
-    fn save_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    /// Applies the settings as the window closes.
+    pub(super) fn save_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(AddDialog::Settings(d)) = &self.add_dialog else { return };
         let s = FileSettings {
             author: d.author.read(cx).value().to_string(),
@@ -295,10 +296,10 @@ impl Workspace {
                 if format_changed {
                     let r = g.set_place_format(&format);
                     if r.rewritten > 0 {
-                        msg.push_str(&t!("settings.rewritten", places = places(r.rewritten)));
+                        msg.push_str(&crate::tn!("settings.rewritten", r.rewritten));
                     }
                     if r.skipped > 0 {
-                        msg.push_str(&t!("settings.skipped", places = places(r.skipped)));
+                        msg.push_str(&crate::tn!("settings.skipped", r.skipped));
                     }
                 }
                 for (family, label) in &removed {
@@ -334,39 +335,36 @@ impl Workspace {
             SettingsPage::Media => self.settings_media(d, cx),
             SettingsPage::Search => self.settings_search(d, cx),
         };
+        // Segmented control, like the gallery's tabs.
         let tab = |id: &'static str, label: std::borrow::Cow<'static, str>, page: SettingsPage| {
-            let active = d.page == page;
-            Button::new(id).small().label(label).when(active, |b| b.primary()).when(!active, |b| b.ghost()).on_click(
-                cx.listener(move |this, _, _, cx| {
-                    if let Some(d) = this.settings_dialog() {
-                        d.page = page;
-                    }
-                    cx.notify();
-                }),
-            )
+            super::gallery::segment(id, d.page == page, label).on_click(cx.listener(move |this, _, w, cx| {
+                if let Some(d) = this.settings_dialog() {
+                    d.page = page;
+                }
+                // Keyboard focus back on the window, so that Esc still closes it.
+                w.focus(&this.focus, cx);
+                cx.notify();
+            }))
         };
+        // No Save button: the settings apply when the window closes (one undo point). The body
+        // keeps the same height on every page, so the window does not jump.
         v_flex()
             .gap_3()
             .child(
-                h_flex()
-                    .gap_1()
-                    .child(tab("settings-general", t!("settings.general"), SettingsPage::General))
-                    .child(tab("settings-places", t!("cmd.places"), SettingsPage::Places))
-                    .child(tab("settings-events", t!("settings.events"), SettingsPage::Events))
-                    .child(tab("settings-media", t!("cmd.media_list"), SettingsPage::Media))
-                    .child(tab("settings-search", t!("settings.search"), SettingsPage::Search)),
-            )
-            .child(theme::scroll_y("settings-body").max_h(px(460.)).child(body))
-            .child(
-                h_flex().gap_2().justify_end().child(
-                    Button::new("settings-save")
-                        .primary()
-                        .small()
-                        .icon(IconName::Check)
-                        .label(t!("common.save"))
-                        .on_click(cx.listener(|this, _, w, cx| this.save_settings(w, cx))),
+                h_flex().child(
+                    h_flex()
+                        .gap_1()
+                        .p_0p5()
+                        .rounded(theme::RADIUS_SM)
+                        .bg(theme::surface())
+                        .child(tab("settings-general", t!("settings.general"), SettingsPage::General))
+                        .child(tab("settings-places", t!("cmd.places"), SettingsPage::Places))
+                        .child(tab("settings-events", t!("settings.events"), SettingsPage::Events))
+                        .child(tab("settings-media", t!("cmd.media_list"), SettingsPage::Media))
+                        .child(tab("settings-search", t!("settings.search"), SettingsPage::Search)),
                 ),
             )
+            .child(theme::scroll_y("settings-body").h(px(440.)).child(body))
             .into_any_element()
     }
 
@@ -402,7 +400,6 @@ impl Workspace {
 
         v_flex()
             .gap_3()
-            .child(v_flex().gap_0p5().text_sm().child(about).child(div().text_color(theme::muted()).child(counts)))
             .child(
                 h_flex()
                     .gap_3()
@@ -429,6 +426,18 @@ impl Workspace {
                 t!("settings.root"),
                 Select::new(&d.root).small().search_placeholder(t!("event_dialog.search")).into_any_element(),
             ))
+            // About the file, last: technical information.
+            .child(
+                v_flex()
+                    .pt_3()
+                    .gap_0p5()
+                    .text_xs()
+                    .text_color(theme::muted())
+                    .border_t_1()
+                    .border_color(theme::border())
+                    .child(counts)
+                    .child(about),
+            )
             .into_any_element()
     }
 
@@ -893,8 +902,4 @@ fn media_naming(d: &SettingsDialog, cx: &App) -> MediaNaming {
 
 fn field(label: impl Into<SharedString>, el: AnyElement) -> Div {
     v_flex().gap_1().min_w_0().child(label_caps(label)).child(el)
-}
-
-fn places(n: usize) -> String {
-    if n == 1 { t!("settings.places.one", n = n) } else { t!("settings.places.other", n = n) }.into_owned()
 }

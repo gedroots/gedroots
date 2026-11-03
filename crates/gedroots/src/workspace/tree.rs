@@ -14,13 +14,6 @@ pub enum TreeMode {
 }
 
 impl TreeMode {
-    pub(super) fn label(self) -> SharedString {
-        match self {
-            TreeMode::Chart => t!("cmd.tree_chart").into(),
-            TreeMode::Fan => t!("cmd.tree_fan").into(),
-        }
-    }
-
     pub(super) fn generations(self) -> std::ops::RangeInclusive<u32> {
         match self {
             // Generations loaded as you move around.
@@ -112,7 +105,13 @@ impl Workspace {
     fn render_fan(&self, gens: u32, cx: &mut Context<Self>) -> AnyElement {
         let (Some(doc), Some(root)) = (&self.doc, &self.selected) else { return div().into_any_element() };
         let g = &doc.ged;
-        let anc = g.ancestry(root, gens);
+        let mut anc = g.ancestry(root, gens);
+        // Known generations plus one empty ring to fill in, rather than rings of empty boxes.
+        let known =
+            (2..anc.len()).filter(|k| anc[*k].is_some()).map(|k| usize::BITS - k.leading_zeros()).max().unwrap_or(1);
+        let gens = (known + 1).clamp(2, gens);
+        anc.truncate(1 << gens);
+        let has_ancestors = known > 1;
         let radii = fan_radii(gens);
         let rmax = *radii.last().unwrap();
         let (w, h) = (2. * rmax + 24., rmax * (1. + (FAN_SPAN / 2. - 90.).to_radians().sin()) + 24.);
@@ -263,26 +262,29 @@ impl Workspace {
                 v_flex()
                     .gap_2()
                     .items_center()
-                    .child(
-                        h_flex()
-                            .gap_4()
-                            .text_xs()
-                            .text_color(theme::muted())
-                            .child(
-                                h_flex()
-                                    .gap_2()
-                                    .items_center()
-                                    .child(dot(theme::paternal()))
-                                    .child(t!("tree.paternal")),
-                            )
-                            .child(
-                                h_flex()
-                                    .gap_2()
-                                    .items_center()
-                                    .child(dot(theme::maternal()))
-                                    .child(t!("tree.maternal")),
-                            ),
-                    )
+                    // Lineage legend: only when there is a lineage to show.
+                    .when(has_ancestors, |d| {
+                        d.child(
+                            h_flex()
+                                .gap_4()
+                                .text_xs()
+                                .text_color(theme::muted())
+                                .child(
+                                    h_flex()
+                                        .gap_2()
+                                        .items_center()
+                                        .child(dot(theme::paternal()))
+                                        .child(t!("tree.paternal")),
+                                )
+                                .child(
+                                    h_flex()
+                                        .gap_2()
+                                        .items_center()
+                                        .child(dot(theme::maternal()))
+                                        .child(t!("tree.maternal")),
+                                ),
+                        )
+                    })
                     .child(fan),
             )
             .into_any_element()

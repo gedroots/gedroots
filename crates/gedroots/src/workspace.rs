@@ -175,7 +175,7 @@ impl CenterTab {
             CenterTab::Tree => t!("cmd.show_tree"),
             CenterTab::Map => t!("ws.map"),
             CenterTab::Form => t!("cmd.show_form"),
-            CenterTab::Raw => t!("ws.gedcom"),
+            CenterTab::Raw => t!("cmd.show_raw"),
         }
         .into()
     }
@@ -184,7 +184,7 @@ impl CenterTab {
         match self {
             CenterTab::Tree => IconName::GitFork,
             CenterTab::Map => IconName::Map,
-            CenterTab::Form => IconName::Pencil,
+            CenterTab::Form => IconName::FileText,
             CenterTab::Raw => IconName::Code,
         }
     }
@@ -697,7 +697,10 @@ impl Workspace {
             View::Sources => t!("ws.search_sources"),
             View::Places => t!("ws.search_places"),
             View::Media => t!("ws.search_media"),
-            _ => t!("ws.search_people"),
+            View::Repositories => t!("ws.search_repositories"),
+            View::Notes => t!("ws.search_notes"),
+            View::Quality => t!("ws.search_quality"),
+            View::Individuals | View::Stats => t!("ws.search_people"),
         };
         self.filter.update(cx, |f, cx| {
             f.set_value("", window, cx);
@@ -775,7 +778,16 @@ impl Workspace {
                 if self.selected.as_deref() == Some(name.as_str()) {
                     self.refresh_editor(window, cx);
                 }
-                self.set_status(t!("places.located", place = short_place(name), lat = la, lon = lo, n = n), false);
+                self.set_status(
+                    t!(
+                        "places.located",
+                        place = short_place(name),
+                        lat = la,
+                        lon = lo,
+                        uses = crate::tn!("places.uses", n)
+                    ),
+                    false,
+                );
                 cx.notify();
             }
         }
@@ -842,6 +854,14 @@ impl Workspace {
                     _ => None,
                 })
                 .collect();
+        // The raw GEDCOM's Apply button lights up once the text changes.
+        if let Some(raw) = &ed.raw {
+            self.editor_subs.push(cx.subscribe(raw, |_, _, ev: &InputEvent, cx| {
+                if let InputEvent::Change = ev {
+                    cx.notify();
+                }
+            }));
+        }
         self.editor = Some(ed);
         // The old fields disappear: give the focus back to the workspace so that keyboard shortcuts
         // stay active.
@@ -1245,7 +1265,7 @@ impl Workspace {
                 .map(|p| Row {
                     title: p.short(),
                     strong: String::new(),
-                    meta: format!("{} ×", p.uses),
+                    meta: p.uses.to_string(),
                     dot: None,
                     flagged: p.latitude.is_none(),
                     key: p.name,
@@ -1442,7 +1462,7 @@ fn dot(color: Hsla) -> Div {
 }
 
 /// Row of a timeline: label and date, then a plain second line (with whom, where). A single click
-/// target; the links live in the event window and the context menu. Orange dot: no source.
+/// target; the links live in the event window and the context menu. Discreet dot: no source.
 fn event_row(
     id: SharedString,
     label: String,
@@ -1481,7 +1501,7 @@ fn event_row(
                                 .text_ellipsis()
                                 .child(label),
                         )
-                        .when(unsourced, |d| d.child(dot(theme::warn()))),
+                        .when(unsourced, |d| d.child(dot(theme::muted()))),
                 )
                 .child(event_date(date)),
         )
@@ -1827,6 +1847,9 @@ impl Workspace {
 
     fn render_list(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let rows = self.rows.clone();
+        // A dot only when it means something (Sosa ancestor, missing file); the other rows keep its
+        // room so names stay aligned.
+        let dotted = rows.iter().any(|r| r.dot.is_some());
         let selected = self.selected.clone();
         let marked: Rc<Vec<String>> = Rc::new(self.media_marked.clone());
         let multi = self.view == View::Media;
@@ -1884,7 +1907,7 @@ impl Workspace {
                                         .cursor_pointer()
                                         .when(on, |d| d.bg(theme::hover()))
                                         .hover(|d| d.bg(theme::surface()))
-                                        .child(dot(r.dot.unwrap_or(theme::border_strong())))
+                                        .when(dotted, |d| d.child(dot(r.dot.unwrap_or(transparent_black()))))
                                         .child(
                                             h_flex()
                                                 .flex_1()
@@ -2027,18 +2050,8 @@ impl Workspace {
                                 } else {
                                     theme::muted()
                                 }))
-                                .child(match t {
-                                    // Current chart view, set in View › Chart.
-                                    CenterTab::Tree => match self.tree_mode {
-                                        tree::TreeMode::Fan => {
-                                            let r = self.tree_mode.generations();
-                                            let gens = self.tree_gens.clamp(*r.start(), *r.end());
-                                            t!("ws.tree_gens", mode = self.tree_mode.label(), n = gens).into_owned()
-                                        }
-                                        m => m.label().to_string(),
-                                    },
-                                    _ => t.label().to_string(),
-                                })
+                                // Same label as the View menu command that opens the tab.
+                                .child(t.label())
                                 // L'onglet GEDCOM brut se referme.
                                 .when(t == CenterTab::Raw, |d| {
                                     d.child(
@@ -2083,11 +2096,10 @@ impl Workspace {
             _ => None,
         };
         let sections = record.as_ref().map(|(x, k)| self.record_sections(x, *k, cx)).unwrap_or_default();
-        // A photo is worth the room; text reads best on a narrower column.
-        let max_w = if preview.is_some() { 960. } else { 720. };
+        // One readable column for every record, photo included (View › Zoom enlarges it).
         let column = v_flex()
             .w_full()
-            .max_w(px(max_w))
+            .max_w(px(720.))
             .px_10()
             .py_8()
             .gap_6()
@@ -2582,6 +2594,7 @@ impl Workspace {
 
     fn render_raw(&self, ed: &RecordEditor, cx: &mut Context<Self>) -> impl IntoElement {
         let Some(raw) = &ed.raw else { return v_flex().flex_1() };
+        let changed = ed.raw_changed(cx);
         v_flex()
             .flex_1()
             .min_h_0()
@@ -2596,14 +2609,15 @@ impl Workspace {
                             .primary()
                             .small()
                             .label(t!("ws.apply_gedcom"))
+                            .disabled(!changed)
                             .on_click(cx.listener(|this, _, w, cx| this.apply_raw(w, cx))),
                     )
-                    .child(Button::new("reset-raw").ghost().small().label(t!("ws.revert")).on_click(cx.listener(
-                        |this, _, w, cx| {
+                    .child(Button::new("reset-raw").ghost().small().label(t!("ws.revert")).disabled(!changed).on_click(
+                        cx.listener(|this, _, w, cx| {
                             this.refresh_editor(w, cx);
                             cx.notify();
-                        },
-                    )))
+                        }),
+                    ))
                     .when_some(ed.error.clone(), |d, e| d.child(div().text_sm().text_color(theme::danger()).child(e))),
             )
             .child(div().flex_1().min_h_0().font_family("monospace").text_sm().child(Editor::new(raw).h_full()))
@@ -2687,10 +2701,16 @@ impl Workspace {
                             }))
                             .children(place.iter().map(|p| {
                                 mono(match (&p.latitude, &p.longitude) {
-                                    (Some(a), Some(b)) => {
-                                        t!("ws.place_coords", lat = a, lon = b, n = p.uses).into_owned()
+                                    (Some(a), Some(b)) => t!(
+                                        "ws.place_coords",
+                                        lat = a,
+                                        lon = b,
+                                        uses = crate::tn!("places.uses", p.uses)
+                                    )
+                                    .into_owned(),
+                                    _ => {
+                                        t!("ws.place_no_coords", uses = crate::tn!("places.uses", p.uses)).into_owned()
                                     }
-                                    _ => t!("ws.place_no_coords", n = p.uses).into_owned(),
                                 })
                             }))
                             .when(confirm, |d| d.child(self.delete_buttons(true, cx).pt_2())),
@@ -3025,7 +3045,7 @@ impl Workspace {
                                 .gap_1()
                                 .items_center()
                                 .text_xs()
-                                .text_color(theme::accent())
+                                .text_color(theme::muted())
                                 .child(icon(IconName::House))
                                 .child(t!("settings.root")),
                         )
@@ -3245,11 +3265,17 @@ impl Workspace {
         if paths.is_empty() {
             return None;
         }
-        // The folder is shown on the right: the file name is enough on the left.
+        // The file name on the left, its folder's name on the right (“Généalogie Guyot”, the useful
+        // end of the path); the whole path in the tooltip.
         Some(v_flex().w(px(440.)).gap_1().child(div().px_3().child(label_caps(t!("ws.recent")))).children(
             paths.into_iter().enumerate().map(|(i, path)| {
                 let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-                let folder = crate::recent::folder(&path);
+                let full: SharedString = crate::recent::folder(&path).into();
+                let folder = path
+                    .parent()
+                    .and_then(|d| d.file_name())
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_else(|| full.to_string());
                 h_flex()
                     .id(("recent", i))
                     .px_3()
@@ -3260,6 +3286,7 @@ impl Workspace {
                     .hover(|d| d.bg(theme::hover()))
                     .child(div().flex_none().child(name))
                     .child(div().flex_1().min_w_0().truncate().text_right().text_color(theme::muted()).child(folder))
+                    .tooltip(move |w, cx| Tooltip::new(full.clone()).build(w, cx))
                     .on_click(cx.listener(move |this, _, w, cx| this.load(path.clone(), w, cx)))
             }),
         ))

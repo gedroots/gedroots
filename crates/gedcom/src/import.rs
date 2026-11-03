@@ -30,12 +30,12 @@ pub static CHECKS: &[Check] = &[
 pub struct Finding {
     pub id: &'static str,
     pub count: usize,
-    /// “213 _URL links”
+    /// “213 web links in another program’s format”
     pub label: String,
     pub into: Cow<'static, str>,
 }
 
-/// “213 _URL links” and what they become, for check `id`.
+/// “213 web links in another program’s format” and what they become, for check `id`.
 fn texts(id: &str, count: usize) -> (Cow<'static, str>, Cow<'static, str>) {
     match id {
         "url" => (tn!("import.url", count), t!("import.url_into")),

@@ -126,7 +126,7 @@ impl Workspace {
                 let n: usize = import::apply(g, &ids).iter().map(|(_, n)| n).sum();
                 let msg = match n {
                     0 => t!("import.imported", file = d.file),
-                    n => t!("import.normalized", file = d.file, n = n),
+                    n => crate::tn!("import.normalized", n, file = d.file),
                 };
                 Ok((format!("{msg}{}", d.note), None))
             });

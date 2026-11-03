@@ -70,7 +70,7 @@ static MOVE_FILES: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool
 
 /// Segment of a segmented control (tabs, Copy/Move): the current choice stands out on a light
 /// background, the others stay discreet.
-fn segment(id: &'static str, selected: bool, label: impl Into<SharedString>) -> Stateful<Div> {
+pub(super) fn segment(id: &'static str, selected: bool, label: impl Into<SharedString>) -> Stateful<Div> {
     div()
         .id(id)
         .px_2()
@@ -675,9 +675,10 @@ impl Workspace {
                     .on_click(cx.listener(|this, _, w, cx| this.close_gallery(w, cx))),
             );
         let (body, footer) = match (importing, gal.tab) {
-            (Some(d), _) => (self.render_import(d, cx), self.render_import_footer(d, cx)),
-            (None, Tab::Attached) => (self.render_attached(gal, groups, cx), self.render_gallery_footer(gal, cx)),
-            (None, Tab::Library) => (self.render_library(gal, cx), self.render_gallery_footer(gal, cx)),
+            (Some(d), _) => (self.render_import(d, cx), Some(self.render_import_footer(d, cx))),
+            // Attached media are imported with the dashed “+” slot of each group: no footer.
+            (None, Tab::Attached) => (self.render_attached(gal, groups, cx), None),
+            (None, Tab::Library) => (self.render_library(gal, cx), Some(self.render_gallery_footer(gal, cx))),
         };
         let entity = cx.entity().downgrade();
         Some(
@@ -710,7 +711,7 @@ impl Workspace {
                         })
                         .child(header)
                         .child(div().flex_1().min_h_0().flex().child(body))
-                        .child(footer),
+                        .children(footer),
                 )
                 .into_any_element(),
         )
@@ -1173,8 +1174,8 @@ impl Workspace {
             .into_any_element()
     }
 
+    /// Footer of the library: import, then attach the picked media.
     fn render_gallery_footer(&self, gal: &Gallery, cx: &mut Context<Self>) -> AnyElement {
-        let library = gal.tab == Tab::Library;
         let n = gal.picked.len();
         let host = self.library_host();
         h_flex()
@@ -1191,33 +1192,31 @@ impl Workspace {
                     .on_click(cx.listener(|this, _, w, cx| this.choose_import(None, w, cx))),
             )
             .child(div().flex_1())
-            .when(library, |d| {
-                d.child(div().text_sm().text_color(theme::muted()).child(t!("gallery.attach_to")))
-                    .child(self.host_button(
-                        "gal-lib-host",
-                        host.as_ref(),
-                        |this, h, cx| {
-                            if let Some(g) = &mut this.gallery {
-                                g.host = h;
-                            }
-                            cx.notify();
-                        },
-                        false,
-                        cx,
-                    ))
-                    .child(
-                        Button::new("gal-link")
-                            .small()
-                            .primary()
-                            .disabled(n == 0)
-                            .label(if n == 0 {
-                                t!("gallery.link").into_owned()
-                            } else {
-                                crate::tn!("gallery.link_n", n).into_owned()
-                            })
-                            .on_click(cx.listener(|this, _, w, cx| this.link_picked(w, cx))),
-                    )
-            })
+            .child(div().text_sm().text_color(theme::muted()).child(t!("gallery.attach_to")))
+            .child(self.host_button(
+                "gal-lib-host",
+                host.as_ref(),
+                |this, h, cx| {
+                    if let Some(g) = &mut this.gallery {
+                        g.host = h;
+                    }
+                    cx.notify();
+                },
+                false,
+                cx,
+            ))
+            .child(
+                Button::new("gal-link")
+                    .small()
+                    .primary()
+                    .disabled(n == 0)
+                    .label(if n == 0 {
+                        t!("gallery.link").into_owned()
+                    } else {
+                        crate::tn!("gallery.link_n", n).into_owned()
+                    })
+                    .on_click(cx.listener(|this, _, w, cx| this.link_picked(w, cx))),
+            )
             .into_any_element()
     }
 

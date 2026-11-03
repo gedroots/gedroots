@@ -14,15 +14,6 @@ map.online_tip:
 map.offline_tip:
   en: Only tiles already in the cache are shown; no connection
   fr: Seules les tuiles déjà en cache sont affichées ; aucune connexion
-map.shown:
-  en: "%{n} place(s) on the map"
-  fr: "%{n} lieu(x) sur la carte"
-map.missing:
-  en: "%{n} without coordinates"
-  fr: "%{n} sans coordonnées"
-map.zoom:
-  en: "zoom %{n}"
-  fr: "zoom %{n}"
 map.attribution:
   en: © OpenStreetMap contributors
   fr: "© les contributeurs d'OpenStreetMap"
@@ -87,8 +78,14 @@ places.offline:
   en: Online search turned off
   fr: Recherche en ligne désactivée
 places.located:
-  en: "%{place}: %{lat} %{lon} (%{n} use(s))"
-  fr: "%{place} : %{lat} %{lon} (%{n} occurrence(s))"
+  en: "%{place}: %{lat} %{lon} (%{uses})"
+  fr: "%{place} : %{lat} %{lon} (%{uses})"
+places.uses.one:
+  en: "%{n} use"
+  fr: "%{n} occurrence"
+places.uses.other:
+  en: "%{n} uses"
+  fr: "%{n} occurrences"
 places.place_on_map:
   en: Place on the Map
   fr: Placer sur la carte
