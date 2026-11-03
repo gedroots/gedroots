@@ -1,5 +1,22 @@
 # Changelog
 
+## [2026.11.2](https://github.com/gedroots/gedroots/releases/tag/v2026.11.2) - 2026-11-03
+
+### 🔄 Changed
+
+- Guided tour of the essentials and a sample tree to try things out by @antoninguyot in [#90](https://github.com/gedroots/gedroots/pull/90)
+- Add tour chapters: entering from sources and AI agents by @antoninguyot in [#94](https://github.com/gedroots/gedroots/pull/94)
+- Choose the export format in the native save dialog by @antoninguyot in [#92](https://github.com/gedroots/gedroots/pull/92)
+- Cache crates and release builds per system by @antoninguyot in [#91](https://github.com/gedroots/gedroots/pull/91)
+- Event window: note field, Esc closes it, searchable type by @antoninguyot in [#95](https://github.com/gedroots/gedroots/pull/95)
+- Don't test main again after each merge by @antoninguyot in [#97](https://github.com/gedroots/gedroots/pull/97)
+- Record entry: Link… and Mention Without Creating on each person card by @antoninguyot in [#96](https://github.com/gedroots/gedroots/pull/96)
+- Fix visible UI breakages from the audit (batch A) by @antoninguyot in [#98](https://github.com/gedroots/gedroots/pull/98)
+- Individuals and places: the right panel is the record, edited in place by @antoninguyot in [#100](https://github.com/gedroots/gedroots/pull/100)
+- Narrow windows, greyed menus, Go menu and secondary sidebar group by @antoninguyot in [#101](https://github.com/gedroots/gedroots/pull/101)
+- UI wording and consistency pass (audit batch D) by @antoninguyot in [#99](https://github.com/gedroots/gedroots/pull/99)
+- Record entry: one status menu per person, no nested cards by @antoninguyot in [#102](https://github.com/gedroots/gedroots/pull/102)
+
 ## [2026.11.1](https://github.com/gedroots/gedroots/releases/tag/v2026.11.1) - 2026-11-02
 
 ### 🔄 Changed
