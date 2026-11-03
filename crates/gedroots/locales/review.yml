@@ -17,6 +17,18 @@ review:
   rejected:
     en: Proposal rejected, nothing was written
     fr: Proposition rejetée, rien n'a été écrit
+  replaced:
+    en: An AI agent corrected one of its proposals
+    fr: Un agent IA a corrigé une de ses propositions
+  withdrawn:
+    en: An AI agent withdrew one of its proposals
+    fr: Un agent IA a retiré une de ses propositions
+  also_in:
+    en: "Also in %{titles}"
+    fr: "Aussi dans %{titles}"
+  quoted:
+    en: "“%{title}”"
+    fr: "« %{title} »"
   by_agent:
     en: proposed by an AI agent
     fr: proposé par un agent IA

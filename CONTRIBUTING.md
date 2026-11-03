@@ -111,10 +111,19 @@ The release tools are in [`mise.release.toml`](mise.release.toml), loaded with
 `MISE_ENV=release`: `MISE_ENV=release mise install`, then `MISE_ENV=release mise run package`
 builds the packages for your system in `target/dist` without uploading them.
 
-The packages are not signed with a certificate: macOS asks to confirm the first launch in
-System Settings › Privacy & Security, and Windows SmartScreen shows a warning. Signing them needs
-an Apple Developer ID with notarization (`vpk pack --signAppIdentity … --notaryProfile …`) and a
-Windows code signing certificate (`--azureTrustedSignFile` for Azure Artifact Signing).
+The packages are not signed with a trusted certificate: macOS asks to confirm the first launch
+in System Settings › Privacy & Security, and Windows SmartScreen shows a warning. Signing them
+needs an Apple Developer ID with notarization (`vpk pack --signAppIdentity … --notaryProfile …`)
+and a Windows code signing certificate (`--azureTrustedSignFile` for Azure Artifact Signing).
+
+On macOS they are signed with GEDRoots' self-signed certificate, stored in the
+`MACOS_CERTIFICATE` and `MACOS_CERTIFICATE_PASSWORD` secrets. macOS remembers the permissions
+given to an app (folders, local network…) for its code identity, and an ad hoc signature has
+none that lasts: each version would be a new app, asked for its permissions again after every
+update. `mise run release:certificate` creates the certificate and the secrets, once: a new
+certificate is a new identity, so it must never be replaced while the old one works. Without the
+secrets, `mise run package` signs ad hoc; pull requests from forks use a throwaway certificate
+to test the signature.
 
 ## Code layout
 
