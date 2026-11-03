@@ -29,6 +29,9 @@ review:
   record:
     en: Record
     fr: Fiche
+  facts:
+    en: Facts
+    fr: Faits
   in_tree:
     en: In the Tree
     fr: Dans l'arbre

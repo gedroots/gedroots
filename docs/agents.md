@@ -66,7 +66,9 @@ login or a captcha, and never to show ids.
 `propose_act` takes the same model as Source › Enter Record… (`crates/gedcom/src/act.rs`): an
 event (any event without its own tag, such as military service, is `EVEN` with its
 `event_type`), the people with their standard GEDCOM 7 role and their `identity`, always given
-explicitly: `link` (an existing person, with `id`), `create` or `mention`, the reference (`PAGE`), the transcription and the source. Nothing raw goes
+explicitly: `link` (an existing person, with `id`), `create` or `mention`, and the other facts the act
+gives about each person (`facts`: a birth date in a baptism, a death in a marginal mention, an
+undated occupation…, each written with the act's citation), the reference (`PAGE`), the transcription and the source. Nothing raw goes
 into the file: GEDRoots writes the whole chain itself, repository → source → file → event →
 people (`crates/gedcom/src/proposal.rs`).
 
@@ -95,7 +97,9 @@ as an act's image. A proposal with a `url` must also give the `file`.
 
 The **To Review** page (sidebar, or Source › Review Agent Proposals) shows, for each proposal,
 the act's image, a comparison of what the tree holds and what is proposed (each person can be
-unchecked), the attachment (repository, source, file, web link, event), the transcription and, on demand,
+unchecked), the **Facts** it gives (each one can be unchecked; the occupations, residences and
+estimated births deduced from the act are listed there too, so nothing is written unseen; the
+answer of `propose_act` lists the same lines in `will_write`), the attachment (repository, source, file, web link, event), the transcription and, on demand,
 the exact GEDCOM lines that will change, computed on a copy of the file. **Save to Tree** (⌘↩)
 writes everything at once, as a single undo step, and stores the image next to the `.ged`,
 named by File Settings › Media; **Reject** (⌘⌫) drops it; **Edit in Record Entry…** opens it in

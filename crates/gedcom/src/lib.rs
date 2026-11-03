@@ -77,7 +77,7 @@ pub mod starter;
 pub mod weblink;
 pub mod websearch;
 
-pub use act::{Act, ActKey, ActResult, ActRole, MediaChoice, Participant, PersonChoice, PersonField, Suggestion};
+pub use act::{Act, ActKey, ActResult, ActRole, Fact, MediaChoice, Participant, PersonChoice, PersonField, Suggestion};
 pub use associations::{Associate, AttendedEvent};
 pub use crop::{Crop, MediaLink, Rect};
 pub use custom::{EventType, Jurisdiction, PlaceRewrite};

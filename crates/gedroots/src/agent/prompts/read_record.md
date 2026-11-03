@@ -30,7 +30,9 @@ How to work:
    already in the tree from another act: never create anyone before resolving who they are, and
    never take an empty search for an absent person (try other spellings, `search_people`).
 6. Call `propose_act` with that `identity` for each person (and `not` for the candidates you
-   checked and found to be someone else). Give the place as
+   checked and found to be someone else), and every other certain fact in that person's `facts`
+   (birth date in a baptism, marginal mention, earlier residence…), each with its own date or
+   none. Check the `will_write` list of the answer against your inventory. Give the place as
    the tree names it, the transcription, and both the downloaded file (`file`, with `pdf_page`
    for a PDF) and the act's page in the archive's viewer (`url`, its permanent link such as an
    ark when the viewer offers one): GEDRoots keeps the image and a web link, so the user can see

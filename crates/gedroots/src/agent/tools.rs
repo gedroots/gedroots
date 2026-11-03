@@ -84,6 +84,9 @@ pub struct Proposed {
     pub status: String,
     /// Proposals waiting for review in GEDRoots.
     pub waiting: usize,
+    /// What saving it will write, one line per change the user reviews (deduced facts included):
+    /// check it against the act.
+    pub will_write: Vec<String>,
 }
 
 #[derive(Debug, Serialize, JsonSchema)]
@@ -299,7 +302,7 @@ impl GedrootsMcp {
 
     #[tool(
         name = "propose_act",
-        description = "Proposes an act found in the archives (birth, marriage, death…), with its source, people and image. Nothing is written: the proposal waits in GEDRoots' review page, where the user compares it with the tree and saves or rejects it. Each person says who they are: identity link (in the tree, with id), create or mention; call match_people first. It is refused, with the reason, if it does not fit the tree (unknown source or person, one source per act or per register as the file does, a parent other than the tree's, a person to create who resembles someone of the tree, impossible date): fix it and propose again. Give the place as the tree names it, the date in GEDCOM format, the downloaded file (a PDF register needs pdf_page) and the act's page in the archive's viewer (url): both are kept, the image and a web link.",
+        description = "Proposes an act found in the archives (birth, marriage, death…), with its source, people and image. Nothing is written: the proposal waits in GEDRoots' review page, where the user compares it with the tree and saves or rejects it. Each person says who they are: identity link (in the tree, with id), create or mention; call match_people first. Give every other fact the act states about a person in their `facts` (birth date in a baptism, marginal mention of a death, occupations, residences), each with its own date or none; the answer lists everything that will be written. It is refused, with the reason, if it does not fit the tree (unknown source or person, one source per act or per register as the file does, a parent other than the tree's, a person to create who resembles someone of the tree, impossible date): fix it and propose again. Give the place as the tree names it, the date in GEDCOM format, the downloaded file (a PDF register needs pdf_page) and the act's page in the archive's viewer (url): both are kept, the image and a web link.",
         annotations(
             read_only_hint = false,
             destructive_hint = false,
@@ -338,6 +341,7 @@ impl GedrootsMcp {
             None => (None, None),
         };
         propose::attach(&mut proposal, image.as_deref());
+        let will_write = propose::effects(&proposal, &s.ged);
         let pending = Pending { proposal, original, pdf_page: p.pdf_page, image, preview };
         let (tx, rx) = tokio::sync::oneshot::channel();
         self.bridge
@@ -345,7 +349,7 @@ impl GedrootsMcp {
             .await
             .map_err(|_| "GEDRoots is closing".to_string())?;
         let waiting = rx.await.map_err(|_| "GEDRoots is closing".to_string())??;
-        Ok(Json(Proposed { status: "waiting for review".into(), waiting }))
+        Ok(Json(Proposed { status: "waiting for review".into(), waiting, will_write }))
     }
 }
 

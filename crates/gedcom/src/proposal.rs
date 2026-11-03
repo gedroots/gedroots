@@ -78,6 +78,8 @@ pub enum Field {
     Place,
     /// Person of the record (index in `act.participants`) and their displayed role.
     Person { index: usize, role: String },
+    /// Other fact `fact` of the person `person` (“Birth”, of “Émile MARCHAND”).
+    Fact { person: usize, fact: usize, label: String, name: String },
 }
 
 /// “In the tree” / “Proposed” line.
@@ -132,6 +134,15 @@ impl Proposal {
                     p.set(f, ged.known_place(&v));
                 }
             }
+            for f in &mut p.facts {
+                let parsed = crate::Date::parse(&f.date);
+                if !f.date.trim().is_empty() && parsed.year().is_some() {
+                    f.date = parsed.to_gedcom();
+                }
+                if !f.place.trim().is_empty() {
+                    f.place = ged.known_place(&f.place);
+                }
+            }
             if let PersonChoice::Link(x) = &p.choice
                 && let Some(ind) = ged.individual(x)
             {
@@ -146,6 +157,8 @@ impl Proposal {
                 }
             }
         }
+        // Everything that will be written is shown in the review, deduced facts included.
+        act.make_facts_explicit(ged);
     }
 
     /// Creates the source if it is new and returns the record pointing to it (to pick it up in
@@ -377,6 +390,51 @@ impl Proposal {
                 change,
                 similar: similar.unwrap_or_default(),
             });
+        }
+        for (i, p) in act.participants.iter().enumerate() {
+            if !matches!(p.choice, PersonChoice::Create | PersonChoice::Link(_)) {
+                continue;
+            }
+            let linked = match &p.choice {
+                PersonChoice::Link(x) => ged.get(x),
+                _ => None,
+            };
+            for (k, f) in p.facts.iter().enumerate().filter(|(_, f)| !f.is_blank()) {
+                // In the tree: the person's fact of the same kind.
+                let same = linked.and_then(|n| {
+                    n.children
+                        .iter()
+                        .find(|c| c.tag == f.tag && c.child_val("TYPE").unwrap_or("") == f.event_type.trim())
+                });
+                let current = same.map(|c| crate::act::Fact {
+                    tag: c.tag.clone(),
+                    value: if f.has_value() { c.val().to_string() } else { String::new() },
+                    date: c.child_val("DATE").unwrap_or("").to_string(),
+                    place: c.child_val("PLAC").unwrap_or("").to_string(),
+                    ..Default::default()
+                });
+                let change = match &current {
+                    None => Change::Added,
+                    Some(c) if f.has_value() => text_change(&c.value, &f.value),
+                    Some(c) if !f.date.trim().is_empty() => date_change(&c.date, &f.date),
+                    Some(c) => text_change(&c.place, &f.place),
+                };
+                rows.push(Row {
+                    field: Field::Fact {
+                        person: i,
+                        fact: k,
+                        label: f.label(),
+                        name: Some(p.get(PersonField::Given))
+                            .filter(|g| !g.is_empty())
+                            .map(str::to_string)
+                            .unwrap_or_else(|| p.display_name()),
+                    },
+                    current: current.map(|c| c.summary()).unwrap_or_default(),
+                    proposed: f.summary(),
+                    change,
+                    similar: Vec::new(),
+                });
+            }
         }
         rows
     }
@@ -667,6 +725,42 @@ mod tests {
         p.act.participants[1] =
             Participant::new(ActRole::Father).with(PersonField::Given, "Louis").with(PersonField::Surname, "BLANC");
         assert!(p.duplicates(&g).is_empty(), "{:?}", p.duplicates(&g));
+    }
+
+    #[test]
+    fn every_fact_written_is_a_row_of_the_review() {
+        let g = ged();
+        let mut p = birth(new_source());
+        p.act.event = "BAPM".into();
+        // Jean (I2) is born ABT 1802 in the tree: the baptism gives the exact date. The mother,
+        // new, is a weaver aged 25.
+        let mut b = crate::act::Fact::new("BIRT");
+        b.date = "2 APR 1802".into();
+        p.act.participants[0].facts.push(b);
+        p.act.participants[2].set(PersonField::Occupation, "tisserande");
+        p.act.participants[2].set(PersonField::Age, "25");
+        p.complete(&g);
+        let mother = &p.act.participants[2];
+        assert_eq!(mother.get(PersonField::Occupation), "", "the deduced occupation became a fact");
+        let tags: Vec<(&str, &str)> = mother.facts.iter().map(|f| (f.tag.as_str(), f.date.as_str())).collect();
+        assert_eq!(tags, [("OCCU", "4 APR 1802"), ("BIRT", "EST 1777")]);
+        let facts: Vec<Row> = p.compare(&g).into_iter().filter(|r| matches!(r.field, Field::Fact { .. })).collect();
+        assert_eq!(facts.len(), 3, "{facts:?}");
+        assert_eq!(facts[0].change, Change::Refined, "{facts:?}");
+        assert!(facts[1..].iter().all(|r| r.change == Change::Added));
+        // Written as before: the occupation at the record's date, the estimated birth.
+        let mut copy = g.clone();
+        let res = p.apply(&mut copy).unwrap();
+        let m = copy.get(res.persons[2].as_ref().unwrap()).unwrap();
+        assert_eq!(m.path_val(&["OCCU", "DATE"]), Some("4 APR 1802"));
+        assert_eq!(m.path_val(&["BIRT", "DATE"]), Some("EST 1777"));
+        assert_eq!(copy.get("I2").unwrap().path_val(&["BIRT", "DATE"]), Some("2 APR 1802"));
+        // Back in record entry: the deduced facts return to their fields.
+        let mut act = p.act.clone();
+        act.fold_deduced_facts();
+        assert_eq!(act.participants[2].get(PersonField::Occupation), "tisserande");
+        assert!(act.participants[2].facts.is_empty() && act.estimate_births);
+        assert_eq!(act.participants[0].facts.len(), 1, "the baptism's birth date stays a fact");
     }
 
     #[test]
