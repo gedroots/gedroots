@@ -1,12 +1,13 @@
-//! Embeds the Atlas (`atlas/*.yml`, see `src/atlas.rs`) in the library.
+//! Embeds the Atlas (the `atlas` submodule, gedroots/atlas: `countries/*.yml`, see `src/atlas.rs`)
+//! in the library.
 
 use std::path::PathBuf;
 
 fn main() {
-    let dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("atlas");
+    let dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("atlas/countries");
     println!("cargo:rerun-if-changed={}", dir.display());
     let mut files: Vec<PathBuf> = std::fs::read_dir(&dir)
-        .unwrap_or_else(|e| panic!("{}: {e}", dir.display()))
+        .unwrap_or_else(|e| panic!("{}: {e} (run `git submodule update --init`)", dir.display()))
         .map(|e| e.unwrap().path())
         .filter(|p| p.extension().is_some_and(|x| x == "yml"))
         .collect();

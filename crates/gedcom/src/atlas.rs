@@ -1,6 +1,7 @@
 //! The Atlas: what genealogy records each country kept and from when, who may read them, and the
-//! legal age at marriage. One YAML file per country in `atlas/` (format documented in
-//! `docs/atlas.md`), embedded at build time; `generic` covers the other countries and the periods
+//! legal age at marriage. One YAML file per country in the `atlas` submodule
+//! ([gedroots/atlas](https://github.com/gedroots/atlas), which documents the format), embedded
+//! at build time; `generic` covers the other countries and the periods
 //! that a country's file does not cover.
 
 use crate::leads::{Goal, RecordType};
@@ -129,7 +130,9 @@ static SOURCES: &[(&str, &str)] = include!(concat!(env!("OUT_DIR"), "/atlas.rs")
 static COUNTRIES: LazyLock<Vec<Country>> = LazyLock::new(|| {
     SOURCES
         .iter()
-        .map(|(file, text)| serde_saphyr::from_str::<Country>(text).unwrap_or_else(|e| panic!("atlas/{file}.yml: {e}")))
+        .map(|(file, text)| {
+            serde_saphyr::from_str::<Country>(text).unwrap_or_else(|e| panic!("atlas/countries/{file}.yml: {e}"))
+        })
         .collect()
 });
 
@@ -145,7 +148,7 @@ pub fn countries() -> &'static [Country] {
 
 /// The rules of the countries without a file.
 pub fn generic() -> &'static Country {
-    COUNTRIES.iter().find(|p| p.is_generic()).expect("atlas/generic.yml")
+    COUNTRIES.iter().find(|p| p.is_generic()).expect("atlas/countries/generic.yml")
 }
 
 /// Country of a country code (`FR`).
