@@ -2536,49 +2536,50 @@ impl Workspace {
     /// Edit › Edit Record on an individual: their panel's header becomes fields, in place: names
     /// next to the portrait (the sex beside the surname), note. Birth and death are events of the
     /// timeline below, edited there like the others.
-    fn render_individual_fields(&self, ed: &RecordEditor, portrait: Div, cx: &mut Context<Self>) -> Div {
+    fn render_individual_fields(&self, ed: &RecordEditor, cx: &mut Context<Self>) -> Div {
         let f = &ed.fields;
         v_flex()
             .p_4()
             .gap_3()
             .border_b_1()
             .border_color(theme::border())
+            // No portrait while editing: it cannot be changed here, and the full width lets the
+            // name parts share rows. Given names beside the sex, particle and suffix around the
+            // surname; the nickname joins the surname row when it has room, else the title's.
+            // A part only gets a field once added.
             .child(
-                h_flex().gap_3().items_center().child(portrait).child(
-                    // Name parts sit in the name block, in reading order (title, given names,
-                    // nickname, particle + surname, suffix), like Contacts or Google Contacts:
-                    // a part only gets a field once it has been added.
-                    v_flex()
-                        .flex_1()
-                        .min_w_0()
-                        .gap_2()
-                        .children(name_part_field(ed, NamePart::Title))
-                        .child(self.render_field(&f[0], cx))
-                        .children(name_part_field(ed, NamePart::Nickname))
-                        // The sex is short: next to the surname, like the name line of most
-                        // genealogy software, rather than a full-width row. A particle takes its
-                        // place before the surname; the sex then moves under it, beside the suffix.
-                        .map(|block| {
-                            let sex = self.render_field(&f[2], cx).w(px(116.)).flex_none();
-                            let surname = self.render_field(&f[1], cx).flex_1();
-                            let suffix = name_part_field(ed, NamePart::Suffix).map(|d| d.flex_1());
-                            match name_part_field(ed, NamePart::Particle) {
-                                None => block
-                                    .child(h_flex().gap_2().items_start().child(surname).child(sex))
-                                    .children(suffix),
-                                Some(particle) => block
-                                    .child(
-                                        h_flex()
-                                            .gap_2()
-                                            .items_start()
-                                            .child(particle.w(px(72.)).flex_none())
-                                            .child(surname),
-                                    )
-                                    .child(h_flex().gap_2().items_start().children(suffix).child(sex)),
-                            }
-                        }),
-                ),
+                h_flex()
+                    .gap_2()
+                    .items_start()
+                    .child(self.render_field(&f[0], cx).flex_1())
+                    .child(self.render_field(&f[2], cx).w(px(116.)).flex_none()),
             )
+            .map(|block| {
+                let particle = name_part_field(ed, NamePart::Particle);
+                let suffix = name_part_field(ed, NamePart::Suffix);
+                let title = name_part_field(ed, NamePart::Title);
+                let mut nickname = name_part_field(ed, NamePart::Nickname);
+                let beside_surname = if particle.is_none() && suffix.is_none() { nickname.take() } else { None };
+                let block = block.child(
+                    h_flex()
+                        .gap_2()
+                        .items_start()
+                        .children(particle.map(|d| d.w(px(72.)).flex_none()))
+                        .child(self.render_field(&f[1], cx).flex_1())
+                        .children(suffix.map(|d| d.w(px(88.)).flex_none()))
+                        .children(beside_surname.map(|d| d.flex_1())),
+                );
+                if title.is_none() && nickname.is_none() {
+                    return block;
+                }
+                block.child(
+                    h_flex()
+                        .gap_2()
+                        .items_start()
+                        .children(title.map(|d| d.flex_1()))
+                        .children(nickname.map(|d| d.flex_1())),
+                )
+            })
             .when_some(ed.names.as_ref(), |d, names| d.children(self.render_name_extras(names, cx)))
             .when_some(ed.long_text.as_ref(), |d, (label, state)| {
                 d.child(v_flex().gap_1().child(label_caps(label.clone())).child(Textarea::new(state).h(px(80.))))
@@ -3459,7 +3460,7 @@ impl Workspace {
         let fields = self
             .panel_editor(&xref)
             .filter(|ed| self.editing && ed.fields.len() >= 3)
-            .map(|ed| self.render_individual_fields(ed, avatar(doc, &i, 64., lineage), cx));
+            .map(|ed| self.render_individual_fields(ed, cx));
         let confirm = self.pending_delete.as_deref() == Some(xref.as_str());
         let names = i.names();
         let main_name = names.first().cloned().unwrap_or_default();
