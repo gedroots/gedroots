@@ -449,13 +449,23 @@ impl Workspace {
         let Some(item) = self.review.items.get(self.review.sel) else {
             return list.into_any_element();
         };
+        // No image: no empty viewer, the proposal takes a single centred column.
+        let image = item.pending.preview.is_some() || item.pending.image.is_some();
         h_flex()
             .flex_1()
             .min_w_0()
             .items_stretch()
             .child(list)
-            .child(self.review_viewer(item))
-            .child(self.review_detail(item, g, cx))
+            .map(|d| match image {
+                true => d.child(self.review_viewer(item)).child(self.review_detail(item, g, cx)),
+                false => d.child(
+                    v_flex()
+                        .flex_1()
+                        .min_w_0()
+                        .items_center()
+                        .child(self.review_detail(item, g, cx).max_w(px(640.)).size_full().border_l_0()),
+                ),
+            })
             .into_any_element()
     }
 
@@ -513,7 +523,7 @@ impl Workspace {
             .into_any_element()
     }
 
-    fn review_detail(&self, item: &Item, g: &Gedcom, cx: &mut Context<Self>) -> AnyElement {
+    fn review_detail(&self, item: &Item, g: &Gedcom, cx: &mut Context<Self>) -> Div {
         let full = &item.pending.proposal;
         let p = item.proposal();
         // The proposal may no longer fit the tree (changed since): it stays visible, but is not
@@ -837,7 +847,6 @@ impl Workspace {
                             .on_click(cx.listener(|this, _, w, cx| this.accept_proposal(w, cx))),
                     ),
             )
-            .into_any_element()
     }
 }
 
