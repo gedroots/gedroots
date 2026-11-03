@@ -183,7 +183,7 @@ mod tests {
         let (mut g, path) = open().unwrap();
         let mut p = demo_proposal(&path).unwrap();
         p.proposal.complete(&g);
-        p.proposal.check(&g, 2026).unwrap();
+        p.proposal.check(&g).unwrap();
         p.proposal.apply(&mut g).unwrap();
         assert!(g.to_gedcom_string().contains("Agneaux, deaths 1831"));
         assert!(cites(&g, JACQUES));

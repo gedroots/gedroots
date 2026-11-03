@@ -26,6 +26,20 @@ pub struct SourceParams {
     pub call_number: Option<String>,
 }
 
+/// Who a person of the act is in the tree, decided before proposing (`match_people` lists the
+/// candidates).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum Identity {
+    /// A person already in the tree: give their `id`.
+    Link,
+    /// A new person, created when the act is saved. Refused when someone in the tree resembles
+    /// them, unless their ids are listed in `not`.
+    Create,
+    /// Only named in the citation (witness, neighbour…), nobody is created.
+    Mention,
+}
+
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct PersonParams {
     /// principal (the child, the deceased, each spouse), father, mother, spouse, witness,
@@ -33,11 +47,14 @@ pub struct PersonParams {
     pub role: String,
     /// For father, mother, spouse: 0 for the first principal person, 1 for the second spouse.
     pub of: Option<usize>,
-    /// Existing person id to link to. Without id the person is created, unless `mention`.
+    /// link (an existing person, with `id`), create (a new person) or mention (named only).
+    pub identity: Identity,
+    /// With link: the person's id (from `match_people`, `search_people` or `person_sheet`).
     pub id: Option<String>,
-    /// Only mention the person in the citation, without creating anyone.
+    /// With create: ids of the people of the tree checked and found to be someone else (the
+    /// candidates `match_people` or a refusal gave).
     #[serde(default)]
-    pub mention: bool,
+    pub not: Vec<String>,
     pub given: Option<String>,
     pub surname: Option<String>,
     /// M or F.
@@ -123,20 +140,123 @@ fn role(s: &str) -> Result<ActRole, String> {
     })
 }
 
+fn clean_id(s: &str) -> String {
+    s.trim().trim_matches('@').to_string()
+}
+
+/// Ids the agent checked and ruled out, for each person of the act (same order as `people`).
+pub fn ruled_out(p: &ProposeParams) -> Vec<Vec<String>> {
+    p.people.iter().map(|x| x.not.iter().map(|s| clean_id(s)).collect()).collect()
+}
+
+/// Refuses a person to create who resembles someone of the tree that the agent did not rule out,
+/// with the candidates, so that it links them or says they are someone else.
+pub fn check_identities(proposal: &Proposal, ruled_out: &[Vec<String>], ged: &Gedcom) -> Result<(), String> {
+    let mut problems = Vec::new();
+    for (i, found) in proposal.duplicates(ged) {
+        let not = ruled_out.get(i).map(Vec::as_slice).unwrap_or_default();
+        let left: Vec<_> = found.iter().filter(|s| !not.contains(&s.xref)).collect();
+        if left.is_empty() {
+            continue;
+        }
+        let who = proposal.act.participants[i].display_name();
+        let list = left
+            .iter()
+            .map(|s| {
+                if s.reason.is_empty() {
+                    format!("{} {}", s.xref, s.label)
+                } else {
+                    format!("{} {} ({})", s.xref, s.label, s.reason)
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("; ");
+        problems.push(format!("people[{i}] {who} may already be in the tree: {list}"));
+    }
+    if problems.is_empty() {
+        return Ok(());
+    }
+    Err(format!(
+        "{}. Check them with person_sheet: link the same person (identity link with their id), or, if it \
+         is someone else, keep identity create and list their ids in `not`.",
+        problems.join(". ")
+    ))
+}
+
 fn opt(s: &Option<String>) -> &str {
     s.as_deref().map(str::trim).unwrap_or("")
 }
 
-/// Record and source described by the agent (without the file).
-pub fn to_proposal(p: &ProposeParams) -> Result<Proposal, String> {
-    let event = p.event.trim().to_uppercase();
+/// Empty act of this event, at this date, without anyone.
+fn base_act(event: &str, family_event: bool, date: &Option<String>) -> Result<Act, String> {
+    let event = event.trim().to_uppercase();
     if event.is_empty() {
         return Err("give the event tag (BIRT, MARR, DEAT…)".into());
     }
     let mut act = Act::new("", &event);
+    act.family_even = event == "EVEN" && family_event;
+    act.date = opt(date).to_string();
+    act.participants = Vec::new();
+    Ok(act)
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct MatchPersonParams {
+    /// Role in the act, as in `propose_act`.
+    pub role: String,
+    /// For father, mother, spouse: 0 for the first principal person, 1 for the second spouse.
+    pub of: Option<usize>,
+    /// Already identified: the person's id. Their relatives in the tree then rank first for the
+    /// others (the father of a linked child…).
+    pub id: Option<String>,
+    pub given: Option<String>,
+    pub surname: Option<String>,
+    /// M or F.
+    pub sex: Option<String>,
+    /// Age as written in the record.
+    pub age: Option<String>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct MatchParams {
+    /// GEDCOM event tag of the act (BIRT, BAPM, MARR, DEAT…, EVEN).
+    pub event: String,
+    /// With EVEN: the event belongs to the couple.
+    #[serde(default)]
+    pub family_event: bool,
+    /// Date of the act, in GEDCOM 7 format: it rules out people born too late or dead too early.
+    pub date: Option<String>,
+    /// Everyone named in the act, in the same order as for `propose_act`.
+    pub people: Vec<MatchPersonParams>,
+}
+
+/// The act described for `match_people`.
+pub fn match_act(p: &MatchParams) -> Result<Act, String> {
+    let mut act = base_act(&p.event, p.family_event, &p.date)?;
+    for person in &p.people {
+        let mut part = Participant::new(role(&person.role)?).of(person.of.unwrap_or(0));
+        for (f, v) in [
+            (PersonField::Given, &person.given),
+            (PersonField::Surname, &person.surname),
+            (PersonField::Sex, &person.sex),
+            (PersonField::Age, &person.age),
+        ] {
+            if !opt(v).is_empty() {
+                part.set(f, opt(v));
+            }
+        }
+        if let Some(x) = person.id.as_deref().map(clean_id).filter(|x| !x.is_empty()) {
+            part.choice = PersonChoice::Link(x);
+        }
+        act.participants.push(part);
+    }
+    Ok(act)
+}
+
+/// Record and source described by the agent (without the file).
+pub fn to_proposal(p: &ProposeParams) -> Result<Proposal, String> {
+    let mut act = base_act(&p.event, p.family_event, &p.date)?;
     act.event_type = opt(&p.event_type).to_string();
-    act.family_even = event == "EVEN" && p.family_event;
-    act.date = opt(&p.date).to_string();
     act.record_date = opt(&p.record_date).to_string();
     act.place = opt(&p.place).to_string();
     act.page = opt(&p.page).to_string();
@@ -158,10 +278,16 @@ pub fn to_proposal(p: &ProposeParams) -> Result<Proposal, String> {
                 part.set(f, opt(v));
             }
         }
-        part.choice = match (&person.id, person.mention) {
-            (Some(x), _) if !x.trim().is_empty() => PersonChoice::Link(x.trim().trim_matches('@').to_string()),
-            (_, true) => PersonChoice::Mention,
-            _ => PersonChoice::Create,
+        let id = person.id.as_deref().map(clean_id).filter(|x| !x.is_empty());
+        let who = || format!("people[{}] ({})", act.participants.len(), person.role.trim());
+        part.choice = match (person.identity, id) {
+            (Identity::Link, Some(x)) => PersonChoice::Link(x),
+            (Identity::Link, None) => return Err(format!("{}: identity link needs the person's id", who())),
+            (_, Some(_)) => {
+                return Err(format!("{}: an id is only given with identity link (the person is in the tree)", who()));
+            }
+            (Identity::Create, None) => PersonChoice::Create,
+            (Identity::Mention, None) => PersonChoice::Mention,
         };
         act.participants.push(part);
     }
@@ -295,7 +421,7 @@ pub fn cache_dir() -> PathBuf {
 
 #[cfg(test)]
 mod tests {
-    use super::{ProposeParams, prepare_file, to_proposal};
+    use super::{ProposeParams, check_identities, prepare_file, ruled_out, to_proposal};
     use gedcom::proposal::SourceChoice;
 
     #[test]
@@ -303,8 +429,9 @@ mod tests {
         let p: ProposeParams = serde_json::from_value(serde_json::json!({
             "event": "birt", "date": "4 APR 1802", "page": "vue 45",
             "source": {"register": "Rennes, naissances an X", "repository_id": "@R1@"},
-            "people": [{"role": "principal", "id": "I2"}, {"role": "mother", "given": "Marie", "surname": "DURAND"},
-                       {"role": "witness", "mention": true, "given": "Joseph"}]
+            "people": [{"role": "principal", "identity": "link", "id": "I2"},
+                       {"role": "mother", "identity": "create", "given": "Marie", "surname": "DURAND"},
+                       {"role": "witness", "identity": "mention", "given": "Joseph"}]
         }))
         .unwrap();
         let prop = to_proposal(&p).unwrap();
@@ -313,19 +440,53 @@ mod tests {
         assert_eq!(prop.act.participants[0].choice, gedcom::PersonChoice::Link("I2".into()));
         assert_eq!(prop.act.participants[2].choice, gedcom::PersonChoice::Mention);
         assert!(matches!(&prop.source, SourceChoice::New(s) if s.repository.as_deref() == Some("R1")));
-        let bad: ProposeParams =
-            serde_json::from_value(serde_json::json!({"event": "BIRT", "source": {}, "people": [{"role": "uncle"}]}))
-                .unwrap();
+        let bad: ProposeParams = serde_json::from_value(
+            serde_json::json!({"event": "BIRT", "source": {}, "people": [{"role": "uncle", "identity": "create"}]}),
+        )
+        .unwrap();
         assert!(to_proposal(&bad).unwrap_err().contains("uncle"));
+        // Who each person is must be said, and consistently.
+        let none = serde_json::from_value::<ProposeParams>(
+            serde_json::json!({"event": "BIRT", "source": {}, "people": [{"role": "principal", "given": "Jean"}]}),
+        );
+        assert!(none.unwrap_err().to_string().contains("identity"));
+        for (identity, id) in [("link", None), ("create", Some("I2")), ("mention", Some("I2"))] {
+            let p: ProposeParams = serde_json::from_value(serde_json::json!({"event": "BIRT", "source": {},
+                "people": [{"role": "principal", "identity": identity, "id": id, "given": "Jean"}]}))
+            .unwrap();
+            assert!(to_proposal(&p).is_err(), "{identity} {id:?}");
+        }
         let milt: ProposeParams = serde_json::from_value(serde_json::json!({
             "event": "even", "event_type": "Military service", "date": "1871", "record_date": "12 MAR 1872",
-            "source": {}, "people": [{"role": "principal", "id": "I2"}]
+            "source": {}, "people": [{"role": "principal", "identity": "link", "id": "I2"}]
         }))
         .unwrap();
         let prop = to_proposal(&milt).unwrap();
         assert_eq!((prop.act.event.as_str(), prop.act.event_type.as_str()), ("EVEN", "Military service"));
         assert_eq!(prop.act.record_date, "12 MAR 1872");
         assert!(!prop.act.family_even);
+    }
+
+    #[test]
+    fn a_new_person_resembling_the_tree_is_refused_until_ruled_out() {
+        let ged = gedcom::Gedcom::parse(
+            "0 HEAD\n1 GEDC\n2 VERS 7.0\n0 @I1@ INDI\n1 NAME Jean /BLANC/\n1 SEX M\n1 BIRT\n2 DATE 1800\n\
+             1 DEAT\n2 DATE 1870\n1 FAMC @F1@\n0 @I2@ INDI\n1 NAME Pierre /BLANC/\n1 SEX M\n1 DEAT\n2 DATE 1840\n\
+             1 FAMS @F1@\n0 @F1@ FAM\n1 HUSB @I2@\n1 CHIL @I1@\n0 TRLR\n",
+        )
+        .unwrap();
+        let params = |not: serde_json::Value| -> ProposeParams {
+            serde_json::from_value(serde_json::json!({"event": "BAPM", "date": "2 MAR 1800", "source": {},
+                "people": [{"role": "principal", "identity": "link", "id": "I1"},
+                           {"role": "father", "identity": "create", "given": "Pierre", "surname": "BLANC", "not": not}]}))
+            .unwrap()
+        };
+        let p = params(serde_json::json!([]));
+        let err = check_identities(&to_proposal(&p).unwrap(), &ruled_out(&p), &ged).unwrap_err();
+        assert!(err.contains("people[1] Pierre BLANC may already be in the tree: I2"), "{err}");
+        // Checked and found to be someone else: accepted.
+        let p = params(serde_json::json!(["@I2@"]));
+        check_identities(&to_proposal(&p).unwrap(), &ruled_out(&p), &ged).unwrap();
     }
 
     #[test]

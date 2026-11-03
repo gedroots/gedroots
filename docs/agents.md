@@ -37,6 +37,7 @@ either: it only adds a proposal to review.
 | `person_sheet` | Events with date, place, cited sources (`PAGE`) and media; parents, unions, children; Sosa number |
 | `research_gaps` | Births, marriages and deaths missing or without a source among the root person's direct ancestors, by Sosa number, with each person's known places |
 | `search_sources` | Sources (register, repository, call number, number of acts) and repositories, to cite an existing one |
+| `match_people` | For the people named in an act (role, names, sex, age, act date), the people of the tree who could be them, with the reason and whether the match is likely |
 | `propose_act` | Adds an act to the To Review page: event, date, place, source, reference, transcription, people with their role, downloaded file |
 
 Ids (`I12`, `F3`…) are only for passing between tools; the server's instructions ask the agent
@@ -50,7 +51,7 @@ Code they appear as slash commands once the server is connected.
 | Prompt | Arguments | Does |
 | --- | --- | --- |
 | `find_record` | `person`, `event` (both optional) | Picks a gap with `research_gaps`, finds the right archive and register, searches it in the browser at a human pace, downloads the act and goes on with `read_record` |
-| `read_record` | `file`, `person` (both optional) | Transcribes the act, checks it against the person's sheet, picks or describes the source with `search_sources`, then calls `propose_act` and fixes it if refused |
+| `read_record` | `file`, `person` (both optional) | Transcribes the act, checks it against the person's sheet, identifies each person with `match_people`, picks or describes the source with `search_sources`, then calls `propose_act` and fixes it if refused |
 
 ```text
 /mcp__gedroots__find_record "Jean MARCHAND" birth
@@ -64,8 +65,8 @@ login or a captcha, and never to show ids.
 
 `propose_act` takes the same model as Source › Enter Record… (`crates/gedcom/src/act.rs`): an
 event (any event without its own tag, such as military service, is `EVEN` with its
-`event_type`), the people with their standard GEDCOM 7 role (each linked to an existing person, created,
-or only mentioned), the reference (`PAGE`), the transcription and the source. Nothing raw goes
+`event_type`), the people with their standard GEDCOM 7 role and their `identity`, always given
+explicitly: `link` (an existing person, with `id`), `create` or `mention`, the reference (`PAGE`), the transcription and the source. Nothing raw goes
 into the file: GEDRoots writes the whole chain itself, repository → source → file → event →
 people (`crates/gedcom/src/proposal.rs`).
 
@@ -77,7 +78,11 @@ reason, which the agent reads to fix it:
   with the act's reference as `PAGE`;
 - a parent other than the one already in the tree is refused (link that person, or mention the
   other one);
-- linked people must exist and not be living; dates must be valid, and are rewritten in
+- a person to create must not resemble someone of the tree (same names, or a relative of a linked
+  person, with compatible dates; `Act::suggestions`, as in record entry): the refusal lists the
+  candidates, and the agent links one or lists in `not` those it checked and found to be someone
+  else. The review page still shows “Resembles …” under such a person;
+- linked people must exist; dates must be valid, and are rewritten in
   GEDCOM 7 syntax; a place named like a place of the tree becomes that place.
 
 The downloaded file takes the format of the acts already attached to the file's sources: the
@@ -98,10 +103,12 @@ the act editor. Proposals live in memory: they are lost when the app closes.
 
 ## Privacy and safety
 
-- **Living people are hidden.** A person with no death, burial or cremation is treated as living
-  unless their birth, or a date that places it (their own events, a union, a child's birth, a
-  parent's birth), is more than 100 years ago. A living person's sheet is refused and their name
-  is replaced by “Living person” wherever they appear (`crates/gedcom/src/research.rs`).
+- **Living people are reduced to what identifies them.** A person with no death, burial or
+  cremation is treated as living unless their birth, or a date that places it (their own events,
+  a union, a child's birth, a parent's birth), is more than 100 years ago. The agent can find and
+  link a living person, but only gets their name, their birth (date and place, `born`) and their
+  close relatives: their sheet leaves out their other events and notes, and `research_gaps` skips
+  them (`crates/gedcom/src/research.rs`).
 - **Local only.** The server listens on `127.0.0.1:47280`, requires the token in the
   `Authorization` header and rejects requests sent by a web page (`Origin` header).
 - **Nothing is written by the agent.** It can only propose; a person reviews, compares and saves.

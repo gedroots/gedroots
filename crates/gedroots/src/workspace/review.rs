@@ -11,7 +11,6 @@
 use super::*;
 use crate::agent::propose::Pending;
 use gedcom::proposal::{Change, Field, Proposal, SourceChoice};
-use gedcom::research::current_year;
 use gpui_kit::component::checkbox::Checkbox;
 use rust_i18n::t;
 use std::collections::BTreeSet;
@@ -109,7 +108,7 @@ impl Workspace {
         let Some(doc) = &self.doc else { return Err("no file is open in GEDRoots".into()) };
         let g = &doc.ged;
         pending.proposal.complete(g);
-        pending.proposal.check(g, current_year())?;
+        pending.proposal.check(g)?;
         self.review.items.push(Item { pending, excluded: BTreeSet::new(), demo });
         let n = self.review.items.len();
         match demo {
@@ -385,7 +384,7 @@ impl Workspace {
         let p = item.proposal();
         // The proposal may no longer fit the tree (changed since): it stays visible, but is not
         // saved.
-        let problem = p.check(g, current_year()).err();
+        let problem = p.check(g).err();
         let rows = full.compare(g);
         let sosa = full
             .act
@@ -463,7 +462,16 @@ impl Workspace {
                             .min_w_0()
                             .when(!on, |d| d.opacity(0.45))
                             .child(div().text_xs().font_weight(FontWeight::SEMIBOLD).text_color(color).child(tag))
-                            .when(!same, |d| d.child(div().text_color(color).child(proposed))),
+                            .when(!same, |d| d.child(div().text_color(color).child(proposed)))
+                            .when(!row.similar.is_empty(), |d| {
+                                let names = row.similar.join(", ");
+                                d.child(
+                                    div()
+                                        .text_xs()
+                                        .text_color(theme::warn())
+                                        .child(t!("review.similar", names = names).into_owned()),
+                                )
+                            }),
                     ),
             );
         }

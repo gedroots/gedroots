@@ -11,10 +11,15 @@
 //! [`Proposal::diff`] gives the exact GEDCOM lines that will change, computed on a copy of the
 //! file.
 
-use crate::act::{Act, ActResult, ActRole, PersonChoice, PersonField};
+use crate::act::{Act, ActResult, ActRole, PersonChoice, PersonField, Suggestion};
 use crate::document::{Gedcom, RecordKind};
 use crate::node::Node;
 use crate::parse::node_to_string;
+
+/// Score from which an individual of the tree is a plausible duplicate of a person to create
+/// ([`Act::suggestions`]): same surname and first given name, or a known relative, without a date
+/// that rules them out.
+pub const PLAUSIBLE_MATCH: f32 = 5.5;
 
 /// New source, created when the proposal is saved.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -82,6 +87,8 @@ pub struct Row {
     pub current: String,
     pub proposed: String,
     pub change: Change,
+    /// Person created: individuals of the tree they resemble (“Marie DURAND (1770–1840)”).
+    pub similar: Vec<String>,
 }
 
 /// Link of the attachment chain: already exists, or will be created.
@@ -209,9 +216,9 @@ impl Proposal {
     }
 
     /// Does the proposal fit into the tree? The error says what to correct.
-    pub fn check(&self, ged: &Gedcom, this_year: i32) -> Result<(), String> {
+    pub fn check(&self, ged: &Gedcom) -> Result<(), String> {
         self.check_source(ged)?;
-        self.check_people(ged, this_year)?;
+        self.check_people(ged)?;
         self.apply(&mut ged.clone()).map(|_| ())
     }
 
@@ -253,16 +260,13 @@ impl Proposal {
         Ok(())
     }
 
-    fn check_people(&self, ged: &Gedcom, this_year: i32) -> Result<(), String> {
+    fn check_people(&self, ged: &Gedcom) -> Result<(), String> {
         let act = &self.act;
         for (i, p) in act.participants.iter().enumerate() {
-            if let PersonChoice::Link(x) = &p.choice {
-                if ged.individual(x).is_none() {
-                    return Err(format!("{}: no person with id {x}", act.role_label(i)));
-                }
-                if ged.is_living(x, this_year) {
-                    return Err(format!("{}: living person, cannot be linked", act.role_label(i)));
-                }
+            if let PersonChoice::Link(x) = &p.choice
+                && ged.individual(x).is_none()
+            {
+                return Err(format!("{}: no person with id {x}", act.role_label(i)));
             }
         }
         // Parents: those of the tree are not replaced silently.
@@ -319,6 +323,7 @@ impl Proposal {
     pub fn compare(&self, ged: &Gedcom) -> Vec<Row> {
         let act = &self.act;
         let (cur_date, cur_place) = self.current_event(ged).unwrap_or_default();
+        let similar = self.duplicates(ged);
         let mut rows = Vec::new();
         if !act.date.trim().is_empty() || !cur_date.is_empty() {
             rows.push(Row {
@@ -326,11 +331,18 @@ impl Proposal {
                 change: date_change(&cur_date, &act.date),
                 current: cur_date,
                 proposed: act.date.trim().to_string(),
+                similar: Vec::new(),
             });
         }
         if !act.place.trim().is_empty() || !cur_place.is_empty() {
             let change = text_change(&cur_place, &act.place);
-            rows.push(Row { field: Field::Place, change, current: cur_place, proposed: act.place.trim().to_string() });
+            rows.push(Row {
+                field: Field::Place,
+                change,
+                current: cur_place,
+                proposed: act.place.trim().to_string(),
+                similar: Vec::new(),
+            });
         }
         for (i, p) in act.participants.iter().enumerate() {
             if p.is_blank() && p.choice == PersonChoice::Create {
@@ -356,14 +368,33 @@ impl Proposal {
                 PersonChoice::Create => (person_text(p), Change::Create),
                 PersonChoice::Mention => (person_text(p), Change::Mention),
             };
+            let similar =
+                similar.iter().find(|(x, _)| *x == i).map(|(_, s)| s.iter().map(|s| s.label.clone()).collect());
             rows.push(Row {
                 field: Field::Person { index: i, role: act.role_label(i).to_string() },
                 current,
                 proposed,
                 change,
+                similar: similar.unwrap_or_default(),
             });
         }
         rows
+    }
+
+    /// People to create who may already be in the tree: index in `act.participants` and the
+    /// individuals they resemble, most likely first.
+    pub fn duplicates(&self, ged: &Gedcom) -> Vec<(usize, Vec<Suggestion>)> {
+        self.act
+            .participants
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| p.choice == PersonChoice::Create && !p.is_blank())
+            .filter_map(|(i, _)| {
+                let found: Vec<Suggestion> =
+                    self.act.suggestions(ged, i).into_iter().filter(|s| s.score >= PLAUSIBLE_MATCH).collect();
+                (!found.is_empty()).then_some((i, found))
+            })
+            .collect()
     }
 
     /// Attachment: repository and source.
@@ -586,7 +617,7 @@ mod tests {
         p.act.date = "4 APR 1802".into();
         assert_eq!(p.act.place, "Rennes");
         assert_eq!(p.act.participants[0].get(PersonField::Given), "Jean");
-        p.check(&g, 2026).unwrap();
+        p.check(&g).unwrap();
         let rows = p.compare(&g);
         assert_eq!(rows[0].field, Field::Date);
         assert_eq!(rows[0].change, Change::Refined, "{rows:?}");
@@ -615,25 +646,49 @@ mod tests {
     }
 
     #[test]
+    fn people_to_create_who_resemble_the_tree_are_flagged() {
+        let g = ged();
+        // Pierre BLANC, father of Jean, proposed as a new person: he is already in the tree.
+        let mut p = birth(new_source());
+        p.act.participants[1] =
+            Participant::new(ActRole::Father).with(PersonField::Given, "Pierre").with(PersonField::Surname, "BLANC");
+        let dups = p.duplicates(&g);
+        assert_eq!(dups.len(), 1, "{dups:?}");
+        assert_eq!(dups[0].0, 1);
+        assert_eq!(dups[0].1[0].xref, "I3");
+        let father = p.compare(&g).into_iter().find(|r| matches!(&r.field, Field::Person { index: 1, .. })).unwrap();
+        assert!(father.similar[0].contains("Pierre BLANC"), "{father:?}");
+        // Marie DURAND has no one like her; a mention is never checked.
+        assert!(!dups.iter().any(|(i, _)| *i == 2));
+        p.act.participants[1].choice = PersonChoice::Mention;
+        assert!(p.duplicates(&g).is_empty());
+        // A namesake ruled out by the dates is not a duplicate: Louis BLANC (1800–1870) is not a
+        // father in 1802.
+        p.act.participants[1] =
+            Participant::new(ActRole::Father).with(PersonField::Given, "Louis").with(PersonField::Surname, "BLANC");
+        assert!(p.duplicates(&g).is_empty(), "{:?}", p.duplicates(&g));
+    }
+
+    #[test]
     fn incoherent_proposals_are_refused_with_reason() {
         let g = ged();
         // Source of a single record: the file keeps one record per source.
-        let e = birth(SourceChoice::Existing("S1".into())).check(&g, 2026).unwrap_err();
+        let e = birth(SourceChoice::Existing("S1".into())).check(&g).unwrap_err();
         assert!(e.contains("one source per act"), "{e}");
         // Unknown repository.
         let mut s = NewSource { register: "X".into(), repository: Some("R9".into()), ..Default::default() };
-        let e = birth(SourceChoice::New(s.clone())).check(&g, 2026).unwrap_err();
+        let e = birth(SourceChoice::New(s.clone())).check(&g).unwrap_err();
         assert!(e.contains("no repository"), "{e}");
         s.repository = None;
         // Another father than the tree's.
         let mut p = birth(SourceChoice::New(s));
         p.act.participants[1] = Participant::new(ActRole::Father).with(PersonField::Given, "Paul");
-        let e = p.check(&g, 2026).unwrap_err();
+        let e = p.check(&g).unwrap_err();
         assert!(e.contains("Pierre BLANC"), "{e}");
         // Impossible date (record entry check).
         let mut p = birth(new_source());
         p.act.date = "31 FEB 1802".into();
-        assert!(p.check(&g, 2026).is_err());
+        assert!(p.check(&g).is_err());
     }
 
     #[test]
@@ -645,9 +700,9 @@ mod tests {
         p.act.participants.truncate(1);
         p.complete(&g);
         // EVEN without a type is refused, with the reason.
-        assert!(p.check(&g, 2026).is_err());
+        assert!(p.check(&g).is_err());
         p.act.event_type = "Military service".into();
-        p.check(&g, 2026).unwrap();
+        p.check(&g).unwrap();
         let mut g2 = g.clone();
         p.apply(&mut g2).unwrap();
         let even = g2.get("I2").unwrap().children.iter().find(|c| c.tag == "EVEN").unwrap();
@@ -660,7 +715,7 @@ mod tests {
         let g = ged();
         let mut p = birth(new_source());
         p.url = "https://archives.ille-et-vilaine.fr/ark:/12345/v45".into();
-        p.check(&g, 2026).unwrap();
+        p.check(&g).unwrap();
         let diff = p.diff(&g).unwrap();
         assert!(
             diff.iter()
@@ -675,7 +730,7 @@ mod tests {
         assert_eq!(links.len(), 1);
         assert_eq!(links[0].title.as_deref(), Some(format!("{}, vue 45", p.act.auto_title()).as_str()));
         p.url = "not a url".into();
-        assert!(p.check(&g, 2026).unwrap_err().starts_with("url:"));
+        assert!(p.check(&g).unwrap_err().starts_with("url:"));
     }
 
     #[test]

@@ -1,7 +1,7 @@
 //! GEDRoots' MCP tools and the HTTP server that serves them. They read the file; the only writing
 //! tool, `propose_act`, adds a proposal to review in the app.
 
-use super::propose::{self, Pending, ProposeParams};
+use super::propose::{self, MatchParams, Pending, ProposeParams};
 use super::{Request, Snapshot};
 use axum::extract::State;
 use axum::http::{StatusCode, header};
@@ -87,6 +87,32 @@ pub struct Proposed {
 }
 
 #[derive(Debug, Serialize, JsonSchema)]
+pub struct Candidate {
+    pub person: PersonRef,
+    /// Why they could be this person (“father of Jean BLANC · born 4 APR 1770”).
+    pub reason: String,
+    /// Strong enough that `propose_act` refuses to create the person without linking them or
+    /// listing them in `not`.
+    pub likely: bool,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct PersonMatches {
+    /// Index in `people`.
+    pub index: usize,
+    pub role: String,
+    pub name: String,
+    /// People of the tree who could be this person, most likely first.
+    pub candidates: Vec<Candidate>,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct Matches {
+    /// The people of the act not yet identified (without `id`).
+    pub people: Vec<PersonMatches>,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
 pub struct FileInfo {
     /// Name of the `.ged` file (empty for a file never saved).
     pub file: String,
@@ -151,7 +177,7 @@ impl GedrootsMcp {
 
     #[tool(
         name = "search_people",
-        description = "Searches the tree for people by name, given name or place. Living people are left out.",
+        description = "Searches the tree for people by name, given name or place. A living person is given only their name and birth (`born`).",
         annotations(read_only_hint = true, open_world_hint = false)
     )]
     async fn search(&self, Parameters(p): Parameters<SearchParams>) -> Res<People> {
@@ -161,7 +187,7 @@ impl GedrootsMcp {
 
     #[tool(
         name = "person_sheet",
-        description = "A person's sheet: events (date, place, cited sources with their reference, media), parents, unions and children, Sosa number.",
+        description = "A person's sheet: events (date, place, cited sources with their reference, media), parents, unions and children, Sosa number. A living person's sheet only gives their birth and close relatives.",
         annotations(read_only_hint = true, open_world_hint = false)
     )]
     async fn person(&self, Parameters(p): Parameters<PersonParams>) -> Res<PersonSheet> {
@@ -170,7 +196,7 @@ impl GedrootsMcp {
         if s.ged.individual(id).is_none() {
             return Err(format!("no person with id {id}"));
         }
-        s.ged.person_sheet(id, current_year()).map(Json).ok_or_else(|| "living person: sheet hidden".to_string())
+        s.ged.person_sheet(id, current_year()).map(Json).ok_or_else(|| format!("no person with id {id}"))
     }
 
     #[tool(
@@ -240,8 +266,40 @@ impl GedrootsMcp {
     }
 
     #[tool(
+        name = "match_people",
+        description = "Finds who the people named in an act are in the tree, before proposing it. Give the act's event and date and everyone named, with their role; give the id of those already identified, so that their relatives rank first. Returns, for each person without id, the candidates of the tree with the reason. `likely` candidates must be checked (person_sheet): `propose_act` refuses to create someone who resembles them unless they are linked or listed in `not`.",
+        annotations(read_only_hint = true, open_world_hint = false)
+    )]
+    async fn match_people(&self, Parameters(p): Parameters<MatchParams>) -> Res<Matches> {
+        let s = self.snapshot().await?;
+        let act = propose::match_act(&p)?;
+        let year = current_year();
+        let people = act
+            .participants
+            .iter()
+            .enumerate()
+            .filter(|(_, x)| !matches!(x.choice, gedcom::PersonChoice::Link(_)))
+            .map(|(i, x)| PersonMatches {
+                index: i,
+                role: act.role_label(i).into_owned(),
+                name: x.display_name(),
+                candidates: act
+                    .suggestions(&s.ged, i)
+                    .into_iter()
+                    .map(|c| Candidate {
+                        person: s.ged.person_ref(&c.xref, year),
+                        reason: c.reason,
+                        likely: c.score >= gedcom::proposal::PLAUSIBLE_MATCH,
+                    })
+                    .collect(),
+            })
+            .collect();
+        Ok(Json(Matches { people }))
+    }
+
+    #[tool(
         name = "propose_act",
-        description = "Proposes an act found in the archives (birth, marriage, death…), with its source, people and image. Nothing is written: the proposal waits in GEDRoots' review page, where the user compares it with the tree and saves or rejects it. It is refused, with the reason, if it does not fit the tree (unknown source or person, one source per act or per register as the file does, a parent other than the tree's, impossible date): fix it and propose again. Give the place as the tree names it, the date in GEDCOM format, the downloaded file (a PDF register needs pdf_page) and the act's page in the archive's viewer (url): both are kept, the image and a web link.",
+        description = "Proposes an act found in the archives (birth, marriage, death…), with its source, people and image. Nothing is written: the proposal waits in GEDRoots' review page, where the user compares it with the tree and saves or rejects it. Each person says who they are: identity link (in the tree, with id), create or mention; call match_people first. It is refused, with the reason, if it does not fit the tree (unknown source or person, one source per act or per register as the file does, a parent other than the tree's, a person to create who resembles someone of the tree, impossible date): fix it and propose again. Give the place as the tree names it, the date in GEDCOM format, the downloaded file (a PDF register needs pdf_page) and the act's page in the archive's viewer (url): both are kept, the image and a web link.",
         annotations(
             read_only_hint = false,
             destructive_hint = false,
@@ -252,9 +310,9 @@ impl GedrootsMcp {
     async fn propose(&self, Parameters(p): Parameters<ProposeParams>) -> Res<Proposed> {
         let s = self.snapshot().await?;
         let mut proposal = propose::to_proposal(&p)?;
-        let year = current_year();
         proposal.complete(&s.ged);
-        proposal.check(&s.ged, year)?;
+        proposal.check(&s.ged)?;
+        propose::check_identities(&proposal, &propose::ruled_out(&p), &s.ged)?;
         let original =
             p.file.as_ref().map(|f| std::path::PathBuf::from(f.trim())).filter(|f| !f.as_os_str().is_empty());
         // An act found online is kept twice: its image (downloaded file) and its web page.
@@ -296,11 +354,13 @@ impl GedrootsMcp {
     name = "gedroots",
     instructions = "GEDRoots is a genealogy app. These tools read the GEDCOM 7 family tree open in \
 the app (its active window). They never change it: `propose_act` only adds an act to the \
-app's review page, where the user compares it with the tree before saving it. Living people are hidden. Ids (I12, F3, S4…) are \
+app's review page, where the user compares it with the tree before saving it. Of a living person, only \
+what identifies them is given (name, birth, close relatives). Ids (I12, F3, S4…) are \
 only for passing between tools: never show them to the user. To look for records (birth, marriage, \
 death acts), call `research_gaps`, then `person_sheet` on the person to learn their places, dates \
 and the sources already cited. When you find an act, read it, check it matches the person, \
-call `search_sources` to reuse the source or repository, then `propose_act`. The prompts \
+call `match_people` to know who each person named is in the tree (link them, create them or only \
+mention them), `search_sources` to reuse the source or repository, then `propose_act`. The prompts \
 `find_record` and `read_record` give the full method."
 )]
 #[prompt_handler(router = self.prompt_router)]
@@ -429,7 +489,7 @@ mod tests {
         let (_, _, list) =
             post(port, "secret", Some(&sid), serde_json::json!({"jsonrpc":"2.0","id":2,"method":"tools/list"}));
         let tools = list["result"]["tools"].as_array().expect("tools");
-        assert_eq!(tools.len(), 6);
+        assert_eq!(tools.len(), 7);
         // Only `propose_act` is not read only, and it writes nothing.
         let writers: Vec<_> =
             tools.iter().filter(|t| t["annotations"]["readOnlyHint"] != true).map(|t| t["name"].clone()).collect();
