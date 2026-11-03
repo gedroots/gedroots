@@ -318,7 +318,7 @@ impl Workspace {
         let rx = cx.prompt_for_new_path(&dir, Some(&name));
         cx.spawn_in(window, async move |this, cx| {
             if let Ok(Ok(Some(p))) = rx.await {
-                let _ = this.update_in(cx, |this, _, cx| this.write_to(p, cx));
+                let _ = this.update_in(cx, |this, _, cx| this.write_to(p, Versioning::Now, cx));
             }
         })
         .detach();

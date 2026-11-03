@@ -215,6 +215,13 @@ struct Document {
     dirty_before_checkpoint: bool,
     /// The tree as it was last opened or saved: Save stamps the records changed since.
     saved: Gedcom,
+    /// The file as GEDRoots last read or wrote it, to notice that something else wrote it.
+    disk: Option<(std::time::SystemTime, u64)>,
+    /// When the last version was recorded, and whether a save happened since.
+    versioned_at: Option<std::time::Instant>,
+    unversioned: bool,
+    /// The tree at the previous automatic save check: saved when it stays the same for a check.
+    settling: Option<Gedcom>,
     /// Previous states, for Undo (the last one is the most recent).
     history: Vec<Gedcom>,
     /// Undone states, for Redo; cleared by any new change.
@@ -227,6 +234,51 @@ impl Document {
     /// Changes that Save would keep (the sample tree has none: it is never saved).
     fn unsaved(&self) -> bool {
         self.dirty && !self.sample
+    }
+
+    /// The file automatic saves write: a tree opened from a `.ged` (not imported, not new, not the
+    /// sample tree).
+    fn own_file(&self) -> Option<&std::path::Path> {
+        self.path.as_deref().filter(|_| !self.imported && !self.sample)
+    }
+
+    /// Writes the tree to `path` (dates of the changed records, header), and records a version
+    /// as `versioning` says, on another thread unless `wait`. Returns whether a version was
+    /// recorded.
+    fn write(&mut self, path: &std::path::Path, versioning: Versioning, wait: bool) -> std::io::Result<bool> {
+        self.ged.ensure_tree_id();
+        self.ged.stamp_changes(&self.saved);
+        self.ged.stamp_header();
+        gedcom::save(&self.ged, path)?;
+        self.saved = self.ged.clone();
+        self.disk = disk_stamp(path);
+        self.settling = None;
+        let due = self.versioned_at.is_none_or(|t| t.elapsed() >= VERSION_EVERY);
+        let versioned = versioning == Versioning::Now || due;
+        if versioned {
+            let kind = Some(gedcom::versions::Kind::Saved);
+            match wait {
+                true => record_version_now(path, &self.ged, kind),
+                false => record_version(path, &self.ged, kind),
+            }
+            self.versioned_at = Some(std::time::Instant::now());
+        }
+        self.unversioned = !versioned;
+        Ok(versioned)
+    }
+
+    /// When the window closes or the app quits: saves the changes and records the last version.
+    fn flush(&mut self) {
+        let Some(path) = self.own_file().map(std::path::Path::to_path_buf) else { return };
+        if self.unsaved() {
+            match self.write(&path, Versioning::Now, true) {
+                Ok(_) => self.dirty = false,
+                Err(e) => eprintln!("save before closing: {}: {e}", path.display()),
+            }
+        } else if self.unversioned {
+            record_version_now(&path, &self.ged, Some(gedcom::versions::Kind::Saved));
+            self.unversioned = false;
+        }
     }
 
     /// Name shown in the title bar: the file name, without its extension for an imported tree
@@ -243,25 +295,50 @@ impl Document {
     }
 }
 
-/// Folder and name proposed by Save for a tree not saved yet: next to the imported file, under a
-/// name that does not replace it (`export copy.ged`); otherwise in the home folder.
 /// Records the tree in the history folder beside its file, on its own thread: as it was found
 /// on opening (`kind` none: first version, or changes made outside GEDRoots), or as saved. The
 /// old versions are pruned after a save.
 fn record_version(path: &std::path::Path, ged: &Gedcom, kind: Option<gedcom::versions::Kind>) {
     let (path, ged) = (path.to_path_buf(), ged.clone());
-    std::thread::spawn(move || {
-        let store = gedcom::versions::Store::for_file(&path, ged.tree_id());
-        let result = match kind {
-            None => store.record_opened(&ged).map(|_| ()),
-            Some(k) => store.record(&ged, k, None, None).and_then(|_| store.prune().map(|_| ())),
-        };
-        if let Err(e) = result {
-            eprintln!("version history: {}: {e}", store.dir().display());
-        }
-    });
+    std::thread::spawn(move || record_version_now(&path, &ged, kind));
 }
 
+/// [`record_version`] on the calling thread: when the window closes or the app quits.
+fn record_version_now(path: &std::path::Path, ged: &Gedcom, kind: Option<gedcom::versions::Kind>) {
+    let store = gedcom::versions::Store::for_file(path, ged.tree_id());
+    let result = match kind {
+        None => store.record_opened(ged).map(|_| ()),
+        Some(k) => store.record(ged, k, None, None).and_then(|_| store.prune().map(|_| ())),
+    };
+    if let Err(e) = result {
+        eprintln!("version history: {}: {e}", store.dir().display());
+    }
+}
+
+/// While editing, a version is recorded at most this often; the file itself is saved after each
+/// change.
+/// How often the window looks for changes to save and for a file changed outside GEDRoots.
+const AUTOSAVE_CHECK: std::time::Duration = std::time::Duration::from_secs(1);
+
+const VERSION_EVERY: std::time::Duration = std::time::Duration::from_secs(5 * 60);
+
+/// Modification time and size of a file, to notice that something else wrote it.
+fn disk_stamp(path: &std::path::Path) -> Option<(std::time::SystemTime, u64)> {
+    let m = std::fs::metadata(path).ok()?;
+    Some((m.modified().ok()?, m.len()))
+}
+
+/// How a save records a version.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Versioning {
+    /// File › Save, window closed, app quit: a version now.
+    Now,
+    /// Automatic save: a version if the last one is old enough.
+    Throttled,
+}
+
+/// Folder and name proposed by Save for a tree not saved yet: next to the imported file, under a
+/// name that does not replace it (`export copy.ged`); otherwise in the home folder.
 fn save_as_default(imported: Option<&std::path::Path>) -> (PathBuf, String) {
     let Some(p) = imported else { return (dirs_home(), format!("{}.ged", t!("file.default_name"))) };
     let dir = p.parent().map(std::path::Path::to_path_buf).unwrap_or_else(dirs_home);
@@ -391,6 +468,8 @@ pub struct Workspace {
     /// Versions of the recent files and search sites known to the window's menu bar.
     recent_gen: (u64, u64),
     _subs: Vec<Subscription>,
+    /// Checks every [`AUTOSAVE_CHECK`] for changes to save and for a file changed elsewhere.
+    _autosave: Task<()>,
 }
 
 impl Workspace {
@@ -407,14 +486,36 @@ impl Workspace {
         let appearance_sub = cx.observe_window_appearance(window, |_, window, cx| theme::sync(window, cx));
         // AI agents: they read the file of the last window activated.
         crate::agent::set_target(cx.entity().downgrade(), cx);
-        let activation_sub = cx.observe_window_activation(window, |_, window, cx| {
+        let activation_sub = cx.observe_window_activation(window, |this, window, cx| {
             if window.is_window_active() {
                 crate::agent::set_target(cx.entity().downgrade(), cx);
+            } else {
+                // Leaving the window saves its changes at once.
+                this.autosave(cx);
+            }
+        });
+        // Quitting the app (menu, shortcut, logging out) saves the changes first.
+        let quit_sub = cx.on_app_quit(|this: &mut Self, _| {
+            if let Some(doc) = &mut this.doc {
+                doc.flush();
+            }
+            async {}
+        });
+        // Automatic save after each change, and changes made to the file outside GEDRoots.
+        let autosave = cx.spawn_in(window, async move |this, cx| {
+            loop {
+                cx.background_executor().timer(AUTOSAVE_CHECK).await;
+                if this.update_in(cx, |this, window, cx| this.autosave_tick(window, cx)).is_err() {
+                    break;
+                }
             }
         });
         // Mobile devices: a file closed with its window is no longer served.
         let me = cx.entity_id();
         let release_sub = cx.on_release(move |this: &mut Self, cx| {
+            if let Some(doc) = &mut this.doc {
+                doc.flush();
+            }
             if let Some(share) = this.mobile_share() {
                 Self::mobile_unpublish(&share, me, cx);
             }
@@ -486,7 +587,8 @@ impl Workspace {
             new_tree: None,
             gallery: None,
             review: review::Review::default(),
-            _subs: vec![sub, map_sub, appearance_sub, activation_sub, release_sub],
+            _subs: vec![sub, map_sub, appearance_sub, activation_sub, release_sub, quit_sub],
+            _autosave: autosave,
         };
         if let Some(p) = path {
             this.load(p, window, cx);
@@ -546,8 +648,13 @@ impl Workspace {
         if let Some(p) = path.as_ref().filter(|_| !imported) {
             record_version(p, &ged, None);
         }
+        let disk = path.as_deref().filter(|_| !imported).and_then(disk_stamp);
         self.doc = Some(Document {
             saved: ged.clone(),
+            disk,
+            versioned_at: Some(std::time::Instant::now()),
+            unversioned: false,
+            settling: None,
             ged,
             path,
             imported,
@@ -611,13 +718,13 @@ impl Workspace {
     fn save_file(&mut self, _: &SaveFile, window: &mut Window, cx: &mut Context<Self>) {
         let Some(doc) = &self.doc else { return };
         match doc.path.clone().filter(|_| !doc.imported) {
-            Some(p) => self.write_to(p, cx),
+            Some(p) => self.write_to(p, Versioning::Now, cx),
             None => {
                 let (dir, name) = save_as_default(doc.path.as_deref());
                 let rx = cx.prompt_for_new_path(&dir, Some(&name));
                 cx.spawn_in(window, async move |this, cx| {
                     if let Ok(Ok(Some(p))) = rx.await {
-                        let _ = this.update_in(cx, |this, _, cx| this.write_to(p, cx));
+                        let _ = this.update_in(cx, |this, _, cx| this.write_to(p, Versioning::Now, cx));
                     }
                 })
                 .detach();
@@ -625,16 +732,11 @@ impl Workspace {
         }
     }
 
-    fn write_to(&mut self, path: PathBuf, cx: &mut Context<Self>) {
+    fn write_to(&mut self, path: PathBuf, versioning: Versioning, cx: &mut Context<Self>) {
         let before = self.mobile_share();
         let Some(doc) = &mut self.doc else { return };
-        doc.ged.ensure_tree_id();
-        doc.ged.stamp_changes(&doc.saved);
-        doc.ged.stamp_header();
-        match gedcom::save(&doc.ged, &path) {
-            Ok(()) => {
-                doc.saved = doc.ged.clone();
-                record_version(&path, &doc.ged, Some(gedcom::versions::Kind::Saved));
+        match doc.write(&path, versioning, false) {
+            Ok(versioned) => {
                 if doc.imported || doc.path.as_ref() != Some(&path) {
                     crate::recent::add(&path, cx);
                 }
@@ -642,14 +744,83 @@ impl Workspace {
                 doc.imported = false;
                 doc.dirty = false;
                 self.rescan_media();
-                self.set_status(t!("ws.saved", path = path.display()), false);
-                // Mobile devices get the saved version; after Save As, the previous file is closed.
+                if versioning == Versioning::Now {
+                    self.set_status(t!("ws.saved", path = path.display()), false);
+                }
+                // Mobile devices get the saved version (with each version while editing); after
+                // Save As, the previous file is closed.
                 if let Some(old) = before.filter(|b| self.mobile_share().as_ref() != Some(b)) {
                     Self::mobile_unpublish(&old, cx.entity_id(), cx);
                 }
-                self.mobile_publish(cx);
+                if versioned {
+                    self.mobile_publish(cx);
+                }
             }
             Err(e) => self.set_error("ws.save_failed", t!("ws.save_failed", error = e)),
+        }
+        cx.notify();
+    }
+
+    /// Saves the changes of a tree that has its own file now, without waiting for them to settle.
+    fn autosave(&mut self, cx: &mut Context<Self>) {
+        let Some(doc) = &self.doc else { return };
+        if let (true, Some(path)) = (doc.unsaved(), doc.own_file().map(std::path::Path::to_path_buf)) {
+            self.write_to(path, Versioning::Throttled, cx);
+        }
+    }
+
+    /// Every [`AUTOSAVE_CHECK`]: picks up a file changed outside GEDRoots, then saves the changes
+    /// once they stayed the same for a whole check (not in the middle of a series of edits).
+    fn autosave_tick(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.check_outside_change(window, cx);
+        let Some(doc) = &mut self.doc else { return };
+        if !doc.unsaved() || doc.own_file().is_none() {
+            doc.settling = None;
+            return;
+        }
+        let settled = doc.settling.as_ref().is_some_and(|before| {
+            before.header == doc.ged.header
+                && before.records.len() == doc.ged.records.len()
+                && before.records.iter().zip(&doc.ged.records).all(|(a, b)| std::sync::Arc::ptr_eq(a, b))
+        });
+        if settled {
+            self.autosave(cx);
+        } else {
+            doc.settling = Some(doc.ged.clone());
+        }
+    }
+
+    /// The open file was written by something else (another software, a sync service bringing a
+    /// newer copy). Without changes here, the tree is reloaded; with changes here, they are kept
+    /// and the other copy goes into the version history.
+    fn check_outside_change(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(doc) = &self.doc else { return };
+        let Some(path) = doc.own_file().map(std::path::Path::to_path_buf) else { return };
+        let now = disk_stamp(&path);
+        if now.is_none() || now == doc.disk {
+            return;
+        }
+        // Being written (a sync service downloading it): read again at the next check.
+        let Ok(theirs) = gedcom::load(&path) else { return };
+        let doc = self.doc.as_mut().unwrap();
+        doc.disk = now;
+        // Touched without a change (a sync service rewriting the same content).
+        if theirs.header == doc.saved.header && theirs.records == doc.saved.records {
+            return;
+        }
+        if doc.unsaved() {
+            record_version(&path, &theirs, Some(gedcom::versions::Kind::Outside));
+            self.set_status(t!("ws.outside_kept"), false);
+        } else {
+            // Undo goes back to the tree before the reload.
+            doc.history.push(std::mem::replace(&mut doc.ged, theirs));
+            doc.future.clear();
+            doc.saved = doc.ged.clone();
+            record_version(&path, &doc.ged, None);
+            self.rebuild_rows(cx);
+            self.refresh_editor(window, cx);
+            self.set_status(t!("ws.outside_reloaded"), false);
+            self.mobile_publish(cx);
         }
         cx.notify();
     }
@@ -3537,5 +3708,87 @@ impl Workspace {
             self.drop_checkpoint();
         }
         cx.notify();
+    }
+}
+
+#[cfg(test)]
+mod autosave_tests {
+    use super::*;
+    use gedcom::versions::Store;
+
+    fn opened(path: &std::path::Path) -> Document {
+        let ged = gedcom::load(path).unwrap();
+        Document {
+            saved: ged.clone(),
+            disk: disk_stamp(path),
+            versioned_at: Some(std::time::Instant::now()),
+            unversioned: false,
+            settling: None,
+            ged,
+            path: Some(path.to_path_buf()),
+            imported: false,
+            sample: false,
+            dirty: false,
+            dirty_before_checkpoint: false,
+            history: Vec::new(),
+            future: Vec::new(),
+            future_before_checkpoint: Vec::new(),
+        }
+    }
+
+    fn temp_tree() -> (PathBuf, PathBuf) {
+        let dir = std::env::temp_dir()
+            .join(format!("gedroots-autosave-{}", std::process::id()))
+            .join(format!("{:?}", std::thread::current().id()).replace(['(', ')'], ""));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("tree.ged");
+        std::fs::write(&path, include_str!("../../gedcom/tests/fixtures/example.ged")).unwrap();
+        (dir, path)
+    }
+
+    #[::core::prelude::v1::test]
+    fn automatic_saves_record_a_version_only_when_due_and_at_closing() {
+        let (dir, path) = temp_tree();
+        let mut doc = opened(&path);
+        let store = Store::for_file(&path, None);
+        // An automatic save right after opening writes the file, not a version.
+        doc.ged.get_mut("I00003").unwrap().set_child_val("SEX", "M");
+        doc.dirty = true;
+        assert!(!doc.write(&path, Versioning::Throttled, true).unwrap());
+        doc.dirty = false;
+        assert!(gedcom::load(&path).unwrap().get("I00003").unwrap().child_val("SEX") == Some("M"));
+        assert!(doc.unversioned);
+        assert!(store.versions().unwrap().is_empty());
+        // Closing records the last version.
+        doc.flush();
+        assert!(!doc.unversioned);
+        assert_eq!(store.versions().unwrap().len(), 1);
+        // Once the last version is old enough, an automatic save records one.
+        doc.versioned_at = Some(std::time::Instant::now() - VERSION_EVERY);
+        doc.ged.get_mut("I00003").unwrap().set_child_val("SEX", "F");
+        assert!(doc.write(&path, Versioning::Throttled, true).unwrap());
+        assert_eq!(store.versions().unwrap().len(), 2);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[::core::prelude::v1::test]
+    fn closing_saves_unsaved_changes() {
+        let (dir, path) = temp_tree();
+        let mut doc = opened(&path);
+        doc.ged.get_mut("I00003").unwrap().set_child_val("SEX", "M");
+        doc.dirty = true;
+        doc.flush();
+        assert!(!doc.dirty);
+        assert_eq!(gedcom::load(&path).unwrap().get("I00003").unwrap().child_val("SEX"), Some("M"));
+        assert_eq!(doc.disk, disk_stamp(&path));
+        // An imported tree is never written without asking where.
+        let mut imported = opened(&path);
+        imported.imported = true;
+        imported.dirty = true;
+        imported.ged.get_mut("I00003").unwrap().set_child_val("SEX", "F");
+        imported.flush();
+        assert_eq!(gedcom::load(&path).unwrap().get("I00003").unwrap().child_val("SEX"), Some("M"));
+        std::fs::remove_dir_all(dir).unwrap();
     }
 }

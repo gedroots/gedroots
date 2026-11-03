@@ -9,7 +9,14 @@ its dot on macOS and Linux, by the hidden attribute on Windows). The code is
 
 - when a file is opened: its first version, or the changes made outside GEDRoots since the
   latest one (nothing when it did not change);
-- at each save.
+- with File › Save, and when the window closes or the app quits;
+- while editing: the file is saved automatically about a second after the last change (and when
+  the window loses focus), but a version is recorded at most every 5 minutes;
+- when the open file is changed outside GEDRoots: GEDRoots reloads it when it has no changes of
+  its own, otherwise it keeps its changes and records the other copy as an `outside` version.
+
+New trees and imported trees are saved automatically only once File › Save has given them a
+file.
 
 Later: named versions, accepted AI agent proposals and restore points before bulk operations
 (the kinds exist already).
