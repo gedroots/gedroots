@@ -1,5 +1,7 @@
 //! Changes proposed by an AI agent for a Data Quality issue: apply the Quality page's fix, edit the
-//! records the issue is about, or hide the issue with the reason it is right.
+//! records the issue is about, or hide the issue with the reason it is right. Without an issue, a
+//! change is a correction the agent read in a document (a given name misread, a date, a sex): the
+//! same typed edits, on any record, with the reason and the evidence the user checks.
 //!
 //! Like an act proposal ([`crate::proposal`]), a change is only a description: the app shows it
 //! in To Review and applies it when the user saves it. Before it is queued, [`QualityChange::check`]
@@ -14,6 +16,7 @@ use crate::date::Date;
 use crate::document::Gedcom;
 use crate::geo::{format_latitude, format_longitude};
 use crate::merge::{MergePlan, RowKind, Side};
+use crate::model::NameForm;
 use crate::node::Node;
 use crate::parse::node_to_string;
 use crate::proposal::{Change, DiffLine, line_diff};
@@ -63,6 +66,22 @@ pub enum Edit {
     },
     /// Removes the structure the issue designates.
     DeleteStructure,
+    /// New given name and/or surname of a person's `NAME` (position `index` among their names, 0
+    /// being the main one). The rest of the name (type, particle, sources…) is kept.
+    SetName {
+        person: String,
+        index: usize,
+        given: Option<String>,
+        surname: Option<String>,
+    },
+    /// Another name of a person (`NAME`, with its `TYPE` when given: `AKA`, `BIRTH`, `MARRIED`…),
+    /// after their other names.
+    AddName {
+        person: String,
+        given: String,
+        surname: String,
+        kind: String,
+    },
 }
 
 impl Edit {
@@ -77,6 +96,19 @@ impl Edit {
             Edit::CiteSource { .. } => "cite_source",
             Edit::SetValue { .. } => "set_value",
             Edit::DeleteStructure => "delete_structure",
+            Edit::SetName { .. } => "set_name",
+            Edit::AddName { .. } => "add_name",
+        }
+    }
+
+    /// The record the edit changes, when it names one.
+    fn record(&self) -> Option<&str> {
+        match self {
+            Edit::SetEvent { record, .. } | Edit::DeleteEvent { record, .. } | Edit::CiteSource { record, .. } => {
+                Some(record)
+            }
+            Edit::SetSex { person, .. } | Edit::SetName { person, .. } | Edit::AddName { person, .. } => Some(person),
+            _ => None,
         }
     }
 }
@@ -112,12 +144,13 @@ impl Evidence {
     }
 }
 
-/// A change proposed for an issue.
+/// A change proposed for an issue, or a correction without one.
 #[derive(Debug, Clone, PartialEq)]
 pub struct QualityChange {
-    /// The issue, as it was when the change was proposed, and its identifier.
-    pub issue: Issue,
-    pub issue_id: String,
+    /// The issue, as it was when the change was proposed, and its identifier. `None`: a
+    /// correction the agent read in a document.
+    pub issue: Option<Issue>,
+    pub issue_id: Option<String>,
     pub action: Action,
     pub reason: String,
     pub evidence: Evidence,
@@ -131,6 +164,10 @@ pub struct ChangeRow {
     pub proposed: String,
     pub change: Change,
 }
+
+/// Edits a correction without an issue may make: those that name their record.
+pub const CORRECTIONS: &[&str] =
+    &["set_name", "add_name", "set_event", "delete_event", "set_sex", "cite_source", "set_coordinates"];
 
 /// Edits each kind of issue allows. Changing a filiation (own ancestor) or a person's links stays
 /// with the user.
@@ -195,14 +232,97 @@ impl Gedcom {
 }
 
 impl QualityChange {
-    /// Records the change may edit: the issue's record and the records involved.
+    /// Records the change may edit: the issue's record and the records involved; any record for a
+    /// correction.
     fn allowed(&self, xref: &str) -> bool {
-        self.issue.xref == xref || self.issue.related.iter().any(|r| r == xref)
+        match &self.issue {
+            Some(i) => i.xref == xref || i.related.iter().any(|r| r == xref),
+            None => true,
+        }
+    }
+
+    /// The issue, for the actions that need one.
+    fn the_issue(&self) -> Result<&Issue, String> {
+        self.issue.as_ref().ok_or_else(|| {
+            "without an issue, a change can only `edit`: `fix`, `hide` and `merge` are for an issue of `quality_issues`"
+                .to_string()
+        })
+    }
+
+    /// Checks a correction without an issue: edits that name their record, a reason and evidence.
+    fn validate_correction(&self, g: &Gedcom) -> Result<(), String> {
+        let Action::Edit(edits) = &self.action else { return self.the_issue().map(|_| ()) };
+        if edits.is_empty() {
+            return Err("give at least one edit".into());
+        }
+        if self.reason.trim().is_empty() {
+            return Err("give the reason for the correction in `reason`: what you read".into());
+        }
+        if self.evidence.is_empty() {
+            return Err(
+                "a correction without an issue needs `evidence`: the source of the tree, the viewer page or a quote of the document"
+                    .into(),
+            );
+        }
+        for e in edits {
+            if !CORRECTIONS.contains(&e.name()) {
+                return Err(format!(
+                    "`{}` needs an issue of `quality_issues`; without one, use {}",
+                    e.name(),
+                    CORRECTIONS.join(", ")
+                ));
+            }
+            if let Some(x) = e.record()
+                && g.get(x).is_none()
+            {
+                return Err(format!("no record {x} in the tree"));
+            }
+            self.validate_edit(g, e)?;
+        }
+        Ok(())
+    }
+
+    /// Checks what an edit needs, whatever the issue.
+    fn validate_edit(&self, g: &Gedcom, e: &Edit) -> Result<(), String> {
+        match e {
+            Edit::SetCoordinates { latitude, longitude, .. }
+                if !(-90.0..=90.0).contains(latitude) || !(-180.0..=180.0).contains(longitude) =>
+            {
+                Err("latitude must be within ±90 and longitude within ±180 degrees".into())
+            }
+            Edit::CiteSource { source, .. } if g.get(source).is_none_or(|n| n.tag != "SOUR") => Err(format!(
+                "no source {source} in the tree: cite an existing one (`search_sources`), or propose the act with `propose_act`"
+            )),
+            Edit::SetName { person, index, given, surname } => {
+                let r = g.get(person).filter(|n| n.tag == "INDI").ok_or_else(|| format!("no person {person}"))?;
+                let names = r.children_with("NAME").count();
+                if *index >= names.max(1) {
+                    return Err(format!("{person} has {names} name(s): `name` is 0 for the main one"));
+                }
+                if given.is_none() && surname.is_none() {
+                    return Err("`set_name` needs `given` and/or `surname`".into());
+                }
+                Ok(())
+            }
+            Edit::AddName { person, given, surname, kind } => {
+                g.get(person).filter(|n| n.tag == "INDI").ok_or_else(|| format!("no person {person}"))?;
+                if given.trim().is_empty() && surname.trim().is_empty() {
+                    return Err("`add_name` needs `given` and/or `surname`".into());
+                }
+                let kind = kind.trim().to_uppercase();
+                if !kind.is_empty() && !crate::model::NAME_TYPES.contains(&kind.as_str()) {
+                    return Err(format!("`name_type` is one of {}", crate::model::NAME_TYPES.join(", ")));
+                }
+                Ok(())
+            }
+            _ => Ok(()),
+        }
     }
 
     /// Checks the change on its own: allowed for this kind of issue, with what it needs.
     fn validate(&self, g: &Gedcom) -> Result<(), String> {
-        let code = self.issue.code;
+        let Some(issue) = &self.issue else { return self.validate_correction(g) };
+        let code = issue.code;
         match &self.action {
             Action::Fix => {
                 if quality::fix_of(code).is_none() {
@@ -213,7 +333,7 @@ impl QualityChange {
                 }
             }
             Action::Hide => {
-                if !can_hide(g, &self.issue) {
+                if !can_hide(g, issue) {
                     return Err("this issue is about places or files, not a record: it cannot be hidden".into());
                 }
                 if self.reason.trim().is_empty() {
@@ -241,33 +361,17 @@ impl QualityChange {
                     if !allowed.contains(&e.name()) {
                         return Err(format!("`{}` is not allowed for `{code}`: use {}", e.name(), allowed_list(code)));
                     }
-                    let target = match e {
-                        Edit::SetEvent { record, .. }
-                        | Edit::DeleteEvent { record, .. }
-                        | Edit::CiteSource { record, .. } => Some(record.as_str()),
-                        Edit::SetSex { person, .. } => Some(person.as_str()),
-                        _ => None,
-                    };
-                    if let Some(x) = target
+                    if let Some(x) = e.record()
                         && !self.allowed(x)
                     {
                         return Err(format!("{x} is not one of the records this issue is about"));
                     }
-                    if let Edit::SetCoordinates { place, latitude, longitude } = e {
-                        if !self.issue.related.iter().any(|p| p == place) {
-                            return Err(format!("`{place}` is not the place of this issue"));
-                        }
-                        if !(-90.0..=90.0).contains(latitude) || !(-180.0..=180.0).contains(longitude) {
-                            return Err("latitude must be within ±90 and longitude within ±180 degrees".into());
-                        }
-                    }
-                    if let Edit::CiteSource { source, .. } = e
-                        && g.get(source).is_none_or(|n| n.tag != "SOUR")
+                    if let Edit::SetCoordinates { place, .. } = e
+                        && !issue.related.iter().any(|p| p == place)
                     {
-                        return Err(format!(
-                            "no source {source} in the tree: cite an existing one (`search_sources`), or propose the act with `propose_act`"
-                        ));
+                        return Err(format!("`{place}` is not the place of this issue"));
                     }
+                    self.validate_edit(g, e)?;
                 }
             }
         }
@@ -282,21 +386,22 @@ impl QualityChange {
     /// Applies the change. Fails if the file no longer fits it.
     pub fn apply(&self, g: &mut Gedcom) -> Result<(), String> {
         self.validate(g)?;
-        let i = &self.issue;
         match &self.action {
             Action::Fix => {
-                if !g.fix_issue(i) {
+                if !g.fix_issue(self.the_issue()?) {
                     return Err(t!("change.outdated").into());
                 }
             }
             // Two people who are not the same: recorded as distinct, never hidden by code.
-            Action::Hide if i.code == "possible_duplicate" => {
+            Action::Hide if self.issue.as_ref().is_some_and(|i| i.code == "possible_duplicate") => {
+                let i = self.the_issue()?;
                 let other = i.related.first().ok_or_else(|| t!("change.outdated").to_string())?;
                 if !g.mark_distinct(&i.xref, other) {
                     return Err(t!("change.outdated").into());
                 }
             }
             Action::Hide => {
+                let i = self.the_issue()?;
                 if !g.ignore_issue_because(&i.xref, i.code, &self.reason) {
                     return Err(t!("change.outdated").into());
                 }
@@ -316,8 +421,12 @@ impl QualityChange {
                 for e in order {
                     self.apply_edit(g, e)?;
                 }
-                for x in std::iter::once(&i.xref).chain(&i.related) {
-                    if let Some(r) = g.get_mut(x) {
+                let touched: Vec<String> = match &self.issue {
+                    Some(i) => std::iter::once(&i.xref).chain(&i.related).cloned().collect(),
+                    None => edits.iter().filter_map(|e| e.record().map(str::to_string)).collect(),
+                };
+                for x in touched {
+                    if let Some(r) = g.get_mut(&x) {
                         r.touch();
                     }
                 }
@@ -328,9 +437,8 @@ impl QualityChange {
 
     /// The two people of a possible duplicate, if they can still be merged.
     pub fn merge_pair(&self) -> Option<(String, String)> {
-        (self.issue.code == "possible_duplicate")
-            .then(|| Some((self.issue.xref.clone(), self.issue.related.first()?.clone())))
-            .flatten()
+        let i = self.issue.as_ref()?;
+        (i.code == "possible_duplicate").then(|| Some((i.xref.clone(), i.related.first()?.clone()))).flatten()
     }
 
     /// The merge plan and, for each of its conflicts, the side the agent chose.
@@ -370,7 +478,6 @@ impl QualityChange {
     }
 
     fn apply_edit(&self, g: &mut Gedcom, e: &Edit) -> Result<(), String> {
-        let i = &self.issue;
         let outdated = || -> String { t!("change.outdated").into() };
         match e {
             Edit::SetEvent { record, index, date, place } => {
@@ -406,6 +513,7 @@ impl QualityChange {
                 if file.trim().is_empty() {
                     return Err("give the file's path, relative to the tree's folder".into());
                 }
+                let i = self.the_issue()?;
                 if g.set_media_file(&i.xref, &i.path, file.trim()) { Ok(()) } else { Err(outdated()) }
             }
             Edit::CiteSource { record, index, source, page } => {
@@ -422,11 +530,13 @@ impl QualityChange {
                 Ok(())
             }
             Edit::SetValue { value } => {
+                let i = self.the_issue()?;
                 let n = node_at(g, &i.xref, &i.path).ok_or_else(outdated)?;
                 n.value = (!value.trim().is_empty()).then(|| value.trim().to_string());
                 Ok(())
             }
             Edit::DeleteStructure => {
+                let i = self.the_issue()?;
                 let (last, parents) =
                     i.path.split_last().ok_or_else(|| "this issue is about a whole record".to_string())?;
                 let parent = node_at(g, &i.xref, parents).ok_or_else(outdated)?;
@@ -436,24 +546,60 @@ impl QualityChange {
                 parent.children.remove(*last);
                 Ok(())
             }
+            Edit::SetName { person, index, given, surname } => {
+                let r = g.get_mut(person).filter(|n| n.tag == "INDI").ok_or_else(|| format!("no person {person}"))?;
+                if r.child("NAME").is_none() {
+                    r.insert_child(Node::new("NAME"));
+                }
+                let node = r.children.iter_mut().filter(|c| c.tag == "NAME").nth(*index).ok_or_else(outdated)?;
+                let mut form = NameForm::read(node);
+                if let Some(v) = given {
+                    form.given = v.trim().to_string();
+                }
+                if let Some(v) = surname {
+                    form.surname = v.trim().to_string();
+                }
+                form.apply(node);
+                Ok(())
+            }
+            Edit::AddName { person, given, surname, kind } => {
+                let r = g.get_mut(person).filter(|n| n.tag == "INDI").ok_or_else(|| format!("no person {person}"))?;
+                let form = NameForm {
+                    given: given.trim().to_string(),
+                    surname: surname.trim().to_string(),
+                    kind: kind.trim().to_uppercase(),
+                    ..Default::default()
+                };
+                let mut node = Node::new("NAME");
+                form.apply(&mut node);
+                // After the last name, before the rest of the record.
+                let at = r.children.iter().rposition(|c| c.tag == "NAME").map(|p| p + 1).unwrap_or(0);
+                r.children.insert(at, node);
+                Ok(())
+            }
         }
     }
 
     /// Checks the change before it is queued: it fits the issue, and once applied to a copy of the
     /// file (`rerun` gives the issues of a file, like the Quality page), the issue is gone. Returns
     /// the issues the change would create.
+    /// A correction without an issue only has to apply.
     pub fn check(&self, g: &Gedcom, rerun: &dyn Fn(&Gedcom) -> Vec<Issue>) -> Result<Vec<Issue>, String> {
         let before = rerun(g);
-        if find_issue(&before, &self.issue_id).is_none() {
-            return Err(format!("no issue `{}` any more: call `quality_issues` again", self.issue_id));
+        if let (Some(_), Some(id)) = (&self.issue, &self.issue_id)
+            && find_issue(&before, id).is_none()
+        {
+            return Err(format!("no issue `{id}` any more: call `quality_issues` again"));
         }
         let mut copy = g.clone();
         self.apply(&mut copy)?;
         let after = rerun(&copy);
         let (b, a) = (counts(&before), counts(&after));
-        let key = count_key(&self.issue);
-        if a.get(&key).copied().unwrap_or(0) >= b.get(&key).copied().unwrap_or(0) {
-            return Err(format!("after this change, GEDRoots still reports: {}", self.issue.message));
+        if let Some(issue) = &self.issue {
+            let key = count_key(issue);
+            if a.get(&key).copied().unwrap_or(0) >= b.get(&key).copied().unwrap_or(0) {
+                return Err(format!("after this change, GEDRoots still reports: {}", issue.message));
+            }
         }
         // Issues that appear: more of their kind on their record than before.
         let mut seen: HashMap<_, usize> = HashMap::new();
@@ -469,15 +615,35 @@ impl QualityChange {
         Ok(new)
     }
 
-    /// Short title: the kind of issue and its record (“Death Before Birth · Jean GUYOT”).
+    /// Short title: the kind of issue and its record (“Death Before Birth · Jean GUYOT”), or
+    /// “Correction · Jean GUYOT”.
     pub fn title(&self, g: &Gedcom) -> String {
-        let kind = code_label(self.issue.code).into_owned();
-        match g.get(&self.issue.xref) {
-            Some(_) => format!("{kind} · {}", g.record_label(&self.issue.xref)),
-            None => match self.issue.related.first() {
+        let Some(issue) = &self.issue else {
+            let kind = t!("change.correction").into_owned();
+            let record = match &self.action {
+                Action::Edit(edits) => edits.iter().find_map(|e| e.record()).map(|x| g.record_label(x)),
+                _ => None,
+            };
+            return match record {
+                Some(r) => format!("{kind} · {r}"),
+                None => kind,
+            };
+        };
+        let kind = code_label(issue.code).into_owned();
+        match g.get(&issue.xref) {
+            Some(_) => format!("{kind} · {}", g.record_label(&issue.xref)),
+            None => match issue.related.first() {
                 Some(v) => format!("{kind} · {v}"),
                 None => kind,
             },
+        }
+    }
+
+    /// What the change answers: the issue's message, or the agent's reason for a correction.
+    pub fn subject(&self) -> &str {
+        match &self.issue {
+            Some(i) => &i.message,
+            None => &self.reason,
         }
     }
 
@@ -485,14 +651,15 @@ impl QualityChange {
     pub fn rows(&self, g: &Gedcom) -> Vec<ChangeRow> {
         let row =
             |label: String, current: String, proposed: String, change| ChangeRow { label, current, proposed, change };
-        let issue = &self.issue;
+        let message = self.subject().to_string();
+        let code = self.issue.as_ref().map(|i| i.code).unwrap_or_default();
         match &self.action {
             Action::Fix => {
-                let fix = quality::fix_of(issue.code).map(|f| f.label.into_owned()).unwrap_or_default();
-                vec![row(code_label(issue.code).into_owned(), issue.message.clone(), fix, Change::Differs)]
+                let fix = quality::fix_of(code).map(|f| f.label.into_owned()).unwrap_or_default();
+                vec![row(code_label(code).into_owned(), message, fix, Change::Differs)]
             }
             Action::Hide => {
-                vec![row(t!("change.issue").into(), issue.message.clone(), t!("change.hidden").into(), Change::Same)]
+                vec![row(t!("change.issue").into(), message, t!("change.hidden").into(), Change::Same)]
             }
             // What the person will have: kept, added, or the chosen value.
             Action::Merge(_) => {
@@ -571,9 +738,11 @@ impl QualityChange {
                         row(crate::short_place(place), or_dash(current), proposed, change)
                     }
                     Edit::SetMediaFile { file } => {
-                        let current = g
-                            .get(&issue.xref)
-                            .and_then(|m| issue.path.first().and_then(|i| m.children.get(*i)))
+                        let current = self
+                            .issue
+                            .as_ref()
+                            .and_then(|issue| g.get(&issue.xref).zip(issue.path.first()))
+                            .and_then(|(m, i)| m.children.get(*i))
                             .map(|f| f.val().to_string())
                             .unwrap_or_default();
                         row(t!("change.file").into(), or_dash(current), file.clone(), Change::Differs)
@@ -586,20 +755,49 @@ impl QualityChange {
                         row(label, t!("change.no_source").into(), proposed, Change::Added)
                     }
                     Edit::SetValue { value } => {
-                        let current = g.get(&issue.xref).and_then(|r| node_ref(r, &issue.path));
+                        let current = self.issue_node(g);
                         let label = current.map(|n| n.tag.clone()).unwrap_or_default();
                         let current = current.map(|n| n.val().to_string()).unwrap_or_default();
                         row(label, or_dash(current), or_dash(value.clone()), Change::Differs)
                     }
                     Edit::DeleteStructure => {
-                        let current = g.get(&issue.xref).and_then(|r| node_ref(r, &issue.path));
+                        let current = self.issue_node(g);
                         let label = current.map(|n| n.tag.clone()).unwrap_or_default();
                         let current = current.map(|n| n.val().to_string()).unwrap_or_default();
                         row(label, or_dash(current), t!("change.deleted").into(), Change::Differs)
                     }
+                    Edit::SetName { person, index, given, surname } => {
+                        let current = g
+                            .get(person)
+                            .and_then(|r| r.children_with("NAME").nth(*index).map(NameForm::read))
+                            .unwrap_or_default();
+                        let mut new = current.clone();
+                        if let Some(v) = given {
+                            new.given = v.trim().to_string();
+                        }
+                        if let Some(v) = surname {
+                            new.surname = v.trim().to_string();
+                        }
+                        row(
+                            t!("change.name").into(),
+                            or_dash(name_text(&current)),
+                            or_dash(name_text(&new)),
+                            Change::Differs,
+                        )
+                    }
+                    Edit::AddName { given, surname, .. } => {
+                        let new = NameForm { given: given.clone(), surname: surname.clone(), ..Default::default() };
+                        row(t!("change.other_name").into(), "—".into(), or_dash(name_text(&new)), Change::Added)
+                    }
                 })
                 .collect(),
         }
+    }
+
+    /// The structure the issue designates.
+    fn issue_node<'a>(&self, g: &'a Gedcom) -> Option<&'a Node> {
+        let i = self.issue.as_ref()?;
+        g.get(&i.xref).and_then(|r| node_ref(r, &i.path))
     }
 
     /// GEDCOM lines that change, record by record, computed on a copy of the file.
@@ -628,6 +826,15 @@ impl QualityChange {
         }
         Ok(out)
     }
+}
+
+/// “Given SURNAME”, as the tree shows a name.
+fn name_text(n: &NameForm) -> String {
+    [n.given.trim().to_string(), n.surname.trim().to_string()]
+        .into_iter()
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 fn or_dash(s: String) -> String {

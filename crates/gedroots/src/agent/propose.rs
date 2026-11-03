@@ -584,9 +584,34 @@ pub fn effects(proposal: &Proposal, ged: &Gedcom) -> Vec<String> {
             } else {
                 format!(" (tree: {})", r.current)
             };
-            format!("{} {what}{value}{tree}", verb(r.change))
+            let renamed = match &r.field {
+                Field::Person { index, .. } => other_name(&proposal.act.participants[*index], ged),
+                _ => None,
+            };
+            let renamed = renamed
+                .map(|(act, x)| {
+                    format!(
+                        "; the act names them {act}: their name in the tree stays as it is, correct it with propose_change (no issue, set_name or add_name on {x})"
+                    )
+                })
+                .unwrap_or_default();
+            format!("{} {what}{value}{tree}{renamed}", verb(r.change))
         })
         .collect()
+}
+
+/// The name the act gives a linked person, when none of their names in the tree matches it, and
+/// their id: linking does not rename them.
+fn other_name(p: &Participant, ged: &Gedcom) -> Option<(String, String)> {
+    let PersonChoice::Link(x) = &p.choice else { return None };
+    let ind = ged.individual(x)?;
+    let (given, surname) = (gedcom::sort_key(p.get(PersonField::Given)), gedcom::sort_key(p.get(PersonField::Surname)));
+    if given.is_empty() && surname.is_empty() {
+        return None;
+    }
+    let same = |a: &str, b: &str| a.is_empty() || a == gedcom::sort_key(b);
+    let known = ind.names().iter().any(|n| same(&given, &n.given) && same(&surname, &n.surname));
+    (!known).then(|| (p.display_name(), x.clone()))
 }
 
 /// Are the records already attached to the file's sources images rather than PDFs?
@@ -858,6 +883,26 @@ mod tests {
             "people": [{"role": "witness", "identity": "mention", "given": "Joseph", "facts": [{"event": "OCCU", "value": "smith"}]}]}))
         .unwrap();
         assert!(to_proposal(&p).unwrap_err().contains("mentioned"));
+    }
+
+    #[test]
+    fn a_linked_person_named_otherwise_is_pointed_out() {
+        let ged = gedcom::Gedcom::parse(
+            "0 HEAD\n1 GEDC\n2 VERS 7.0\n0 @I1@ INDI\n1 NAME Lorenz /Hörmann/\n1 SEX M\n0 TRLR\n",
+        )
+        .unwrap();
+        let act = |given: &str| {
+            let p: ProposeParams = serde_json::from_value(serde_json::json!({"event": "MARR", "source": {},
+                "people": [{"role": "principal", "identity": "link", "id": "I1", "given": given, "surname": "HÖRMANN"}]}))
+            .unwrap();
+            let mut prop = to_proposal(&p).unwrap();
+            prop.complete(&ged);
+            super::effects(&prop, &ged)
+        };
+        let lines = act("Johann");
+        assert!(lines.iter().any(|l| l.contains("names them Johann") && l.contains("set_name")), "{lines:?}");
+        // Same name, other case: nothing to say.
+        assert!(act("lorenz").iter().all(|l| !l.contains("set_name")));
     }
 
     #[test]

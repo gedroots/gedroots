@@ -1,5 +1,6 @@
-//! `propose_change`: a change for a Data Quality issue (fix, edit, hide), turned into
-//! [`gedcom::change`] types. GEDRoots checks it against the file before queueing it in To Review.
+//! `propose_change`: a change for a Data Quality issue (fix, edit, hide), or a correction read in a
+//! document without an issue (a misread given name, a wrong date), turned into [`gedcom::change`]
+//! types. GEDRoots checks it against the file before queueing it in To Review.
 
 use gedcom::change::{Action, Edit, Evidence};
 use schemars::JsonSchema;
@@ -7,8 +8,10 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct ChangeParams {
-    /// Issue id, as `quality_issues` gives it.
-    pub issue: String,
+    /// Issue id, as `quality_issues` gives it. Leave it out for a correction you read in a
+    /// document (a given name misread in an earlier proposal, a wrong date): `edit` only, with
+    /// `reason` and `evidence`.
+    pub issue: Option<String>,
     /// `fix`: the Quality page's own fix (only when the issue has `automatic_fix`). `edit`: the
     /// edits in `edits`. `hide`: the issue is right (e.g. a marriage really celebrated very young),
     /// and the reason says why; for a possible duplicate, they are two different people. `merge`:
@@ -29,7 +32,10 @@ pub struct ChangeParams {
 /// `set_event` (record, event, date and/or place), `delete_event` (record, event),
 /// `set_sex` (record, sex), `set_coordinates` (place, latitude, longitude),
 /// `set_media_file` (file), `cite_source` (record, event, source, page),
-/// `set_value` (value), `delete_structure` (nothing: the structure the issue designates).
+/// `set_value` (value), `delete_structure` (nothing: the structure the issue designates),
+/// `set_name` (record, given and/or surname, name), `add_name` (record, given and/or surname,
+/// name_type). Without an issue: set_name, add_name, set_event, delete_event, set_sex, cite_source,
+/// set_coordinates.
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct EditParams {
     pub kind: String,
@@ -53,6 +59,14 @@ pub struct EditParams {
     /// Reference in the source (page, act number, view).
     pub page: Option<String>,
     pub value: Option<String>,
+    /// Given names, as the document writes them.
+    pub given: Option<String>,
+    pub surname: Option<String>,
+    /// For `set_name`: position of the name among the person's names (0, the main one, when left
+    /// out).
+    pub name: Option<usize>,
+    /// For `add_name`: `AKA`, `BIRTH`, `MARRIED`, `MAIDEN`, `IMMIGRANT`, `PROFESSIONAL` or `OTHER`.
+    pub name_type: Option<String>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -80,7 +94,8 @@ pub struct ChangeProposed {
 /// What the app needs to build and check the change.
 #[derive(Debug, Clone)]
 pub struct ChangeRequest {
-    pub issue_id: String,
+    /// `None`: a correction without an issue.
+    pub issue_id: Option<String>,
     pub action: Action,
     pub reason: String,
     pub evidence: Evidence,
@@ -126,6 +141,18 @@ fn edit(p: &EditParams) -> Result<Edit, String> {
         },
         "set_value" => Edit::SetValue { value: need(p.value.clone(), k, "value")? },
         "delete_structure" => Edit::DeleteStructure,
+        "set_name" => Edit::SetName {
+            person: need(id(&p.record), k, "record")?,
+            index: p.name.unwrap_or(0),
+            given: p.given.clone(),
+            surname: p.surname.clone(),
+        },
+        "add_name" => Edit::AddName {
+            person: need(id(&p.record), k, "record")?,
+            given: p.given.clone().unwrap_or_default(),
+            surname: p.surname.clone().unwrap_or_default(),
+            kind: p.name_type.clone().unwrap_or_default(),
+        },
         other => return Err(format!("unknown edit `{other}`")),
     })
 }
@@ -156,7 +183,7 @@ pub fn to_request(p: &ChangeParams) -> Result<ChangeRequest, String> {
         })
         .unwrap_or_default();
     Ok(ChangeRequest {
-        issue_id: p.issue.trim().to_string(),
+        issue_id: p.issue.as_deref().map(str::trim).filter(|s| !s.is_empty()).map(str::to_string),
         action,
         reason: p.reason.clone().unwrap_or_default().trim().to_string(),
         evidence,
@@ -198,5 +225,27 @@ mod tests {
         }))
         .unwrap();
         assert_eq!(to_request(&merge).unwrap().action, Action::Merge(vec![("BIRT".into(), "I11".into())]));
+    }
+
+    #[test]
+    fn a_correction_needs_no_issue() {
+        let p: ChangeParams = serde_json::from_value(serde_json::json!({
+            "action": "edit",
+            "edits": [{"kind": "set_name", "record": "I27", "given": "Johann"}],
+            "reason": "The marriage act of 1850 names the groom Johann",
+            "evidence": {"url": "https://example.org/register/51", "quote": "Johann Hörmann"}
+        }))
+        .unwrap();
+        let r = to_request(&p).unwrap();
+        assert_eq!(r.issue_id, None);
+        assert_eq!(
+            r.action,
+            Action::Edit(vec![Edit::SetName {
+                person: "I27".into(),
+                index: 0,
+                given: Some("Johann".into()),
+                surname: None
+            }])
+        );
     }
 }

@@ -2350,13 +2350,22 @@ impl Act {
                 let g = sort_key(&i.given());
                 let mut reasons: Vec<String> = Vec::new();
                 // Surname and given names typed in each other's field: still a match, said so.
+                // Named otherwise but already in this place in the tree (the linked child's
+                // father…): still offered, said so, since the record may correct a misread name.
+                let in_context = context.iter().any(|(x, _)| x == i.xref());
                 let mut score = match name_score(&surname, &given, &s, &g) {
                     Some(n) => n,
-                    None => {
-                        let n = name_score(&given, &surname, &s, &g)?;
-                        reasons.push(t!("act.reason.swapped").into_owned());
-                        n
-                    }
+                    None => match name_score(&given, &surname, &s, &g) {
+                        Some(n) => {
+                            reasons.push(t!("act.reason.swapped").into_owned());
+                            n
+                        }
+                        None if in_context => {
+                            reasons.push(t!("act.reason.other_name").into_owned());
+                            0.0
+                        }
+                        None => return None,
+                    },
                 };
                 if matches!(sex.as_str(), "M" | "F") && matches!(i.sex(), "M" | "F") && i.sex() != sex {
                     return None;

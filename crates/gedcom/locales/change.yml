@@ -1,5 +1,5 @@
 _version: 2
-# Changes proposed by an AI agent for a Data Quality issue (crates/gedcom/src/change.rs).
+# Changes proposed by an AI agent for a Data Quality issue, or corrections (crates/gedcom/src/change.rs).
 change.outdated:
   en: "The tree changed since this change was proposed."
   fr: "L'arbre a changé depuis que cette modification a été proposée."
@@ -18,3 +18,12 @@ change.file:
 change.no_source:
   en: "No source"
   fr: "Sans source"
+change.correction:
+  en: "Correction"
+  fr: "Correction"
+change.name:
+  en: "Name"
+  fr: "Nom"
+change.other_name:
+  en: "Other name"
+  fr: "Autre nom"
