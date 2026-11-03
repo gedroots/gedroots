@@ -1,0 +1,120 @@
+_version: 2
+# File › Mobile Devices… (crates/gedroots/src/workspace/mobile.rs, crates/gedroots/src/mobile.rs)
+mobile:
+  title:
+    en: Mobile Devices
+    fr: Appareils mobiles
+  share:
+    en: Share the Tree With My Mobile Devices
+    fr: Partager l’arbre avec mes appareils mobiles
+  save_first:
+    en: Save the tree to share it.
+    fr: Enregistrez l’arbre pour le partager.
+  "on":
+    en: "On"
+    fr: Actif
+  on_version:
+    en: "On · Updated %{when}"
+    fr: "Actif · mis à jour %{when}"
+  "off":
+    en: "Off"
+    fr: Désactivé
+  paired:
+    en: Paired
+    fr: Jumelés
+  add:
+    en: Add a Device
+    fr: Ajouter un appareil
+  scan:
+    en: Scan With GEDRoots on Your Device
+    fr: Scannez avec GEDRoots sur l’appareil
+  valid:
+    en: "Code valid for %{n} min"
+    fr: "Code valable %{n} min"
+  copy_code:
+    en: Copy Code
+    fr: Copier le code
+  expired:
+    en: This code has expired.
+    fr: Ce code a expiré.
+  code_failed:
+    en: The code could not be created.
+    fr: Le code n’a pas pu être créé.
+  new_code:
+    en: New Code
+    fr: Nouveau code
+  paired_status:
+    en: "“%{name}” is paired"
+    fr: "« %{name} » est jumelé"
+  unnamed:
+    en: Mobile Device
+    fr: Appareil mobile
+  phone:
+    en: Phone
+    fr: Téléphone
+  tablet:
+    en: Tablet
+    fr: Tablette
+  kind_paired:
+    en: "%{kind} · Paired on %{date}"
+    fr: "%{kind} · jumelé le %{date}"
+  last_sync:
+    en: Last Sync
+    fr: Dernière synchro
+  never:
+    en: Never
+    fr: Jamais
+  up_to_date:
+    en: "Up to date · %{when}"
+    fr: "À jour · %{when}"
+  connection:
+    en: Connection
+    fr: Connexion
+  direct:
+    en: Direct
+    fr: Directe
+  relay:
+    en: Relay
+    fr: Relais
+  on_device:
+    en: On the Device
+    fr: Sur l’appareil
+  people:
+    one:
+      en: "%{n} person"
+      fr: "%{n} individu"
+    other:
+      en: "%{n} people"
+      fr: "%{n} individus"
+  kb:
+    en: "%{n} KB"
+    fr: "%{n} Ko"
+  mb:
+    en: "%{n} MB"
+    fr: "%{n} Mo"
+  remove:
+    en: Remove Device
+    fr: Retirer cet appareil
+  just_now:
+    en: just now
+    fr: à l’instant
+  minutes_ago:
+    one:
+      en: "%{n} min ago"
+      fr: "il y a %{n} min"
+    other:
+      en: "%{n} min ago"
+      fr: "il y a %{n} min"
+  hours_ago:
+    one:
+      en: "%{n} h ago"
+      fr: "il y a %{n} h"
+    other:
+      en: "%{n} h ago"
+      fr: "il y a %{n} h"
+  on_day:
+    en: "on %{date}"
+    fr: "le %{date}"
+  no_config:
+    en: No configuration folder on this computer.
+    fr: Pas de dossier de configuration sur cet ordinateur.

@@ -30,6 +30,9 @@ serde = { version = "1.0.229", features = ["derive"] }
 schemars = "1"
 # Platform configuration folder (AI agents setting, recent files outside macOS).
 dirs = "6"
+# Mobile devices: one-way peer-to-peer sync, and the pairing QR code.
+gedroots-sync = { path = "../sync" }
+qrcode = { version = "0.14", default-features = false }
 tokio-util = "0.7.20"
 hayro = "0.8.0"
 similar = "2.7.0"
