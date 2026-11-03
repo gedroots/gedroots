@@ -152,8 +152,12 @@ mod tests {
         assert_eq!(g.root().as_deref(), Some(ROOT));
         let people: Vec<String> = g.records_of(gedcom::RecordKind::Individual).filter_map(|r| r.xref.clone()).collect();
         assert!(people.len() >= 10);
+        // Nobody living: everyone died, or was born more than a century ago.
         for x in people {
-            assert!(!g.is_living(&x, 2026), "{x} must not be living");
+            let ind = g.individual(&x).unwrap();
+            let dead = ind.events().iter().any(|e| matches!(e.tag(), "DEAT" | "BURI" | "CREM"));
+            let old = ind.birth().and_then(|b| b.date()).and_then(|d| d.latest_year()).is_some_and(|y| y <= 1926);
+            assert!(dead || old, "{x} must not be living");
         }
     }
 

@@ -60,7 +60,7 @@ register.
   or any archive website, and find how two people are related.
 - **AI agents, under your control.** Connect an agent such as Claude Code: it finds the gaps,
   searches online archives and proposes records. You compare each proposal with your tree
-  before anything is saved. Living people stay hidden.
+  before anything is saved.
 - **Share freely.** GEDZIP archives with every media file, GEDCOM 5.5.1 for older software,
   and a file ready for Geneanet.
 

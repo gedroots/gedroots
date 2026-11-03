@@ -3,7 +3,7 @@
 //!
 //! Nothing is inferred or classified here: the agent gets the settings, the description the user
 //! wrote, the vocabulary in use and the latest records as raw GEDCOM, and draws its own
-//! conclusions. Living people are never among the examples.
+//! conclusions.
 
 use crate::date::Date;
 use crate::document::{Gedcom, RecordKind};
@@ -89,9 +89,7 @@ pub struct MediaSubfolder {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, schemars::JsonSchema))]
 pub struct Examples {
     pub sources: Vec<String>,
-    /// Never a person who may be living.
     pub people: Vec<String>,
-    /// Never a family where a spouse may be living.
     pub families: Vec<String>,
     pub media: Vec<String>,
     pub repositories: Vec<String>,
@@ -99,7 +97,7 @@ pub struct Examples {
 
 impl Gedcom {
     /// The file's context, with `examples` records of each kind.
-    pub fn file_context(&self, examples: usize, this_year: i32) -> FileContext {
+    pub fn file_context(&self, examples: usize) -> FileContext {
         let header = &self.header;
         let naming = self.media_naming();
         FileContext {
@@ -131,18 +129,11 @@ impl Gedcom {
                     .collect(),
             }),
             examples: Examples {
-                sources: self.latest(RecordKind::Source, examples, |_| true),
-                people: self.latest(RecordKind::Individual, examples, |n| {
-                    n.xref.as_deref().is_some_and(|x| !self.is_living(x, this_year))
-                }),
-                families: self.latest(RecordKind::Family, examples, |n| {
-                    ["HUSB", "WIFE"]
-                        .iter()
-                        .filter_map(|t| n.child(t).and_then(Node::pointer))
-                        .all(|x| !self.is_living(x, this_year))
-                }),
-                media: self.latest(RecordKind::Media, examples, |_| true),
-                repositories: self.latest(RecordKind::Repository, examples, |_| true),
+                sources: self.latest(RecordKind::Source, examples),
+                people: self.latest(RecordKind::Individual, examples),
+                families: self.latest(RecordKind::Family, examples),
+                media: self.latest(RecordKind::Media, examples),
+                repositories: self.latest(RecordKind::Repository, examples),
             },
         }
     }
@@ -173,15 +164,15 @@ impl Gedcom {
         all
     }
 
-    /// Raw GEDCOM of the last `n` records of a kind that pass `keep`, by date of last change
+    /// Raw GEDCOM of the last `n` records of a kind, by date of last change
     /// (`CHAN`); records without one count as older, in file order.
-    fn latest(&self, kind: RecordKind, n: usize, keep: impl Fn(&Node) -> bool) -> Vec<String> {
+    fn latest(&self, kind: RecordKind, n: usize) -> Vec<String> {
         if n == 0 {
             return Vec::new();
         }
         let mut records: Vec<(usize, &Node)> = self.records_of(kind).enumerate().collect();
         records.sort_by_cached_key(|(i, r)| std::cmp::Reverse((changed(r), *i)));
-        records.into_iter().filter(|(_, r)| keep(r)).take(n).map(|(_, r)| example(r)).collect()
+        records.into_iter().take(n).map(|(_, r)| example(r)).collect()
     }
 }
 
@@ -237,7 +228,7 @@ mod tests {
     #[test]
     fn gives_the_settings_vocabulary_and_latest_records() {
         let g = Gedcom::parse(FILE).unwrap();
-        let c = g.file_context(5, 2026);
+        let c = g.file_context(5);
         assert_eq!(c.description, "Titles of sources: « Acte de naissance de Prénom NOM ».");
         assert_eq!(c.language, "fr");
         assert_eq!(c.place_format, ["Town", "County", "Country"]);
@@ -245,14 +236,15 @@ mod tests {
         assert!(c.event_tags.contains(&Count { value: "OCCU".into(), count: 3 }));
         assert!(c.event_types.iter().any(|t| t.ty == "Service militaire" && !t.family && t.count == 1));
         assert!(c.event_types.iter().any(|t| t.ty == "Publication des bans" && t.family && t.count == 0));
-        // Latest change first, never a living person (I2, born 2001).
-        assert_eq!(c.examples.people.len(), 2);
-        assert!(c.examples.people[0].starts_with("0 @I1@ INDI"));
-        assert!(c.examples.people[1].starts_with("0 @I3@ INDI"));
+        // Latest change first, living people included (I2, born 2001).
+        assert_eq!(c.examples.people.len(), 3);
+        assert!(c.examples.people[0].starts_with("0 @I2@ INDI"));
+        assert!(c.examples.people[1].starts_with("0 @I1@ INDI"));
+        assert!(c.examples.people[2].starts_with("0 @I3@ INDI"));
         // A record without a change date comes after those that have one.
         assert!(c.examples.sources[0].starts_with("0 @S2@ SOUR"));
         assert!(c.examples.sources[1].starts_with("0 @S1@ SOUR"));
-        assert_eq!(g.file_context(1, 2026).examples.sources.len(), 1);
-        assert!(g.file_context(0, 2026).examples.people.is_empty());
+        assert_eq!(g.file_context(1).examples.sources.len(), 1);
+        assert!(g.file_context(0).examples.people.is_empty());
     }
 }
