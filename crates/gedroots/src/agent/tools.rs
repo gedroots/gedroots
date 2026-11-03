@@ -9,6 +9,7 @@ use axum::http::{StatusCode, header};
 use axum::middleware::Next;
 use axum::response::Response;
 use gedcom::RecordKind;
+use gedcom::context::FileContext;
 use gedcom::research::{Gap, PersonRef, PersonSheet, QualityFilter, QualityReport, current_year};
 use rmcp::handler::server::wrapper::{Json, Parameters};
 use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
@@ -38,6 +39,12 @@ pub struct SearchParams {
 pub struct PersonParams {
     /// Person id, as returned by another tool (e.g. `I12`).
     pub id: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct ContextParams {
+    /// Records of each kind given as examples (default 5, at most 20).
+    pub examples: Option<usize>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -281,6 +288,17 @@ impl GedrootsMcp {
     }
 
     #[tool(
+        name = "file_context",
+        description = "How this file is written, to write new records the same way: the description the user wrote for the file (their conventions, word for word), its language and place format, the events, custom event types and occupations in use with their counts, where media are filed and named, and the latest sources, people, families, media and repositories changed, as raw GEDCOM. Call it before proposing anything, and follow what you see: source titles, registers, one source per act or per register, name forms, event types.",
+        annotations(read_only_hint = true, open_world_hint = false)
+    )]
+    async fn file_context(&self, Parameters(p): Parameters<ContextParams>) -> Res<FileContext> {
+        let s = self.snapshot().await?;
+        let context = s.ged.file_context(p.examples.unwrap_or(5).min(20), current_year());
+        self.answer(&s, context)
+    }
+
+    #[tool(
         name = "search_people",
         description = "Searches the tree for people by name, given name or place. A living person is given only their name and birth (`born`).",
         annotations(read_only_hint = true, open_world_hint = false)
@@ -429,7 +447,7 @@ impl GedrootsMcp {
 
     #[tool(
         name = "propose_act",
-        description = "Proposes an act found in the archives (birth, marriage, death…), with its source, people and image. Nothing is written: the proposal waits in GEDRoots' review page, where the user compares it with the tree and saves or rejects it. Each person says who they are: identity link (in the tree, with id), create or mention; call match_people first. Give every other fact the act states about a person in their `facts` (birth date in a baptism, marginal mention of a death, occupations, residences), each with its own date or none; the answer lists everything that will be written, the proposal's id (to correct it, propose it again with `replaces`) and the temporary id of each new person (link it to name the same person in another proposal: never create them twice). It is refused, with the reason, if it does not fit the tree (unknown source or person, one source per act or per register as the file does, a parent other than the tree's, a person to create who resembles someone of the tree, impossible date): fix it and propose again. Give the place as the tree names it, the date in GEDCOM format, the downloaded file (a PDF register needs pdf_page) and the act's page in the archive's viewer (url): both are kept, the image and a web link.",
+        description = "Proposes an act found in the archives (birth, marriage, death…), with its source, people and image. Nothing is written: the proposal waits in GEDRoots' review page, where the user compares it with the tree and saves or rejects it. Each person says who they are: identity link (in the tree, with id), create or mention; call match_people first. Give every other fact the act states about a person in their `facts` (birth date in a baptism, marginal mention of a death, occupations, residences), each with its own date or none; the answer lists everything that will be written, the proposal's id (to correct it, propose it again with `replaces`) and the temporary id of each new person (link it to name the same person in another proposal: never create them twice). It is refused, with the reason, if it does not fit the tree (unknown source or person, a parent other than the tree's, a person to create who resembles someone of the tree, impossible date): fix it and propose again. Give the place as the tree names it, the date in GEDCOM format, the downloaded file (a PDF register needs pdf_page) and the act's page in the archive's viewer (url): both are kept, the image and a web link.",
         annotations(
             read_only_hint = false,
             destructive_hint = false,
@@ -594,12 +612,12 @@ impl GedrootsMcp {
     }
 }
 
-// Instructions given to the agent on connection.
-#[tool_handler(
-    name = "gedroots",
-    instructions = "GEDRoots is a genealogy app. These tools read the GEDCOM 7 family tree open in \
+/// Instructions given to the agent on connection.
+const INSTRUCTIONS: &str = "GEDRoots is a genealogy app. These tools read the GEDCOM 7 family tree open in \
 the app (its active window). They never change it: `propose_act` and `propose_change` only add \
-a proposal to the app's review page, where the user compares it with the tree before saving it. Of a living person, only \
+a proposal to the app's review page, where the user compares it with the tree before saving it. \
+Start with `file_context`: it shows how this file is written (the user's own conventions, source \
+titles, names, event types), so that what you propose looks like the rest of the file. Of a living person, only \
 what identifies them is given (name, birth, close relatives). Ids (I12, F3, S4…) are \
 only for passing between tools: never show them to the user. To look for records (birth, marriage, \
 death acts), call `research_gaps`, then `person_sheet` on the person to learn their places, dates \
@@ -612,10 +630,52 @@ Every answer carries `news` when the user saved, rejected or edited a proposal s
 a saved proposal gives the ids its new people now have in the tree, to link from then on. \
 The prompts `find_record` and `read_record` give the full method. To improve the data, `quality_issues` lists \
 the tree's Data Quality issues and `propose_change` fixes, edits or hides one; the prompt \
-`review_quality` gives the method."
-)]
+`review_quality` gives the method.";
+
+/// The file's context, also offered as a resource for clients that let the user attach one.
+const CONTEXT_URI: &str = "gedroots://file/context";
+
+#[tool_handler]
 #[prompt_handler(router = self.prompt_router)]
 impl ServerHandler for GedrootsMcp {
+    fn get_info(&self) -> rmcp::model::ServerConfig {
+        rmcp::model::ServerConfig::new(
+            rmcp::model::ServerCapabilities::builder().enable_tools().enable_prompts().enable_resources().build(),
+        )
+        .with_server_info(rmcp::model::Implementation::new("gedroots", env!("CARGO_PKG_VERSION")))
+        .with_instructions(INSTRUCTIONS.to_string())
+    }
+
+    async fn list_resources(
+        &self,
+        _request: Option<rmcp::model::PaginatedRequestParams>,
+        _context: rmcp::service::RequestContext<rmcp::RoleServer>,
+    ) -> Result<rmcp::model::ListResourcesResult, rmcp::ErrorData> {
+        let context = rmcp::model::Resource::new(CONTEXT_URI, "file_context")
+            .with_title("File context")
+            .with_description("How the open file is written: the user's conventions, vocabulary and latest records")
+            .with_mime_type("application/json");
+        Ok(rmcp::model::ListResourcesResult::with_all_items(vec![context]))
+    }
+
+    async fn read_resource(
+        &self,
+        request: rmcp::model::ReadResourceRequestParams,
+        _context: rmcp::service::RequestContext<rmcp::RoleServer>,
+    ) -> Result<rmcp::model::ReadResourceResponse, rmcp::ErrorData> {
+        if request.uri != CONTEXT_URI {
+            return Err(rmcp::ErrorData::resource_not_found(format!("no resource {}", request.uri), None));
+        }
+        let s = self.snapshot().await.map_err(|e| rmcp::ErrorData::internal_error(e, None))?;
+        let json = serde_json::to_string_pretty(&s.ged.file_context(5, current_year()))
+            .map_err(|e| rmcp::ErrorData::internal_error(e.to_string(), None))?;
+        let mut text = rmcp::model::ResourceContents::text(json, CONTEXT_URI);
+        if let rmcp::model::ResourceContents::TextResourceContents { mime_type, .. } = &mut text {
+            *mime_type = Some("application/json".into());
+        }
+        Ok(rmcp::model::ReadResourceResult::new(vec![text]).into())
+    }
+
     async fn initialize(
         &self,
         request: rmcp::model::InitializeRequestParams,
@@ -751,7 +811,7 @@ mod tests {
         let (_, _, list) =
             post(port, "secret", Some(&sid), serde_json::json!({"jsonrpc":"2.0","id":2,"method":"tools/list"}));
         let tools = list["result"]["tools"].as_array().expect("tools");
-        assert_eq!(tools.len(), 11);
+        assert_eq!(tools.len(), 12);
         // Only the proposals are not read only, and they write nothing.
         let writers: Vec<_> =
             tools.iter().filter(|t| t["annotations"]["readOnlyHint"] != true).map(|t| t["name"].clone()).collect();
@@ -801,6 +861,28 @@ mod tests {
             serde_json::json!({"jsonrpc":"2.0","id":6,"method":"prompts/get","params":{"name":"read_record"}}),
         );
         assert!(bare["result"]["messages"][0]["content"]["text"].is_string(), "{bare}");
+        // The file's context: as a tool, and as a resource.
+        let (_, _, call) = post(
+            port,
+            "secret",
+            Some(&sid),
+            serde_json::json!({"jsonrpc":"2.0","id":8,"method":"tools/call",
+            "params":{"name":"file_context","arguments":{}}}),
+        );
+        let ctx = &call["result"]["structuredContent"];
+        assert!(ctx["examples"]["people"][0].as_str().is_some_and(|p| p.starts_with("0 @I1@ INDI")), "{call}");
+        assert_eq!(ctx["event_tags"][0]["value"], "BIRT");
+        let (_, _, list) =
+            post(port, "secret", Some(&sid), serde_json::json!({"jsonrpc":"2.0","id":9,"method":"resources/list"}));
+        assert_eq!(list["result"]["resources"][0]["uri"], CONTEXT_URI, "{list}");
+        let (_, _, read) = post(
+            port,
+            "secret",
+            Some(&sid),
+            serde_json::json!({"jsonrpc":"2.0","id":10,"method":"resources/read","params":{"uri":CONTEXT_URI}}),
+        );
+        let text = read["result"]["contents"][0]["text"].as_str().expect("text");
+        assert!(text.contains("Jean /MARCHAND/"), "{read}");
         cancel.cancel();
     }
 }
