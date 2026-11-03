@@ -994,6 +994,7 @@ impl Workspace {
                 window,
                 cx,
             ),
+            ActEditorEvent::PickMedia => this.open_picker(relatives::PickPurpose::ActMedia, window, cx),
         });
         // Place fields of the record: the same menu as everywhere else.
         let ws = cx.entity().downgrade();

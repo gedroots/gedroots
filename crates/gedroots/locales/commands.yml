@@ -275,6 +275,9 @@ cmd:
   show_raw:
     en: Raw GEDCOM
     fr: GEDCOM brut
+  record_preview:
+    en: GEDCOM Preview
+    fr: Aperçu GEDCOM
   toggle_sidebar:
     en: Show or Hide Sidebar
     fr: Masquer ou afficher la barre latérale

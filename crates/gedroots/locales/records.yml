@@ -195,6 +195,9 @@ picker.merge_into:
 picker.act_person:
   en: Choose an Existing Person
   fr: Choisir une personne existante
+picker.act_media:
+  en: Choose the Record Image
+  fr: Choisir l’image de l’acte
 picker.act_source:
   en: Enter a Record in the Source…
   fr: Saisir un acte dans la source…

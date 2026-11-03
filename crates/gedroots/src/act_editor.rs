@@ -7,16 +7,16 @@
 //! receives [`ActEditorEvent::Save`].
 
 use crate::date_field::DateField;
-use crate::editor::{PickerState, choice_with_search, picker};
+use crate::editor::{PickerState, choice, choice_with_search};
 use crate::theme;
 use gedcom::*;
 use gpui_kit::assets::IconName;
-use gpui_kit::component::button::{Button, ButtonVariants};
+use gpui_kit::component::button::{Button, ButtonCustomVariant, ButtonGroup, ButtonVariants};
 use gpui_kit::component::checkbox::Checkbox;
 use gpui_kit::component::input::{Input, InputEvent, InputState, Textarea, TextareaState};
-use gpui_kit::component::menu::{DropdownMenu, PopupMenuItem};
+use gpui_kit::component::menu::{ContextMenuExt, DropdownMenu, PopupMenu, PopupMenuItem};
 use gpui_kit::component::select::{Select, SelectEvent};
-use gpui_kit::component::{Disableable, Sizable, h_flex, v_flex};
+use gpui_kit::component::{Disableable, Selectable, Sizable, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 use rust_i18n::t;
@@ -36,6 +36,8 @@ pub enum ActEditorEvent {
         idx: usize,
         suggestions: Vec<(String, String)>,
     },
+    /// Choose any media of the file as the record's image.
+    PickMedia,
     /// Typing in a place field (`changed`: the text changed): the workspace holds the place menu,
     /// shared by every Place field.
     PlaceInput {
@@ -81,11 +83,11 @@ pub struct ActEditor {
     record_date: Entity<DateField>,
     transcription: Entity<TextareaState>,
     quality: Option<u8>,
+    /// Quality pop-up: “—”, then the four GEDCOM levels.
+    quality_picker: Entity<PickerState>,
     media: MediaChoice,
     /// Displayed page of the record's image (from 0).
     media_page: usize,
-    /// Any media of the file, to link a file already imported.
-    media_picker: Entity<PickerState>,
     estimate_births: bool,
     rows: Vec<PersonRow>,
     /// Active place field (to show the suggested places under this field).
@@ -102,6 +104,12 @@ pub struct ActEditor {
 }
 
 impl EventEmitter<ActEditorEvent> for ActEditor {}
+
+/// Likely individuals offered directly in a person's menu (the others are in “Other Person…”).
+const MENU_MATCHES: usize = 3;
+
+/// Value of the quality pop-up for “no quality”.
+const NO_QUALITY: &str = "-";
 
 fn quality_labels() -> [std::borrow::Cow<'static, str>; 4] {
     [t!("act.quality_0"), t!("act.quality_1"), t!("act.quality_2"), t!("act.quality_3")]
@@ -177,14 +185,21 @@ impl ActEditor {
             let t = act.transcription.clone();
             cx.new(|cx| TextareaState::new(window, cx).rows(4).default_value(t))
         };
-        let media_picker = picker(&ged, RecordKind::Media, "", window, cx);
+        let quality_picker = {
+            let labels = quality_labels();
+            let values = ["0", "1", "2", "3"];
+            let mut opts: Vec<(&str, &str)> = vec![(NO_QUALITY, "—")];
+            opts.extend(values.iter().zip(labels.iter()).map(|(v, l)| (*v, l.as_ref())));
+            let current = act.quality.map(|q| q.to_string()).unwrap_or_else(|| NO_QUALITY.into());
+            choice(&opts, &current, window, cx)
+        };
         let mut this = Self {
             ged,
             base_dir: ged_path.and_then(|p| p.parent().map(Path::to_path_buf)),
             quality: act.quality,
             media: act.media.clone(),
             media_page: 0,
-            media_picker,
+            quality_picker,
             estimate_births: act.estimate_births,
             base: act.clone(),
             event,
@@ -226,7 +241,13 @@ impl ActEditor {
             }
         });
         this._subs.push(sub);
-        let sub = this.watch_media_picker(window, cx);
+        let q = this.quality_picker.clone();
+        let sub = cx.subscribe_in(&q, window, |this, _, ev: &SelectEvent<_>, _, cx| {
+            let SelectEvent::Confirm(v) = ev;
+            this.quality = v.as_deref().and_then(|v| v.parse().ok());
+            this.preview = None;
+            cx.notify();
+        });
         this._subs.push(sub);
         let e = this.event.clone();
         let sub = cx.subscribe_in(&e, window, |this, _, ev: &SelectEvent<_>, window, cx| {
@@ -304,17 +325,11 @@ impl ActEditor {
                     PersonField::Residence | PersonField::Birthplace => Kind::Place,
                     _ => Kind::Plain,
                 };
-                let ph = match f {
-                    PersonField::Age => t!("act.age_placeholder"),
-                    PersonField::Kinship => t!("act.kinship_placeholder"),
-                    _ => "".into(),
-                }
-                .into_owned();
                 let v = match kind {
                     Kind::Place => place_label(p.get(f)),
                     _ => p.get(f).to_string(),
                 };
-                let e = cx.new(|cx| InputState::new(window, cx).placeholder(ph).default_value(v));
+                let e = cx.new(|cx| InputState::new(window, cx).default_value(v));
                 subs.push(self.watch(&e, kind, window, cx));
                 inputs.push((f, e));
             }
@@ -534,17 +549,7 @@ impl ActEditor {
         cx.notify();
     }
 
-    fn watch_media_picker(&self, window: &mut Window, cx: &mut Context<Self>) -> Subscription {
-        cx.subscribe_in(&self.media_picker, window, |this, picker, ev: &SelectEvent<_>, window, cx| {
-            if let SelectEvent::Confirm(Some(x)) = ev {
-                this.set_media(MediaChoice::Existing(x.clone()), cx);
-                // The picker acts as an action: it goes back to “Existing Media…”.
-                picker.update(cx, |p, cx| p.set_selected_index(None, window, cx));
-            }
-        })
-    }
-
-    fn set_media(&mut self, media: MediaChoice, cx: &mut Context<Self>) {
+    pub(crate) fn set_media(&mut self, media: MediaChoice, cx: &mut Context<Self>) {
         self.media = media;
         self.media_page = 0;
         self.preview = None;
@@ -556,11 +561,16 @@ impl ActEditor {
         self.transcription.update(cx, |t, cx| t.set_value(text, window, cx));
     }
 
-    fn toggle_preview(&mut self, cx: &mut Context<Self>) {
+    /// View › GEDCOM Preview: shows or hides what the record will write.
+    pub fn toggle_preview(&mut self, cx: &mut Context<Self>) {
         self.preview = match self.preview {
             Some(_) => None,
             None => Some(self.collect(cx).preview(&self.ged)),
         };
+        // The preview is at the end of the form: bring it into view.
+        if self.preview.is_some() {
+            self.scroll.scroll_to_bottom();
+        }
         cx.notify();
     }
 
@@ -585,10 +595,6 @@ impl ActEditor {
             n.media = result.media.clone().map(MediaChoice::Existing).unwrap_or_default();
         }
         self.ged = ged;
-        // The media created by this record can now be offered.
-        self.media_picker = picker(&self.ged, RecordKind::Media, "", window, cx);
-        let sub = self.watch_media_picker(window, cx);
-        self._subs.push(sub);
         self.saved_count += 1;
         self.base = n.clone();
         self.media = n.media.clone();
@@ -666,35 +672,39 @@ fn mono(s: impl Into<SharedString>) -> Div {
         .child(s.into())
 }
 
-/// Columns of the grid shared by the “Record” and “People” sections.
+/// Columns of the “Record” grid.
 const GRID: u16 = 4;
 
-/// Width (in columns) of each field of a person: the surname and given names each take half a row,
-/// the note a full row, the others one column; the last field of an incomplete row stretches to the
-/// edge so as not to leave a gap.
+/// Columns of a person's fields: the surname and given names each take half a row, the age a
+/// quarter, the other fields three eighths, the note a full row.
+const PERSON_GRID: u16 = 8;
+
+/// Width (in columns of [`PERSON_GRID`]) of each field of a person; the last field of an
+/// incomplete row stretches to the edge so as not to leave a gap.
 fn grid_spans(fields: impl Iterator<Item = PersonField>) -> Vec<u16> {
     let mut spans: Vec<u16> = fields
         .map(|f| match f {
-            PersonField::Surname | PersonField::Given => GRID / 2,
-            PersonField::Note => GRID,
-            _ => 1,
+            PersonField::Surname | PersonField::Given => PERSON_GRID / 2,
+            PersonField::Note => PERSON_GRID,
+            PersonField::Age => 2,
+            _ => 3,
         })
         .collect();
     let mut used = 0;
     for i in 0..spans.len() {
-        if used + spans[i] > GRID {
+        if used + spans[i] > PERSON_GRID {
             if let Some(prev) = i.checked_sub(1) {
-                spans[prev] += GRID - used;
+                spans[prev] += PERSON_GRID - used;
             }
             used = 0;
         }
         used += spans[i];
     }
     if used > 0
-        && used < GRID
+        && used < PERSON_GRID
         && let Some(last) = spans.last_mut()
     {
-        *last += GRID - used;
+        *last += PERSON_GRID - used;
     }
     spans
 }
@@ -707,31 +717,41 @@ fn field(label: impl Into<SharedString>, input: &Entity<InputState>) -> Div {
     v_flex().gap_1().min_w_0().child(caps(label)).child(Input::new(input).small())
 }
 
-fn chip(id: impl Into<SharedString>, label: impl Into<SharedString>, on: bool) -> Stateful<Div> {
+/// A person's field: its label stays inside, before the value, so it is not repeated above every
+/// field of every person and remains visible once the field is filled.
+fn inline_field(label: impl Into<SharedString>, input: &Entity<InputState>) -> Div {
     div()
-        .id(ElementId::Name(id.into()))
-        .px_2()
-        .py(px(3.))
-        .rounded(theme::RADIUS_SM)
-        .border_1()
-        .text_xs()
-        .cursor_pointer()
-        .border_color(if on { theme::accent() } else { theme::border_strong() })
-        .bg(if on { theme::accent_soft() } else { theme::surface() })
-        .text_color(if on { theme::text() } else { theme::muted() })
-        .hover(|d| d.border_color(theme::accent()))
-        .child(label.into())
+        .min_w_0()
+        .child(Input::new(input).small().prefix(div().text_xs().text_color(theme::muted()).child(label.into())))
 }
 
+/// Menu item that runs `f` on the editor once the menu is closed.
+fn menu_action(
+    label: impl Into<SharedString>,
+    me: &WeakEntity<ActEditor>,
+    f: impl Fn(&mut ActEditor, &mut Window, &mut Context<ActEditor>) + 'static,
+) -> PopupMenuItem {
+    PopupMenuItem::new(label).on_click(deferred(me, f))
+}
+
+fn deferred(
+    me: &WeakEntity<ActEditor>,
+    f: impl Fn(&mut ActEditor, &mut Window, &mut Context<ActEditor>) + 'static,
+) -> impl Fn(&ClickEvent, &mut Window, &mut App) + 'static {
+    let me = me.clone();
+    let f = Rc::new(f);
+    move |_, window, cx| {
+        let (me, f) = (me.clone(), f.clone());
+        window.defer(cx, move |window, cx| {
+            let _ = me.update(cx, |this, cx| f(this, window, cx));
+        });
+    }
+}
+
+/// A section of the form: a title over its content, separated from the previous one by a rule
+/// (no card around it).
 fn section(title: impl Into<SharedString>) -> Div {
-    v_flex()
-        .gap_2()
-        .p_3()
-        .rounded(theme::RADIUS_SM)
-        .border_1()
-        .border_color(theme::border())
-        .bg(theme::panel())
-        .child(caps(title))
+    v_flex().gap_2().pt_3().border_t_1().border_color(theme::border()).child(caps(title))
 }
 
 impl ActEditor {
@@ -830,10 +850,6 @@ impl ActEditor {
                 .child(t!("act.no_image"))
                 .into_any_element(),
         };
-        let new_files = match &self.media {
-            MediaChoice::NewFiles(f) if !f.is_empty() => Some(f.clone()),
-            _ => None,
-        };
         // While dragging from the Finder / Explorer: the drop zone shows itself; it is emphasized
         // when the pointer hovers it.
         let dragging = cx.has_active_drag();
@@ -883,50 +899,7 @@ impl ActEditor {
                     }),
             )
             .child(viewer)
-            .child(
-                h_flex()
-                    .p_2()
-                    .gap_1()
-                    .flex_wrap()
-                    .border_t_1()
-                    .border_color(theme::border())
-                    .children(candidates.into_iter().map(|(x, title)| {
-                        let on = self.media == MediaChoice::Existing(x.clone());
-                        chip(format!("media-{x}"), title, on).max_w(px(240.)).overflow_hidden().on_click(
-                            cx.listener(move |this, _, _, cx| this.set_media(MediaChoice::Existing(x.clone()), cx)),
-                        )
-                    }))
-                    .when_some(new_files, |d, f| {
-                        let first = f[0].rsplit(['/', '\\']).next().unwrap_or(&f[0]).to_string();
-                        let label = if f.len() > 1 { format!("{first} +{}", f.len() - 1) } else { first };
-                        d.child(chip("media-new", label, true).max_w(px(240.)).overflow_hidden())
-                    })
-                    .child(
-                        div().w(px(170.)).child(
-                            Select::new(&self.media_picker)
-                                .xsmall()
-                                .placeholder(t!("act.existing_media"))
-                                .menu_width(px(360.))
-                                .search_placeholder(t!("event_dialog.search")),
-                        ),
-                    )
-                    .child(
-                        Button::new("pick-file")
-                            .ghost()
-                            .xsmall()
-                            .label(t!("act.other_file"))
-                            .on_click(cx.listener(|this, _, w, cx| this.pick_file(w, cx))),
-                    )
-                    .when(self.media != MediaChoice::None, |d| {
-                        d.child(
-                            Button::new("no-media")
-                                .ghost()
-                                .xsmall()
-                                .label(t!("act.without_image"))
-                                .on_click(cx.listener(|this, _, _, cx| this.set_media(MediaChoice::None, cx))),
-                        )
-                    }),
-            )
+            .child(h_flex().p_2().border_t_1().border_color(theme::border()).child(self.image_button(candidates, cx)))
             .when(dragging, |d| {
                 d.child(
                     v_flex()
@@ -948,6 +921,50 @@ impl ActEditor {
             })
     }
 
+    /// “Change Image”: the source's media, any other media of the file, a file, or no image.
+    fn image_button(&self, candidates: Vec<(String, String)>, cx: &mut Context<Self>) -> impl IntoElement {
+        let me = cx.entity().downgrade();
+        let media = self.media.clone();
+        let new_files = match &self.media {
+            MediaChoice::NewFiles(f) if !f.is_empty() => {
+                let first = f[0].rsplit(['/', '\\']).next().unwrap_or(&f[0]).to_string();
+                Some(if f.len() > 1 { format!("{first} +{}", f.len() - 1) } else { first })
+            }
+            _ => None,
+        };
+        Button::new("change-image").ghost().xsmall().label(t!("act.change_image")).dropdown_caret(true).dropdown_menu(
+            move |mut menu, _, _| {
+                if !candidates.is_empty() {
+                    menu = menu.label(t!("act.source_media"));
+                }
+                for (x, title) in candidates.clone() {
+                    let on = media == MediaChoice::Existing(x.clone());
+                    menu = menu.item(
+                        menu_action(title, &me, move |this, _, cx| {
+                            this.set_media(MediaChoice::Existing(x.clone()), cx)
+                        })
+                        .checked(on),
+                    );
+                }
+                if let Some(label) = new_files.clone() {
+                    menu = menu.item(PopupMenuItem::new(label).checked(true));
+                }
+                if !candidates.is_empty() || new_files.is_some() {
+                    menu = menu.separator();
+                }
+                menu = menu
+                    .item(menu_action(t!("act.other_media"), &me, |_, _, cx| cx.emit(ActEditorEvent::PickMedia)))
+                    .item(menu_action(t!("act.other_file"), &me, |this, w, cx| this.pick_file(w, cx)));
+                if media != MediaChoice::None {
+                    menu = menu.item(menu_action(t!("act.without_image"), &me, |this, _, cx| {
+                        this.set_media(MediaChoice::None, cx)
+                    }));
+                }
+                menu
+            },
+        )
+    }
+
     fn render_act(&self, act: &Act, cx: &mut Context<Self>) -> Div {
         let place_hints = self.place_suggestions(&self.place, cx);
         let (tag, _, _) = parse_event(&self.event.read(cx).selected_value().cloned().unwrap_or_default());
@@ -956,6 +973,8 @@ impl ActEditor {
             v == "EVEN" || v == "FAM:EVEN"
         };
         section(t!("act.section"))
+            .border_t_0()
+            .pt_0()
             .child(
                 div()
                     .grid()
@@ -979,156 +998,197 @@ impl ActEditor {
                     .child(date_cell(t!("event_dialog.date"), &self.date).col_span(2))
                     .child(field(t!("editor.place"), &self.place).col_span(2))
                     .child(date_cell(t!("act.record_date"), &self.record_date).col_span(2))
-                    .child(field(t!("act.reference"), &self.page).col_span(GRID)),
+                    .child(field(t!("act.reference"), &self.page).col_span(GRID / 2))
+                    .child(
+                        v_flex()
+                            .gap_1()
+                            .min_w_0()
+                            .col_span(GRID / 2)
+                            .child(caps(t!("act.quality")))
+                            .child(Select::new(&self.quality_picker).small()),
+                    ),
             )
             .when_some(place_hints, |d, h| d.child(h))
-            .child(h_flex().gap_1().items_center().child(caps(t!("act.quality")).mr_1()).children(
-                quality_labels().into_iter().enumerate().map(|(q, label)| {
-                    let on = self.quality == Some(q as u8);
-                    chip(format!("quay-{q}"), label, on).on_click(cx.listener(move |this, _, _, cx| {
-                        this.quality = if this.quality == Some(q as u8) { None } else { Some(q as u8) };
-                        this.preview = None;
-                        cx.notify();
-                    }))
-                }),
-            ))
+    }
+
+    /// Menu of a person: what the record does with them (create, mention, link to one of the
+    /// likely individuals or to anyone), then remove them. Shown by the status pop-up and on right
+    /// click.
+    fn person_menu(
+        &self,
+        idx: usize,
+        row: &PersonRow,
+        cx: &mut Context<Self>,
+    ) -> impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static {
+        let me = cx.entity().downgrade();
+        let choice = row.choice.clone();
+        let principal = row.role == ActRole::Principal;
+        let matches: Vec<(String, String, String, String)> = row
+            .suggestions
+            .iter()
+            .take(MENU_MATCHES)
+            .map(|s| {
+                let years = self.ged.individual(&s.xref).map(|i| i.years()).unwrap_or_default();
+                (s.xref.clone(), self.ged.record_label(&s.xref), years, s.reason.clone())
+            })
+            .collect();
+        let linked = match &row.choice {
+            PersonChoice::Link(x) => Some(self.ged.record_label(x)),
+            _ => None,
+        };
+        move |mut menu, _, _| {
+            menu = menu.item(
+                menu_action(t!("cmd.new_individual"), &me, move |this, w, cx| {
+                    this.set_choice(idx, PersonChoice::Create, w, cx)
+                })
+                .checked(choice == PersonChoice::Create),
+            );
+            if !principal {
+                menu = menu.item(
+                    menu_action(t!("act.mention"), &me, move |this, w, cx| {
+                        this.set_choice(idx, PersonChoice::Mention, w, cx)
+                    })
+                    .checked(choice == PersonChoice::Mention),
+                );
+            }
+            menu = menu.separator();
+            if !matches.is_empty() {
+                menu = menu.label(t!("act.matches_header"));
+            }
+            for (xref, name, years, reason) in matches.clone() {
+                let x = xref.clone();
+                menu = menu.item(
+                    PopupMenuItem::element(move |_, _| {
+                        v_flex()
+                            .child(
+                                h_flex()
+                                    .gap_2()
+                                    .child(name.clone())
+                                    .child(div().text_xs().text_color(theme::muted()).child(years.clone())),
+                            )
+                            .child(div().text_xs().text_color(theme::muted()).child(reason.clone()))
+                    })
+                    .on_click(deferred(&me, move |this, w, cx| this.link_person(idx, x.clone(), w, cx))),
+                );
+            }
+            if let Some(name) = linked.clone() {
+                menu = menu.item(PopupMenuItem::new(name).checked(true));
+            }
+            menu.item(menu_action(t!("act.other_person"), &me, move |this, _, cx| this.pick_person(idx, cx)))
+                .separator()
+                .item(
+                    PopupMenuItem::element(|_, _| div().text_color(theme::danger()).child(t!("act.remove_person")))
+                        .on_click(deferred(&me, move |this, w, cx| this.remove_person(idx, w, cx))),
+                )
+        }
+    }
+
+    /// Pop-up next to the role: what the record does with the person (new individual, possible
+    /// matches, linked individual, mention); it opens [`Self::person_menu`].
+    fn status_button(&self, idx: usize, row: &PersonRow, cx: &mut Context<Self>) -> impl IntoElement {
+        let (icon, color, label) = match &row.choice {
+            PersonChoice::Link(x) => {
+                let years = self.ged.individual(x).map(|i| i.years()).unwrap_or_default();
+                let name = self.ged.record_label(x);
+                (IconName::Link, theme::ok(), if years.is_empty() { name } else { format!("{name}  {years}") })
+            }
+            PersonChoice::Mention => (IconName::Quote, theme::muted(), t!("act.mentioned").into_owned()),
+            PersonChoice::Create if row.suggestions.is_empty() => {
+                (IconName::UserPlus, theme::muted(), t!("cmd.new_individual").into_owned())
+            }
+            PersonChoice::Create => {
+                (IconName::UserSearch, theme::warn(), crate::tn!("act.matches", row.suggestions.len()).into_owned())
+            }
+        };
+        // The tour points at the menu that holds the individual it expects.
+        let ringed = self.tour_link.as_deref().is_some_and(|x| row.suggestions.iter().any(|s| s.xref == x));
+        div().rounded(theme::RADIUS_MD).when(ringed, |d| d.border_2().border_color(theme::accent())).child(
+            Button::new(SharedString::from(format!("status-{idx}")))
+                .custom(ButtonCustomVariant::new(cx).foreground(color).hover(theme::hover()).active(theme::hover()))
+                .xsmall()
+                .icon(icon)
+                .label(label)
+                .dropdown_caret(true)
+                .tooltip(t!("act.status_tooltip"))
+                .dropdown_menu(self.person_menu(idx, row, cx)),
+        )
+    }
+
+    /// The person's role; for the father, mother or spouse of one of several principal people, a
+    /// pop-up that says whose (“Father of the Groom”).
+    fn role_label(&self, act: &Act, idx: usize, row: &PersonRow, cx: &mut Context<Self>) -> AnyElement {
+        let label = act.role_label(idx);
+        let principals = act.principal_count();
+        if !(row.role.relative() && principals > 1) {
+            return div().font_weight(FontWeight::SEMIBOLD).child(label).into_any_element();
+        }
+        let names: Vec<String> = (0..principals).map(|k| act.principal_name(k)).collect();
+        let of = row.of.min(principals - 1);
+        let me = cx.entity().downgrade();
+        let current = format!("{label} {}", t!("act.of", name = names[of]));
+        Button::new(SharedString::from(format!("of-{idx}")))
+            .ghost()
+            .xsmall()
+            .dropdown_caret(true)
+            .child(div().text_sm().font_weight(FontWeight::SEMIBOLD).child(current))
+            .dropdown_menu(move |mut menu, _, _| {
+                for (k, name) in names.iter().enumerate() {
+                    menu = menu.item(
+                        menu_action(format!("{label} {}", t!("act.of", name = name)), &me, move |this, _, cx| {
+                            this.set_of(idx, k, cx)
+                        })
+                        .checked(k == of),
+                    );
+                }
+                menu
+            })
+            .into_any_element()
     }
 
     fn render_person(&self, act: &Act, idx: usize, row: &PersonRow, cx: &mut Context<Self>) -> impl IntoElement {
-        let label = act.role_label(idx);
-        let status: AnyElement = match &row.choice {
-            PersonChoice::Link(x) => h_flex()
-                .gap_1()
-                .text_xs()
-                .text_color(theme::ok())
-                .child(t!("act.linked_to", name = self.ged.record_label(x)))
-                .child(mono(self.ged.individual(x).map(|i| i.years()).unwrap_or_default()))
-                .into_any_element(),
-            PersonChoice::Mention => {
-                div().text_xs().text_color(theme::muted()).child(t!("act.mentioned")).into_any_element()
-            }
-            PersonChoice::Create if row.suggestions.is_empty() => {
-                div().text_xs().text_color(theme::muted()).child(t!("cmd.new_individual")).into_any_element()
-            }
-            PersonChoice::Create => div()
-                .text_xs()
-                .text_color(theme::warn())
-                .child(crate::tn!("act.matches", row.suggestions.len()))
-                .into_any_element(),
-        };
-        // Father, mother or spouse of which principal person?
-        let principals = act.principal_count();
-        let of_chips: Vec<Stateful<Div>> = if row.role.relative() && principals > 1 {
-            (0..principals)
-                .map(|k| {
-                    chip(format!("of-{idx}-{k}"), t!("act.of", name = act.principal_name(k)), row.of == k)
-                        .on_click(cx.listener(move |this, _, _, cx| this.set_of(idx, k, cx)))
-                })
-                .collect()
-        } else {
-            Vec::new()
-        };
         let place_hints: Vec<AnyElement> =
             row.inputs.iter().filter_map(|(_, e)| self.place_suggestions(e, cx)).collect();
+        let sex = row.sex.clone().map(|current| {
+            ButtonGroup::new(SharedString::from(format!("sex-{idx}")))
+                .outline()
+                .small()
+                .children([("M", t!("sex.male")), ("F", t!("sex.female"))].into_iter().map(|(v, label)| {
+                    Button::new(SharedString::from(format!("sex-{idx}-{v}"))).label(label).selected(current == v)
+                }))
+                .on_click(cx.listener(move |this, clicked: &Vec<usize>, _, cx| {
+                    let v = if clicked.contains(&0) { "M" } else { "F" };
+                    if let Some(r) = this.rows.get_mut(idx) {
+                        // Second click: deselect.
+                        r.sex = Some(if r.sex.as_deref() == Some(v) { String::new() } else { v.into() });
+                    }
+                    this.preview = None;
+                    this.refresh_suggestions(cx);
+                    cx.notify();
+                }))
+        });
         v_flex()
+            .id(SharedString::from(format!("person-{idx}")))
             .gap_2()
-            .p_3()
-            .rounded(theme::RADIUS_SM)
-            .border_1()
-            .border_color(match row.choice {
-                PersonChoice::Link(_) => theme::ok(),
-                PersonChoice::Create if !row.suggestions.is_empty() => theme::warn(),
-                _ => theme::border(),
-            })
-            .bg(theme::surface())
+            .py_2()
+            .when(idx > 0, |d| d.border_t_1().border_color(theme::border()))
             .child(
                 h_flex()
                     .gap_2()
                     .items_center()
-                    .child(div().font_weight(FontWeight::SEMIBOLD).child(label))
-                    .children(of_chips)
-                    .child(status)
-                    .child(div().flex_1())
-                    .when(row.choice == PersonChoice::Create, |d| {
-                        // The tour points at the button that finds the individual it expects.
-                        let ringed =
-                            self.tour_link.as_deref().is_some_and(|x| row.suggestions.iter().any(|s| s.xref == x));
-                        d.child(
-                            div()
-                                .rounded(theme::RADIUS_MD)
-                                .when(ringed, |d| d.border_2().border_color(theme::accent()))
-                                .child(
-                                    Button::new(SharedString::from(format!("link-{idx}")))
-                                        .ghost()
-                                        .xsmall()
-                                        .label(t!("act.link"))
-                                        .on_click(cx.listener(move |this, _, _, cx| this.pick_person(idx, cx))),
-                                ),
-                        )
-                        .when(row.role != ActRole::Principal, |d| {
-                            d.child(
-                                Button::new(SharedString::from(format!("mention-{idx}")))
-                                    .ghost()
-                                    .xsmall()
-                                    .label(t!("act.mention"))
-                                    .on_click(cx.listener(move |this, _, w, cx| {
-                                        this.set_choice(idx, PersonChoice::Mention, w, cx)
-                                    })),
-                            )
-                        })
-                    })
-                    .when(row.choice != PersonChoice::Create, |d| {
-                        d.child(
-                            Button::new(SharedString::from(format!("unlink-{idx}")))
-                                .ghost()
-                                .xsmall()
-                                .label(if matches!(row.choice, PersonChoice::Link(_)) {
-                                    t!("act.unlink")
-                                } else {
-                                    t!("common.cancel")
-                                })
-                                .on_click(
-                                    cx.listener(move |this, _, w, cx| {
-                                        this.set_choice(idx, PersonChoice::Create, w, cx)
-                                    }),
-                                ),
-                        )
-                    })
-                    .child(
-                        Button::new(SharedString::from(format!("rm-{idx}")))
-                            .ghost()
-                            .xsmall()
-                            .icon(IconName::Close)
-                            .tooltip(t!("act.remove_person"))
-                            .on_click(cx.listener(move |this, _, w, cx| this.remove_person(idx, w, cx))),
-                    ),
+                    .child(self.role_label(act, idx, row, cx))
+                    .child(self.status_button(idx, row, cx))
+                    .when_some(sex, |d, s| d.child(div().flex_1()).child(s)),
             )
             .child(
-                div().grid().grid_cols(GRID).gap_2().children(
+                div().grid().grid_cols(PERSON_GRID).gap_2().children(
                     row.inputs
                         .iter()
                         .zip(grid_spans(row.inputs.iter().map(|(f, _)| *f)))
-                        .map(|((f, e), span)| field(f.label(), e).col_span(span)),
+                        .map(|((f, e), span)| inline_field(f.label(), e).col_span(span)),
                 ),
             )
-            .when_some(row.sex.clone(), |d, current| {
-                d.child(h_flex().gap_1().items_center().child(caps(t!("editor.sex"))).children(
-                    [("M", t!("sex.male")), ("F", t!("sex.female"))].into_iter().map(|(v, label)| {
-                        chip(format!("sex-{idx}-{v}"), label, current == v).on_click(cx.listener(
-                            move |this, _, _, cx| {
-                                if let Some(r) = this.rows.get_mut(idx) {
-                                    // Second click: deselect.
-                                    r.sex = Some(if r.sex.as_deref() == Some(v) { String::new() } else { v.into() });
-                                }
-                                this.preview = None;
-                                this.refresh_suggestions(cx);
-                                cx.notify();
-                            },
-                        ))
-                    }),
-                ))
-            })
             .children(place_hints)
+            .context_menu(self.person_menu(idx, row, cx))
     }
 
     fn render_people(&self, act: &Act, cx: &mut Context<Self>) -> Div {
@@ -1147,23 +1207,15 @@ impl ActEditor {
             .dropdown_menu(move |mut menu, _, _| {
                 for role in ActRole::ALL {
                     let label = role.label(&event, family, if role == ActRole::Principal { next_principal } else { 0 });
-                    let me = me.clone();
-                    menu = menu.item(PopupMenuItem::new(label).on_click(move |_, window, cx| {
-                        let me = me.clone();
-                        window.defer(cx, move |window, cx| {
-                            let _ = me.update(cx, |this, cx| this.add_person(role, window, cx));
-                        });
-                    }));
+                    menu = menu.item(menu_action(label, &me, move |this, w, cx| this.add_person(role, w, cx)));
                 }
                 menu
             });
         v_flex()
             .gap_2()
-            .p_3()
-            .rounded(theme::RADIUS_SM)
-            .border_1()
+            .pt_3()
+            .border_t_1()
             .border_color(theme::border())
-            .bg(theme::panel())
             .child(h_flex().gap_1().items_center().child(caps(t!("act.people"))).child(add))
             .children(rows)
             .when(self.rows.iter().any(|r| r.inputs.iter().any(|(f, _)| *f == PersonField::Age)), |d| {
@@ -1209,13 +1261,6 @@ impl ActEditor {
             )
             .when_some(self.error.clone(), |d, e| d.child(div().text_xs().text_color(theme::danger()).child(e)))
             .child(div().flex_1())
-            .child(
-                Button::new("preview")
-                    .ghost()
-                    .small()
-                    .label(if self.preview.is_some() { t!("act.hide_preview") } else { t!("act.preview") })
-                    .on_click(cx.listener(|this, _, _, cx| this.toggle_preview(cx))),
-            )
             .child(
                 Button::new("save-act")
                     .small()
