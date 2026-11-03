@@ -558,9 +558,11 @@ impl Tree {
 
     fn unions(&self, id: &str) -> Vec<UnionRow> {
         let Some(ind) = self.ged.individual(id) else { return Vec::new() };
-        ind.fams()
+        let mut families: Vec<_> = ind.fams().into_iter().filter_map(|f| self.ged.family(f)).collect();
+        // By marriage date; undated unions keep their place in the file, after the dated ones.
+        families.sort_by_key(|f| f.marriage().and_then(|m| m.date()).map(|d| d.sort_key()).unwrap_or((i32::MAX, 0, 0)));
+        families
             .into_iter()
-            .filter_map(|f| self.ged.family(f))
             .map(|f| {
                 let spouse = [f.husband(), f.wife()].into_iter().flatten().find(|x| *x != id);
                 UnionRow {

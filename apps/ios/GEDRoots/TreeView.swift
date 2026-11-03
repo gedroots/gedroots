@@ -70,12 +70,14 @@ struct FamilyChart: View {
             // pages, and the children below are those of the union shown.
             HStack(alignment: .top, spacing: 16) {
                 Button { open(family.person.id) } label: {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Portrait(path: family.portrait, crop: family.portraitCrop, name: family.person.name, size: 44)
-                        Text(family.person.name).font(.caption).fontWeight(.semibold).lineLimit(2)
-                        detail(family.person)
+                    HStack(alignment: .top, spacing: 8) {
+                        Portrait(path: family.portrait, crop: family.portraitCrop, name: family.person.name, size: 32)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(family.person.name).font(.caption).fontWeight(.semibold).lineLimit(2)
+                            detail(family.person)
+                        }
                     }
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     .padding(8)
                     .background(Theme.accentSoft, in: RoundedRectangle(cornerRadius: 8))
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.accent, lineWidth: 2))
@@ -84,20 +86,30 @@ struct FamilyChart: View {
                 .accessibilityHint(Text("Opens the record"))
                 .card("me")
                 if family.unions.count == 1 {
-                    box(family.unions[0].spouse, compact: false).card(family.unions[0].spouse == nil ? nil : "s")
+                    box(family.unions[0].spouse, compact: false, fill: true).card(family.unions[0].spouse == nil ? nil : "s")
                 } else if family.unions.count > 1 {
                     TabView(selection: $union) {
                         ForEach(Array(family.unions.enumerated()), id: \.offset) { u, row in
-                            box(row.spouse, compact: false).padding(.bottom, 28).tag(u)
+                            box(row.spouse, compact: false, fill: true).tag(u)
                         }
                     }
-                    .tabViewStyle(.page(indexDisplayMode: .always))
-                    .indexViewStyle(.page(backgroundDisplayMode: .always))
-                    .frame(height: 112)
+                    .tabViewStyle(.page(indexDisplayMode: .never))
                     .card("s")
+                    // The pages, under the spouse rather than over the card.
+                    .overlay(alignment: .bottom) {
+                        HStack(spacing: 6) {
+                            ForEach(family.unions.indices, id: \.self) { u in
+                                Circle().fill(u == union ? Color.primary : Color.secondary.opacity(0.4)).frame(width: 6, height: 6)
+                            }
+                        }
+                        .offset(y: 12)
+                        .accessibilityHidden(true)
+                    }
                 }
             }
+            // Both cards the same height, which the paged spouse needs.
             .frame(maxWidth: family.unions.isEmpty ? 200 : .infinity)
+            .frame(height: 84)
             if let shown {
                 VStack(spacing: 16) {
                     if !shown.married.isEmpty {
@@ -126,7 +138,7 @@ struct FamilyChart: View {
     }
 
     @ViewBuilder
-    private func box(_ person: PersonRow?, compact: Bool) -> some View {
+    private func box(_ person: PersonRow?, compact: Bool, fill: Bool = false) -> some View {
         if let p = person {
             Button { center(p.id) } label: {
                 VStack(alignment: .leading, spacing: 2) {
@@ -152,7 +164,7 @@ struct FamilyChart: View {
                         detail(p)
                     }
                 }
-                .frame(maxWidth: .infinity, minHeight: compact ? 72 : 56, alignment: .topLeading)
+                .frame(maxWidth: .infinity, minHeight: compact ? 72 : 56, maxHeight: fill ? .infinity : nil, alignment: .topLeading)
                 .padding(8)
                 .background(Theme.surface, in: RoundedRectangle(cornerRadius: 8))
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.borderStrong))
