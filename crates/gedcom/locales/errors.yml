@@ -136,32 +136,32 @@ error.xref_used:
   en: "the identifier %{xref} is already used"
   fr: "l'identifiant %{xref} est déjà utilisé"
 import.events.one:
-  en: "%{n} event with an extension tag (_MILT…)"
-  fr: "%{n} événement à balise d'extension (_MILT…)"
+  en: "%{n} event in another program’s format (military service…)"
+  fr: "%{n} événement au format d’un autre logiciel (service militaire…)"
 import.events.other:
-  en: "%{n} events with an extension tag (_MILT…)"
-  fr: "%{n} événements à balise d'extension (_MILT…)"
+  en: "%{n} events in another program’s format (military service…)"
+  fr: "%{n} événements au format d’un autre logiciel (service militaire…)"
 import.events_into:
-  en: "EVEN + TYPE events"
-  fr: "événements EVEN + TYPE"
+  en: "standard events"
+  fr: "événements standard"
 import.prim.one:
-  en: "%{n} _PRIM main photo"
-  fr: "%{n} photo principale _PRIM"
+  en: "%{n} main photo in another program’s format"
+  fr: "%{n} photo principale au format d’un autre logiciel"
 import.prim.other:
-  en: "%{n} _PRIM main photos"
-  fr: "%{n} photos principales _PRIM"
+  en: "%{n} main photos in another program’s format"
+  fr: "%{n} photos principales au format d’un autre logiciel"
 import.prim_into:
   en: "first media of the record"
   fr: "premier média de la fiche"
 import.url.one:
-  en: "%{n} _URL link"
-  fr: "%{n} lien _URL"
+  en: "%{n} web link in another program’s format"
+  fr: "%{n} lien web au format d’un autre logiciel"
 import.url.other:
-  en: "%{n} _URL links"
-  fr: "%{n} liens _URL"
+  en: "%{n} web links in another program’s format"
+  fr: "%{n} liens web au format d’un autre logiciel"
 import.url_into:
-  en: "GEDCOM 7 multimedia links"
-  fr: "liens multimédia GEDCOM 7"
+  en: "standard web links"
+  fr: "liens web standard"
 media_links.portraits:
   en: "Portraits and Photos"
   fr: "Portraits et photos"

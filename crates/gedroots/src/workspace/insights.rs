@@ -13,6 +13,15 @@ fn pct(x: f64) -> String {
     t!("stats.percent", value = format!("{:.0}", x * 100.)).to_string()
 }
 
+/// A number with one decimal, with the language's separator (“1.5”, « 1,5 »).
+fn decimal(x: f64) -> String {
+    let s = format!("{x:.1}");
+    match &*rust_i18n::locale() {
+        "fr" => s.replace('.', ","),
+        _ => s,
+    }
+}
+
 fn bar_row(label: String, value: f64, right: String) -> impl IntoElement {
     h_flex()
         .w_full()
@@ -26,7 +35,7 @@ fn bar_row(label: String, value: f64, right: String) -> impl IntoElement {
                 .h(px(6.))
                 .rounded_full()
                 .bg(theme::border())
-                .child(div().h_full().rounded_full().bg(theme::accent()).w(relative(value.clamp(0., 1.) as f32))),
+                .child(div().h_full().rounded_full().bg(theme::muted()).w(relative(value.clamp(0., 1.) as f32))),
         )
         .child(div().w(px(130.)).flex_none().child(mono(right)))
 }
@@ -39,8 +48,7 @@ impl Workspace {
         div()
             .id(id.into())
             .cursor_pointer()
-            .text_color(theme::accent())
-            .hover(|d| d.underline())
+            .hover(|d| d.text_color(theme::accent()).underline())
             .child(name)
             .on_click(cx.listener(move |this, _, w, cx| this.goto(target.clone(), w, cx)))
     }
@@ -189,10 +197,7 @@ impl Workspace {
                 .child(figure(t!("stats.families"), s.families.to_string()))
                 .child(figure(t!("stats.men_women"), format!("{} / {}", s.men, s.women)))
                 .child(figure(t!("stats.sourced_events"), pct(sourced)))
-                .child(figure(
-                    t!("stats.children_per_family"),
-                    s.mean_children.map(|x| format!("{x:.1}")).unwrap_or("—".into()),
-                ))
+                .child(figure(t!("stats.children_per_family"), s.mean_children.map(decimal).unwrap_or("—".into())))
                 .child(figure(t!("stats.first_marriage_men"), years(s.mean_marriage_age_men)))
                 .child(figure(t!("stats.first_marriage_women"), years(s.mean_marriage_age_women))),
         );
@@ -213,7 +218,7 @@ impl Workspace {
             });
         let ancestry = card()
             .child(label_caps(match &s.root {
-                Some(r) => t!("stats.ancestry_of", name = g.record_label(r).to_uppercase()).to_string(),
+                Some(r) => t!("stats.ancestry_of", name = g.record_label(r)).to_string(),
                 None => t!("stats.ancestry").into(),
             }))
             .children(s.generations.iter().map(|level| {

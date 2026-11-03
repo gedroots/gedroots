@@ -9,9 +9,6 @@ ws.stats:
 ws.map:
   en: Map
   fr: Carte
-ws.gedcom:
-  en: GEDCOM
-  fr: GEDCOM
 ws.open_failed:
   en: "Could not open %{path}: %{error}"
   fr: "Impossible d'ouvrir %{path} : %{error}"
@@ -39,6 +36,15 @@ ws.search_places:
 ws.search_media:
   en: Search for a media, a person…
   fr: Rechercher un média, une personne…
+ws.search_repositories:
+  en: Search for a repository, a town…
+  fr: Rechercher un dépôt, une ville…
+ws.search_notes:
+  en: Search the notes
+  fr: Rechercher dans les notes
+ws.search_quality:
+  en: Search for an issue, a name…
+  fr: Rechercher un problème, un nom…
 ws.search_people:
   en: Search for a name, a place…
   fr: Rechercher un nom, un lieu…
@@ -87,9 +93,6 @@ ws.flag_no_file:
 ws.history_tip:
   en: "%{verb}: %{dest}"
   fr: "%{verb} : %{dest}"
-ws.tree_gens:
-  en: "%{mode} · %{n} gen."
-  fr: "%{mode} · %{n} gén."
 ws.done:
   en: Done
   fr: Terminé
@@ -133,11 +136,11 @@ ws.apply_gedcom:
   en: Apply GEDCOM
   fr: Appliquer le GEDCOM
 ws.place_coords:
-  en: "%{lat} · %{lon} · %{n} use(s)"
-  fr: "%{lat} · %{lon} · %{n} occurrence(s)"
+  en: "%{lat} · %{lon} · %{uses}"
+  fr: "%{lat} · %{lon} · %{uses}"
 ws.place_no_coords:
-  en: "No coordinates · %{n} use(s)"
-  fr: "Sans coordonnées · %{n} occurrence(s)"
+  en: "No coordinates · %{uses}"
+  fr: "Sans coordonnées · %{uses}"
 ws.cited_by:
   en: Cited By
   fr: Cité par
@@ -220,5 +223,5 @@ ws.recent:
   en: Recent
   fr: Récents
 ws.media_tooltip:
-  en: "Media… (⌘⇧M)"
-  fr: "Médias… (⌘⇧M)"
+  en: "Record Media… (⌘⇧M)"
+  fr: "Médias de la fiche… (⌘⇧M)"

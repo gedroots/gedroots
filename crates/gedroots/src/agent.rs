@@ -1,6 +1,6 @@
 //! AI agents: GEDRoots' local MCP server.
 //!
-//! When the setting is on (File › Connect an AI Agent…), the app serves the MCP protocol over HTTP
+//! When the setting is on (Source › Connect an AI Agent…), the app serves the MCP protocol over HTTP
 //! on `127.0.0.1`: an agent such as Claude Code reads the open file (records, search, gaps),
 //! without ever writing to it: the records it finds become proposals, reviewed in the “To Review”
 //! page before being saved. Living people are hidden.

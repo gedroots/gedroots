@@ -51,6 +51,26 @@ pub(crate) mod tour;
 mod tree;
 mod weblinks;
 
+/// Window widths below which a column folds away (like libadwaita's breakpoints and Mail's
+/// columns): first the sidebar, then the details panel. A folded column comes back over the others
+/// with its View menu command.
+const FOLD_SIDEBAR: f32 = 1200.;
+const FOLD_INSPECTOR: f32 = 1100.;
+
+/// Columns folded away in a narrow window.
+#[derive(Clone, Copy, Default, PartialEq)]
+struct Compact {
+    sidebar: bool,
+    inspector: bool,
+}
+
+/// Folded column shown over the others.
+#[derive(Clone, Copy, PartialEq)]
+enum Drawer {
+    Sidebar,
+    Inspector,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum View {
     Individuals,
@@ -64,9 +84,10 @@ pub enum View {
 }
 
 impl View {
-    /// The sidebar zones. The other lists (repositories, notes) and the pages (quality, statistics)
-    /// open from the View menu, the links of records and search.
+    /// The main sidebar zones.
     const SIDEBAR: [View; 4] = [View::Individuals, View::Sources, View::Places, View::Media];
+    /// The secondary group of the sidebar, under a separator.
+    const SECONDARY: [View; 4] = [View::Repositories, View::Notes, View::Quality, View::Stats];
 
     fn label(self) -> SharedString {
         match self {
@@ -93,6 +114,12 @@ impl View {
             View::Quality => IconName::CircleCheck,
             View::Stats => IconName::ChartPie,
         }
+    }
+
+    /// Individuals and places: the centre shows the tree or the map, and the record is the right
+    /// panel (read, and edited in place).
+    fn has_panel(self) -> bool {
+        matches!(self, View::Individuals | View::Places)
     }
 
     /// Pages without a record (Quality, Statistics).
@@ -148,7 +175,7 @@ impl CenterTab {
             CenterTab::Tree => t!("cmd.show_tree"),
             CenterTab::Map => t!("ws.map"),
             CenterTab::Form => t!("cmd.show_form"),
-            CenterTab::Raw => t!("ws.gedcom"),
+            CenterTab::Raw => t!("cmd.show_raw"),
         }
         .into()
     }
@@ -157,7 +184,7 @@ impl CenterTab {
         match self {
             CenterTab::Tree => IconName::GitFork,
             CenterTab::Map => IconName::Map,
-            CenterTab::Form => IconName::Pencil,
+            CenterTab::Form => IconName::FileText,
             CenterTab::Raw => IconName::Code,
         }
     }
@@ -240,8 +267,14 @@ pub struct Workspace {
     map: Entity<MapView>,
     tree_mode: tree::TreeMode,
     tree_gens: u32,
-    /// Sidebar shown (View › Hide or Show the Sidebar).
+    /// Sidebar shown (View › Show or Hide Sidebar) when the window is wide enough.
     sidebar: bool,
+    /// Details panel shown (View › Show or Hide Details Panel) when the window is wide enough.
+    inspector: bool,
+    /// Narrow window: which columns are folded away, as of the last frame.
+    compact: Compact,
+    /// Narrow window: folded column shown over the others on request.
+    drawer: Option<Drawer>,
     /// Raw GEDCOM tab opened on demand (View › Raw GEDCOM), closed when switching lists.
     raw_open: bool,
     /// Free chart: central person, generations loaded, panning.
@@ -374,6 +407,9 @@ impl Workspace {
             tree_mode: tree::TreeMode::Chart,
             tree_gens: 5,
             sidebar: true,
+            inspector: true,
+            compact: Compact::default(),
+            drawer: None,
             raw_open: false,
             chart: Default::default(),
             picker: None,
@@ -661,7 +697,10 @@ impl Workspace {
             View::Sources => t!("ws.search_sources"),
             View::Places => t!("ws.search_places"),
             View::Media => t!("ws.search_media"),
-            _ => t!("ws.search_people"),
+            View::Repositories => t!("ws.search_repositories"),
+            View::Notes => t!("ws.search_notes"),
+            View::Quality => t!("ws.search_quality"),
+            View::Individuals | View::Stats => t!("ws.search_people"),
         };
         self.filter.update(cx, |f, cx| {
             f.set_value("", window, cx);
@@ -739,7 +778,16 @@ impl Workspace {
                 if self.selected.as_deref() == Some(name.as_str()) {
                     self.refresh_editor(window, cx);
                 }
-                self.set_status(t!("places.located", place = short_place(name), lat = la, lon = lo, n = n), false);
+                self.set_status(
+                    t!(
+                        "places.located",
+                        place = short_place(name),
+                        lat = la,
+                        lon = lo,
+                        uses = crate::tn!("places.uses", n)
+                    ),
+                    false,
+                );
                 cx.notify();
             }
         }
@@ -806,6 +854,14 @@ impl Workspace {
                     _ => None,
                 })
                 .collect();
+        // The raw GEDCOM's Apply button lights up once the text changes.
+        if let Some(raw) = &ed.raw {
+            self.editor_subs.push(cx.subscribe(raw, |_, _, ev: &InputEvent, cx| {
+                if let InputEvent::Change = ev {
+                    cx.notify();
+                }
+            }));
+        }
         self.editor = Some(ed);
         // The old fields disappear: give the focus back to the workspace so that keyboard shortcuts
         // stay active.
@@ -820,7 +876,9 @@ impl Workspace {
         self.filter.update(cx, |f, cx| f.set_value("", window, cx));
         self.rebuild_rows(cx);
         self.select(x.clone(), window, cx);
-        self.tab = CenterTab::Form;
+        if !self.view.has_panel() {
+            self.tab = CenterTab::Form;
+        }
         // A new record opens on its fields.
         self.start_edit(window, cx);
         self.set_status(t!("ws.created", kind = crate::i18n::record_kind(kind)), false);
@@ -1208,7 +1266,7 @@ impl Workspace {
                 .map(|p| Row {
                     title: p.short(),
                     strong: String::new(),
-                    meta: format!("{} ×", p.uses),
+                    meta: p.uses.to_string(),
                     dot: None,
                     flagged: p.latitude.is_none(),
                     key: p.name,
@@ -1405,7 +1463,7 @@ fn dot(color: Hsla) -> Div {
 }
 
 /// Row of a timeline: label and date, then a plain second line (with whom, where). A single click
-/// target; the links live in the event window and the context menu. Orange dot: no source.
+/// target; the links live in the event window and the context menu. Discreet dot: no source.
 fn event_row(
     id: SharedString,
     label: String,
@@ -1444,7 +1502,7 @@ fn event_row(
                                 .text_ellipsis()
                                 .child(label),
                         )
-                        .when(unsourced, |d| d.child(dot(theme::warn()))),
+                        .when(unsourced, |d| d.child(dot(theme::muted()))),
                 )
                 .child(event_date(date)),
         )
@@ -1535,8 +1593,7 @@ impl Workspace {
             .border_color(theme::border())
             .child(
                 h_flex()
-                    .flex_1()
-                    .min_w_0()
+                    .flex_none()
                     .gap_3()
                     .items_center()
                     .child(
@@ -1553,18 +1610,20 @@ impl Workspace {
                     // to the file name in the center (VS Code, Zed), with the menus on the left.
                     .when(mac && self.doc.is_some(), |d| d.child(self.render_history_buttons(cx))),
             )
-            .children(title.map(|t| {
+            // The file name is centred in the room the menus leave, and shortened rather than
+            // running under them in a narrow window.
+            .child(h_flex().flex_1().min_w_0().px_3().justify_center().children(title.map(|t| {
                 h_flex()
-                    .flex_none()
+                    .min_w_0()
                     .gap_2()
                     .items_center()
                     .when(!mac, |d| d.child(self.render_history_buttons(cx)))
-                    .child(div().text_sm().font_weight(FontWeight::MEDIUM).child(t))
-            }))
+                    .child(div().min_w_0().truncate().text_sm().font_weight(FontWeight::MEDIUM).child(t))
+            })))
             .child(
                 h_flex()
-                    .flex_1()
-                    .min_w_0()
+                    .flex_none()
+                    .max_w(px(320.))
                     .gap_3()
                     .items_center()
                     .justify_end()
@@ -1644,55 +1703,154 @@ impl Workspace {
             .child(arrow(false))
     }
 
-    /// Sidebar: the four zones, named, with their count. It launches no action; the commands are in
-    /// the menus.
+    /// Sidebar: the four zones, named, with their count, then a secondary group (repositories and
+    /// notes when the file has some, quality, statistics), like Mail's or Finder's sections. It
+    /// launches no action; the commands are in the menus.
     fn render_sidebar(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let doc = self.doc.as_ref();
         // Active zone filtered: its counter gives the number of results.
         let filtered = self.is_filtered(cx);
+        let count = |v: View| -> Option<usize> {
+            let d = doc?;
+            Some(match v {
+                _ if v == self.view && filtered => self.rows.len(),
+                View::Places => d.ged.places().len(),
+                // Only once the checks have run: a stale count would mislead.
+                View::Quality if self.quality.stale => return None,
+                View::Quality => self.quality.issues.iter().filter(|i| !i.ignored).count(),
+                View::Stats => return None,
+                v => d.ged.count(v.kind()?),
+            })
+        };
+        let zone = |v: View, n: Option<usize>, cx: &mut Context<Self>| {
+            let active = v == self.view;
+            h_flex()
+                .id(SharedString::from(format!("zone-{}", v.label())))
+                .px_2()
+                .py_1()
+                .gap_2()
+                .items_center()
+                .rounded(theme::RADIUS_SM)
+                .cursor_pointer()
+                .when(active, |d| d.bg(theme::accent_soft()).font_weight(FontWeight::SEMIBOLD))
+                .when(!active, |d| d.hover(|d| d.bg(theme::hover())))
+                .child(Icon::new(v.icon()).size(px(16.)).text_color(if active {
+                    theme::accent()
+                } else {
+                    theme::muted()
+                }))
+                .child(div().flex_1().min_w_0().truncate().child(v.label()))
+                .children(n.map(|n| div().text_xs().text_color(theme::muted()).child(group_thousands(n))))
+                .on_click(cx.listener(move |this, _, w, cx| this.show_view(v, w, cx)))
+        };
+        let primary: Vec<_> = View::SIDEBAR.into_iter().map(|v| zone(v, count(v), cx)).collect();
+        // Repositories and notes only when the file has some (or one is open).
+        let secondary: Vec<_> = View::SECONDARY
+            .into_iter()
+            .map(|v| (v, count(v)))
+            .filter(|&(v, n)| v == self.view || !matches!(v, View::Repositories | View::Notes) || n.unwrap_or(0) > 0)
+            .map(|(v, n)| zone(v, n, cx))
+            .collect();
         v_flex()
+            .id("sidebar")
             .relative()
             .w(px(184.))
             .flex_none()
+            .overflow_y_scroll()
             .p_2()
             .pt_3()
             .gap_0p5()
             .bg(theme::panel())
             .border_r_1()
             .border_color(theme::border())
-            .children(View::SIDEBAR.into_iter().map(|v| {
-                let active = v == self.view;
-                let n = doc.map(|d| match v.kind() {
-                    _ if active && filtered => self.rows.len(),
-                    Some(k) => d.ged.count(k),
-                    None => d.ged.places().len(),
-                });
-                h_flex()
-                    .id(SharedString::from(format!("zone-{}", v.label())))
-                    .px_2()
-                    .py_1()
-                    .gap_2()
-                    .items_center()
-                    .rounded(theme::RADIUS_SM)
-                    .cursor_pointer()
-                    .when(active, |d| d.bg(theme::accent_soft()).font_weight(FontWeight::SEMIBOLD))
-                    .when(!active, |d| d.hover(|d| d.bg(theme::hover())))
-                    .child(Icon::new(v.icon()).size(px(16.)).text_color(if active {
-                        theme::accent()
-                    } else {
-                        theme::muted()
-                    }))
-                    .child(div().flex_1().child(v.label()))
-                    .children(n.map(|n| div().text_xs().text_color(theme::muted()).child(group_thousands(n))))
-                    .on_click(cx.listener(move |this, _, w, cx| this.show_view(v, w, cx)))
-            }))
+            .children(primary)
+            .when(doc.is_some(), |d| d.child(div().h(px(1.)).my_1().bg(theme::border())).children(secondary))
             .children(self.render_review_zone(cx))
             .children(self.render_saved(cx))
             .children(self.tour_anchor(tour::Target::Sidebar, cx))
     }
 
+    /// Whether the current view has a details panel (individuals and places, record selected).
+    fn has_inspector(&self) -> bool {
+        self.doc.is_some()
+            && self.selected.is_some()
+            && self.act_editor.is_none()
+            && !self.review.open
+            && matches!(self.view, View::Individuals | View::Places)
+    }
+
+    /// View › Show or Hide Sidebar / Details Panel: in a wide window the column is docked; in a
+    /// narrow one it is folded away and the command shows it over the others.
+    fn toggle_column(&mut self, which: Drawer, cx: &mut Context<Self>) {
+        let folded = match which {
+            Drawer::Sidebar => self.compact.sidebar,
+            Drawer::Inspector => self.compact.inspector,
+        };
+        if folded {
+            self.drawer = if self.drawer == Some(which) { None } else { Some(which) };
+        } else {
+            match which {
+                Drawer::Sidebar => self.sidebar = !self.sidebar,
+                Drawer::Inspector => self.inspector = !self.inspector,
+            }
+        }
+        cx.notify();
+    }
+
+    /// Folded column shown over the others, with a shadow since it floats. A click outside, `Esc`
+    /// or choosing a zone puts it away.
+    fn render_drawer(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let which = self.drawer?;
+        let column: AnyElement = match which {
+            Drawer::Sidebar => div()
+                .absolute()
+                .top_0()
+                .bottom_0()
+                .left_0()
+                .flex()
+                .shadow_lg()
+                .occlude()
+                // A zone or a saved search chosen: the drawer has done its job.
+                .on_mouse_up(
+                    MouseButton::Left,
+                    cx.listener(|this, _, _, cx| {
+                        this.drawer = None;
+                        cx.notify();
+                    }),
+                )
+                .child(self.render_sidebar(cx))
+                .into_any_element(),
+            Drawer::Inspector => div()
+                .absolute()
+                .top_0()
+                .bottom_0()
+                .right_0()
+                .flex()
+                .shadow_lg()
+                .child(self.render_detail(cx))
+                .into_any_element(),
+        };
+        Some(
+            div()
+                .absolute()
+                .size_full()
+                .child(div().id("drawer-outside").absolute().size_full().on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(|this, _, _, cx| {
+                        this.drawer = None;
+                        cx.notify();
+                    }),
+                ))
+                .child(column)
+                .into_any_element(),
+        )
+    }
+
     fn render_list(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let rows = self.rows.clone();
+        // A dot only when it means something (Sosa ancestor, missing file); the other rows keep its
+        // room so names stay aligned.
+        let dotted = rows.iter().any(|r| r.dot.is_some());
         let selected = self.selected.clone();
         let marked: Rc<Vec<String>> = Rc::new(self.media_marked.clone());
         let multi = self.view == View::Media;
@@ -1750,7 +1908,7 @@ impl Workspace {
                                         .cursor_pointer()
                                         .when(on, |d| d.bg(theme::hover()))
                                         .hover(|d| d.bg(theme::surface()))
-                                        .child(dot(r.dot.unwrap_or(theme::border_strong())))
+                                        .when(dotted, |d| d.child(dot(r.dot.unwrap_or(transparent_black()))))
                                         .child(
                                             h_flex()
                                                 .flex_1()
@@ -1823,9 +1981,10 @@ impl Workspace {
         }
         // Raw GEDCOM: a tab only when it was asked for. With no other view than the record, no tab
         // bar.
+        // Individuals and places: the record is the right panel, not a tab.
         let mut tabs: Vec<CenterTab> = match self.view {
-            View::Individuals => vec![CenterTab::Tree, CenterTab::Form],
-            View::Places => vec![CenterTab::Map, CenterTab::Form],
+            View::Individuals => vec![CenterTab::Tree],
+            View::Places => vec![CenterTab::Map],
             _ => vec![CenterTab::Form],
         };
         if self.raw_open && self.view != View::Places {
@@ -1892,18 +2051,8 @@ impl Workspace {
                                 } else {
                                     theme::muted()
                                 }))
-                                .child(match t {
-                                    // Current chart view, set in View › Chart.
-                                    CenterTab::Tree => match self.tree_mode {
-                                        tree::TreeMode::Fan => {
-                                            let r = self.tree_mode.generations();
-                                            let gens = self.tree_gens.clamp(*r.start(), *r.end());
-                                            t!("ws.tree_gens", mode = self.tree_mode.label(), n = gens).into_owned()
-                                        }
-                                        m => m.label().to_string(),
-                                    },
-                                    _ => t.label().to_string(),
-                                })
+                                // Same label as the View menu command that opens the tab.
+                                .child(t.label())
                                 // L'onglet GEDCOM brut se referme.
                                 .when(t == CenterTab::Raw, |d| {
                                     d.child(
@@ -1940,27 +2089,7 @@ impl Workspace {
         let editable = !ed.fields.is_empty() || !ed.pickers.is_empty() || ed.long_text.is_some();
         let editing = self.editing && editable;
         // Deletion: Edit › Delete Item, then confirmation here.
-        let confirm_buttons = confirm.then(|| {
-            h_flex()
-                .gap_2()
-                .child(Button::new("cancel-delete").ghost().small().label(t!("ws.keep")).on_click(cx.listener(
-                    |this, _, _, cx| {
-                        this.pending_delete = None;
-                        cx.notify();
-                    },
-                )))
-                .child(
-                    Button::new("delete")
-                        .danger()
-                        .small()
-                        .icon(IconName::Trash)
-                        .label(match &ed.target {
-                            Target::Place(_) => t!("ws.confirm_remove_place"),
-                            _ => t!("ws.confirm_delete"),
-                        })
-                        .on_click(cx.listener(|this, _, w, cx| this.delete_selected(w, cx))),
-                )
-        });
+        let confirm_buttons = confirm.then(|| self.delete_buttons(matches!(ed.target, Target::Place(_)), cx));
         // Sources, media, repositories and notes are read whole in the centre, with no side panel:
         // their images, web links and links follow the record.
         let record = match &ed.target {
@@ -1968,42 +2097,17 @@ impl Workspace {
             _ => None,
         };
         let sections = record.as_ref().map(|(x, k)| self.record_sections(x, *k, cx)).unwrap_or_default();
-        // A photo is worth the room; text reads best on a narrower column.
-        let max_w = if preview.is_some() { 960. } else { 720. };
+        // One readable column for every record, photo included (View › Zoom enlarges it).
         let column = v_flex()
             .w_full()
-            .max_w(px(max_w))
+            .max_w(px(720.))
             .px_10()
             .py_8()
             .gap_6()
             .when(editing, |d| d.child(self.render_form_fields(ed, cx)))
             .when(!editing && editable, |d| d.child(self.render_form_read(ed, cx)))
-            .when(editing || confirm, |d| {
-                d.child(
-                    h_flex()
-                        .gap_2()
-                        .when(editing, |d| {
-                            d.child(
-                                Button::new("cancel-form")
-                                    .ghost()
-                                    .small()
-                                    .label(t!("ws.cancel_edit"))
-                                    .tooltip(t!("ws.cancel_edit_tip"))
-                                    .on_click(cx.listener(|this, _, w, cx| this.cancel_edit(w, cx))),
-                            )
-                            .child(
-                                Button::new("apply-form")
-                                    .primary()
-                                    .small()
-                                    .icon(IconName::Check)
-                                    .label(t!("ws.done"))
-                                    .on_click(cx.listener(|this, _, w, cx| this.apply_form(w, cx))),
-                            )
-                        })
-                        .child(div().flex_1())
-                        .children(confirm_buttons),
-                )
-            })
+            .when(editing, |d| d.child(self.edit_buttons(cx).justify_start()))
+            .children(confirm_buttons)
             .when_some(
                 match &ed.target {
                     Target::Record { xref, kind: RecordKind::Source } => Some(xref.clone()),
@@ -2091,28 +2195,133 @@ impl Workspace {
                     )
                 })))
             })
-            .child(div().grid().grid_cols(2).gap_3().children(ed.fields.iter().map(|f| {
-                v_flex()
-                    .gap_1()
-                    .min_w_0()
-                    .child(label_caps(f.label.clone()))
-                    .child(match &f.state {
-                        FieldState::Text(e) => Input::new(e).small().into_any_element(),
-                        FieldState::Choice(e) => Select::new(e)
-                            .small()
-                            .cleanable(true)
-                            .placeholder(t!("event_dialog.choose"))
-                            .into_any_element(),
-                        FieldState::Date(e) => e.clone().into_any_element(),
-                    })
-                    .children(match &f.state {
-                        FieldState::Text(e) if f.place => self.place_suggestions(e, cx),
-                        _ => None,
-                    })
-            })))
+            .child(div().grid().grid_cols(2).gap_3().children(ed.fields.iter().map(|f| self.render_field(f, cx))))
             .when_some(ed.long_text.as_ref(), |d, (label, state)| {
                 d.child(v_flex().gap_1().child(label_caps(label.clone())).child(Textarea::new(state).h(px(120.))))
             })
+    }
+
+    /// One field of the record being edited: its label above its input.
+    fn render_field(&self, f: &crate::editor::Field, cx: &mut Context<Self>) -> Div {
+        v_flex()
+            .gap_1()
+            .min_w_0()
+            .child(label_caps(f.label.clone()))
+            .child(match &f.state {
+                FieldState::Text(e) => Input::new(e).small().into_any_element(),
+                FieldState::Choice(e) => {
+                    Select::new(e).small().cleanable(true).placeholder(t!("event_dialog.choose")).into_any_element()
+                }
+                FieldState::Date(e) => e.clone().into_any_element(),
+            })
+            .children(match &f.state {
+                FieldState::Text(e) if f.place => self.place_suggestions(e, cx),
+                _ => None,
+            })
+    }
+
+    /// Cancel and Done, under the fields of the record being edited.
+    fn edit_buttons(&self, cx: &mut Context<Self>) -> Div {
+        h_flex()
+            .gap_2()
+            .justify_end()
+            .child(
+                Button::new("cancel-form")
+                    .ghost()
+                    .small()
+                    .label(t!("ws.cancel_edit"))
+                    .tooltip(t!("ws.cancel_edit_tip"))
+                    .on_click(cx.listener(|this, _, w, cx| this.cancel_edit(w, cx))),
+            )
+            .child(
+                Button::new("apply-form")
+                    .primary()
+                    .small()
+                    .icon(IconName::Check)
+                    .label(t!("ws.done"))
+                    .on_click(cx.listener(|this, _, w, cx| this.apply_form(w, cx))),
+            )
+    }
+
+    /// Keep and Delete, after Edit › Delete Item.
+    fn delete_buttons(&self, place: bool, cx: &mut Context<Self>) -> Div {
+        h_flex()
+            .gap_2()
+            .justify_end()
+            .child(Button::new("cancel-delete").ghost().small().label(t!("ws.keep")).on_click(cx.listener(
+                |this, _, _, cx| {
+                    this.pending_delete = None;
+                    cx.notify();
+                },
+            )))
+            .child(
+                Button::new("delete")
+                    .danger()
+                    .small()
+                    .icon(IconName::Trash)
+                    .label(if place { t!("ws.confirm_remove_place") } else { t!("ws.confirm_delete") })
+                    .on_click(cx.listener(|this, _, w, cx| this.delete_selected(w, cx))),
+            )
+    }
+
+    /// The editor of the record shown in the right panel, when it is this one (`key`).
+    fn panel_editor(&self, key: &str) -> Option<&RecordEditor> {
+        self.editor.as_ref().filter(|ed| match &ed.target {
+            Target::Record { xref, .. } => xref == key,
+            Target::Place(name) => name == key,
+        })
+    }
+
+    /// The small pencil next to a record's title: Edit › Edit Record.
+    fn edit_pencil(&self, cx: &mut Context<Self>) -> Button {
+        Button::new("edit-record")
+            .ghost()
+            .small()
+            .icon(IconName::Pencil)
+            .tooltip_with_action(t!("cmd.edit_record"), &EditRecord, Some("Workspace"))
+            .on_click(cx.listener(|this, _, w, cx| this.start_edit(w, cx)))
+    }
+
+    /// Edit › Edit Record on an individual: their panel's header becomes fields, in place: names
+    /// next to the portrait, sex, birth and death for quick entry, note. The timeline and the
+    /// family stay below.
+    fn render_individual_fields(&self, ed: &RecordEditor, portrait: Div, cx: &mut Context<Self>) -> Div {
+        let f = &ed.fields;
+        let event = |title: SharedString, n: usize, cx: &mut Context<Self>| {
+            v_flex()
+                .gap_2()
+                .child(div().text_xs().font_weight(FontWeight::SEMIBOLD).text_color(theme::muted()).child(title))
+                // The place takes the room: its names are long.
+                .child(
+                    h_flex()
+                        .gap_2()
+                        .items_start()
+                        .child(self.render_field(&f[n], cx).w(px(136.)).flex_none())
+                        .child(self.render_field(&f[n + 1], cx).flex_1()),
+                )
+        };
+        v_flex()
+            .p_4()
+            .gap_3()
+            .border_b_1()
+            .border_color(theme::border())
+            .child(
+                h_flex().gap_3().items_center().child(portrait).child(
+                    v_flex()
+                        .flex_1()
+                        .min_w_0()
+                        .gap_2()
+                        .child(self.render_field(&f[0], cx))
+                        .child(self.render_field(&f[1], cx)),
+                ),
+            )
+            .child(self.render_field(&f[2], cx))
+            .child(event(t!("editor.birth").into(), 3, cx))
+            .child(event(t!("editor.death").into(), 5, cx))
+            .when_some(ed.long_text.as_ref(), |d, (label, state)| {
+                d.child(v_flex().gap_1().child(label_caps(label.clone())).child(Textarea::new(state).h(px(80.))))
+            })
+            .child(self.edit_buttons(cx))
     }
 
     /// The record as it is saved, in text: its title (with a source's repository and call number
@@ -2166,12 +2375,7 @@ impl Workspace {
             (None, Some((_, text))) => (Some(text), None),
             (_, long) => (None, long.map(|(label, text)| row(label, text.into_any_element()))),
         };
-        let edit = Button::new("edit-record")
-            .ghost()
-            .small()
-            .icon(IconName::Pencil)
-            .tooltip_with_action(t!("cmd.edit_record"), &EditRecord, Some("Workspace"))
-            .on_click(cx.listener(|this, _, w, cx| this.start_edit(w, cx)));
+        let edit = self.edit_pencil(cx);
         let head = v_flex()
             .flex_1()
             .min_w_0()
@@ -2194,7 +2398,9 @@ impl Workspace {
             self.apply_form(window, cx);
             return;
         }
-        self.tab = CenterTab::Form;
+        if !self.view.has_panel() {
+            self.tab = CenterTab::Form;
+        }
         self.editing = true;
         if let Some(f) = self.editor.as_ref().and_then(|ed| ed.fields.first()) {
             match &f.state {
@@ -2389,6 +2595,7 @@ impl Workspace {
 
     fn render_raw(&self, ed: &RecordEditor, cx: &mut Context<Self>) -> impl IntoElement {
         let Some(raw) = &ed.raw else { return v_flex().flex_1() };
+        let changed = ed.raw_changed(cx);
         v_flex()
             .flex_1()
             .min_h_0()
@@ -2403,14 +2610,15 @@ impl Workspace {
                             .primary()
                             .small()
                             .label(t!("ws.apply_gedcom"))
+                            .disabled(!changed)
                             .on_click(cx.listener(|this, _, w, cx| this.apply_raw(w, cx))),
                     )
-                    .child(Button::new("reset-raw").ghost().small().label(t!("ws.revert")).on_click(cx.listener(
-                        |this, _, w, cx| {
+                    .child(Button::new("reset-raw").ghost().small().label(t!("ws.revert")).disabled(!changed).on_click(
+                        cx.listener(|this, _, w, cx| {
                             this.refresh_editor(w, cx);
                             cx.notify();
-                        },
-                    )))
+                        }),
+                    ))
                     .when_some(ed.error.clone(), |d, e| d.child(div().text_sm().text_color(theme::danger()).child(e))),
             )
             .child(div().flex_1().min_h_0().font_family("monospace").text_sm().child(Editor::new(raw).h_full()))
@@ -2455,28 +2663,66 @@ impl Workspace {
             View::Places => {
                 let place = g.places().into_iter().find(|p| &p.name == key);
                 let refs = place.as_ref().map(|p| p.records.clone()).unwrap_or_default();
-                panel
+                let confirm = self.pending_delete.as_ref() == Some(key);
+                // Edit › Edit Record: one field per jurisdiction, then the coordinates, in place.
+                let fields = self.panel_editor(key).filter(|_| self.editing).map(|ed| {
+                    v_flex()
+                        .p_4()
+                        .gap_3()
+                        .border_b_1()
+                        .border_color(theme::border())
+                        // The name (one field, or one per jurisdiction), then the coordinates.
+                        .map(|d| {
+                            let (names, coords) = ed.fields.split_at(ed.fields.len().saturating_sub(2));
+                            let grid = || div().grid().grid_cols(2).gap_3();
+                            match names {
+                                [one] => d.child(self.render_field(one, cx)),
+                                _ => d.child(grid().children(names.iter().map(|f| self.render_field(f, cx)))),
+                            }
+                            .child(grid().children(coords.iter().map(|f| self.render_field(f, cx))))
+                        })
+                        .child(self.edit_buttons(cx))
+                });
+                let editing = fields.is_some();
+                let header = h_flex()
+                    .p_4()
+                    .gap_2()
+                    .items_start()
+                    .border_b_1()
+                    .border_color(theme::border())
                     .child(
                         v_flex()
-                            .p_4()
+                            .flex_1()
+                            .min_w_0()
                             .gap_1()
-                            .border_b_1()
-                            .border_color(theme::border())
                             .child(div().text_xl().font_weight(FontWeight::SEMIBOLD).child(short_place(key)))
-                            .children(place.iter().map(|p| {
-                                mono(match (&p.latitude, &p.longitude) {
-                                    (Some(a), Some(b)) => {
-                                        t!("ws.place_coords", lat = a, lon = b, n = p.uses).into_owned()
-                                    }
-                                    _ => t!("ws.place_no_coords", n = p.uses).into_owned(),
-                                })
-                            }))
                             .children(place.iter().map(|p| {
                                 let parts = p.parts().join(" › ");
                                 div().text_color(theme::muted()).child(parts)
-                            })),
+                            }))
+                            .children(place.iter().map(|p| {
+                                mono(match (&p.latitude, &p.longitude) {
+                                    (Some(a), Some(b)) => t!(
+                                        "ws.place_coords",
+                                        lat = a,
+                                        lon = b,
+                                        uses = crate::tn!("places.uses", p.uses)
+                                    )
+                                    .into_owned(),
+                                    _ => {
+                                        t!("ws.place_no_coords", uses = crate::tn!("places.uses", p.uses)).into_owned()
+                                    }
+                                })
+                            }))
+                            .when(confirm, |d| d.child(self.delete_buttons(true, cx).pt_2())),
                     )
-                    .children(place.as_ref().and_then(|p| self.render_locate(p, cx)))
+                    .child(self.edit_pencil(cx));
+                panel
+                    .map(|d| match fields {
+                        Some(f) => d.child(f),
+                        None => d.child(header),
+                    })
+                    .when(!editing, |d| d.children(place.as_ref().and_then(|p| self.render_locate(p, cx))))
                     .child(self.render_links(t!("ws.cited_by").into(), refs, cx))
                     .into_any_element()
             }
@@ -2760,6 +3006,12 @@ impl Workspace {
         let lineage =
             sosa.as_deref().and_then(|s| s.parse().ok()).map(theme::lineage).unwrap_or(theme::border_strong());
         let xref = i.xref().to_string();
+        // Edit › Edit Record: the header becomes fields, in place.
+        let fields = self
+            .panel_editor(&xref)
+            .filter(|ed| self.editing && ed.fields.len() >= 7)
+            .map(|ed| self.render_individual_fields(ed, avatar(doc, &i, 64., lineage), cx));
+        let confirm = self.pending_delete.as_deref() == Some(xref.as_str());
 
         let header = h_flex()
             .p_4()
@@ -2794,7 +3046,7 @@ impl Workspace {
                                 .gap_1()
                                 .items_center()
                                 .text_xs()
-                                .text_color(theme::accent())
+                                .text_color(theme::muted())
                                 .child(icon(IconName::House))
                                 .child(t!("settings.root")),
                         )
@@ -2812,8 +3064,10 @@ impl Workspace {
                                     .child(div().h_full().rounded_full().bg(theme::ok()).w(px(120. * pct))),
                             )
                             .child(mono(t!("ws.sourced", sourced = sourced, total = total))),
-                    ),
-            );
+                    )
+                    .when(confirm, |d| d.child(self.delete_buttons(false, cx).pt_2())),
+            )
+            .child(self.edit_pencil(cx));
 
         let events_el = self.render_events(&xref, cx);
 
@@ -2893,10 +3147,15 @@ impl Workspace {
         }
         let web = self.render_web_links(&xref, cx);
         let gallery = self.render_gallery(&xref, false, true, cx);
-        let mut notes = i.notes();
+        let editing = fields.is_some();
+        // While editing, the first note is in the fields.
+        let mut notes: Vec<String> = i.notes().into_iter().skip(usize::from(editing)).collect();
         notes.extend(unions.iter().flat_map(|f| f.notes()));
         v_flex()
-            .child(header)
+            .map(|d| match fields {
+                Some(f) => d.child(f),
+                None => d.child(header),
+            })
             .when_some(gallery, |d, el| d.child(el))
             .child(events_el)
             .child(family_el)
@@ -3007,11 +3266,17 @@ impl Workspace {
         if paths.is_empty() {
             return None;
         }
-        // The folder is shown on the right: the file name is enough on the left.
+        // The file name on the left, its folder's name on the right (“Généalogie Guyot”, the useful
+        // end of the path); the whole path in the tooltip.
         Some(v_flex().w(px(440.)).gap_1().child(div().px_3().child(label_caps(t!("ws.recent")))).children(
             paths.into_iter().enumerate().map(|(i, path)| {
                 let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-                let folder = crate::recent::folder(&path);
+                let full: SharedString = crate::recent::folder(&path).into();
+                let folder = path
+                    .parent()
+                    .and_then(|d| d.file_name())
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_else(|| full.to_string());
                 h_flex()
                     .id(("recent", i))
                     .px_3()
@@ -3022,6 +3287,7 @@ impl Workspace {
                     .hover(|d| d.bg(theme::hover()))
                     .child(div().flex_none().child(name))
                     .child(div().flex_1().min_w_0().truncate().text_right().text_color(theme::muted()).child(folder))
+                    .tooltip(move |w, cx| Tooltip::new(full.clone()).build(w, cx))
                     .on_click(cx.listener(move |this, _, w, cx| this.load(path.clone(), w, cx)))
             }),
         ))
@@ -3059,14 +3325,42 @@ impl Render for Workspace {
                 crate::commands::install_menus(cx);
             }
         }
-        // Recent files or search sites changed (here or in another window): the menu bar picks them
-        // up.
+        // Menu bar drawn in the window (Linux, Windows): once this frame is drawn, grey out the
+        // commands that do not apply to it (macOS asks the window itself when a menu opens).
+        if self.menu_bar.is_some() && (window.is_window_active() || cx.windows().len() == 1) {
+            let focus = self.focus.clone();
+            window.on_next_frame(move |window, cx| {
+                let unavailable = crate::commands::menu_actions()
+                    .into_iter()
+                    .filter(|a| {
+                        !window.is_action_available_in(a.as_ref(), &focus) && !crate::is_global_action(a.as_ref())
+                    })
+                    .map(|a| a.name())
+                    .collect();
+                if crate::commands::set_unavailable(unavailable) {
+                    crate::commands::install_menus(cx);
+                    window.refresh();
+                }
+            });
+        }
+        // Recent files, search sites or available commands changed (here or in another window): the
+        // menu bar picks them up.
         let menus_gen = (crate::recent::generation(), crate::commands::search_sites_generation());
         if self.recent_gen != menus_gen {
             self.recent_gen = menus_gen;
             if let Some(bar) = &self.menu_bar {
                 bar.update(cx, |bar, cx| bar.reload(cx));
             }
+        }
+        // Narrow window: fold the sidebar, then the details panel (see `FOLD_SIDEBAR`).
+        let width = f32::from(window.viewport_size().width);
+        let compact = Compact { sidebar: width < FOLD_SIDEBAR, inspector: width < FOLD_INSPECTOR };
+        if compact != self.compact {
+            self.compact = compact;
+            self.drawer = None;
+        }
+        if self.drawer == Some(Drawer::Inspector) && !self.has_inspector() {
+            self.drawer = None;
         }
         // Shortcuts (Save…) go through this node: keep it in the focus chain.
         if window.focused(cx).is_none() {
@@ -3079,7 +3373,7 @@ impl Render for Workspace {
                 .flex_1()
                 .min_h_0()
                 .items_stretch()
-                .when(self.sidebar, |d| d.child(self.render_sidebar(cx)))
+                .when(self.sidebar && !self.compact.sidebar, |d| d.child(self.render_sidebar(cx)))
                 .child(self.render_list(cx))
                 .child(editor.clone())
                 .into_any_element()
@@ -3089,7 +3383,7 @@ impl Render for Workspace {
                 .flex_1()
                 .min_h_0()
                 .items_stretch()
-                .when(self.sidebar, |d| d.child(self.render_sidebar(cx)))
+                .when(self.sidebar && !self.compact.sidebar, |d| d.child(self.render_sidebar(cx)))
                 .child(self.render_review(cx))
                 .into_any_element()
         } else if self.doc.is_some() {
@@ -3097,10 +3391,10 @@ impl Render for Workspace {
                 .flex_1()
                 .min_h_0()
                 .items_stretch()
-                .when(self.sidebar, |d| d.child(self.render_sidebar(cx)))
+                .when(self.sidebar && !self.compact.sidebar, |d| d.child(self.render_sidebar(cx)))
                 .when(self.view != View::Stats, |d| d.child(self.render_list(cx)))
                 .child(self.render_center(cx))
-                .child(self.render_detail(cx))
+                .when(self.inspector && !self.compact.inspector, |d| d.child(self.render_detail(cx)))
                 .into_any_element()
         } else {
             self.render_welcome(window, cx).into_any_element()
@@ -3137,6 +3431,9 @@ impl Render for Workspace {
                     if this.gallery_escape(w, cx) {
                         return;
                     }
+                    if this.drawer.take().is_some() {
+                        return cx.notify();
+                    }
                     if this.photo_draw.is_some() {
                         this.cancel_draw(cx);
                     } else if this.kinship.take().is_some() || this.close_event_detail(cx) {
@@ -3150,7 +3447,7 @@ impl Render for Workspace {
             .text_color(theme::text())
             .text_sm()
             .child(self.render_header(cx))
-            .child(body)
+            .child(div().flex_1().min_h_0().flex().relative().child(body).children(self.render_drawer(cx)))
             .children(self.render_picker(cx))
             .children(self.render_kinship(cx))
             .children(self.render_event_detail(cx))

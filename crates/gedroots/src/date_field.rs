@@ -199,7 +199,7 @@ fn chip(id: impl Into<SharedString>, label: impl Into<SharedString>, on: bool, e
 }
 
 fn caps(label: impl Into<SharedString>) -> Div {
-    div().text_xs().font_weight(FontWeight::SEMIBOLD).text_color(theme::muted()).child(label.into().to_uppercase())
+    div().text_xs().font_weight(FontWeight::SEMIBOLD).text_color(theme::muted()).child(label.into())
 }
 
 fn details(this: &Entity<DateField>, cx: &App) -> AnyElement {

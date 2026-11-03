@@ -110,7 +110,7 @@ fn import_wizard_checks() {
     let mut g = Gedcom::parse(LEGACY).unwrap();
     let found = import::analyze(&g);
     assert_eq!(found.len(), 1);
-    assert_eq!((found[0].id, found[0].label.as_str()), ("url", "4 _URL links"));
+    assert_eq!((found[0].id, found[0].label.as_str()), ("url", "4 web links in another program’s format"));
     assert_eq!(import::apply(&mut g, &[]), []);
     assert_eq!(import::apply(&mut g, &["url"]), [("url", 4)]);
     assert!(import::analyze(&g).is_empty());

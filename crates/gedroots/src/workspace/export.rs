@@ -182,7 +182,7 @@ impl Workspace {
                         };
                         let mut msg = t!("export.done", path = dest.display(), files = files).to_string();
                         if !missing.is_empty() {
-                            msg.push_str(&t!("export.missing", count = missing.len()));
+                            msg.push_str(&crate::tn!("export.missing", missing.len()));
                             this.add_dialog = Some(AddDialog::Gedzip(Box::new(GedzipReport { file, missing })));
                         }
                         this.set_status(msg, false);

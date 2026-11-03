@@ -81,6 +81,7 @@ actions!(
         RenameMediaFiles,
         // View
         ToggleSidebar,
+        ToggleInspector,
         GoBack,
         GoForward,
         ShowIndividuals,
@@ -164,6 +165,45 @@ pub fn search_sites_generation() -> u64 {
     SEARCH_SITES_GEN.load(std::sync::atomic::Ordering::Relaxed)
 }
 
+/// Commands that do not apply right now, by action name, for the menu bar drawn in the window
+/// (Linux, Windows). macOS asks the window itself each time a menu opens.
+static UNAVAILABLE: std::sync::Mutex<Vec<&'static str>> = std::sync::Mutex::new(Vec::new());
+
+/// Records the commands that do not apply. Returns `true` if the list changed: the menus then need
+/// to be installed again.
+pub fn set_unavailable(mut names: Vec<&'static str>) -> bool {
+    names.sort_unstable();
+    names.dedup();
+    let mut current = UNAVAILABLE.lock().unwrap_or_else(|e| e.into_inner());
+    if *current == names {
+        return false;
+    }
+    *current = names;
+    SEARCH_SITES_GEN.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    true
+}
+
+fn is_unavailable(action: &dyn Action) -> bool {
+    UNAVAILABLE.lock().unwrap_or_else(|e| e.into_inner()).binary_search(&action.name()).is_ok()
+}
+
+/// Every command of the menus (text editing actions left out), to check which ones apply.
+pub fn menu_actions() -> Vec<Box<dyn Action>> {
+    fn walk(items: Vec<Item>, out: &mut Vec<Box<dyn Action>>) {
+        for i in items {
+            match i {
+                Item::Sub(_, items) => walk(items, out),
+                i => out.extend(i.into_command().map(|(_, a)| a)),
+            }
+        }
+    }
+    let mut out = Vec::new();
+    for (_, items) in model() {
+        walk(items, &mut out);
+    }
+    out
+}
+
 /// Shortcut with ⌘ on macOS, Ctrl elsewhere.
 macro_rules! shortcut {
     ($k:literal) => {
@@ -209,6 +249,8 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new(shortcut!("8"), ShowStats, WS),
         // Like Finder and Mail: ⌃⌘S (Ctrl+Alt+S elsewhere).
         KeyBinding::new(if cfg!(target_os = "macos") { "ctrl-cmd-s" } else { "ctrl-alt-s" }, ToggleSidebar, WS),
+        // Like the inspectors of Finder, Pages or Xcode: ⌥⌘I (Ctrl+Alt+I elsewhere).
+        KeyBinding::new(shortcut!("alt-i"), ToggleInspector, WS),
         KeyBinding::new(shortcut!("alt-1"), ShowTree, WS),
         KeyBinding::new(shortcut!("alt-2"), ShowForm, WS),
         KeyBinding::new(shortcut!("alt-3"), ShowRaw, WS),
@@ -419,8 +461,6 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
         a(t!("cmd.save_as"), SaveFileAs),
         Sep,
         a(t!("cmd.export"), ExportFile),
-        Sep,
-        a(t!("cmd.connect_agent"), ConnectAgent),
     ]);
     if !mac {
         file.extend([Sep, a(t!("cmd.file_settings"), OpenFileSettings), Sep, a(t!("cmd.quit"), Quit)]);
@@ -438,11 +478,10 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
             Item::Os(t!("cmd.select_all").into(), Box::new(input::SelectAll), OsAction::SelectAll),
             Sep,
             a(t!("cmd.edit_record"), EditRecord),
-            a(label::media_gallery(), MediaGallery),
             a(t!("cmd.add_web_link"), AddWebLink),
             Sep,
-            a(label::copy_name(), CopyName),
-            a(label::copy_id(), CopyId),
+            // Rarely used: one level down, so that Edit stays within 12 items.
+            Sub(t!("menu.copy_special").into(), vec![a(label::copy_name(), CopyName), a(label::copy_id(), CopyId)]),
             a(label::delete(), DeleteRecord),
             Sep,
             a(t!("cmd.find"), FocusSearch),
@@ -475,7 +514,6 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
             ),
             a(label::add_event(), AddEvent),
             Sep,
-            a(label::go_to_root(), GoToRoot),
             a(t!("cmd.kinship_with"), KinshipWith),
             a(t!("cmd.search_ancestors"), SearchAncestors),
             a(t!("cmd.search_descendants"), SearchDescendants),
@@ -489,7 +527,7 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
             indi.push(Sub(label::search_web(), items.collect()));
         }
     }
-    // Repositories and shared notes are not in the sidebar: they are created from the Source menu.
+    // Agents propose records: connecting one and reviewing what it proposed go together.
     menus.push((
         t!("menu.source").into(),
         vec![
@@ -498,6 +536,7 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
             a(t!("cmd.review_proposals"), ReviewProposals),
             a(t!("cmd.accept_proposal"), AcceptProposal),
             a(t!("cmd.reject_proposal"), RejectProposal),
+            a(t!("cmd.connect_agent"), ConnectAgent),
             Sep,
             a(label::new_source(), NewSource),
             a(label::new_repository(), NewRepository),
@@ -509,6 +548,7 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
         vec![
             a(label::new_media(), NewMedia),
             a(label::attach_media_to(), AttachMediaTo),
+            a(label::media_gallery(), MediaGallery),
             Sep,
             Sub(
                 t!("menu.pages").into(),
@@ -529,32 +569,18 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
             a(t!("cmd.rename_media_files"), RenameMediaFiles),
             Sep,
             a(label::tag_person(), TagPerson),
-            Sep,
-            a(t!("cmd.unreferenced_files"), ShowUnreferencedFiles),
         ],
     ));
     menus.push((
         t!("menu.view").into(),
         vec![
-            a(t!("cmd.back"), GoBack),
-            a(t!("cmd.forward"), GoForward),
-            Sep,
-            a(t!("cmd.individuals"), ShowIndividuals),
-            a(t!("cmd.sources"), ShowSources),
-            a(t!("cmd.places"), ShowPlaces),
-            a(t!("cmd.media_list"), ShowMedia),
-            a(t!("cmd.repositories"), ShowRepositories),
-            a(t!("cmd.notes"), ShowNotes),
-            Sep,
-            a(t!("cmd.quality"), ShowQuality),
-            a(t!("cmd.stats"), ShowStats),
-            Sep,
             a(t!("cmd.show_tree"), ShowTree),
             a(t!("cmd.show_form"), ShowForm),
             a(t!("cmd.show_raw"), ShowRaw),
             a(t!("cmd.record_preview"), ToggleRecordPreview),
             Sep,
             a(t!("cmd.toggle_sidebar"), ToggleSidebar),
+            a(t!("cmd.toggle_inspector"), ToggleInspector),
             a(t!("cmd.relative_events"), ToggleRelativeEvents),
             Sep,
             Sub(
@@ -602,6 +628,27 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
             a(label::delete_search(), DeleteSearch),
         ],
     ));
+    // Like Finder's Go menu: history, then the places of the file.
+    menus.push((
+        t!("menu.go").into(),
+        vec![
+            a(t!("cmd.back"), GoBack),
+            a(t!("cmd.forward"), GoForward),
+            Sep,
+            a(t!("cmd.individuals"), ShowIndividuals),
+            a(t!("cmd.sources"), ShowSources),
+            a(t!("cmd.places"), ShowPlaces),
+            a(t!("cmd.media_list"), ShowMedia),
+            a(t!("cmd.repositories"), ShowRepositories),
+            a(t!("cmd.notes"), ShowNotes),
+            Sep,
+            a(t!("cmd.quality"), ShowQuality),
+            a(t!("cmd.unreferenced_files"), ShowUnreferencedFiles),
+            a(t!("cmd.stats"), ShowStats),
+            Sep,
+            a(label::go_to_root(), GoToRoot),
+        ],
+    ));
     let mut help = vec![
         a(t!("cmd.all_commands"), CommandPalette),
         a(t!("cmd.take_tour"), TakeTour),
@@ -623,16 +670,19 @@ fn to_menu_items(items: Vec<Item>) -> Vec<MenuItem> {
         .into_iter()
         .map(|i| match i {
             Item::Action(name, action) => {
-                MenuItem::Action { name, action, os_action: None, checked: false, disabled: false }
+                let disabled = is_unavailable(action.as_ref());
+                MenuItem::Action { name, action, os_action: None, checked: false, disabled }
             }
             Item::Recent(name, action) => {
-                MenuItem::Action { name: name.into(), action, os_action: None, checked: false, disabled: false }
+                let disabled = is_unavailable(action.as_ref());
+                MenuItem::Action { name: name.into(), action, os_action: None, checked: false, disabled }
             }
             Item::Os(name, action, os) => {
                 MenuItem::Action { name, action, os_action: Some(os), checked: false, disabled: false }
             }
             Item::Check(name, action, checked) => {
-                MenuItem::Action { name, action, os_action: None, checked, disabled: false }
+                let disabled = is_unavailable(action.as_ref());
+                MenuItem::Action { name, action, os_action: None, checked, disabled }
             }
             Item::Sub(name, items) => MenuItem::submenu(Menu::new(name).items(to_menu_items(items))),
             Item::Separator => MenuItem::separator(),
@@ -713,6 +763,17 @@ mod tests {
         let sites = ["Geneanet".to_string(), "FamilySearch".to_string()];
         for (menu, items) in model_with(&recents, &sites) {
             walk(&menu, items, &mut seen);
+        }
+    }
+
+    /// design.md: menus of 3 to 12 items (separators left out, a submenu counts as one).
+    #[test]
+    fn menus_stay_short() {
+        let recents = [PathBuf::from("/a/Martin.ged")];
+        let sites = ["Geneanet".to_string()];
+        for (menu, items) in model_with(&recents, &sites) {
+            let n = items.iter().filter(|i| !matches!(i, Item::Separator)).count();
+            assert!((3..=12).contains(&n), "{menu} has {n} items");
         }
     }
 

@@ -12,12 +12,18 @@ settings.municipality:
 settings.saved:
   en: File settings saved
   fr: Réglages du fichier enregistrés
-settings.rewritten:
-  en: " · %{places} rewritten"
-  fr: " · %{places} réécrit(s)"
-settings.skipped:
-  en: " · %{places} in another format left unchanged"
-  fr: " · %{places} d'un autre format inchangé(s)"
+settings.rewritten.one:
+  en: " · %{n} place rewritten"
+  fr: " · %{n} lieu réécrit"
+settings.rewritten.other:
+  en: " · %{n} places rewritten"
+  fr: " · %{n} lieux réécrits"
+settings.skipped.one:
+  en: " · %{n} place in another format left unchanged"
+  fr: " · %{n} lieu d’un autre format inchangé"
+settings.skipped.other:
+  en: " · %{n} places in another format left unchanged"
+  fr: " · %{n} lieux d’un autre format inchangés"
 settings.general:
   en: General
   fr: Général
@@ -108,12 +114,6 @@ settings.add_folder:
 settings.portrait:
   en: Portrait
   fr: Portrait
-settings.places.one:
-  en: "%{n} place"
-  fr: "%{n} lieu"
-settings.places.other:
-  en: "%{n} places"
-  fr: "%{n} lieux"
 settings.search:
   en: Search
   fr: Recherche

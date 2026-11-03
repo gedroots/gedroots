@@ -180,27 +180,19 @@ impl Workspace {
         let context = v_flex()
             .gap_1()
             .child(
-                Checkbox::new("report-include").checked(d.include).label(t!("report.include").into_owned()).on_click(
-                    cx.listener(|this, checked: &bool, _, cx| {
-                        if let Some(d) = &mut this.report {
-                            d.include = *checked;
-                            cx.notify();
-                        }
-                    }),
-                ),
-            )
-            .child(
                 h_flex()
-                    .pl(px(24.))
                     .gap_2()
                     .items_center()
                     .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .text_xs()
-                            .text_color(theme::muted())
-                            .child(t!("report.include_detail")),
+                        Checkbox::new("report-include")
+                            .checked(d.include)
+                            .label(t!("report.include").into_owned())
+                            .on_click(cx.listener(|this, checked: &bool, _, cx| {
+                                if let Some(d) = &mut this.report {
+                                    d.include = *checked;
+                                    cx.notify();
+                                }
+                            })),
                     )
                     .child(
                         Button::new("report-preview")

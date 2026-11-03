@@ -16,11 +16,11 @@ stats.civil_degree:
   en: "Civil degree: %{degree}"
   fr: "Degré civil : %{degree}"
 stats.common_ancestors:
-  en: COMMON ANCESTORS
-  fr: ANCÊTRES COMMUNS
+  en: Common ancestors
+  fr: Ancêtres communs
 stats.path:
-  en: PATH
-  fr: CHEMIN
+  en: Path
+  fr: Chemin
 stats.no_link:
   en: "No relationship found between %{a} and %{b}."
   fr: "Aucun lien trouvé entre %{a} et %{b}."
@@ -28,8 +28,8 @@ stats.years:
   en: "%{years} yrs"
   fr: "%{years} ans"
 stats.overview:
-  en: OVERVIEW
-  fr: "VUE D'ENSEMBLE"
+  en: Overview
+  fr: "Vue d’ensemble"
 stats.individuals:
   en: people
   fr: individus
@@ -52,20 +52,20 @@ stats.first_marriage_women:
   en: age at 1st marriage (F)
   fr: âge au 1er mariage (F)
 stats.longevity:
-  en: LIFESPAN BY CENTURY OF BIRTH
-  fr: LONGÉVITÉ PAR SIÈCLE DE NAISSANCE
+  en: Lifespan by century of birth
+  fr: Longévité par siècle de naissance
 stats.births:
   en: "%{years} (%{births} b.)"
   fr: "%{years} (%{births} n.)"
 stats.longest:
-  en: LONGEST LIVES
-  fr: LES PLUS LONGUES VIES
+  en: Longest lives
+  fr: Les plus longues vies
 stats.ancestry_of:
-  en: "ANCESTRY OF %{name}"
-  fr: "ASCENDANCE DE %{name}"
+  en: "Ancestry of %{name}"
+  fr: "Ascendance de %{name}"
 stats.ancestry:
-  en: ANCESTRY
-  fr: ASCENDANCE
+  en: Ancestry
+  fr: Ascendance
 stats.duplicates:
   en: " (%{n} duplicates)"
   fr: " (%{n} doubles)"
@@ -76,14 +76,14 @@ stats.implexe:
   en: "Pedigree collapse: %{value}"
   fr: "Implexe : %{value}"
 stats.surnames:
-  en: SURNAMES
-  fr: PATRONYMES
+  en: Surnames
+  fr: Patronymes
 stats.given_men:
-  en: MALE GIVEN NAMES
-  fr: PRÉNOMS MASCULINS
+  en: Male given names
+  fr: Prénoms masculins
 stats.given_women:
-  en: FEMALE GIVEN NAMES
-  fr: PRÉNOMS FÉMININS
+  en: Female given names
+  fr: Prénoms féminins
 stats.places:
-  en: MOST CITED PLACES
-  fr: LIEUX LES PLUS CITÉS
+  en: Most cited places
+  fr: Lieux les plus cités

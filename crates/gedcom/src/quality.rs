@@ -226,13 +226,19 @@ fn validate(g: &Gedcom, x: &str, who: &str, node: &Node, def: &StructDef, path: 
         }
         path.push(i);
         match def.sub(&c.tag) {
-            None => out.push(issue(
-                Severity::Warning,
-                "tag_not_allowed",
-                x,
-                path.clone(),
-                t!("quality.tag_not_allowed", who = who, tag = c.tag, here = here).into(),
-            )),
+            None => {
+                // The genealogist's word for the tag when there is one (“Title”), else the tag.
+                let what = crate::i18n::lookup(&format!("tag.{}", c.tag))
+                    .or_else(|| crate::i18n::lookup(&format!("event.{}", c.tag)))
+                    .unwrap_or(Cow::Borrowed(c.tag.as_str()));
+                out.push(issue(
+                    Severity::Warning,
+                    "tag_not_allowed",
+                    x,
+                    path.clone(),
+                    t!("quality.tag_not_allowed", who = who, what = what, here = here).into(),
+                ))
+            }
             Some(sub) => {
                 let d = sub.def();
                 if let Some(problem) = payload_problem(g, c, d.payload) {

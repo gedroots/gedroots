@@ -200,6 +200,8 @@ pub struct RecordEditor {
     pub fields: Vec<Field>,
     pub long_text: Option<(SharedString, Entity<TextareaState>)>,
     pub raw: Option<Entity<EditorState>>,
+    /// Text of the raw GEDCOM editor when it opened, to know whether it was changed.
+    pub raw_original: String,
     pub error: Option<SharedString>,
 }
 
@@ -226,6 +228,7 @@ impl RecordEditor {
         let mut pickers = Vec::new();
         let mut long_text = None;
         let mut raw = None;
+        let mut raw_original = String::new();
         macro_rules! field {
             ($label:expr, $hint:expr, $v:expr) => {
                 fields.push(Field {
@@ -298,6 +301,7 @@ impl RecordEditor {
                         fields,
                         long_text,
                         raw,
+                        raw_original,
                         error: Some(t!("editor.not_found").into()),
                     };
                 };
@@ -318,11 +322,13 @@ impl RecordEditor {
                             shown: choice_label(&sexes, &f.sex),
                             slot: Slot::Fact,
                         });
-                        field!(t!("editor.occupation"), "", f.occupation);
-                        date_field!(t!("editor.birth_date"), f.birth);
-                        place_field!(t!("editor.birth_place"), f.birth.place);
-                        date_field!(t!("editor.death_date"), f.death);
-                        place_field!(t!("editor.death_place"), f.death.place);
+                        // The occupation is an event of the timeline (there can be several): not
+                        // in the form. Birth and death are here for quick entry, as in the
+                        // timeline below the fields.
+                        date_field!(t!("editor.date"), f.birth);
+                        place_field!(t!("editor.place"), f.birth.place);
+                        date_field!(t!("editor.date"), f.death);
+                        place_field!(t!("editor.place"), f.death.place);
                         long_text = Some((t!("editor.note").into(), textarea(window, cx, &f.note)));
                     }
                     // Unions are managed from the spouses' pages.
@@ -337,7 +343,7 @@ impl RecordEditor {
                         fields[3].slot = Slot::Subtitle;
                         // Contents (`DATA` / `EVEN`): record types and period.
                         let content = SourceContent::read(node);
-                        field!(t!("editor.acts"), t!("editor.acts_placeholder"), content.events_label());
+                        field!(t!("editor.record_types"), t!("editor.acts_placeholder"), content.events_label());
                         fields.push(Field {
                             label: t!("editor.period").into(),
                             shown: date_words(&content.period, ""),
@@ -393,6 +399,7 @@ impl RecordEditor {
                     }
                 }
                 let text = node_to_string(node);
+                raw_original = text.clone();
                 let provider = Rc::new(GedcomCompletion::new(Catalog::from_gedcom(ged)));
                 raw = Some(cx.new(|cx| {
                     let mut state = EditorState::new(window, cx).line_number(true).default_value(text);
@@ -402,7 +409,7 @@ impl RecordEditor {
                 }));
             }
         }
-        Self { target, pickers, fields, long_text, raw, error: None }
+        Self { target, pickers, fields, long_text, raw, raw_original, error: None }
     }
 
     fn picked(&self, n: usize, cx: &App) -> String {
@@ -465,9 +472,9 @@ impl RecordEditor {
                         given: v[0].clone(),
                         surname: v[1].clone(),
                         sex: v[2].clone(),
-                        occupation: v[3].clone(),
-                        birth: self.event(4, &v, cx)?,
-                        death: self.event(6, &v, cx)?,
+                        occupation: IndividualForm::read(node).occupation,
+                        birth: self.event(3, &v, cx)?,
+                        death: self.event(5, &v, cx)?,
                         note,
                     }
                     .apply(node),
@@ -517,6 +524,11 @@ impl RecordEditor {
                 Ok(t!("editor.applied", name = ged.record_label(xref)).into_owned())
             }
         }
+    }
+
+    /// Whether the text of the raw GEDCOM editor differs from the record.
+    pub fn raw_changed(&self, cx: &App) -> bool {
+        self.raw.as_ref().is_some_and(|r| r.read(cx).value().as_ref() != self.raw_original.as_str())
     }
 
     /// Applies the text of the raw GEDCOM editor. Returns the new identifier.

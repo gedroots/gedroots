@@ -518,7 +518,17 @@ impl Workspace {
         self.mutate(window, cx, move |g| {
             let (la, lo) = (geo::format_latitude(c.lat), geo::format_longitude(c.lon));
             let n = g.locate_place(&name, &la, &lo, c.exid.as_ref());
-            Ok((t!("places.located", place = short_place(&name), lat = la, lon = lo, n = n).into_owned(), None))
+            Ok((
+                t!(
+                    "places.located",
+                    place = short_place(&name),
+                    lat = la,
+                    lon = lo,
+                    uses = crate::tn!("places.uses", n)
+                )
+                .into_owned(),
+                None,
+            ))
         });
     }
 

@@ -262,7 +262,7 @@ impl Workspace {
                 .into_any_element()
         };
         let sex = root.then(|| {
-            h_flex().gap_1().children([("F", t!("sex.female")), ("M", t!("sex.male")), ("U", t!("sex.unknown"))].map(
+            h_flex().gap_1().children([("M", t!("sex.male")), ("F", t!("sex.female")), ("U", t!("sex.unknown"))].map(
                 |(v, label)| {
                     let on = d.sex == v;
                     div()

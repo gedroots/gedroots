@@ -59,7 +59,7 @@ A proposal without this research is not ready to show.
   placeholder; empty sections are hidden.
 - **Progressive disclosure**: technical fields are inferred, not shown (e.g. a media's
   `FORM`); rare or destructive actions are collapsed or in menus; GEDCOM identifiers only
-  appear through Edit › Copy ID and the advanced search.
+  appear through Edit › Copy Special › Copy ID and the advanced search.
 - **Read first, edit in place**: a record opens as text (empty values hidden, linked records
   clickable). Edit › Edit Record (`⌘L`, like Contacts) or the small pencil next to it turns the
   same layout into fields; Done saves (one undo point), Cancel or `Esc` drops the changes. A
@@ -86,7 +86,8 @@ forces it (screenshots, tests).
 | `surface()` | Cards, fields | `#F4EFE6` | `#222222` |
 | `hover()` | Hover, subtle selection | `#EEE7DA` | `#2B2B2B` |
 | `border()` | Separators | `#E6DED0` | `#2E2E2E` |
-| `border_strong()` | Field outlines, tree boxes | `#D5CAB7` | `#3D3D3D` |
+| `border_strong()` | Tree boxes, strong separators | `#D5CAB7` | `#3D3D3D` |
+| `field_border()` | Text field outlines | `#D5CAB7` | `#6E6E6E` (3:1 on `surface`) |
 | `text()` | Main text | `#1F1B16` | `#ECECEC` |
 | `muted()` | Secondary text | `#6B6257` | `#A3A3A3` |
 | `accent()` | Violet: actions, links, selection | `#6D3DF0` | `#B997FF` |
@@ -190,10 +191,19 @@ Rules shared by the three guidelines, to apply everywhere.
 
 - Fixed structure: sidebar (areas) → list → record. The sidebar is on the left on all three
   platforms and can be hidden. Individuals and places add a detail panel on the right, because
-  the centre shows the tree or the map. Sources, media, repositories and notes have none (like
+  the centre shows the tree or the map: that panel is their record, read and edited in place
+  (no "Details" tab repeating it in the centre, like Family Historian's Property Box). Sources, media, repositories and notes have none (like
   Contacts or Mail): the record is read whole in the centre, in one readable column (720 px at
   most): title with the repository and call number under it, facts, records, images, web
   links, links, then "Used by".
+- Sidebar: the four areas (Individuals, Sources, Places, Media), then a secondary group under
+  a separator, like Mail's or Finder's sections: Repositories and Notes when the file has some,
+  Quality (with its count) and Statistics. The Go menu lists the same places (`⌘1`–`⌘8`).
+- **Narrow window**: below 1200 px the sidebar folds away, below 1100 px the details panel does
+  too (like libadwaita's breakpoints or Mail's columns); the list and the centre never shrink
+  under their content. View › Show or Hide Sidebar (`⌃⌘S`) or Details Panel (`⌥⌘I`) then shows
+  the column over the others, with a shadow; a click outside, `Esc` or a choice puts it away.
+  The file name in the top bar is centred in the room the menus leave and shortened if needed.
 - **Back/forward history** across all navigation (`workspace/history.rs`): keyboard, side
   mouse buttons and, on a trackpad, swipe. Each list reopens the last item viewed; Individuals
   falls back to the root individual.
@@ -207,9 +217,13 @@ Rules shared by the three guidelines, to apply everywhere.
   événement »).
 - **Ellipsis "…"** when the command still asks for something before acting (window, picker);
   never otherwise.
-- A command that does not apply is greyed out, not hidden (only context menus show just what
-  applies). An empty submenu is hidden (e.g. Open Recent).
-- Menus: 3 to 12 items, grouped by separators, submenus one level deep.
+- A command that does not apply is greyed out, not hidden, on every platform: a command is only
+  declared on the window when it applies (`workspace/commands.rs`); macOS asks the window when a
+  menu opens, the bar drawn in the window (Linux, Windows) is refreshed after each frame. Only
+  context menus show just what applies. An empty submenu is hidden (e.g. Open Recent).
+- Menus: 3 to 12 items, grouped by separators, submenus one level deep (checked by the
+  `menus_stay_short` test). Navigation lives in the Go menu (history, then the places of the
+  file), like Finder.
 - Context menu: right click (and `⇧F10` / Menu key outside macOS), same labels as the menu
   bar; it acts on the clicked item without changing the selection.
 - Shortcuts: only for frequent commands; reuse the platform's before inventing new ones (see

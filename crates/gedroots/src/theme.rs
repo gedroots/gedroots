@@ -27,6 +27,8 @@ struct Palette {
     hover: u32,
     border: u32,
     border_strong: u32,
+    /// Outline of the text fields.
+    field_border: u32,
     text: u32,
     muted: u32,
     /// Primary violet: actions, links, selection.
@@ -49,6 +51,7 @@ const LIGHT: Palette = Palette {
     hover: 0xEEE7DA,
     border: 0xE6DED0,
     border_strong: 0xD5CAB7,
+    field_border: 0xD5CAB7,
     text: 0x1F1B16,
     muted: 0x6B6257,
     accent: 0x6D3DF0,
@@ -69,6 +72,8 @@ const DARK: Palette = Palette {
     hover: 0x2B2B2B,
     border: 0x2E2E2E,
     border_strong: 0x3D3D3D,
+    // 3:1 on `surface`, so an empty field stands out from a card.
+    field_border: 0x6E6E6E,
     text: 0xECECEC,
     muted: 0xA3A3A3,
     accent: 0xB997FF,
@@ -124,6 +129,10 @@ pub fn border() -> Hsla {
 }
 pub fn border_strong() -> Hsla {
     c(p().border_strong)
+}
+/// Outline of the text fields.
+pub fn field_border() -> Hsla {
+    c(p().field_border)
 }
 pub fn text() -> Hsla {
     c(p().text)
@@ -276,7 +285,7 @@ fn apply(dark: bool, cx: &mut App) {
         t.background = bg();
         t.foreground = text();
         t.border = border();
-        t.input = border_strong();
+        t.input = field_border();
         t.muted = surface();
         t.muted_foreground = muted();
         t.primary = accent();
