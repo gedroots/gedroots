@@ -54,6 +54,9 @@ struct FamilyChart: View {
     let family: FamilyView
     let center: (String) -> Void
     let open: (String) -> Void
+    @State private var union = 0
+
+    private var shown: UnionRow? { family.unions.indices.contains(union) ? family.unions[union] : nil }
 
     var body: some View {
         VStack(spacing: 24) {
@@ -63,41 +66,51 @@ struct FamilyChart: View {
             HStack(spacing: 8) {
                 ForEach(0..<2, id: \.self) { i in box(family.parents[i], compact: false).card(family.parents[i] == nil ? nil : "p\(i)") }
             }
-            Button { open(family.person.id) } label: {
-                HStack(spacing: 12) {
-                    Portrait(path: family.portrait, crop: family.portraitCrop, name: family.person.name, size: 56)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(family.person.name).font(.subheadline).fontWeight(.semibold)
+            // The couple side by side, as in the parents' row; with several unions, the spouse
+            // pages, and the children below are those of the union shown.
+            HStack(alignment: .top, spacing: 16) {
+                Button { open(family.person.id) } label: {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Portrait(path: family.portrait, crop: family.portraitCrop, name: family.person.name, size: 44)
+                        Text(family.person.name).font(.caption).fontWeight(.semibold).lineLimit(2)
                         detail(family.person)
                     }
-                    Spacer(minLength: 0)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                    .padding(8)
+                    .background(Theme.accentSoft, in: RoundedRectangle(cornerRadius: 8))
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.accent, lineWidth: 2))
                 }
-                .padding(12)
-                .frame(maxWidth: 280)
-                .background(Theme.accentSoft, in: RoundedRectangle(cornerRadius: 8))
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.accent, lineWidth: 2))
-            }
-            .buttonStyle(.plain)
-            .accessibilityHint(Text("Opens the record"))
-            .card("me")
-            ForEach(Array(family.unions.enumerated()), id: \.offset) { u, union in
-                VStack(spacing: 24) {
-                    if let s = union.spouse {
-                        VStack(spacing: 4) {
-                            if !union.married.isEmpty {
-                                Text("⚭ \(union.married)").font(.footnote).foregroundStyle(.secondary).monospacedDigit()
-                                    // Over the line to the spouse, which it interrupts.
-                                    .padding(.horizontal, 6)
-                                    .background(Color(UIColor.systemBackground))
-                            }
-                            box(s, compact: false).frame(maxWidth: 280).card("s\(u)")
+                .buttonStyle(.plain)
+                .accessibilityHint(Text("Opens the record"))
+                .card("me")
+                if family.unions.count == 1 {
+                    box(family.unions[0].spouse, compact: false).card(family.unions[0].spouse == nil ? nil : "s")
+                } else if family.unions.count > 1 {
+                    TabView(selection: $union) {
+                        ForEach(Array(family.unions.enumerated()), id: \.offset) { u, row in
+                            box(row.spouse, compact: false).padding(.bottom, 28).tag(u)
                         }
                     }
-                    if !union.children.isEmpty {
+                    .tabViewStyle(.page(indexDisplayMode: .always))
+                    .indexViewStyle(.page(backgroundDisplayMode: .always))
+                    .frame(height: 112)
+                    .card("s")
+                }
+            }
+            .frame(maxWidth: family.unions.isEmpty ? 200 : .infinity)
+            if let shown {
+                VStack(spacing: 16) {
+                    if !shown.married.isEmpty {
+                        Text("⚭ \(shown.married)").font(.footnote).foregroundStyle(.secondary).monospacedDigit()
+                            // Over the line down to the children, which it interrupts.
+                            .padding(.horizontal, 6)
+                            .background(Color(UIColor.systemBackground))
+                    }
+                    if !shown.children.isEmpty {
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 8) {
-                                ForEach(Array(union.children.enumerated()), id: \.offset) { i, c in
-                                    box(c, compact: false).frame(width: 140).card("c\(u)-\(i)")
+                                ForEach(Array(shown.children.enumerated()), id: \.offset) { i, c in
+                                    box(c, compact: false).frame(width: 140).card("c\(i)")
                                 }
                             }
                         }
@@ -106,8 +119,9 @@ struct FamilyChart: View {
                 }
             }
         }
+        .onChange(of: family.person.id) { union = 0 }
         .backgroundPreferenceValue(CardBounds.self) { cards in
-            GeometryReader { proxy in Connectors(family: family, cards: cards.mapValues { proxy[$0] }) }
+            GeometryReader { proxy in Connectors(family: family, union: shown, cards: cards.mapValues { proxy[$0] }) }
         }
     }
 
@@ -170,7 +184,7 @@ struct FamilyChart: View {
     }
 }
 
-/// Where each card of the chart is (`g0`…`g3`, `p0`, `p1`, `me`, `s0`, `c0-0`…).
+/// Where each card of the chart is (`g0`…`g3`, `p0`, `p1`, `me`, `s`, `c0`…).
 struct CardBounds: PreferenceKey {
     static let defaultValue: [String: Anchor<CGRect>] = [:]
     static func reduce(value: inout [String: Anchor<CGRect>], nextValue: () -> [String: Anchor<CGRect>]) {
@@ -189,6 +203,7 @@ extension View {
 /// colour of the lineage (father's side, mother's side, the person), neutral for the descendants.
 struct Connectors: View {
     let family: FamilyView
+    let union: UnionRow?
     let cards: [String: CGRect]
 
     var body: some View {
@@ -224,28 +239,30 @@ struct Connectors: View {
         }
     }
 
-    /// The person to each spouse, and each couple (or the person alone) to their children.
+    /// The person to the spouse beside them, and the couple (or the person alone) to the children
+    /// of the union shown.
     private var descendants: Path {
         Path { path in
-            guard let me = cards["me"] else { return }
-            for (u, union) in family.unions.enumerated() {
-                let spouse = cards["s\(u)"]
-                if let spouse {
-                    path.move(to: CGPoint(x: me.midX, y: me.maxY))
-                    path.addLine(to: CGPoint(x: spouse.midX, y: spouse.minY))
-                }
-                let parent = spouse ?? me
-                let children = union.children.indices.compactMap { cards["c\(u)-\($0)"] }
-                guard let first = children.first else { continue }
-                let bar = (parent.maxY + first.minY) / 2
-                path.move(to: CGPoint(x: parent.midX, y: parent.maxY))
-                path.addLine(to: CGPoint(x: parent.midX, y: bar))
-                for c in children {
-                    path.move(to: CGPoint(x: min(parent.midX, c.midX), y: bar))
-                    path.addLine(to: CGPoint(x: max(parent.midX, c.midX), y: bar))
-                    path.move(to: CGPoint(x: c.midX, y: bar))
-                    path.addLine(to: CGPoint(x: c.midX, y: c.minY))
-                }
+            guard let me = cards["me"], let union else { return }
+            var from = CGPoint(x: me.midX, y: me.maxY)
+            var top = me.maxY
+            if let spouse = cards["s"] {
+                let y = min(me.midY, spouse.midY)
+                path.move(to: CGPoint(x: me.maxX, y: y))
+                path.addLine(to: CGPoint(x: spouse.minX, y: y))
+                from = CGPoint(x: (me.maxX + spouse.minX) / 2, y: y)
+                top = max(me.maxY, spouse.maxY)
+            }
+            let children = union.children.indices.compactMap { cards["c\($0)"] }
+            guard let first = children.first else { return }
+            let bar = (top + first.minY) / 2
+            path.move(to: from)
+            path.addLine(to: CGPoint(x: from.x, y: bar))
+            for c in children {
+                path.move(to: CGPoint(x: min(from.x, c.midX), y: bar))
+                path.addLine(to: CGPoint(x: max(from.x, c.midX), y: bar))
+                path.move(to: CGPoint(x: c.midX, y: bar))
+                path.addLine(to: CGPoint(x: c.midX, y: c.minY))
             }
         }
     }
