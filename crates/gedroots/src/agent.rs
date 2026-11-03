@@ -1,9 +1,11 @@
 //! AI agents: GEDRoots' local MCP server.
 //!
 //! When the setting is on (Source › Connect an AI Agent…), the app serves the MCP protocol over HTTP
-//! on `127.0.0.1`: an agent such as Claude Code reads the open file (records, search, gaps),
-//! without ever writing to it: the records it finds become proposals, reviewed in the “To Review”
-//! page before being saved. Living people are hidden.
+//! on `127.0.0.1`: an agent such as Claude Code reads the open file (records, search, records to
+//! find) without ever changing the tree: the records it finds become proposals, reviewed in the
+//! “To Review” page before being saved. Only its research log (what it planned and searched, even in
+//! vain) is written at once, with an undo point. Of living people, only what identifies them is
+//! given.
 //!
 //! - the server runs on its own thread (tokio runtime);
 //! - each tool call asks the app's loop for a copy of the displayed document (a cheap copy: records
@@ -14,6 +16,7 @@
 //! The setting and the token belong to the machine: they live in the platform's configuration
 //! folder, never in the `.ged`.
 
+pub mod change;
 pub mod clients;
 mod prompts;
 pub mod propose;
@@ -36,16 +39,37 @@ pub fn url() -> String {
 /// What the app asks of the displayed document, from the server's thread.
 pub enum Request {
     Snapshot(tokio::sync::oneshot::Sender<Option<Snapshot>>),
+    /// Copy of the document with its Data Quality issues, as the Quality page computes them.
+    Quality(tokio::sync::oneshot::Sender<Option<(Snapshot, Vec<gedcom::analysis::check::Issue>)>>),
+    /// Change for a Data Quality issue: added to “To Review”, with the issues it would create, or
+    /// refused.
+    ProposeChange(Box<change::ChangeRequest>, tokio::sync::oneshot::Sender<Result<(usize, Vec<String>), String>>),
     /// Record proposal: added to the window's “To Review” page, or refused.
-    Propose(Box<propose::Pending>, tokio::sync::oneshot::Sender<Result<usize, String>>),
+    Propose(Box<propose::Pending>, tokio::sync::oneshot::Sender<Result<propose::Queued, String>>),
+    /// The agent withdraws a waiting proposal: the number still waiting, or why it cannot.
+    Withdraw(String, tokio::sync::oneshot::Sender<Result<usize, String>>),
+    /// Change to the research log (plan, searches), never to the tree's data: applied at once,
+    /// with an undo point, and announced in the top bar.
+    Edit(Edit, tokio::sync::oneshot::Sender<Result<(), String>>),
     /// An agent has just opened a session: the “AI Agents” window updates.
     Connected,
+}
+
+/// A change applied to the displayed document; an error leaves it untouched.
+pub type Apply = Box<dyn FnOnce(&mut Gedcom) -> Result<(), String> + Send>;
+
+/// A change of the research log by an agent, and the message shown once it is applied.
+pub struct Edit {
+    pub apply: Apply,
+    pub message: String,
 }
 
 /// Copy of the active window's document.
 pub struct Snapshot {
     pub path: Option<PathBuf>,
     pub ged: Gedcom,
+    /// The review page: waiting proposals and what became of the others.
+    pub queue: propose::Queue,
 }
 
 /// Window whose file the agent reads: the last one activated.
@@ -119,11 +143,48 @@ pub fn install(cx: &mut App) {
                     });
                     let _ = reply.send(snap);
                 }
+                Request::Quality(reply) => {
+                    let res = cx.update(|cx| {
+                        let ws = cx.global::<Target>().0.as_ref()?.upgrade()?;
+                        ws.update(cx, |ws, _| ws.agent_quality())
+                    });
+                    let _ = reply.send(res);
+                }
+                Request::ProposeChange(req, reply) => {
+                    let res = cx.update(|cx| {
+                        let ws = cx.global::<Target>().0.as_ref().and_then(|w| w.upgrade());
+                        match ws {
+                            Some(ws) => ws.update(cx, |ws, cx| ws.add_change(*req, cx)),
+                            None => Err("no file is open in GEDRoots".to_string()),
+                        }
+                    });
+                    let _ = reply.send(res);
+                }
                 Request::Propose(pending, reply) => {
                     let res = cx.update(|cx| {
                         let ws = cx.global::<Target>().0.as_ref().and_then(|w| w.upgrade());
                         match ws {
                             Some(ws) => ws.update(cx, |ws, cx| ws.add_proposal(*pending, cx)),
+                            None => Err("no file is open in GEDRoots".to_string()),
+                        }
+                    });
+                    let _ = reply.send(res);
+                }
+                Request::Edit(edit, reply) => {
+                    let res = cx.update(|cx| {
+                        let ws = cx.global::<Target>().0.as_ref().and_then(|w| w.upgrade());
+                        match ws {
+                            Some(ws) => ws.update(cx, |ws, cx| ws.agent_edit(edit, cx)),
+                            None => Err("no file is open in GEDRoots".to_string()),
+                        }
+                    });
+                    let _ = reply.send(res);
+                }
+                Request::Withdraw(id, reply) => {
+                    let res = cx.update(|cx| {
+                        let ws = cx.global::<Target>().0.as_ref().and_then(|w| w.upgrade());
+                        match ws {
+                            Some(ws) => ws.update(cx, |ws, cx| ws.withdraw_proposal(&id, cx)),
                             None => Err("no file is open in GEDRoots".to_string()),
                         }
                     });

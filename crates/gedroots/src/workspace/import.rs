@@ -119,6 +119,9 @@ impl Workspace {
             self.set_status(format!("{}{}", t!("import.imported", file = d.file), d.note), false);
         } else {
             let chosen = root.clone();
+            if !ids.is_empty() {
+                self.restore_point(t!("versions.before_import").into());
+            }
             self.mutate(window, cx, move |g| {
                 if let Some(r) = &root {
                     g.set_root(r);

@@ -1,0 +1,40 @@
+_version: 2
+# Record history: Edit › Record History… (workspace/record_history.rs).
+
+record_history:
+  title:
+    en: "History of %{name}"
+    fr: "Historique de %{name}"
+  added:
+    en: Record created
+    fr: Fiche créée
+  removed:
+    en: Record deleted
+    fr: Fiche supprimée
+  missing:
+    en: (deleted record)
+    fr: (fiche supprimée)
+  field:
+    en: Field
+    fr: Champ
+  before:
+    en: Before
+    fr: Avant
+  after:
+    en: After
+    fr: Après
+  value:
+    en: Value
+    fr: Valeur
+  empty:
+    en: No change recorded for this record yet
+    fr: Aucun changement enregistré pour cette fiche
+  restore:
+    en: Restore This State
+    fr: Rétablir cet état
+  show_version:
+    en: Show in Version History
+    fr: Voir dans l’historique des versions
+  restored:
+    en: "Record of %{name} restored as of %{from}"
+    fr: "Fiche de %{name} rétablie telle qu’au %{from}"

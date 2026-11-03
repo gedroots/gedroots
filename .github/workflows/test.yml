@@ -3,17 +3,10 @@ name: Test
 # Tools and commands come from mise.toml (and mise.lock): the workflow runs the same task as a
 # local machine (`mise run ci`). The installers are built by the Release workflow.
 
-# Pull requests are tested before they merge, so main is not tested again on every merge. It only
-# runs when the crates or the toolchain change: that run saves the cache pull requests restore
-# (a pull request can only read caches saved on main). Weekly, so the cache is never evicted.
+# Pull requests are tested before they merge, so main is never tested again after a merge. The
+# weekly run on main saves the cache that pull requests restore (a pull request can only read
+# caches saved on main) and keeps it from being evicted; it can also be run by hand.
 on:
-  push:
-    branches: [main]
-    paths:
-      - Cargo.lock
-      - mise.lock
-      - mise.toml
-      - .github/workflows/test.yml
   pull_request:
   schedule:
     - cron: "0 4 * * 1"
@@ -29,7 +22,10 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
+      # With the Atlas (crates/gedcom/atlas), embedded at build time.
       - uses: actions/checkout@v7
+        with:
+          submodules: true
       - name: GPUI system dependencies
         run: |
           sudo apt-get update
@@ -41,8 +37,14 @@ jobs:
       - uses: jdx/mise-action@v5
         with:
           version: 2026.10.25
-      # Downloaded crates and build outputs: they follow Cargo.lock.
-      - uses: actions/cache@v6
+          # Saved by main only, like the build outputs below.
+          cache_save: ${{ github.ref == 'refs/heads/main' }}
+      # Downloaded crates and build outputs: they follow Cargo.lock. Only main saves them: a
+      # pull request's copy could only be read by that pull request, and those copies filled the
+      # repository's 10 GB, evicting main's cache.
+      - name: Restore the crates and build outputs
+        id: cache
+        uses: actions/cache/restore@v6
         with:
           path: |
             ~/.cargo/registry/index
@@ -52,3 +54,13 @@ jobs:
           key: ${{ github.job }}-${{ runner.os }}-${{ hashFiles('mise.lock', 'Cargo.lock') }}
           restore-keys: ${{ github.job }}-${{ runner.os }}-
       - run: mise run ci
+      - name: Save the crates and build outputs
+        if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: ${{ steps.cache.outputs.cache-primary-key }}

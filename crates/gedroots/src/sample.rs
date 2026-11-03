@@ -127,9 +127,17 @@ pub fn demo_proposal(ged_path: &Path) -> Result<Pending, String> {
         call_number: "3 E 4/2".into(),
         ..Default::default()
     });
-    let mut proposal = Proposal { source, act, url: String::new() };
+    let mut proposal = Proposal { source, act, url: String::new(), conflicts: Default::default() };
     proposal.act.media = MediaChoice::NewFiles(vec![file.into()]);
-    Ok(Pending { proposal, original: None, pdf_page: None, image: Some(image.clone()), preview: Some(image) })
+    Ok(Pending {
+        proposal,
+        original: None,
+        pdf_page: None,
+        image: Some(image.clone()),
+        preview: Some(image),
+        temps: Vec::new(),
+        replaces: None,
+    })
 }
 
 #[cfg(test)]
@@ -183,7 +191,7 @@ mod tests {
         let (mut g, path) = open().unwrap();
         let mut p = demo_proposal(&path).unwrap();
         p.proposal.complete(&g);
-        p.proposal.check(&g, 2026).unwrap();
+        p.proposal.check(&g).unwrap();
         p.proposal.apply(&mut g).unwrap();
         assert!(g.to_gedcom_string().contains("Agneaux, deaths 1831"));
         assert!(cites(&g, JACQUES));

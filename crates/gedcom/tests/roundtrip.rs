@@ -54,18 +54,66 @@ fn rename_place_everywhere() {
 fn individual_form_edits_only_its_fields() {
     let mut g = Gedcom::parse(SAMPLE).unwrap();
     let node = g.get_mut("I00001").unwrap();
+    let before = node_to_string(node);
     let mut form = IndividualForm::read(node);
-    assert_eq!(form.birth.date, "14 MAR 1912");
-    form.given = "Paul".into();
-    form.death = EventForm::default();
+    form.names[0].given = "Paul".into();
     form.note = "Ligne 1\nLigne 2".into();
     form.apply(node);
     let text = node_to_string(node);
     assert!(text.contains("1 NAME Paul /MARCHAND/\n2 GIVN Paul\n"));
     assert!(text.contains("3 PAGE Acte n° 112, vue 37"), "la citation de source est conservée");
-    assert!(!text.contains("DEAT"));
+    // Birth and death are events of the timeline: the form leaves them as they are.
+    for tag in ["BIRT", "DEAT"] {
+        let event = |t: &str| t.split("\n1 ").find(|b| b.starts_with(tag)).map(str::to_string);
+        assert!(event(&before).is_some());
+        assert_eq!(event(&text), event(&before));
+    }
     assert!(text.contains("1 NOTE Ligne 1\n2 CONT Ligne 2\n"));
     assert!(text.contains("1 _SOSADABOVILLE 1 G1"), "les balises propriétaires sont conservées");
+}
+
+#[test]
+fn individual_form_leaves_real_names_unchanged() {
+    let mut g = Gedcom::parse(SAMPLE).unwrap();
+    let xrefs: Vec<String> = g.records.iter().filter(|r| r.tag == "INDI").filter_map(|r| r.xref.clone()).collect();
+    for x in xrefs {
+        let node = g.get_mut(&x).unwrap();
+        let before = node_to_string(node);
+        IndividualForm::read(node).apply(node);
+        assert_eq!(node_to_string(node), before);
+    }
+}
+
+#[test]
+fn individual_form_edits_every_name() {
+    let mut node = node_from_string(
+        "0 @I1@ INDI\n1 NAME Philibert /KIRIEL/\n2 GIVN Philibert\n2 SURN KIRIEL\n1 NAME Philibert /QUIRIEL/\n2 TYPE AKA\n2 GIVN Philibert\n2 SURN QUIRIEL\n2 SOUR @S1@\n1 NAME Philibert /QUIRIELLE/\n2 TYPE AKA\n1 SEX M\n",
+    )
+    .unwrap();
+    let form = IndividualForm::read(&node);
+    assert_eq!(form.names.len(), 3);
+    assert_eq!(form.names[1].kind, "AKA");
+    // Unchanged: nothing moves.
+    let before = node_to_string(&node);
+    form.apply(&mut node);
+    assert_eq!(node_to_string(&node), before);
+
+    let mut form = IndividualForm::read(&node);
+    form.names[0].nickname = "Babet".into();
+    form.names[0].particle = "de".into();
+    form.names[1].kind = "BIRTH".into();
+    form.names.remove(2);
+    form.names.push(NameForm { surname: "CHIRIEL".into(), kind: "AKA".into(), ..Default::default() });
+    form.apply(&mut node);
+    let text = node_to_string(&node);
+    assert!(
+        text.contains("1 NAME Philibert /de KIRIEL/\n2 GIVN Philibert\n2 SURN KIRIEL\n2 NICK Babet\n2 SPFX de\n"),
+        "{text}"
+    );
+    assert!(text.contains("1 NAME Philibert /QUIRIEL/\n2 TYPE BIRTH\n"), "{text}");
+    assert!(text.contains("2 SOUR @S1@"), "the citation of a name is kept");
+    assert!(!text.contains("QUIRIELLE"));
+    assert!(text.contains("1 NAME /CHIRIEL/\n2 TYPE AKA\n1 SEX M"), "{text}");
 }
 
 #[test]

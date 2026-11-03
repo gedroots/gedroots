@@ -42,6 +42,8 @@ pub struct IgnoredIssue {
     pub xref: String,
     pub code: String,
     pub label: std::borrow::Cow<'static, str>,
+    /// Why it was hidden (`NOTE` under the tag), if given.
+    pub reason: String,
 }
 
 impl Gedcom {
@@ -162,6 +164,7 @@ impl Gedcom {
                     xref: x.to_string(),
                     code: n.val().to_string(),
                     label: code_label(n.val()),
+                    reason: n.child("NOTE").map(|n| n.text()).unwrap_or_default(),
                 })
             })
             .collect()

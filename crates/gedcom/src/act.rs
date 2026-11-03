@@ -19,6 +19,7 @@ use crate::model::{Individual, sort_key};
 use crate::node::Node;
 use rust_i18n::t;
 use std::borrow::Cow;
+use std::collections::BTreeMap;
 
 // ----------------------------------------------------------------------
 // Events and roles
@@ -294,6 +295,70 @@ pub enum PersonChoice {
     Mention,
 }
 
+/// Another fact the record gives about a person, besides its event: a birth date in a baptism, a
+/// death in a marginal mention, an occupation without a date… Written on the person with the
+/// record's citation.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Fact {
+    /// GEDCOM tag (`BIRT`, `DEAT`, `OCCU`, `RESI`, `EVEN`…).
+    pub tag: String,
+    /// `TYPE` (required with `EVEN`).
+    pub event_type: String,
+    /// Value of an attribute (the occupation of `OCCU`).
+    pub value: String,
+    /// Date in GEDCOM form; empty: undated.
+    pub date: String,
+    pub place: String,
+}
+
+impl Fact {
+    pub fn new(tag: &str) -> Self {
+        Self { tag: tag.to_string(), ..Default::default() }
+    }
+
+    /// Attribute whose detail is the line's value (`1 OCCU Miller`).
+    pub fn has_value(&self) -> bool {
+        crate::events::detail_in_value(&self.tag)
+    }
+
+    pub fn is_blank(&self) -> bool {
+        [&self.value, &self.date, &self.place].iter().all(|v| v.trim().is_empty())
+    }
+
+    /// “Birth”, or the type of a custom event.
+    pub fn label(&self) -> String {
+        if self.tag == "EVEN" && !self.event_type.trim().is_empty() {
+            return self.event_type.trim().to_string();
+        }
+        crate::model::event_label(&self.tag).map(|l| l.into_owned()).unwrap_or_else(|| self.tag.clone())
+    }
+
+    /// “tisserand, 30 germinal an IV, Agneaux (Manche)”: value, date and place, as displayed.
+    pub fn summary(&self) -> String {
+        let date = if self.date.trim().is_empty() { String::new() } else { crate::Date::parse(&self.date).display() };
+        [self.value.trim().to_string(), date, crate::model::short_place(&self.place)]
+            .into_iter()
+            .filter(|s| !s.is_empty())
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+
+    fn node(&self) -> Node {
+        let mut n =
+            if self.has_value() { Node::with_value(&self.tag, self.value.trim()) } else { Node::new(&self.tag) };
+        if !self.event_type.trim().is_empty() {
+            n.children.push(Node::with_value("TYPE", self.event_type.trim()));
+        }
+        if let Some(d) = crate::date::date_node(self.date.trim(), "") {
+            n.children.push(d);
+        }
+        if !self.place.trim().is_empty() {
+            n.children.push(Node::with_value("PLAC", self.place.trim()));
+        }
+        n
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Participant {
     pub role: ActRole,
@@ -301,11 +366,13 @@ pub struct Participant {
     pub of: usize,
     pub values: Vec<(PersonField, String)>,
     pub choice: PersonChoice,
+    /// Other facts the record gives about them.
+    pub facts: Vec<Fact>,
 }
 
 impl Participant {
     pub fn new(role: ActRole) -> Self {
-        Self { role, of: 0, values: Vec::new(), choice: PersonChoice::Create }
+        Self { role, of: 0, values: Vec::new(), choice: PersonChoice::Create, facts: Vec::new() }
     }
 
     pub fn get(&self, f: PersonField) -> &str {
@@ -347,6 +414,32 @@ impl Participant {
 pub struct ActKey {
     pub page: String,
     pub date: String,
+}
+
+/// What to do with a value of the record that contradicts the tree's (a different date or place).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum Conflict {
+    /// The record's event is added after the tree's, which stays preferred (GEDCOM order).
+    #[default]
+    KeepBoth,
+    /// The record's event is added first, preferred; the tree's is kept after it.
+    Replace,
+    /// The tree's values stay: the record only adds its citation and what does not contradict.
+    Ignore,
+}
+
+/// Choices for a record's contradictions: its event, and each person's other facts (index in
+/// `participants`, index in their `facts`).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Conflicts {
+    pub event: Conflict,
+    pub facts: BTreeMap<(usize, usize), Conflict>,
+}
+
+impl Conflicts {
+    fn fact(&self, person: usize, fact: usize) -> Conflict {
+        self.facts.get(&(person, fact)).copied().unwrap_or_default()
+    }
 }
 
 /// A record of a source.
@@ -623,6 +716,92 @@ impl Act {
         lines.join("\n")
     }
 
+    /// Turns the facts deduced from the fields (occupation and residence at the record's date,
+    /// birth estimated from the age, birthplace) into explicit facts of each person, written the
+    /// same way: everything the record will write can then be shown and unchecked one by one.
+    pub fn make_facts_explicit(&mut self, ged: &Gedcom) {
+        let year = self.year();
+        let date = self.date.trim().to_string();
+        let event = self.event.clone();
+        let estimate = self.estimate_births;
+        for p in &mut self.participants {
+            if !matches!(p.choice, PersonChoice::Create | PersonChoice::Link(_)) || p.is_blank() {
+                continue;
+            }
+            let mut out = Vec::new();
+            let occu = p.get(Occupation).to_string();
+            if !occu.is_empty() {
+                out.push(Fact { tag: "OCCU".into(), value: occu, date: date.clone(), ..Default::default() });
+                p.set(Occupation, "");
+            }
+            let resi = p.get(Residence).to_string();
+            if !resi.is_empty() {
+                out.push(Fact { tag: "RESI".into(), place: resi, date: date.clone(), ..Default::default() });
+                p.set(Residence, "");
+            }
+            let has_birth = p.facts.iter().any(|f| is_birth_like(&f.tag))
+                || matches!(&p.choice, PersonChoice::Link(x) if ged.get(x).is_some_and(|n| n.children.iter().any(|c| is_birth_like(&c.tag))));
+            if !(is_birth_like(&event) && p.role == ActRole::Principal) && !has_birth {
+                let est = match (estimate, year, parse_age_years(p.get(Age))) {
+                    (true, Some(y), Some(a)) => format!("EST {}", y - a),
+                    _ => String::new(),
+                };
+                let place = p.get(Birthplace).to_string();
+                if !est.is_empty() || !place.is_empty() {
+                    out.push(Fact { tag: "BIRT".into(), date: est, place, ..Default::default() });
+                    p.set(Birthplace, "");
+                }
+            }
+            p.facts.splice(0..0, out);
+        }
+        self.estimate_births = false;
+    }
+
+    /// The reverse of [`Act::make_facts_explicit`], for record entry: the occupation and residence
+    /// at the record's date go back to their fields, the birth estimated from the age goes back to
+    /// the “estimate” option.
+    pub fn fold_deduced_facts(&mut self) {
+        let date = self.date.trim().to_string();
+        let year = self.year();
+        let birth_record = is_birth_like(&self.event);
+        let mut estimated = false;
+        for p in &mut self.participants {
+            // The principal person of a baptism has no birthplace field: their birth stays a fact.
+            let deduced_birth = !(birth_record && p.role == ActRole::Principal);
+            let mut kept = Vec::new();
+            for f in std::mem::take(&mut p.facts) {
+                let at_date = f.date.trim() == date && f.event_type.is_empty();
+                match f.tag.as_str() {
+                    "OCCU" if at_date && p.get(Occupation).is_empty() => p.set(Occupation, f.value.trim()),
+                    "RESI" if at_date && p.get(Residence).is_empty() && f.value.is_empty() => {
+                        p.set(Residence, f.place.trim())
+                    }
+                    "BIRT"
+                        if deduced_birth
+                            && f.event_type.is_empty()
+                            && f.value.is_empty()
+                            && (f.date.trim().is_empty()
+                                || f.date
+                                    .trim()
+                                    .strip_prefix("EST ")
+                                    .and_then(|y| y.trim().parse::<i32>().ok())
+                                    .is_some_and(|b| {
+                                        year.zip(parse_age_years(p.get(Age))).is_some_and(|(y, a)| y - a == b)
+                                    })) =>
+                    {
+                        estimated |= !f.date.trim().is_empty();
+                        if !f.place.trim().is_empty() {
+                            p.set(Birthplace, f.place.trim());
+                        }
+                    }
+                    _ => kept.push(f),
+                }
+            }
+            p.facts = kept;
+        }
+        self.estimate_births = estimated || self.estimate_births;
+    }
+
     /// Checks the record before writing it.
     pub fn validate(&self, ged: &Gedcom) -> Result<(), String> {
         if ged.get(&self.source).is_none_or(|n| n.tag != "SOUR") {
@@ -659,6 +838,23 @@ impl Act {
                     }
                     .into_owned()
                 })?;
+            }
+        }
+        for (i, p) in self.participants.iter().enumerate() {
+            for f in p.facts.iter().filter(|f| !f.is_blank()) {
+                let label = self.role_label(i);
+                if f.tag.trim().is_empty() || (f.tag == "EVEN" && f.event_type.trim().is_empty()) {
+                    return Err(t!("act.error.fact_type", role = label).into());
+                }
+                if !f.date.trim().is_empty() {
+                    let parsed = crate::Date::parse(&f.date);
+                    if parsed.year().is_none() {
+                        return Err(
+                            t!("act.error.fact_date", role = label, fact = f.label(), text = f.date.trim()).into()
+                        );
+                    }
+                    parsed.validate().map_err(|e| t!("act.error.date_impossible", error = e).into_owned())?;
+                }
             }
         }
         let principals = self.principal_count();
@@ -755,13 +951,18 @@ impl Act {
     /// Writes the record into the document. A reopened record replaces its old version. Nothing is
     /// changed on error.
     pub fn save(&self, ged: &mut Gedcom) -> Result<ActResult, String> {
+        self.save_with(ged, &Conflicts::default())
+    }
+
+    /// Like [`Act::save`], with a choice for each value that contradicts the tree.
+    pub fn save_with(&self, ged: &mut Gedcom, conflicts: &Conflicts) -> Result<ActResult, String> {
         self.validate(ged)?;
         let mut copy = ged.clone();
         let mut removed = Vec::new();
         if let Some(k) = &self.original {
             removed = copy.unlink_act(&self.source, k, true);
         }
-        let mut res = self.apply(&mut copy)?;
+        let mut res = self.apply(&mut copy, conflicts)?;
         copy.drop_empty_events(&removed);
         for x in removed {
             if !res.touched.contains(&x) {
@@ -772,7 +973,7 @@ impl Act {
         Ok(res)
     }
 
-    fn apply(&self, ged: &mut Gedcom) -> Result<ActResult, String> {
+    fn apply(&self, ged: &mut Gedcom, conflicts: &Conflicts) -> Result<ActResult, String> {
         self.validate(ged)?;
         let mut w = Writer { ged, res: ActResult::default() };
         let source = self.source.clone();
@@ -947,7 +1148,7 @@ impl Act {
                     ev.children.insert(at, Node::new(tag).push(Node::with_value("AGE", age)));
                 }
             }
-            let i = w.add_event(fam, ev);
+            let i = w.add_event(fam, ev, conflicts.event);
             main_event = Some((fam.clone(), i));
         }
 
@@ -963,7 +1164,7 @@ impl Act {
                     cite.children.push(Node::with_value("NOTE", &note));
                 }
                 ev.children.push(cite);
-                let at = w.add_event(x, ev);
+                let at = w.add_event(x, ev, conflicts.event);
                 if first_principal {
                     main_event = Some((x.clone(), at));
                 }
@@ -1011,7 +1212,8 @@ impl Act {
                     (true, Some(y), Some(a)) => Some(format!("EST {}", y - a)),
                     _ => None,
                 };
-                if (est.is_some() || !birthplace.is_empty()) && !w.has_birth(x) {
+                let birth_fact = p.facts.iter().any(|f| is_birth_like(&f.tag) && !f.is_blank());
+                if (est.is_some() || !birthplace.is_empty()) && !birth_fact && !w.has_birth(x) {
                     let mut n = Node::new("BIRT");
                     if let Some(d) = est {
                         n.children.push(Node::with_value("DATE", d));
@@ -1022,6 +1224,18 @@ impl Act {
                     n.children.push(self.citation(media.as_deref(), role.clone(), false));
                     w.ged.get_mut(x).unwrap().insert_child(n);
                     w.touch(x);
+                }
+            }
+
+            // Other facts of the record, with its citation.
+            for (k, f) in p.facts.iter().enumerate().filter(|(_, f)| !f.is_blank()) {
+                let mut n = f.node();
+                n.children.push(self.citation(media.as_deref(), role.clone(), false));
+                let conflict = conflicts.fact(i, k);
+                if f.has_value() || f.tag == "RESI" {
+                    w.add_fact_with(x, n, conflict);
+                } else {
+                    w.add_event(x, n, conflict);
                 }
             }
         }
@@ -1473,8 +1687,9 @@ impl Writer<'_> {
 
     /// Adds the record's event, or merges it with an existing event: a unique event (birth, death…)
     /// with compatible dates, or an event of the same type that is still empty (no date or source).
-    /// Returns its index.
-    fn add_event(&mut self, x: &str, ev: Node) -> usize {
+    /// A date or place that contradicts the existing event's is settled by `conflict`. Returns its
+    /// index.
+    fn add_event(&mut self, x: &str, mut ev: Node, conflict: Conflict) -> usize {
         let unique = matches!(ev.tag.as_str(), "BIRT" | "CHR" | "BAPM" | "DEAT" | "BURI" | "CREM");
         let node = self.ged.get_mut(x).unwrap();
         let existing = node.children.iter().position(|c| {
@@ -1482,6 +1697,26 @@ impl Writer<'_> {
                 && c.child_val("TYPE") == ev.child_val("TYPE")
                 && (unique || (c.child("DATE").is_none() && c.child("SOUR").is_none()))
         });
+        if let Some(i) = existing {
+            let old = &node.children[i];
+            let date = old.child_val("DATE").is_some_and(|d| {
+                crate::proposal::date_change(d, ev.child_val("DATE").unwrap_or("")) == crate::proposal::Change::Differs
+            });
+            let place = old.child_val("PLAC").is_some_and(|p| {
+                crate::proposal::text_change(p, ev.child_val("PLAC").unwrap_or("")) == crate::proposal::Change::Differs
+            });
+            if date || place {
+                match conflict {
+                    Conflict::KeepBoth | Conflict::Replace => {
+                        let at = if conflict == Conflict::Replace { i } else { i + 1 };
+                        node.children.insert(at, ev);
+                        self.touch(x);
+                        return at;
+                    }
+                    Conflict::Ignore => ev.children.retain(|c| !(date && c.tag == "DATE" || place && c.tag == "PLAC")),
+                }
+            }
+        }
         let idx = match existing {
             Some(i) if compatible_dates(node.children[i].child_val("DATE"), ev.child_val("DATE")) => {
                 let target = &mut node.children[i];
@@ -1533,6 +1768,12 @@ impl Writer<'_> {
 
     /// Adds a fact (occupation, residence), unless it already exists with the same value and date.
     fn add_fact(&mut self, x: &str, fact: Node) {
+        self.add_fact_with(x, fact, Conflict::KeepBoth)
+    }
+
+    /// Like `add_fact`; with [`Conflict::Replace`], a new value goes before the person's other
+    /// facts of the same kind, preferred.
+    fn add_fact_with(&mut self, x: &str, fact: Node, conflict: Conflict) {
         let node = self.ged.get_mut(x).unwrap();
         let same = node.children.iter_mut().find(|c| {
             c.tag == fact.tag
@@ -1547,7 +1788,17 @@ impl Writer<'_> {
                     existing.children.push(cite);
                 }
             }
-            None => node.insert_child(fact),
+            None => {
+                let first = node
+                    .children
+                    .iter()
+                    .position(|c| c.tag == fact.tag && c.child_val("TYPE") == fact.child_val("TYPE"));
+                match (conflict, first) {
+                    (Conflict::Replace, Some(at)) => node.children.insert(at, fact),
+                    (Conflict::Ignore, Some(_)) => {}
+                    _ => node.insert_child(fact),
+                }
+            }
         }
         self.touch(x);
     }
@@ -1830,10 +2081,21 @@ impl Gedcom {
                 }
             };
             let p = &mut people[at].1;
+            // Occupation and residence at the record's date fill the person's fields; at another
+            // date, or a second one, they are other facts.
+            let at_act_date = |e: &Node| e.child_val("DATE").unwrap_or("") == act.date.trim();
             match h.event {
-                Some(e) if e.tag == "OCCU" => p.set(Occupation, e.val()),
-                Some(e) if e.tag == "RESI" => p.set(Residence, e.child_val("PLAC").unwrap_or("")),
-                Some(e) if matches!(e.tag.as_str(), "BIRT" | "CHR" | "BAPM") => {
+                Some(e) if e.tag == "OCCU" && at_act_date(e) && p.get(Occupation).is_empty() => {
+                    p.set(Occupation, e.val())
+                }
+                Some(e) if e.tag == "RESI" && at_act_date(e) && p.get(Residence).is_empty() => {
+                    p.set(Residence, e.child_val("PLAC").unwrap_or(""))
+                }
+                // A dated birth or baptism is a fact; an estimated one comes from the age.
+                Some(e)
+                    if matches!(e.tag.as_str(), "BIRT" | "CHR" | "BAPM")
+                        && e.child_val("DATE").is_none_or(|d| d.starts_with("EST ")) =>
+                {
                     if let Some(pl) = e.child_val("PLAC") {
                         p.set(Birthplace, pl);
                     }
@@ -1843,6 +2105,18 @@ impl Gedcom {
                         && let (Ok(b), Some(y)) = (est.trim().parse::<i32>(), act.year())
                     {
                         p.set(Age, tn!("act.age.years", (y - b).max(0) as usize).into_owned());
+                    }
+                }
+                Some(e) if !matches!(e.tag.as_str(), "NAME" | "SEX") && crate::model::event_label(&e.tag).is_some() => {
+                    let fact = Fact {
+                        tag: e.tag.clone(),
+                        event_type: e.child_val("TYPE").unwrap_or("").to_string(),
+                        value: if crate::events::detail_in_value(&e.tag) { e.val().to_string() } else { String::new() },
+                        date: e.child_val("DATE").unwrap_or("").to_string(),
+                        place: e.child_val("PLAC").unwrap_or("").to_string(),
+                    };
+                    if !p.facts.contains(&fact) {
+                        p.facts.push(fact);
                     }
                 }
                 _ => {}

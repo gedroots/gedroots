@@ -17,6 +17,18 @@ review:
   rejected:
     en: Proposal rejected, nothing was written
     fr: Proposition rejetée, rien n'a été écrit
+  replaced:
+    en: An AI agent corrected one of its proposals
+    fr: Un agent IA a corrigé une de ses propositions
+  withdrawn:
+    en: An AI agent withdrew one of its proposals
+    fr: Un agent IA a retiré une de ses propositions
+  also_in:
+    en: "Also in %{titles}"
+    fr: "Aussi dans %{titles}"
+  quoted:
+    en: "“%{title}”"
+    fr: "« %{title} »"
   by_agent:
     en: proposed by an AI agent
     fr: proposé par un agent IA
@@ -29,6 +41,9 @@ review:
   record:
     en: Record
     fr: Fiche
+  facts:
+    en: Facts
+    fr: Faits
   in_tree:
     en: In the Tree
     fr: Dans l'arbre
@@ -53,12 +68,24 @@ review:
   differs:
     en: "≠ Different"
     fr: "≠ Différent"
+  keep_both:
+    en: "Keep Both"
+    fr: "Garder les deux"
+  replace:
+    en: "Use the Record's"
+    fr: "Préférer l'acte"
+  ignore:
+    en: "Keep the Tree's"
+    fr: "Garder l'arbre"
   create:
     en: "+ Create"
     fr: "+ Créer"
   link:
     en: "+ Link"
     fr: "+ Lier"
+  similar:
+    en: "Resembles %{names}"
+    fr: "Ressemble à %{names}"
   mention:
     en: "+ Mention"
     fr: "+ Mentionner"
@@ -119,3 +146,41 @@ review:
   save_ged_first:
     en: Save the .ged file first, so the act's image can be stored next to it
     fr: Enregistrez d'abord le fichier .ged, pour ranger l'image de l'acte à côté
+  # Changes for a Data Quality issue (crates/gedroots/src/workspace/review_change.rs).
+  change_received:
+    one:
+      en: "An AI agent proposed a change: it is waiting in To Review"
+      fr: "Un agent IA a proposé une correction : elle attend dans À relire"
+    other:
+      en: "An AI agent proposed a change: %{n} proposals are waiting in To Review"
+      fr: "Un agent IA a proposé une correction : %{n} propositions attendent dans À relire"
+  why:
+    en: Why
+    fr: Pourquoi
+  evidence:
+    en: Evidence
+    fr: Preuve
+  new_issues:
+    en: "This change also creates: %{list}"
+    fr: "Cette correction crée aussi : %{list}"
+  hide_issue:
+    en: Hide Issue
+    fr: Masquer la remarque
+  merge_people:
+    en: one person
+    fr: un seul individu
+  compare_merge:
+    en: Compare and Merge…
+    fr: Comparer et fusionner…
+  apply:
+    en: "Apply %{n}"
+    fr: "Appliquer (%{n})"
+  change_saved:
+    en: "Change saved: %{title}"
+    fr: "Correction enregistrée : %{title}"
+  automatic:
+    en: Automatic fixes
+    fr: Corrections automatiques
+  outdated:
+    en: The tree changed since this change was proposed
+    fr: L'arbre a changé depuis que cette correction a été proposée

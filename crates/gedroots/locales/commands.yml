@@ -33,6 +33,9 @@ menu:
   open_recent:
     en: Open Recent
     fr: Ouvrir récent
+  revert_to:
+    en: Revert To
+    fr: Revenir à
   pages:
     en: Pages
     fr: Pages
@@ -75,6 +78,18 @@ cmd:
   save_as:
     en: Save As…
     fr: Enregistrer sous…
+  save_version:
+    en: Save Version…
+    fr: Enregistrer une version…
+  revert_to_opened:
+    en: Last Opened
+    fr: Dernière ouverture
+  browse_versions:
+    en: Browse All Versions…
+    fr: Parcourir toutes les versions…
+  record_history:
+    en: Record History…
+    fr: Historique de la fiche…
   export:
     en: Export…
     fr: Exporter…
@@ -176,6 +191,24 @@ cmd:
   add_event:
     en: Add Event…
     fr: Ajouter un événement…
+  add_to_name:
+    en: Add to Name
+    fr: Ajouter au nom
+  other_name:
+    en: Other Name
+    fr: Autre nom
+  nickname:
+    en: Nickname
+    fr: Surnom
+  name_title:
+    en: Title
+    fr: Titre
+  name_particle:
+    en: Surname Prefix
+    fr: Particule
+  name_suffix:
+    en: Suffix
+    fr: Suffixe
   go_to_root:
     en: Go to Root Person
     fr: Aller à l'individu racine
@@ -188,6 +221,12 @@ cmd:
   search_descendants:
     en: Find Descendants
     fr: Rechercher ses descendants
+  merge_with_person:
+    en: Merge With…
+    fr: Fusionner avec…
+  find_duplicates:
+    en: Find Duplicates
+    fr: Rechercher ses doublons
   # Source
   enter_act:
     en: Enter Record…

@@ -1,6 +1,8 @@
 # GEDRoots GEDCOM extensions
 
-GEDRoots stores its own data **in the `.ged` file**, never in a sidecar file. All its tags
+GEDRoots stores its own data **in the `.ged` file**, never in a sidecar file (the version
+history, a hidden folder beside the file, holds copies of the tree, not data of its own: see
+[version-history.md](version-history.md)). All its tags
 start with `_GR_` and are declared in the header, as GEDCOM 7 requires:
 
 ```
@@ -8,11 +10,14 @@ start with `_GR_` and are declared in the header, as GEDCOM 7 requires:
 1 SCHMA
 2 TAG _GR_IGNORE https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_ignore
 2 TAG _GR_ROOT https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_root
+2 TAG _GR_TREE https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_tree
 2 TAG _GR_FILE https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_file
 2 TAG _GR_EVEN https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_even
 2 TAG _GR_MEDIA https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_media
 2 TAG _GR_FIND https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_find
 2 TAG _GR_WEB https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_web
+2 TAG _GR_DISTINCT https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_distinct
+2 TAG _GR_TASK https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_task
 ```
 
 Other software ignores these tags without losing data.
@@ -36,6 +41,22 @@ Root person of the tree: the one GEDRoots opens when the file loads and the one
 Without this tag (or if it points to a deleted person), GEDRoots takes the Sosa 1 declared
 by Ancestris (`_SOSADABOVILLE 1`), otherwise the first person in the file. Deleting the root
 person also removes the tag.
+
+## `_GR_TREE`
+
+Identifier of the tree, so GEDRoots recognizes it after the file is renamed, moved or synced to
+another computer.
+
+- **Under**: `HEAD`.
+- **Value**: a random UUID (version 4), written at the first save and never changed after.
+- **Substructures**: none.
+
+```
+0 HEAD
+1 SCHMA
+2 TAG _GR_TREE https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_tree
+1 _GR_TREE 3f2b8c1e-9a4d-4e57-b0c2-6d1f8e7a9b40
+```
 
 ## `_GR_EVEN`
 
@@ -189,12 +210,14 @@ tag).
 
 - **Under**: any record (`INDI`, `FAM`…), at level 1.
 - **Value**: the issue code (see below). One line per hidden issue.
-- **Substructures**: none.
+- **Substructures**: `NOTE` (optional): why the issue is correct, as written by an AI agent that
+  proposed hiding it (`propose_change`) and shown on the Data Quality page.
 
 ```
 0 @I263@ INDI
 1 NAME Antoine /GIRAUDON/
 1 _GR_IGNORE marriage_too_young
+2 NOTE The marriage act gives her age as 14, with her parents' consent
 ```
 
 Hidden issues are listed in **File › File Settings…**, where they can be shown again (the tag
@@ -246,6 +269,7 @@ with the right code.
 | `bad_coords` | Unreadable or incomplete coordinates |
 | `place_variant` | Same place written differently (case, accents, "St"/"Saint", codes), or a shortened form of exactly one other place |
 | `place_hierarchy` | The same division attached to two higher divisions ("Loire" in "Rhône-Alpes" and in "Auvergne-Rhône-Alpes"); "Harmonize" keeps the most frequent |
+| `possible_duplicate` | Two individuals that may be the same person; hidden with `_GR_DISTINCT` on the pair, not `_GR_IGNORE` |
 
 File and place issues cannot be hidden: they concern no record where `_GR_IGNORE` could be
 written.
@@ -255,6 +279,26 @@ reported.
 
 Imprecise dates (`ABT`, `BEF`, `BET … AND …`, year only) are treated as ranges: an issue is
 only reported if it holds for every possible date. "About" dates have a 5-year margin.
+
+## `_GR_DISTINCT`
+
+Two individuals that look alike but are different people: the user answered **Not a
+Duplicate**, so the pair is no longer suggested among the possible duplicates, and an AI agent
+cannot propose to merge them.
+
+- **Under**: `INDI`, at level 1. One line per individual known to be someone else.
+- **Value**: pointer to the other individual. Written on one of the two; GEDRoots reads it in
+  both directions.
+- **Substructures**: none.
+
+```
+0 @I710@ INDI
+1 NAME Abraham /DARMON/
+1 _GR_DISTINCT @I729@
+```
+
+Merging two individuals carries the marks of the merged-away one over to the kept one. If the
+other individual is deleted, the line goes with it, like any pointer to a deleted record.
 
 ## Source and media types (no extension)
 
@@ -369,3 +413,49 @@ and no `_GR_URL`, means no site is wanted.
 1 _GR_WEB Google
 2 _GR_URL https://www.google.com/search?q=%22{given}%20{surname}%22%20{place}
 ```
+
+## `_GR_TASK`
+
+Research log of a record still to find (a *lead*: birth, marriage, death, parents): whether it is
+planned, ignored or found, and every search made, including those that found nothing, so that
+nobody searches the same register twice. Written by an AI agent (`plan_research`, `log_search`)
+and, later, by the research page. The leads themselves are computed, not stored.
+
+- **Under**: the `INDI` concerned, or the `FAM` for a marriage, at level 1. One per lead.
+- **Value**: the record to find: `BIRT` (birth or baptism), `MARR`, `DEAT` (death or burial) or
+  `FAMC` (the parents of a person whose parents are unknown).
+- **Substructures**:
+  - `_GR_STAT <state>`: `PLANNED`, `NOT_FOUND` (searched in vain for now), `FOUND`, `IGNORED`;
+    absent: only suggested;
+  - `NOTE <text>`: why it is planned or ignored;
+  - `_GR_LOG`, one per search, oldest first:
+    - `DATE <date>`: day of the search;
+    - `TEXT <text>`: what was searched (archive, register or index, years, names tried);
+    - `_GR_RES <result>`: `FOUND`, `NONE` or `PARTIAL` (a clue, not the record);
+    - `_GR_SPAN <years>`: years searched (`1853`, `FROM 1853 TO 1862`);
+    - `PLAC <place>`, `WWW <url>` (page of the archive's viewer), `NOTE <text>`;
+    - `_GR_AGENT`: noted by an AI agent.
+
+```
+0 HEAD
+1 SCHMA
+2 TAG _GR_TASK https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_task
+2 TAG _GR_STAT https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_task
+2 TAG _GR_LOG https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_task
+2 TAG _GR_RES https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_task
+2 TAG _GR_SPAN https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_task
+2 TAG _GR_AGENT https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_task
+0 @I4@ INDI
+1 _GR_TASK DEAT
+2 _GR_STAT PLANNED
+2 NOTE Last seen in 1852, his widow remarried in 1860
+2 _GR_LOG
+3 DATE 3 NOV 2026
+3 TEXT Decennial tables of Saint-Lô, deaths, MARCHAND and MARCHANT
+3 _GR_RES NONE
+3 _GR_SPAN FROM 1853 TO 1862
+3 PLAC Saint-Lô, Manche, France
+3 _GR_AGENT
+```
+
+Legacy and RootsMagic keep their to-do items in `_TODO`; GEDRoots does not read or write it.

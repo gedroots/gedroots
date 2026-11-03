@@ -237,7 +237,7 @@ impl Gedcom {
         Ok(())
     }
 
-    fn rename_pointers(&mut self, old: &str, new: &str) {
+    pub(crate) fn rename_pointers(&mut self, old: &str, new: &str) {
         let old_p = format!("@{old}@");
         let new_p = format!("@{new}@");
         let mentions = |n: &Node| n.any(&|n| n.value.as_deref() == Some(old_p.as_str()));
@@ -315,7 +315,56 @@ impl Gedcom {
             schma.children.push(Node::with_value("TAG", format!("{tag} {uri}")));
         }
     }
+
+    /// Identifier of the tree (`HEAD._GR_TREE`), kept across renames, moves and copies of the file.
+    pub fn tree_id(&self) -> Option<&str> {
+        self.header.child(TREE_TAG).map(|n| n.val()).filter(|v| !v.is_empty())
+    }
+
+    /// Gives the tree an identifier if it has none yet, and returns it.
+    pub fn ensure_tree_id(&mut self) -> String {
+        if let Some(id) = self.tree_id() {
+            return id.to_string();
+        }
+        let id = uuid::Uuid::new_v4().to_string();
+        self.declare_extension(TREE_TAG, TREE_URI);
+        match self.header.child_mut(TREE_TAG) {
+            Some(n) => n.value = Some(id.clone()),
+            None => self.header.insert_child(Node::with_value(TREE_TAG, id.clone())),
+        }
+        id
+    }
+
+    /// Before saving: stamps `CHAN` on each record changed since `saved` whose edit did not stamp
+    /// it, and `CREA` on each new record that has neither. Unchanged records are skipped without
+    /// being compared when they are still shared with `saved`.
+    pub fn stamp_changes(&mut self, saved: &Gedcom) {
+        for r in &mut self.records {
+            let Some(xref) = r.xref.as_deref() else { continue };
+            match saved.get(xref) {
+                Some(old) => {
+                    let shared = saved.index.get(xref).is_some_and(|&i| Arc::ptr_eq(&saved.records[i], r));
+                    if shared || r.child("CHAN") != old.child("CHAN") || **r == *old {
+                        continue;
+                    }
+                    Arc::make_mut(r).touch();
+                }
+                None if r.child("CREA").is_none() && r.child("CHAN").is_none() => {
+                    let n = Arc::make_mut(r);
+                    n.touch();
+                    if let Some(chan) = n.child("CHAN").cloned() {
+                        n.insert_child(Node { tag: "CREA".into(), ..chan });
+                    }
+                }
+                None => {}
+            }
+        }
+    }
 }
+
+/// Tag of the tree identifier (in `HEAD`).
+pub const TREE_TAG: &str = "_GR_TREE";
+pub const TREE_URI: &str = extension_uri!("_gr_tree");
 
 /// Tag of the root individual (in `HEAD`).
 pub const ROOT_TAG: &str = "_GR_ROOT";

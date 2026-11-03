@@ -15,7 +15,7 @@ use crate::relations::NewEvent;
 
 /// Attributes whose detail is the line's value (`1 OCCU Miller`). For other tags, it goes into
 /// `TYPE`.
-fn detail_in_value(tag: &str) -> bool {
+pub(crate) fn detail_in_value(tag: &str) -> bool {
     matches!(tag, "OCCU" | "EDUC" | "RELI" | "TITL" | "NATI" | "FACT")
 }
 

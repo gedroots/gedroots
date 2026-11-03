@@ -21,6 +21,8 @@ pub enum PickPurpose {
     ActSource,
     /// Relationship between `indi` and the chosen person (nothing is changed).
     Kinship { indi: String },
+    /// `indi` and the chosen person are compared in the merge window.
+    MergeWith { indi: String },
     /// The chosen person is the person at `idx` in the record being entered; the likely
     /// individuals (individual, why) come first.
     ActPerson { idx: usize, suggestions: Vec<(String, String)> },
@@ -36,6 +38,7 @@ impl PickPurpose {
             PickPurpose::MediaTo { media } => t!("picker.attach_to", name = g.record_label(media)).into_owned(),
             PickPurpose::TagPerson { .. } => t!("picker.who").into(),
             PickPurpose::Kinship { indi } => t!("picker.kinship", name = g.record_label(indi)).into_owned(),
+            PickPurpose::MergeWith { indi } => t!("picker.merge_with", name = g.record_label(indi)).into_owned(),
             PickPurpose::MergeInto { media } => t!("picker.merge_into", name = g.record_label(media)).into_owned(),
             PickPurpose::ActSource => t!("picker.act_source").into(),
             PickPurpose::ActPerson { .. } => t!("picker.act_person").into(),
@@ -219,7 +222,7 @@ impl Workspace {
             _ => None,
         };
         let me: Option<&str> = match &p.purpose {
-            PickPurpose::Kinship { indi } => Some(indi),
+            PickPurpose::Kinship { indi } | PickPurpose::MergeWith { indi } => Some(indi),
             _ => exclude,
         };
         // For a relationship: compatible sex, and plausible dates first.
@@ -380,6 +383,10 @@ impl Workspace {
             cx.notify();
             return;
         }
+        if let PickPurpose::MergeWith { indi } = p.purpose {
+            self.open_merge(vec![(indi, chosen)], 0, cx);
+            return;
+        }
         self.mutate(window, cx, |g| {
             let who = g.record_label(&chosen);
             match p.purpose {
@@ -417,9 +424,10 @@ impl Workspace {
                     Ok((t!("picker.tagged", who = who).into_owned(), None))
                 }
                 // Handled before: nothing to change.
-                PickPurpose::Kinship { .. } | PickPurpose::ActPerson { .. } | PickPurpose::ActMedia => {
-                    Err(t!("stats.kinship_title").into())
-                }
+                PickPurpose::Kinship { .. }
+                | PickPurpose::MergeWith { .. }
+                | PickPurpose::ActPerson { .. }
+                | PickPurpose::ActMedia => Err(t!("stats.kinship_title").into()),
             }
         });
     }

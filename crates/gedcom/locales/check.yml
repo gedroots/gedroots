@@ -126,6 +126,9 @@ check.code.bad_coords:
 check.code.place_variant:
   en: "Variant of another place"
   fr: "Variante d'un autre lieu"
+check.code.possible_duplicate:
+  en: "Possible duplicate"
+  fr: "Doublon possible"
 check.code.place_hierarchy:
   en: "Inconsistent hierarchy"
   fr: "Rattachement incohérent"

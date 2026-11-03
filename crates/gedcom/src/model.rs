@@ -178,6 +178,11 @@ impl<'a> Individual<'a> {
         v.split('/').next().unwrap_or("").trim().to_string()
     }
 
+    /// Every `NAME`, the main one first.
+    pub fn names(&self) -> Vec<NameForm> {
+        self.node.children_with("NAME").map(NameForm::read).collect()
+    }
+
     /// “Given name SURNAME”.
     pub fn display_name(&self) -> String {
         let (g, s) = (self.given(), self.surname());
@@ -779,13 +784,97 @@ impl EventForm {
     }
 }
 
+/// Types of `NAME.TYPE` (GEDCOM 7 enumeration), in the order offered in the interface.
+pub const NAME_TYPES: [&str; 7] = ["BIRTH", "MARRIED", "AKA", "MAIDEN", "IMMIGRANT", "PROFESSIONAL", "OTHER"];
+
+/// One `NAME` of an individual: its parts and its type. What it does not hold (sources, notes,
+/// translations…) stays as it is on the node.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct IndividualForm {
+pub struct NameForm {
     pub given: String,
     pub surname: String,
+    /// `NAME.TYPE`, empty when absent.
+    pub kind: String,
+    /// `NICK`: “called …”.
+    pub nickname: String,
+    /// `NPFX`: title before the name (“Abbé”, “Dr”).
+    pub prefix: String,
+    /// `SPFX`: particle of the surname (“de”, “van”).
+    pub particle: String,
+    /// `NSFX`: after the name (“fils”, “Jr”).
+    pub suffix: String,
+}
+
+impl NameForm {
+    pub fn read(name: &Node) -> Self {
+        let v = name.val();
+        let slashes = (v.find('/'), v.rfind('/'));
+        let surname = name.child_val("SURN").map(str::to_string).unwrap_or_else(|| match slashes {
+            (Some(a), Some(b)) if b > a => v[a + 1..b].trim().to_string(),
+            _ => String::new(),
+        });
+        let given = name
+            .child_val("GIVN")
+            .map(str::to_string)
+            .unwrap_or_else(|| v.split('/').next().unwrap_or("").trim().to_string());
+        let val = |tag: &str| name.child_val(tag).unwrap_or("").to_string();
+        Self {
+            given,
+            surname,
+            kind: val("TYPE"),
+            nickname: val("NICK"),
+            prefix: val("NPFX"),
+            particle: val("SPFX"),
+            suffix: val("NSFX"),
+        }
+    }
+
+    /// The `NAME` payload: “[title] given /[particle] surname/ [suffix]”.
+    pub fn value(&self) -> String {
+        let join =
+            |parts: &[&str]| parts.iter().map(|p| p.trim()).filter(|p| !p.is_empty()).collect::<Vec<_>>().join(" ");
+        let given = join(&[&self.prefix, &self.given]);
+        let surname = join(&[&self.particle, &self.surname]);
+        join(&[&given, &format!("/{surname}/"), &self.suffix])
+    }
+
+    pub fn apply(&self, name: &mut Node) {
+        name.value = Some(self.value());
+        let kind = self.kind.trim();
+        if name.child_val("TYPE") != Some(kind) {
+            // A new type: its phrase described the old one.
+            name.children.retain(|c| c.tag != "TYPE");
+            if !kind.is_empty() {
+                name.children.insert(0, Node::with_value("TYPE", kind));
+            }
+        }
+        // Given name and surname the payload already says are not repeated in GIVN / SURN.
+        let implied = NameForm::read(&Node::with_value("NAME", self.value()));
+        for (tag, v) in [
+            ("NPFX", &self.prefix),
+            ("GIVN", &self.given),
+            ("NICK", &self.nickname),
+            ("SPFX", &self.particle),
+            ("SURN", &self.surname),
+            ("NSFX", &self.suffix),
+        ] {
+            let same = match tag {
+                "GIVN" => *v == implied.given,
+                "SURN" => *v == implied.surname,
+                _ => false,
+            };
+            if !(same && name.child(tag).is_none()) {
+                name.set_child_val(tag, v);
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct IndividualForm {
+    /// Every `NAME`, the first (main) one first; never empty.
+    pub names: Vec<NameForm>,
     pub sex: String,
-    pub birth: EventForm,
-    pub death: EventForm,
     pub occupation: String,
     pub note: String,
 }
@@ -793,26 +882,41 @@ pub struct IndividualForm {
 impl IndividualForm {
     pub fn read(node: &Node) -> Self {
         let i = Individual::new(node);
+        let mut names: Vec<NameForm> = node.children_with("NAME").map(NameForm::read).collect();
+        if names.is_empty() {
+            names.push(NameForm::default());
+        }
         Self {
-            given: i.given(),
-            surname: i.surname(),
+            names,
             sex: i.sex().to_string(),
-            birth: EventForm::read(node, "BIRT"),
-            death: EventForm::read(node, "DEAT"),
             occupation: node.child_val("OCCU").unwrap_or("").to_string(),
             note: node.child("NOTE").map(|n| n.text()).unwrap_or_default(),
         }
     }
 
+    /// Writes the names in order onto the `NAME` substructures (keeping what the form does not
+    /// hold), removes the extra ones and adds the new ones after the last.
     pub fn apply(&self, node: &mut Node) {
-        let (given, surname) = (self.given.trim(), self.surname.trim());
-        let name = node.ensure_child("NAME");
-        name.value = Some(format!("{given} /{surname}/").trim_start().to_string());
-        name.set_child_val("GIVN", given);
-        name.set_child_val("SURN", surname);
+        node.ensure_child("NAME");
+        let at: Vec<usize> =
+            node.children.iter().enumerate().filter(|(_, c)| c.tag == "NAME").map(|(i, _)| i).collect();
+        for (form, &i) in self.names.iter().zip(&at) {
+            form.apply(&mut node.children[i]);
+        }
+        for &i in at.iter().skip(self.names.len().max(1)).rev() {
+            node.children.remove(i);
+        }
+        let after = node.children.iter().rposition(|c| c.tag == "NAME").map_or(0, |i| i + 1);
+        let added: Vec<Node> = self.names[at.len().min(self.names.len())..]
+            .iter()
+            .map(|form| {
+                let mut name = Node::new("NAME");
+                form.apply(&mut name);
+                name
+            })
+            .collect();
+        node.children.splice(after..after, added);
         node.set_child_val("SEX", if self.sex.trim().is_empty() { "U" } else { self.sex.trim() });
-        self.birth.apply(node, "BIRT");
-        self.death.apply(node, "DEAT");
         node.set_child_val("OCCU", &self.occupation);
         node.set_child_text("NOTE", &self.note);
     }

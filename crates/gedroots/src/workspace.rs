@@ -3,7 +3,7 @@
 
 use crate::act_editor::{ActEditor, ActEditorEvent};
 use crate::commands::*;
-use crate::editor::{FieldState, RecordEditor, Slot, Target};
+use crate::editor::{FieldState, NamePart, NamesEditor, RecordEditor, Slot, Target, name_type_label};
 use crate::images::picture;
 use crate::map::{MapEvent, MapView};
 use crate::theme;
@@ -37,19 +37,23 @@ mod import;
 mod insights;
 mod media_files;
 mod menus;
+mod merging;
 mod mobile;
 mod new_tree;
 mod pages;
 mod photo;
 mod places;
 mod quality;
+mod record_history;
 mod relatives;
 mod report;
 mod review;
+mod review_change;
 mod saved;
 mod settings;
 pub(crate) mod tour;
 mod tree;
+mod version_history;
 mod weblinks;
 
 /// Window widths below which a column folds away (like libadwaita's breakpoints and Mail's
@@ -213,6 +217,17 @@ struct Document {
     sample: bool,
     dirty: bool,
     dirty_before_checkpoint: bool,
+    /// The tree as it was last opened or saved: Save stamps the records changed since.
+    saved: Gedcom,
+    /// The tree as it was opened, for File › Revert To › Last Opened.
+    opened: Gedcom,
+    /// The file as GEDRoots last read or wrote it, to notice that something else wrote it.
+    disk: Option<(std::time::SystemTime, u64)>,
+    /// When the last version was recorded, and whether a save happened since.
+    versioned_at: Option<std::time::Instant>,
+    unversioned: bool,
+    /// The tree at the previous automatic save check: saved when it stays the same for a check.
+    settling: Option<Gedcom>,
     /// Previous states, for Undo (the last one is the most recent).
     history: Vec<Gedcom>,
     /// Undone states, for Redo; cleared by any new change.
@@ -227,6 +242,52 @@ impl Document {
         self.dirty && !self.sample
     }
 
+    /// The file automatic saves write: a tree opened from a `.ged` (not imported, not new, not the
+    /// sample tree).
+    fn own_file(&self) -> Option<&std::path::Path> {
+        self.path.as_deref().filter(|_| !self.imported && !self.sample)
+    }
+
+    /// Writes the tree to `path` (dates of the changed records, header), and records a version
+    /// as `versioning` says, on another thread unless `wait`. Returns whether a version was
+    /// recorded.
+    fn write(&mut self, path: &std::path::Path, versioning: Versioning, wait: bool) -> std::io::Result<bool> {
+        self.ged.ensure_tree_id();
+        self.ged.stamp_changes(&self.saved);
+        self.ged.stamp_header();
+        gedcom::save(&self.ged, path)?;
+        self.saved = self.ged.clone();
+        self.disk = disk_stamp(path);
+        self.settling = None;
+        let due = self.versioned_at.is_none_or(|t| t.elapsed() >= VERSION_EVERY);
+        let versioned = versioning != Versioning::Throttled || due;
+        if versioned {
+            let (kind, label, author) = versioning.kind();
+            let kind = Some(kind);
+            match wait {
+                true => record_version_now(path, &self.ged, kind, label, author),
+                false => record_version(path, &self.ged, kind, label, author),
+            }
+            self.versioned_at = Some(std::time::Instant::now());
+        }
+        self.unversioned = !versioned;
+        Ok(versioned)
+    }
+
+    /// When the window closes or the app quits: saves the changes and records the last version.
+    fn flush(&mut self) {
+        let Some(path) = self.own_file().map(std::path::Path::to_path_buf) else { return };
+        if self.unsaved() {
+            match self.write(&path, Versioning::Now, true) {
+                Ok(_) => self.dirty = false,
+                Err(e) => eprintln!("save before closing: {}: {e}", path.display()),
+            }
+        } else if self.unversioned {
+            record_version_now(&path, &self.ged, Some(gedcom::versions::Kind::Saved), None, None);
+            self.unversioned = false;
+        }
+    }
+
     /// Name shown in the title bar: the file name, without its extension for an imported tree
     /// (not saved yet, like an untitled one).
     fn title(&self) -> String {
@@ -238,6 +299,84 @@ impl Document {
             false => self.path.as_ref().and_then(|p| p.file_name()),
         };
         name.map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| t!("ws.untitled").into())
+    }
+}
+
+/// Records the tree in the history folder beside its file, on its own thread: as it was found
+/// on opening (`kind` none: first version, or changes made outside GEDRoots), or as saved. The
+/// old versions are pruned after a save.
+fn record_version(
+    path: &std::path::Path,
+    ged: &Gedcom,
+    kind: Option<gedcom::versions::Kind>,
+    label: Option<String>,
+    author: Option<String>,
+) {
+    let (path, ged) = (path.to_path_buf(), ged.clone());
+    std::thread::spawn(move || record_version_now(&path, &ged, kind, label, author));
+}
+
+/// [`record_version`] on the calling thread: when the window closes or the app quits, or before
+/// the version history is shown.
+fn record_version_now(
+    path: &std::path::Path,
+    ged: &Gedcom,
+    kind: Option<gedcom::versions::Kind>,
+    label: Option<String>,
+    author: Option<String>,
+) {
+    let store = gedcom::versions::Store::for_file(path, ged.tree_id());
+    let result = match kind {
+        None => store.record_opened(ged).map(|_| ()),
+        Some(k) => store.record(ged, k, label.as_deref(), author.as_deref()).and_then(|_| store.prune().map(|_| ())),
+    };
+    if let Err(e) = result {
+        eprintln!("version history: {}: {e}", store.dir().display());
+    }
+}
+
+/// How often the window looks for changes to save and for a file changed outside GEDRoots.
+const AUTOSAVE_CHECK: std::time::Duration = std::time::Duration::from_secs(1);
+
+/// While editing, a version is recorded at most this often; the file itself is saved after each
+/// change.
+const VERSION_EVERY: std::time::Duration = std::time::Duration::from_secs(5 * 60);
+
+/// Modification time and size of a file, to notice that something else wrote it.
+fn disk_stamp(path: &std::path::Path) -> Option<(std::time::SystemTime, u64)> {
+    let m = std::fs::metadata(path).ok()?;
+    Some((m.modified().ok()?, m.len()))
+}
+
+/// How a save records a version.
+#[derive(Clone, PartialEq, Eq)]
+enum Versioning {
+    /// File › Save, window closed, app quit: a version now.
+    Now,
+    /// File › Save Version…: a version with this name, kept until deleted.
+    Named(String),
+    /// An earlier version brought back: its id, `opened` for Revert To › Last Opened, or
+    /// `undo <id>` for the changes of a version taken back.
+    Restored(String),
+    /// A proposal of an AI agent accepted in To Review: what it did, and the agent.
+    Agent(String, Option<String>),
+    /// Before an operation that changes many records (merge, fixes of a whole kind).
+    RestorePoint(String),
+    /// Automatic save: a version if the last one is old enough.
+    Throttled,
+}
+
+impl Versioning {
+    /// Kind, label and author of the version.
+    fn kind(&self) -> (gedcom::versions::Kind, Option<String>, Option<String>) {
+        use gedcom::versions::Kind;
+        match self {
+            Versioning::Now | Versioning::Throttled => (Kind::Saved, None, None),
+            Versioning::Named(n) => (Kind::Named, Some(n.clone()), None),
+            Versioning::Restored(from) => (Kind::Restored, Some(from.clone()), None),
+            Versioning::Agent(what, who) => (Kind::Agent, Some(what.clone()), who.clone()),
+            Versioning::RestorePoint(what) => (Kind::RestorePoint, Some(what.clone()), None),
+        }
     }
 }
 
@@ -355,6 +494,12 @@ pub struct Workspace {
     quality: quality::QualityState,
     /// Relationship shown in a modal window (A, B).
     kinship: Option<(String, String)>,
+    /// Merge window (possible duplicates, or two people chosen by the user).
+    merge: Option<merging::MergeDialog>,
+    /// File › Revert To › Browse All Versions… window.
+    version_history: Option<version_history::VersionHistory>,
+    /// Edit › Record History… window.
+    record_history: Option<record_history::RecordHistory>,
     /// Guided tour in progress.
     tour: Option<tour::Tour>,
     /// Chapters of the tour offered (Help › Take the Tour).
@@ -372,6 +517,8 @@ pub struct Workspace {
     /// Versions of the recent files and search sites known to the window's menu bar.
     recent_gen: (u64, u64),
     _subs: Vec<Subscription>,
+    /// Checks every [`AUTOSAVE_CHECK`] for changes to save and for a file changed elsewhere.
+    _autosave: Task<()>,
 }
 
 impl Workspace {
@@ -388,14 +535,36 @@ impl Workspace {
         let appearance_sub = cx.observe_window_appearance(window, |_, window, cx| theme::sync(window, cx));
         // AI agents: they read the file of the last window activated.
         crate::agent::set_target(cx.entity().downgrade(), cx);
-        let activation_sub = cx.observe_window_activation(window, |_, window, cx| {
+        let activation_sub = cx.observe_window_activation(window, |this, window, cx| {
             if window.is_window_active() {
                 crate::agent::set_target(cx.entity().downgrade(), cx);
+            } else {
+                // Leaving the window saves its changes at once.
+                this.autosave(cx);
+            }
+        });
+        // Quitting the app (menu, shortcut, logging out) saves the changes first.
+        let quit_sub = cx.on_app_quit(|this: &mut Self, _| {
+            if let Some(doc) = &mut this.doc {
+                doc.flush();
+            }
+            async {}
+        });
+        // Automatic save after each change, and changes made to the file outside GEDRoots.
+        let autosave = cx.spawn_in(window, async move |this, cx| {
+            loop {
+                cx.background_executor().timer(AUTOSAVE_CHECK).await;
+                if this.update_in(cx, |this, window, cx| this.autosave_tick(window, cx)).is_err() {
+                    break;
+                }
             }
         });
         // Mobile devices: a file closed with its window is no longer served.
         let me = cx.entity_id();
         let release_sub = cx.on_release(move |this: &mut Self, cx| {
+            if let Some(doc) = &mut this.doc {
+                doc.flush();
+            }
             if let Some(share) = this.mobile_share() {
                 Self::mobile_unpublish(&share, me, cx);
             }
@@ -447,6 +616,9 @@ impl Workspace {
             list_scroll: UniformListScrollHandle::new(),
             quality: quality::QualityState { stale: true, ..Default::default() },
             kinship: None,
+            merge: None,
+            version_history: None,
+            record_history: None,
             tour: None,
             tour_chooser: false,
             tour_pending: false,
@@ -467,7 +639,8 @@ impl Workspace {
             new_tree: None,
             gallery: None,
             review: review::Review::default(),
-            _subs: vec![sub, map_sub, appearance_sub, activation_sub, release_sub],
+            _subs: vec![sub, map_sub, appearance_sub, activation_sub, release_sub, quit_sub],
+            _autosave: autosave,
         };
         if let Some(p) = path {
             this.load(p, window, cx);
@@ -524,7 +697,17 @@ impl Workspace {
         }
         let first = ged.root();
         let dirty = imported || path.is_none();
+        if let Some(p) = path.as_ref().filter(|_| !imported) {
+            record_version(p, &ged, None, None, None);
+        }
+        let disk = path.as_deref().filter(|_| !imported).and_then(disk_stamp);
         self.doc = Some(Document {
+            saved: ged.clone(),
+            opened: ged.clone(),
+            disk,
+            versioned_at: Some(std::time::Instant::now()),
+            unversioned: false,
+            settling: None,
             ged,
             path,
             imported,
@@ -588,13 +771,13 @@ impl Workspace {
     fn save_file(&mut self, _: &SaveFile, window: &mut Window, cx: &mut Context<Self>) {
         let Some(doc) = &self.doc else { return };
         match doc.path.clone().filter(|_| !doc.imported) {
-            Some(p) => self.write_to(p, cx),
+            Some(p) => self.write_to(p, Versioning::Now, cx),
             None => {
                 let (dir, name) = save_as_default(doc.path.as_deref());
                 let rx = cx.prompt_for_new_path(&dir, Some(&name));
                 cx.spawn_in(window, async move |this, cx| {
                     if let Ok(Ok(Some(p))) = rx.await {
-                        let _ = this.update_in(cx, |this, _, cx| this.write_to(p, cx));
+                        let _ = this.update_in(cx, |this, _, cx| this.write_to(p, Versioning::Now, cx));
                     }
                 })
                 .detach();
@@ -602,12 +785,12 @@ impl Workspace {
         }
     }
 
-    fn write_to(&mut self, path: PathBuf, cx: &mut Context<Self>) {
+    fn write_to(&mut self, path: PathBuf, versioning: Versioning, cx: &mut Context<Self>) {
         let before = self.mobile_share();
         let Some(doc) = &mut self.doc else { return };
-        doc.ged.stamp_header();
-        match gedcom::save(&doc.ged, &path) {
-            Ok(()) => {
+        let explicit = versioning == Versioning::Now;
+        match doc.write(&path, versioning, false) {
+            Ok(versioned) => {
                 if doc.imported || doc.path.as_ref() != Some(&path) {
                     crate::recent::add(&path, cx);
                 }
@@ -615,14 +798,83 @@ impl Workspace {
                 doc.imported = false;
                 doc.dirty = false;
                 self.rescan_media();
-                self.set_status(t!("ws.saved", path = path.display()), false);
-                // Mobile devices get the saved version; after Save As, the previous file is closed.
+                if explicit {
+                    self.set_status(t!("ws.saved", path = path.display()), false);
+                }
+                // Mobile devices get the saved version (with each version while editing); after
+                // Save As, the previous file is closed.
                 if let Some(old) = before.filter(|b| self.mobile_share().as_ref() != Some(b)) {
                     Self::mobile_unpublish(&old, cx.entity_id(), cx);
                 }
-                self.mobile_publish(cx);
+                if versioned {
+                    self.mobile_publish(cx);
+                }
             }
             Err(e) => self.set_error("ws.save_failed", t!("ws.save_failed", error = e)),
+        }
+        cx.notify();
+    }
+
+    /// Saves the changes of a tree that has its own file now, without waiting for them to settle.
+    fn autosave(&mut self, cx: &mut Context<Self>) {
+        let Some(doc) = &self.doc else { return };
+        if let (true, Some(path)) = (doc.unsaved(), doc.own_file().map(std::path::Path::to_path_buf)) {
+            self.write_to(path, Versioning::Throttled, cx);
+        }
+    }
+
+    /// Every [`AUTOSAVE_CHECK`]: picks up a file changed outside GEDRoots, then saves the changes
+    /// once they stayed the same for a whole check (not in the middle of a series of edits).
+    fn autosave_tick(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.check_outside_change(window, cx);
+        let Some(doc) = &mut self.doc else { return };
+        if !doc.unsaved() || doc.own_file().is_none() {
+            doc.settling = None;
+            return;
+        }
+        let settled = doc.settling.as_ref().is_some_and(|before| {
+            before.header == doc.ged.header
+                && before.records.len() == doc.ged.records.len()
+                && before.records.iter().zip(&doc.ged.records).all(|(a, b)| std::sync::Arc::ptr_eq(a, b))
+        });
+        if settled {
+            self.autosave(cx);
+        } else {
+            doc.settling = Some(doc.ged.clone());
+        }
+    }
+
+    /// The open file was written by something else (another software, a sync service bringing a
+    /// newer copy). Without changes here, the tree is reloaded; with changes here, they are kept
+    /// and the other copy goes into the version history.
+    fn check_outside_change(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(doc) = &self.doc else { return };
+        let Some(path) = doc.own_file().map(std::path::Path::to_path_buf) else { return };
+        let now = disk_stamp(&path);
+        if now.is_none() || now == doc.disk {
+            return;
+        }
+        // Being written (a sync service downloading it): read again at the next check.
+        let Ok(theirs) = gedcom::load(&path) else { return };
+        let doc = self.doc.as_mut().unwrap();
+        doc.disk = now;
+        // Touched without a change (a sync service rewriting the same content).
+        if theirs.header == doc.saved.header && theirs.records == doc.saved.records {
+            return;
+        }
+        if doc.unsaved() {
+            record_version(&path, &theirs, Some(gedcom::versions::Kind::Outside), None, None);
+            self.set_status(t!("ws.outside_kept"), false);
+        } else {
+            // Undo goes back to the tree before the reload.
+            doc.history.push(std::mem::replace(&mut doc.ged, theirs));
+            doc.future.clear();
+            doc.saved = doc.ged.clone();
+            record_version(&path, &doc.ged, None, None, None);
+            self.rebuild_rows(cx);
+            self.refresh_editor(window, cx);
+            self.set_status(t!("ws.outside_reloaded"), false);
+            self.mobile_publish(cx);
         }
         cx.notify();
     }
@@ -2301,45 +2553,194 @@ impl Workspace {
     }
 
     /// Edit › Edit Record on an individual: their panel's header becomes fields, in place: names
-    /// next to the portrait, sex, birth and death for quick entry, note. The timeline and the
-    /// family stay below.
-    fn render_individual_fields(&self, ed: &RecordEditor, portrait: Div, cx: &mut Context<Self>) -> Div {
+    /// next to the portrait (the sex beside the surname), note. Birth and death are events of the
+    /// timeline below, edited there like the others.
+    fn render_individual_fields(&self, ed: &RecordEditor, cx: &mut Context<Self>) -> Div {
         let f = &ed.fields;
-        let event = |title: SharedString, n: usize, cx: &mut Context<Self>| {
-            v_flex()
-                .gap_2()
-                .child(div().text_xs().font_weight(FontWeight::SEMIBOLD).text_color(theme::muted()).child(title))
-                // The place takes the room: its names are long.
-                .child(
-                    h_flex()
-                        .gap_2()
-                        .items_start()
-                        .child(self.render_field(&f[n], cx).w(px(136.)).flex_none())
-                        .child(self.render_field(&f[n + 1], cx).flex_1()),
-                )
-        };
         v_flex()
             .p_4()
             .gap_3()
             .border_b_1()
             .border_color(theme::border())
+            // No portrait while editing: it cannot be changed here. The whole name sits on one
+            // line, in reading order (given names, particle, surname, suffix); title, sex and
+            // nickname go below. A part only gets a field once added.
             .child(
-                h_flex().gap_3().items_center().child(portrait).child(
-                    v_flex()
-                        .flex_1()
-                        .min_w_0()
-                        .gap_2()
-                        .child(self.render_field(&f[0], cx))
-                        .child(self.render_field(&f[1], cx)),
-                ),
+                h_flex()
+                    .gap_2()
+                    .items_start()
+                    .child(self.render_field(&f[0], cx).flex_1())
+                    .children(name_part_field(ed, NamePart::Particle).map(|d| d.w(px(56.)).flex_none()))
+                    .child(self.render_field(&f[1], cx).flex_1())
+                    .children(name_part_field(ed, NamePart::Suffix).map(|d| d.w(px(64.)).flex_none())),
             )
-            .child(self.render_field(&f[2], cx))
-            .child(event(t!("editor.birth").into(), 3, cx))
-            .child(event(t!("editor.death").into(), 5, cx))
+            .child(
+                h_flex()
+                    .gap_2()
+                    .items_start()
+                    .children(name_part_field(ed, NamePart::Title).map(|d| d.flex_1()))
+                    .child(self.render_field(&f[2], cx).w(px(116.)).flex_none())
+                    .children(name_part_field(ed, NamePart::Nickname).map(|d| d.flex_1())),
+            )
+            .when_some(ed.names.as_ref(), |d, names| d.children(self.render_name_extras(names, cx)))
             .when_some(ed.long_text.as_ref(), |d, (label, state)| {
                 d.child(v_flex().gap_1().child(label_caps(label.clone())).child(Textarea::new(state).h(px(80.))))
             })
-            .child(self.edit_buttons(cx))
+            .child(
+                h_flex()
+                    .gap_2()
+                    .items_center()
+                    .child(self.add_to_name_button(cx))
+                    .child(div().flex_1())
+                    .child(self.edit_buttons(cx)),
+            )
+    }
+
+    /// The other names of the person: each one a line, unfolded into its fields when clicked.
+    fn render_name_extras(&self, names: &NamesEditor, cx: &mut Context<Self>) -> Vec<AnyElement> {
+        let mut out = Vec::new();
+        if names.others.is_empty() {
+            return out;
+        }
+        let rows = names.others.iter().enumerate().map(|(ix, other)| {
+            if names.open == Some(ix) {
+                return v_flex()
+                    .gap_2()
+                    .p_2()
+                    .rounded(theme::RADIUS_SM)
+                    .border_1()
+                    .border_color(theme::border_strong())
+                    .bg(theme::bg())
+                    .child(
+                        v_flex()
+                            .gap_1()
+                            .child(label_caps(t!("editor.name_type")))
+                            .child(Select::new(&other.kind).small().placeholder(t!("event_dialog.choose"))),
+                    )
+                    .child(
+                        h_flex()
+                            .gap_2()
+                            .child(
+                                v_flex()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .gap_1()
+                                    .child(label_caps(t!("editor.given")))
+                                    .child(Input::new(&other.given).small()),
+                            )
+                            .child(
+                                v_flex()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .gap_1()
+                                    .child(label_caps(t!("editor.name")))
+                                    .child(Input::new(&other.surname).small()),
+                            ),
+                    )
+                    .child(
+                        h_flex()
+                            .justify_between()
+                            .child(
+                                Button::new(("remove-name", ix))
+                                    .ghost()
+                                    .small()
+                                    .label(t!("editor.remove_name"))
+                                    .text_color(theme::danger())
+                                    .on_click(cx.listener(move |this, _, _, cx| {
+                                        if let Some(n) = this.editor.as_mut().and_then(|ed| ed.names.as_mut()) {
+                                            n.remove_other(ix);
+                                        }
+                                        cx.notify();
+                                    })),
+                            )
+                            .child(
+                                Button::new(("fold-name", ix))
+                                    .primary()
+                                    .small()
+                                    .label(t!("editor.fold_name"))
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        if let Some(n) = this.editor.as_mut().and_then(|ed| ed.names.as_mut()) {
+                                            n.open = None;
+                                        }
+                                        cx.notify();
+                                    })),
+                            ),
+                    )
+                    .into_any_element();
+            }
+            let form = other.read(cx);
+            let shown = join_words(&[&form.prefix, &form.given, &form.particle, &form.surname, &form.suffix]);
+            h_flex()
+                .id(("other-name", ix))
+                .justify_between()
+                .gap_2()
+                .h(px(30.))
+                .px_2()
+                .rounded(theme::RADIUS_SM)
+                .cursor_pointer()
+                .hover(|d| d.bg(theme::hover()))
+                .child(div().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(shown))
+                .child(div().flex_none().text_xs().text_color(theme::muted()).child(name_type_label(&form.kind)))
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    if let Some(n) = this.editor.as_mut().and_then(|ed| ed.names.as_mut()) {
+                        n.open = Some(ix);
+                    }
+                    cx.notify();
+                }))
+                .into_any_element()
+        });
+        out.push(v_flex().gap_1().child(label_caps(t!("editor.other_names"))).children(rows).into_any_element());
+        out
+    }
+
+    /// “+ Add ▾” under an individual's fields: the commands of Person › Add to Name.
+    fn add_to_name_button(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+        let shown: Vec<NamePart> = self
+            .editor
+            .as_ref()
+            .and_then(|ed| ed.names.as_ref())
+            .map(|n| n.parts.iter().map(|(p, _)| *p).collect())
+            .unwrap_or_default();
+        let me = cx.entity().downgrade();
+        Button::new("add-to-name")
+            .ghost()
+            .small()
+            .icon(IconName::Plus)
+            .label(t!("common.add"))
+            .dropdown_caret(true)
+            .dropdown_menu(move |menu, _, _| {
+                let item = |label: SharedString, part: Option<NamePart>| {
+                    let me = me.clone();
+                    PopupMenuItem::new(label).on_click(move |_, w, cx| {
+                        let _ = me.update(cx, |this, cx| this.add_to_name(part, w, cx));
+                    })
+                };
+                let mut menu = menu.item(item(t!("cmd.other_name").into(), None)).separator();
+                for part in NamePart::ALL {
+                    menu = menu.item(item(part.label(), Some(part)).disabled(shown.contains(&part)));
+                }
+                menu
+            })
+    }
+
+    /// Person › Add to Name: edits the record if needed, then shows the part's field (or a new
+    /// other name, unfolded) and focuses it.
+    pub(super) fn add_to_name(&mut self, part: Option<NamePart>, window: &mut Window, cx: &mut Context<Self>) {
+        if self.editor.as_ref().and_then(|ed| ed.names.as_ref()).is_none() {
+            return;
+        }
+        if !self.editing {
+            self.start_edit(window, cx);
+        }
+        let Some(ed) = self.editor.as_mut() else { return };
+        let given = ed.fields.first().map(|f| f.state.value(cx)).unwrap_or_default();
+        let Some(names) = ed.names.as_mut() else { return };
+        let input = match part {
+            Some(p) => names.add_part(p, window, cx),
+            None => names.add_other(&given, window, cx),
+        };
+        input.update(cx, |e, cx| e.focus(window, cx));
+        cx.notify();
     }
 
     /// The record as it is saved, in text: its title (with a source's repository and call number
@@ -2408,6 +2809,39 @@ impl Workspace {
             .gap_6()
             .child(h_flex().gap_3().items_start().child(head).child(edit))
             .when(!facts.is_empty(), |d| d.child(v_flex().gap_2().children(facts)))
+    }
+
+    /// “Possible duplicate: X” under the person's name, for each likely duplicate; a click opens
+    /// the merge window.
+    fn duplicate_lines(&self, g: &Gedcom, xref: &str, cx: &mut Context<Self>) -> Vec<AnyElement> {
+        let pairs = self
+            .quality
+            .issues
+            .iter()
+            .filter(|i| {
+                i.code == "possible_duplicate" && !i.ignored && i.severity == gedcom::analysis::check::Severity::Warning
+            })
+            .filter_map(|i| Some((i.xref.clone(), i.related.first()?.clone())))
+            .filter(|(a, b)| a == xref || b == xref);
+        pairs
+            .enumerate()
+            .map(|(n, (a, b))| {
+                let other = if a == xref { &b } else { &a };
+                let name = t!("merge.possible_duplicate", name = g.record_label(other)).to_string();
+                h_flex()
+                    .id(("card-duplicate", n))
+                    .gap_1()
+                    .items_center()
+                    .text_xs()
+                    .text_color(theme::warn())
+                    .cursor_pointer()
+                    .hover(|d| d.underline())
+                    .child(icon(IconName::Users))
+                    .child(name)
+                    .on_click(cx.listener(move |this, _, _, cx| this.open_merge(vec![(a.clone(), b.clone())], 0, cx)))
+                    .into_any_element()
+            })
+            .collect()
     }
 
     /// Edit › Edit Record: the record's fields, in place; a second time, saves (like Done).
@@ -3027,9 +3461,12 @@ impl Workspace {
         // Edit › Edit Record: the header becomes fields, in place.
         let fields = self
             .panel_editor(&xref)
-            .filter(|ed| self.editing && ed.fields.len() >= 7)
-            .map(|ed| self.render_individual_fields(ed, avatar(doc, &i, 64., lineage), cx));
+            .filter(|ed| self.editing && ed.fields.len() >= 3)
+            .map(|ed| self.render_individual_fields(ed, cx));
         let confirm = self.pending_delete.as_deref() == Some(xref.as_str());
+        let names = i.names();
+        let main_name = names.first().cloned().unwrap_or_default();
+        let names_line = names_line(&names, i.sex() == "F");
 
         let header = h_flex()
             .p_4()
@@ -3049,9 +3486,19 @@ impl Workspace {
                             .flex_wrap()
                             .gap_x_1()
                             .text_xl()
-                            .child(div().font_weight(FontWeight::SEMIBOLD).child(i.surname()))
-                            .child(div().min_w_0().max_w_full().child(i.given())),
+                            .child(
+                                div()
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .child(join_words(&[&main_name.particle, &main_name.surname])),
+                            )
+                            .child(div().min_w_0().max_w_full().child(join_words(&[
+                                &main_name.prefix,
+                                &main_name.given,
+                                &main_name.suffix,
+                            ]))),
                     )
+                    // Other names and nickname, only when there are some.
+                    .when(!names_line.is_empty(), |d| d.child(div().text_color(theme::muted()).child(names_line)))
                     .child(div().text_color(theme::muted()).child(format!(
                         "{} · {}{}",
                         i.sex_label(),
@@ -3069,6 +3516,7 @@ impl Workspace {
                                 .child(t!("settings.root")),
                         )
                     })
+                    .children(self.duplicate_lines(g, &xref, cx))
                     .child(
                         h_flex()
                             .gap_2()
@@ -3434,6 +3882,21 @@ impl Render for Workspace {
                 cx.listener(|this, _, w, cx| this.go_forward(w, cx)),
             )
             .on_key_down(cx.listener(|this, ev: &KeyDownEvent, w, cx| {
+                // Version history: ↑ ↓ move in the list.
+                if this.version_history.is_some() && this.add_dialog.is_none() {
+                    match ev.keystroke.key.as_str() {
+                        "down" => return this.step_version(1, w, cx),
+                        "up" => return this.step_version(-1, w, cx),
+                        _ => {}
+                    }
+                }
+                if this.record_history.is_some() {
+                    match ev.keystroke.key.as_str() {
+                        "down" => return this.step_record_change(1, cx),
+                        "up" => return this.step_record_change(-1, cx),
+                        _ => {}
+                    }
+                }
                 if ev.keystroke.key == "escape" {
                     if this.tour_chooser {
                         this.tour_chooser = false;
@@ -3454,7 +3917,12 @@ impl Render for Workspace {
                     }
                     if this.photo_draw.is_some() {
                         this.cancel_draw(cx);
-                    } else if this.kinship.take().is_some() || this.close_event_detail(cx) {
+                    } else if this.kinship.take().is_some()
+                        || this.close_merge(cx)
+                        || this.close_version_history(cx)
+                        || this.close_record_history(cx)
+                        || this.close_event_detail(cx)
+                    {
                         cx.notify();
                     } else if this.editing {
                         this.cancel_edit(w, cx);
@@ -3468,6 +3936,9 @@ impl Render for Workspace {
             .child(div().flex_1().min_h_0().flex().relative().child(body).children(self.render_drawer(cx)))
             .children(self.render_picker(cx))
             .children(self.render_kinship(cx))
+            .children(self.render_merge(cx))
+            .children(self.render_version_history(cx))
+            .children(self.render_record_history(cx))
             .children(self.render_event_detail(cx))
             .children(self.render_media_gallery(cx))
             .children(self.render_add_dialog(cx))
@@ -3510,5 +3981,160 @@ impl Workspace {
             self.drop_checkpoint();
         }
         cx.notify();
+    }
+}
+
+/// The field of a main-name part, when it has been added to the record being edited.
+fn name_part_field(ed: &RecordEditor, part: NamePart) -> Option<Div> {
+    let state = ed.names.as_ref()?.parts.iter().find(|(p, _)| *p == part)?.1.clone();
+    Some(v_flex().gap_1().min_w_0().child(label_caps(part.label())).child(Input::new(&state).small()))
+}
+
+/// Words joined by spaces, empty ones left out.
+fn join_words(words: &[&str]) -> String {
+    words.iter().map(|w| w.trim()).filter(|w| !w.is_empty()).collect::<Vec<_>>().join(" ")
+}
+
+/// Under an individual's name: their nickname and their other names, by type, each showing only
+/// what differs from the main name (“called Messaoud · also QUIRIEL, QUIRIELLE”). Empty if none.
+fn names_line(names: &[NameForm], female: bool) -> String {
+    let Some(main) = names.first() else { return String::new() };
+    let surname = |n: &NameForm| join_words(&[&n.particle, &n.surname]);
+    let mut groups: Vec<(&str, Vec<String>)> = Vec::new();
+    for n in &names[1..] {
+        let shown = if n.given.trim() == main.given.trim() || n.given.trim().is_empty() {
+            surname(n)
+        } else if surname(n) == surname(main) || n.surname.trim().is_empty() {
+            n.given.trim().to_string()
+        } else {
+            join_words(&[&n.given, &surname(n)])
+        };
+        if shown.is_empty() {
+            continue;
+        }
+        let kind = match n.kind.as_str() {
+            k @ ("BIRTH" | "MAIDEN" | "MARRIED" | "IMMIGRANT" | "PROFESSIONAL") => k,
+            _ => "AKA",
+        };
+        match groups.iter_mut().find(|(k, _)| *k == kind) {
+            Some((_, list)) => list.push(shown),
+            None => groups.push((kind, vec![shown])),
+        }
+    }
+    let nickname = main.nickname.trim();
+    let called = (!nickname.is_empty()).then(|| t!("names.called", name = nickname).into_owned());
+    let others = groups.into_iter().map(|(kind, list)| {
+        let names = list.join(", ");
+        match kind {
+            "BIRTH" if female => t!("names.born_f", names = names),
+            "BIRTH" => t!("names.born", names = names),
+            "MAIDEN" => t!("names.maiden", names = names),
+            "MARRIED" => t!("names.married", names = names),
+            "IMMIGRANT" => t!("names.immigrant", names = names),
+            "PROFESSIONAL" => t!("names.professional", names = names),
+            _ => t!("names.also", names = names),
+        }
+        .into_owned()
+    });
+    called.into_iter().chain(others).collect::<Vec<_>>().join(" · ")
+}
+
+#[cfg(test)]
+mod autosave_tests {
+    use super::*;
+    use gedcom::versions::Store;
+
+    fn opened(path: &std::path::Path) -> Document {
+        let ged = gedcom::load(path).unwrap();
+        Document {
+            saved: ged.clone(),
+            opened: ged.clone(),
+            disk: disk_stamp(path),
+            versioned_at: Some(std::time::Instant::now()),
+            unversioned: false,
+            settling: None,
+            ged,
+            path: Some(path.to_path_buf()),
+            imported: false,
+            sample: false,
+            dirty: false,
+            dirty_before_checkpoint: false,
+            history: Vec::new(),
+            future: Vec::new(),
+            future_before_checkpoint: Vec::new(),
+        }
+    }
+
+    fn temp_tree() -> (PathBuf, PathBuf) {
+        let dir = std::env::temp_dir()
+            .join(format!("gedroots-autosave-{}", std::process::id()))
+            .join(format!("{:?}", std::thread::current().id()).replace(['(', ')'], ""));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("tree.ged");
+        std::fs::write(&path, include_str!("../../gedcom/tests/fixtures/example.ged")).unwrap();
+        (dir, path)
+    }
+
+    #[::core::prelude::v1::test]
+    fn automatic_saves_record_a_version_only_when_due_and_at_closing() {
+        let (dir, path) = temp_tree();
+        let mut doc = opened(&path);
+        let store = Store::for_file(&path, None);
+        // An automatic save right after opening writes the file, not a version.
+        doc.ged.get_mut("I00003").unwrap().set_child_val("SEX", "M");
+        doc.dirty = true;
+        assert!(!doc.write(&path, Versioning::Throttled, true).unwrap());
+        doc.dirty = false;
+        assert!(gedcom::load(&path).unwrap().get("I00003").unwrap().child_val("SEX") == Some("M"));
+        assert!(doc.unversioned);
+        assert!(store.versions().unwrap().is_empty());
+        // Closing records the last version.
+        doc.flush();
+        assert!(!doc.unversioned);
+        assert_eq!(store.versions().unwrap().len(), 1);
+        // Once the last version is old enough, an automatic save records one.
+        doc.versioned_at = Some(std::time::Instant::now() - VERSION_EVERY);
+        doc.ged.get_mut("I00003").unwrap().set_child_val("SEX", "F");
+        assert!(doc.write(&path, Versioning::Throttled, true).unwrap());
+        assert_eq!(store.versions().unwrap().len(), 2);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[::core::prelude::v1::test]
+    fn closing_saves_unsaved_changes() {
+        let (dir, path) = temp_tree();
+        let mut doc = opened(&path);
+        doc.ged.get_mut("I00003").unwrap().set_child_val("SEX", "M");
+        doc.dirty = true;
+        doc.flush();
+        assert!(!doc.dirty);
+        assert_eq!(gedcom::load(&path).unwrap().get("I00003").unwrap().child_val("SEX"), Some("M"));
+        assert_eq!(doc.disk, disk_stamp(&path));
+        // An imported tree is never written without asking where.
+        let mut imported = opened(&path);
+        imported.imported = true;
+        imported.dirty = true;
+        imported.ged.get_mut("I00003").unwrap().set_child_val("SEX", "F");
+        imported.flush();
+        assert_eq!(gedcom::load(&path).unwrap().get("I00003").unwrap().child_val("SEX"), Some("M"));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[::core::prelude::v1::test]
+    fn named_and_restored_versions_keep_their_label() {
+        use gedcom::versions::Kind;
+        let (dir, path) = temp_tree();
+        let mut doc = opened(&path);
+        let store = Store::for_file(&path, None);
+        // A named version is recorded even without a change, and at once.
+        doc.write(&path, Versioning::Named("Before the merge".into()), true).unwrap();
+        doc.ged.get_mut("I00003").unwrap().set_child_val("SEX", "M");
+        doc.write(&path, Versioning::Restored("01793724394512-3f2b8c1e9a4d".into()), true).unwrap();
+        let v = store.versions().unwrap();
+        assert_eq!(v.len(), 2);
+        assert_eq!((v[0].kind, v[0].label.as_deref()), (Kind::Named, Some("Before the merge")));
+        assert_eq!((v[1].kind, v[1].label.as_deref()), (Kind::Restored, Some("01793724394512-3f2b8c1e9a4d")));
+        std::fs::remove_dir_all(dir).unwrap();
     }
 }

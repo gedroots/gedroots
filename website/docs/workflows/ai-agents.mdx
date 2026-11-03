@@ -13,7 +13,7 @@ GEDRoots runs a small server on your computer, using the [Model Context Protocol
 - list the gaps among the root person's direct ancestors: births, marriages and deaths missing or without a source, with the places where each person lived;
 - propose a record it found.
 
-Living people are hidden from the agent. Only your computer can reach the server.
+Of living people, the agent only gets what identifies them: name, birth and close relatives. Only your computer can reach the server.
 
 ## Before you begin
 
@@ -63,17 +63,26 @@ For each proposal, you see:
 
 - the image of the record;
 - a comparison of what your tree holds and what is proposed, person by person: **= same**, **+ Add**, **≠ More precise**, **≠ Different**, **+ Create**, **+ Link**;
+- the other **facts** the record gives, each on its own line: a birth date in a baptism record, a death written in the margin, an occupation or a residence. The ones GEDRoots deduces itself, such as a birth estimated from an age, are listed too, so nothing is written without you seeing it;
 - where it will be attached: repository, source, file, event;
 - the agent's transcription;
 - on request, the exact GEDCOM lines that will change.
 
-Clear a person's checkbox to leave them out. Then choose:
+When the record contradicts your tree (another date or place), the **≠** line lets you choose what to write:
+
+- **Keep Both** (the default): the record's event is added after yours, which stays the preferred one;
+- **Use the Record's**: the record's event comes first and becomes the preferred one; yours is kept after it;
+- **Keep the Tree's**: your values stay, and the record is only cited.
+
+Clear a person's or a fact's checkbox to leave it out. Then choose:
 
 | Action | Shortcut (macOS / Windows and Linux) | Result |
 | --- | --- | --- |
 | **Save to Tree** | <kbd>⌘↩</kbd> / <kbd>Ctrl+Enter</kbd> | Writes everything as a single change, and stores the record's image next to your `.ged` file, named after your [media settings](/workflows/media#file-images-automatically). |
 | **Reject** | <kbd>⌘⌫</kbd> / <kbd>Ctrl+Backspace</kbd> | Drops the proposal. Nothing is written. |
 | **Edit in Record Entry…** | | Opens the proposal in the [record editor](/workflows/records), to correct it before saving. |
+
+The agent learns what you saved or rejected the next time it calls GEDRoots. It can correct a proposal while it's waiting, which then replaces it in the list, or withdraw it. When several records name the same new person, such as a father found in two baptisms, the review page shows “Also in …” under that person: saving either record creates them once, and the other links to them.
 
 Proposals are kept in memory: they are lost if you quit GEDRoots before reviewing them. Save your `.ged` file first, so the record's image has a folder to go to.
 
@@ -84,7 +93,8 @@ GEDRoots checks every proposal before it reaches you, and sends it back to the a
 - its source doesn't exist, and it doesn't name the new register;
 - it doesn't follow your file's habit for that register: one source per record, or one per register with the record's reference;
 - it gives a person a different parent than the one in your tree;
-- it links a living person or a person who doesn't exist, or has an invalid date.
+- it creates a person who resembles someone already in your tree, without saying why they are someone else (the review page then shows “Resembles …” under that person);
+- it links a person who doesn't exist, or has an invalid date.
 
 Places named like a place of your tree are matched to it. A record found as a page of a PDF register is extracted as an image, in the format your other records use.
 

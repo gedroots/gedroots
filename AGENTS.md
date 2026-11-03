@@ -27,7 +27,8 @@ The details (which apps, what to hand in) are in [design.md › Before any mocku
 
 - **Standard GEDCOM 7 first.** What the app must remember (root person, file settings…) goes
   in the `.ged` as `_GR_*` tags declared in `HEAD.SCHMA` and documented in
-  [`docs/extensions.md`](docs/extensions.md), never in a sidecar file. No GEDCOM X.
+  [`docs/extensions.md`](docs/extensions.md), never in a sidecar file (the only exception is the version history beside the file, see
+  [`docs/version-history.md`](docs/version-history.md)). No GEDCOM X.
 - **Generic features.** Nothing is tailored to a particular file: data fixes go through the
   import wizard (`crates/gedcom/src/import.rs`, pluggable checks).
 - **Cross-platform** (macOS, Windows, Linux): prefer solutions that work everywhere.

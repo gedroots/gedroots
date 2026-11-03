@@ -23,6 +23,9 @@ actions!(
         OpenFileSettings,
         SaveFile,
         SaveFileAs,
+        SaveVersion,
+        RevertToOpened,
+        BrowseVersions,
         ExportFile,
         ConnectAgent,
         MobileDevices,
@@ -34,6 +37,7 @@ actions!(
         Undo,
         Redo,
         EditRecord,
+        RecordHistory,
         DeleteRecord,
         CopyId,
         CopyName,
@@ -60,6 +64,11 @@ actions!(
         SearchDescendants,
         MediaGallery,
         AddEvent,
+        AddOtherName,
+        AddNickname,
+        AddNameTitle,
+        AddNameParticle,
+        AddNameSuffix,
         // Source
         NewSource,
         NewRepository,
@@ -94,6 +103,8 @@ actions!(
         ShowQuality,
         ShowStats,
         KinshipWith,
+        MergeWithPerson,
+        FindDuplicates,
         ToggleIgnoredIssues,
         ToggleRelativeEvents,
         ShowTree,
@@ -294,6 +305,9 @@ pub mod label {
     pub fn media_gallery() -> SharedString {
         t!("cmd.media_gallery").into()
     }
+    pub fn record_history() -> SharedString {
+        t!("cmd.record_history").into()
+    }
     pub fn copy_id() -> SharedString {
         t!("cmd.copy_id").into()
     }
@@ -460,6 +474,12 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
         Sep,
         a(t!("cmd.save"), SaveFile),
         a(t!("cmd.save_as"), SaveFileAs),
+        a(t!("cmd.save_version"), SaveVersion),
+        // Like macOS documents: Revert To › Last Opened, Browse All Versions….
+        Sub(
+            t!("menu.revert_to").into(),
+            vec![a(t!("cmd.revert_to_opened"), RevertToOpened), Sep, a(t!("cmd.browse_versions"), BrowseVersions)],
+        ),
         Sep,
         a(t!("cmd.export"), ExportFile),
         Sep,
@@ -481,6 +501,7 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
             Item::Os(t!("cmd.select_all").into(), Box::new(input::SelectAll), OsAction::SelectAll),
             Sep,
             a(t!("cmd.edit_record"), EditRecord),
+            a(label::record_history(), RecordHistory),
             a(t!("cmd.add_web_link"), AddWebLink),
             Sep,
             // Rarely used: one level down, so that Edit stays within 12 items.
@@ -516,10 +537,24 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
                 ],
             ),
             a(label::add_event(), AddEvent),
+            Sub(
+                t!("cmd.add_to_name").into(),
+                vec![
+                    a(t!("cmd.other_name"), AddOtherName),
+                    Sep,
+                    a(t!("cmd.nickname"), AddNickname),
+                    a(t!("cmd.name_title"), AddNameTitle),
+                    a(t!("cmd.name_particle"), AddNameParticle),
+                    a(t!("cmd.name_suffix"), AddNameSuffix),
+                ],
+            ),
             Sep,
             a(t!("cmd.kinship_with"), KinshipWith),
             a(t!("cmd.search_ancestors"), SearchAncestors),
             a(t!("cmd.search_descendants"), SearchDescendants),
+            Sep,
+            a(t!("cmd.merge_with_person"), MergeWithPerson),
+            a(t!("cmd.find_duplicates"), FindDuplicates),
         ],
     ));
     // Search sites of the file; submenu hidden if there are none.

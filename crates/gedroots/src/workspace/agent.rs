@@ -52,10 +52,33 @@ impl Workspace {
         cx.notify();
     }
 
+    /// Applies an agent's change to the research log, with an undo point. Refused changes leave
+    /// the file untouched.
+    pub(crate) fn agent_edit(&mut self, edit: agent::Edit, cx: &mut Context<Self>) -> Result<(), String> {
+        let Some(doc) = &self.doc else { return Err("no file is open in GEDRoots".into()) };
+        let mut ged = doc.ged.clone();
+        (edit.apply)(&mut ged)?;
+        self.checkpoint();
+        if let Some(doc) = &mut self.doc {
+            doc.ged = ged;
+        }
+        self.rebuild_rows(cx);
+        self.set_status(edit.message, false);
+        cx.notify();
+        Ok(())
+    }
+
     /// Copy of the document, for the MCP server.
     pub(crate) fn agent_snapshot(&self) -> Option<agent::Snapshot> {
         let doc = self.doc.as_ref()?;
-        Some(agent::Snapshot { path: doc.path.clone(), ged: doc.ged.clone() })
+        Some(agent::Snapshot { path: doc.path.clone(), ged: doc.ged.clone(), queue: self.review_queue() })
+    }
+
+    /// Copy of the document and its issues (media files checked too), for the MCP server.
+    pub(crate) fn agent_quality(&mut self) -> Option<(agent::Snapshot, Vec<gedcom::analysis::check::Issue>)> {
+        self.refresh_quality();
+        let snapshot = self.agent_snapshot()?;
+        Some((snapshot, self.quality.issues.as_ref().clone()))
     }
 
     fn agent_dialog(&mut self) -> Option<&mut AgentDialog> {

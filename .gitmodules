@@ -1,0 +1,4 @@
+[submodule "crates/gedcom/atlas"]
+	path = crates/gedcom/atlas
+	url = https://github.com/gedroots/atlas.git
+	branch = main

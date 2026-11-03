@@ -1,5 +1,32 @@
 # Changelog
 
+## [2026.11.3](https://github.com/gedroots/gedroots/releases/tag/v2026.11.3) - 2026-11-03
+
+### 🔄 Changed
+
+- Share the tree with mobile devices (File › Mobile Devices…) by @antoninguyot in [#103](https://github.com/gedroots/gedroots/pull/103)
+- Resolve who each person is before proposing an act by @antoninguyot in [#105](https://github.com/gedroots/gedroots/pull/105)
+- Stamp every changed record at save and add a tree identifier by @antoninguyot in [#106](https://github.com/gedroots/gedroots/pull/106)
+- Find possible duplicate individuals and merge them (library) by @antoninguyot in [#108](https://github.com/gedroots/gedroots/pull/108)
+- Propose every fact of an act, and show each one before saving by @antoninguyot in [#110](https://github.com/gedroots/gedroots/pull/110)
+- Keep a version history in a hidden folder beside the .ged by @antoninguyot in [#111](https://github.com/gedroots/gedroots/pull/111)
+- Let agents read the Data Quality issues (quality_issues) by @antoninguyot in [#109](https://github.com/gedroots/gedroots/pull/109)
+- Add the merge window and possible duplicates to the Quality page by @antoninguyot in [#113](https://github.com/gedroots/gedroots/pull/113)
+- Let agents propose changes for Data Quality issues by @antoninguyot in [#117](https://github.com/gedroots/gedroots/pull/117)
+- Keep macOS permissions and recent files after an update by @antoninguyot in [#104](https://github.com/gedroots/gedroots/pull/104)
+- Save automatically, save before quitting, and reload a file changed elsewhere by @antoninguyot in [#114](https://github.com/gedroots/gedroots/pull/114)
+- Correct, withdraw and follow up proposals by @antoninguyot in [#115](https://github.com/gedroots/gedroots/pull/115)
+- Give the file's context (file_context) instead of source-model refusals by @antoninguyot in [#119](https://github.com/gedroots/gedroots/pull/119)
+- Let agents propose merging a possible duplicate by @antoninguyot in [#121](https://github.com/gedroots/gedroots/pull/121)
+- Edit Record on an individual: drop birth/death fields, sex beside the surname by @antoninguyot in [#118](https://github.com/gedroots/gedroots/pull/118)
+- Browse and restore earlier versions of the tree by @antoninguyot in [#123](https://github.com/gedroots/gedroots/pull/123)
+- Let the user settle a record's contradictions in To Review by @antoninguyot in [#120](https://github.com/gedroots/gedroots/pull/120)
+- Place ancestors without dates before calling them living by @antoninguyot in [#122](https://github.com/gedroots/gedroots/pull/122)
+- Research leads and an agent research loop by @antoninguyot in [#116](https://github.com/gedroots/gedroots/pull/116)
+- Add record history, Undo This Change, agent versions and restore points by @antoninguyot in [#124](https://github.com/gedroots/gedroots/pull/124)
+- Show and edit a person's other names by @antoninguyot in [#125](https://github.com/gedroots/gedroots/pull/125)
+- The Atlas: records, access delays and marriage ages per country by @antoninguyot in [#126](https://github.com/gedroots/gedroots/pull/126)
+
 ## [2026.11.2](https://github.com/gedroots/gedroots/releases/tag/v2026.11.2) - 2026-11-03
 
 ### 🔄 Changed

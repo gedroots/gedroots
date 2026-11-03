@@ -84,6 +84,15 @@ act.mention:
 act.add_person:
   en: Add a Person
   fr: Ajouter une personne
+act.add_fact:
+  en: Add a Fact
+  fr: Ajouter un fait
+act.remove_fact:
+  en: Remove the Fact
+  fr: Retirer le fait
+act.other_facts:
+  en: Other Facts
+  fr: Autres faits
 act.people:
   en: People
   fr: Personnes

@@ -10,6 +10,8 @@ use serde::Deserialize;
 
 const FIND_RECORD: &str = include_str!("prompts/find_record.md");
 const READ_RECORD: &str = include_str!("prompts/read_record.md");
+const RESEARCH_SESSION: &str = include_str!("prompts/research_session.md");
+const REVIEW_QUALITY: &str = include_str!("prompts/review_quality.md");
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct FindArgs {
@@ -24,6 +26,24 @@ pub struct ReadArgs {
     /// Path of the downloaded image or PDF.
     pub file: Option<String>,
     /// Person the act is about.
+    pub person: Option<String>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct SessionArgs {
+    /// People to research, in the syntax of GEDRoots' search (`sosa:1-15`, `place:manche`,
+    /// `descendants:@I12@`…); nothing: the ancestors over six generations.
+    pub focus: Option<String>,
+    /// Number of leads to plan (default 5).
+    pub count: Option<String>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct QualityArgs {
+    /// Category to work on (dates, family, structure, empty, media, places, sources, files, coords),
+    /// or nothing for all.
+    pub category: Option<String>,
+    /// Person whose issues to settle (name), or nothing for the whole tree.
     pub person: Option<String>,
 }
 
@@ -52,6 +72,19 @@ impl GedrootsMcp {
     }
 
     #[prompt(
+        name = "research_session",
+        description = "Plan the records to find in the tree open in GEDRoots, then search them one by one in the online archives, noting every search."
+    )]
+    async fn research_session(&self, Parameters(a): Parameters<SessionArgs>) -> Vec<PromptMessage> {
+        let count = some(&a.count).and_then(|c| c.parse::<usize>().ok()).unwrap_or(5);
+        let target = match some(&a.focus) {
+            Some(f) => format!("Focus: `{f}`. Plan {count} leads."),
+            None => format!("Plan {count} leads."),
+        };
+        text(RESEARCH_SESSION, target)
+    }
+
+    #[prompt(
         name = "read_record",
         description = "Read a downloaded act (image or PDF), check it against the tree and propose it to GEDRoots for review."
     )]
@@ -62,5 +95,21 @@ impl GedrootsMcp {
             .collect::<Vec<_>>()
             .join("\n");
         text(READ_RECORD, target)
+    }
+
+    #[prompt(
+        name = "review_quality",
+        description = "Go through the Data Quality issues of the tree open in GEDRoots and propose a fix, an edit or a reasoned hide for each one."
+    )]
+    async fn review_quality(&self, Parameters(a): Parameters<QualityArgs>) -> Vec<PromptMessage> {
+        let target = [
+            some(&a.category).map(|c| format!("Category: {c}.")),
+            some(&a.person).map(|p| format!("Only the issues about {p}.")),
+        ]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>()
+        .join("\n");
+        text(REVIEW_QUALITY, target)
     }
 }

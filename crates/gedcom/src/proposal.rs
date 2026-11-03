@@ -4,17 +4,25 @@
 //! with the same model as record entry ([`Act`]), and the source that contains it (existing, or new
 //! with its register and repository). Before it is shown, a proposal is checked
 //! ([`Proposal::check`]): it must fit into the tree's structure (repository → source → file → event
-//! → people) and follow the file's habits (one source per record, or per register). An inconsistent
-//! proposal is rejected with the reason, which the agent reads to correct it.
+//! → people). An inconsistent proposal is rejected with the reason, which the agent reads to correct
+//! it. How the file writes its records (one source per act or per register, titles…) is not
+//! checked: the agent learns it from the file's context ([`crate::context`]) and the user reviews
+//! the proposal.
 //!
 //! For the review, [`Proposal::compare`] puts what the tree contains next to what is proposed, and
 //! [`Proposal::diff`] gives the exact GEDCOM lines that will change, computed on a copy of the
 //! file.
 
-use crate::act::{Act, ActResult, ActRole, PersonChoice, PersonField};
+use crate::DateKind;
+use crate::act::{Act, ActResult, ActRole, Conflicts, PersonChoice, PersonField, Suggestion};
 use crate::document::{Gedcom, RecordKind};
 use crate::node::Node;
 use crate::parse::node_to_string;
+
+/// Score from which an individual of the tree is a plausible duplicate of a person to create
+/// ([`Act::suggestions`]): same surname and first given name, or a known relative, without a date
+/// that rules them out.
+pub const PLAUSIBLE_MATCH: f32 = 5.5;
 
 /// New source, created when the proposal is saved.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -43,6 +51,8 @@ pub struct Proposal {
     pub act: Act,
     /// Web page of the record (the archives' viewer), kept as a web link of the source.
     pub url: String,
+    /// What to do with the values that contradict the tree, chosen in To Review.
+    pub conflicts: Conflicts,
 }
 
 /// What a line of the comparison changes.
@@ -73,6 +83,8 @@ pub enum Field {
     Place,
     /// Person of the record (index in `act.participants`) and their displayed role.
     Person { index: usize, role: String },
+    /// Other fact `fact` of the person `person` (“Birth”, of “Émile MARCHAND”).
+    Fact { person: usize, fact: usize, label: String, name: String },
 }
 
 /// “In the tree” / “Proposed” line.
@@ -82,6 +94,8 @@ pub struct Row {
     pub current: String,
     pub proposed: String,
     pub change: Change,
+    /// Person created: individuals of the tree they resemble (“Marie DURAND (1770–1840)”).
+    pub similar: Vec<String>,
 }
 
 /// Link of the attachment chain: already exists, or will be created.
@@ -125,6 +139,15 @@ impl Proposal {
                     p.set(f, ged.known_place(&v));
                 }
             }
+            for f in &mut p.facts {
+                let parsed = crate::Date::parse(&f.date);
+                if !f.date.trim().is_empty() && parsed.year().is_some() {
+                    f.date = parsed.to_gedcom();
+                }
+                if !f.place.trim().is_empty() {
+                    f.place = ged.known_place(&f.place);
+                }
+            }
             if let PersonChoice::Link(x) = &p.choice
                 && let Some(ind) = ged.individual(x)
             {
@@ -139,6 +162,8 @@ impl Proposal {
                 }
             }
         }
+        // Everything that will be written is shown in the review, deduced facts included.
+        act.make_facts_explicit(ged);
     }
 
     /// Creates the source if it is new and returns the record pointing to it (to pick it up in
@@ -191,7 +216,7 @@ impl Proposal {
     pub fn apply(&self, ged: &mut Gedcom) -> Result<ActResult, String> {
         let mut copy = ged.clone();
         let act = self.materialize(&mut copy)?;
-        let mut res = act.save(&mut copy)?;
+        let mut res = act.save_with(&mut copy, &self.conflicts)?;
         if (matches!(self.source, SourceChoice::New(_)) || !self.url.trim().is_empty())
             && !res.touched.contains(&act.source)
         {
@@ -209,9 +234,9 @@ impl Proposal {
     }
 
     /// Does the proposal fit into the tree? The error says what to correct.
-    pub fn check(&self, ged: &Gedcom, this_year: i32) -> Result<(), String> {
+    pub fn check(&self, ged: &Gedcom) -> Result<(), String> {
         self.check_source(ged)?;
-        self.check_people(ged, this_year)?;
+        self.check_people(ged)?;
         self.apply(&mut ged.clone()).map(|_| ())
     }
 
@@ -220,17 +245,6 @@ impl Proposal {
             SourceChoice::Existing(x) => {
                 if ged.get(x).is_none_or(|n| n.tag != "SOUR") {
                     return Err(format!("no source with id {x}"));
-                }
-                // Source of a single record (without a reference): the file keeps one record per
-                // source.
-                let acts = ged.acts(x);
-                if self.act.original.is_none() && acts.len() == 1 && acts[0].page.trim().is_empty() {
-                    let s = crate::model::Source::new(ged.get(x).unwrap());
-                    return Err(format!(
-                        "source {x} (\"{}\") already holds one act: this file keeps one source per act; \
-                         propose a new source with the same register and repository",
-                        s.title()
-                    ));
                 }
             }
             SourceChoice::New(s) => {
@@ -242,27 +256,18 @@ impl Proposal {
                 if s.register.trim().is_empty() && s.title.trim().is_empty() {
                     return Err("give the new source's register (e.g. \"Rennes, births 1802\")".into());
                 }
-                // Register already described by a source that gathers several records.
-                if let Some(x) = ged.register_sources(&s.register).into_iter().find(|x| ged.acts(x).len() > 1) {
-                    return Err(format!(
-                        "this file keeps one source per register: use source {x} with the act's reference as page"
-                    ));
-                }
             }
         }
         Ok(())
     }
 
-    fn check_people(&self, ged: &Gedcom, this_year: i32) -> Result<(), String> {
+    fn check_people(&self, ged: &Gedcom) -> Result<(), String> {
         let act = &self.act;
         for (i, p) in act.participants.iter().enumerate() {
-            if let PersonChoice::Link(x) = &p.choice {
-                if ged.individual(x).is_none() {
-                    return Err(format!("{}: no person with id {x}", act.role_label(i)));
-                }
-                if ged.is_living(x, this_year) {
-                    return Err(format!("{}: living person, cannot be linked", act.role_label(i)));
-                }
+            if let PersonChoice::Link(x) = &p.choice
+                && ged.individual(x).is_none()
+            {
+                return Err(format!("{}: no person with id {x}", act.role_label(i)));
             }
         }
         // Parents: those of the tree are not replaced silently.
@@ -319,6 +324,7 @@ impl Proposal {
     pub fn compare(&self, ged: &Gedcom) -> Vec<Row> {
         let act = &self.act;
         let (cur_date, cur_place) = self.current_event(ged).unwrap_or_default();
+        let similar = self.duplicates(ged);
         let mut rows = Vec::new();
         if !act.date.trim().is_empty() || !cur_date.is_empty() {
             rows.push(Row {
@@ -326,11 +332,18 @@ impl Proposal {
                 change: date_change(&cur_date, &act.date),
                 current: cur_date,
                 proposed: act.date.trim().to_string(),
+                similar: Vec::new(),
             });
         }
         if !act.place.trim().is_empty() || !cur_place.is_empty() {
             let change = text_change(&cur_place, &act.place);
-            rows.push(Row { field: Field::Place, change, current: cur_place, proposed: act.place.trim().to_string() });
+            rows.push(Row {
+                field: Field::Place,
+                change,
+                current: cur_place,
+                proposed: act.place.trim().to_string(),
+                similar: Vec::new(),
+            });
         }
         for (i, p) in act.participants.iter().enumerate() {
             if p.is_blank() && p.choice == PersonChoice::Create {
@@ -356,14 +369,78 @@ impl Proposal {
                 PersonChoice::Create => (person_text(p), Change::Create),
                 PersonChoice::Mention => (person_text(p), Change::Mention),
             };
+            let similar =
+                similar.iter().find(|(x, _)| *x == i).map(|(_, s)| s.iter().map(|s| s.label.clone()).collect());
             rows.push(Row {
                 field: Field::Person { index: i, role: act.role_label(i).to_string() },
                 current,
                 proposed,
                 change,
+                similar: similar.unwrap_or_default(),
             });
         }
+        for (i, p) in act.participants.iter().enumerate() {
+            if !matches!(p.choice, PersonChoice::Create | PersonChoice::Link(_)) {
+                continue;
+            }
+            let linked = match &p.choice {
+                PersonChoice::Link(x) => ged.get(x),
+                _ => None,
+            };
+            for (k, f) in p.facts.iter().enumerate().filter(|(_, f)| !f.is_blank()) {
+                // In the tree: the person's fact of the same kind.
+                let same = linked.and_then(|n| {
+                    n.children
+                        .iter()
+                        .find(|c| c.tag == f.tag && c.child_val("TYPE").unwrap_or("") == f.event_type.trim())
+                });
+                let current = same.map(|c| crate::act::Fact {
+                    tag: c.tag.clone(),
+                    value: if f.has_value() { c.val().to_string() } else { String::new() },
+                    date: c.child_val("DATE").unwrap_or("").to_string(),
+                    place: c.child_val("PLAC").unwrap_or("").to_string(),
+                    ..Default::default()
+                });
+                let change = match &current {
+                    None => Change::Added,
+                    Some(c) if f.has_value() => text_change(&c.value, &f.value),
+                    Some(c) if !f.date.trim().is_empty() => date_change(&c.date, &f.date),
+                    Some(c) => text_change(&c.place, &f.place),
+                };
+                rows.push(Row {
+                    field: Field::Fact {
+                        person: i,
+                        fact: k,
+                        label: f.label(),
+                        name: Some(p.get(PersonField::Given))
+                            .filter(|g| !g.is_empty())
+                            .map(str::to_string)
+                            .unwrap_or_else(|| p.display_name()),
+                    },
+                    current: current.map(|c| c.summary()).unwrap_or_default(),
+                    proposed: f.summary(),
+                    change,
+                    similar: Vec::new(),
+                });
+            }
+        }
         rows
+    }
+
+    /// People to create who may already be in the tree: index in `act.participants` and the
+    /// individuals they resemble, most likely first.
+    pub fn duplicates(&self, ged: &Gedcom) -> Vec<(usize, Vec<Suggestion>)> {
+        self.act
+            .participants
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| p.choice == PersonChoice::Create && !p.is_blank())
+            .filter_map(|(i, _)| {
+                let found: Vec<Suggestion> =
+                    self.act.suggestions(ged, i).into_iter().filter(|s| s.score >= PLAUSIBLE_MATCH).collect();
+                (!found.is_empty()).then_some((i, found))
+            })
+            .collect()
     }
 
     /// Attachment: repository and source.
@@ -429,7 +506,7 @@ fn norm(s: &str) -> String {
     s.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase()
 }
 
-fn text_change(current: &str, proposed: &str) -> Change {
+pub(crate) fn text_change(current: &str, proposed: &str) -> Change {
     let (c, p) = (norm(current), norm(proposed));
     if c.is_empty() {
         Change::Added
@@ -444,7 +521,7 @@ fn text_change(current: &str, proposed: &str) -> Change {
 
 /// Proposed date against the tree's: identical, more precise (within the interval of the tree's, or
 /// close to an approximate date) or contrary.
-fn date_change(current: &str, proposed: &str) -> Change {
+pub(crate) fn date_change(current: &str, proposed: &str) -> Change {
     let (c, p) = (current.trim(), proposed.trim());
     if c.is_empty() {
         return Change::Added;
@@ -458,7 +535,12 @@ fn date_change(current: &str, proposed: &str) -> Change {
         (Some((c0, c1)), Some((p0, p1))) if p0 >= c0 && p1 <= c1 => Change::Refined,
         _ => match (dc.year(), dp.year()) {
             // “about 1802”, “1802”: a date of the same order refines it.
-            (Some(a), Some(b)) if dc.kind().is_some() && (a - b).abs() <= 2 => Change::Refined,
+            (Some(a), Some(b))
+                if matches!(dc.kind(), Some(DateKind::About | DateKind::Calculated | DateKind::Estimated))
+                    && (a - b).abs() <= 2 =>
+            {
+                Change::Refined
+            }
             _ => Change::Differs,
         },
     }
@@ -507,7 +589,7 @@ impl Gedcom {
 }
 
 /// Line by line diff (longest common subsequence; records are short).
-fn line_diff(before: &str, after: &str) -> Vec<DiffLine> {
+pub(crate) fn line_diff(before: &str, after: &str) -> Vec<DiffLine> {
     let a: Vec<&str> = before.lines().collect();
     let b: Vec<&str> = after.lines().collect();
     let (n, m) = (a.len(), b.len());
@@ -563,7 +645,7 @@ mod tests {
             Participant { choice: PersonChoice::Link("I3".into()), ..Participant::new(ActRole::Father) },
             Participant::new(ActRole::Mother).with(PersonField::Given, "Marie").with(PersonField::Surname, "DURAND"),
         ];
-        Proposal { source, act, url: String::new() }
+        Proposal { source, act, url: String::new(), conflicts: Conflicts::default() }
     }
 
     fn new_source() -> SourceChoice {
@@ -573,6 +655,34 @@ mod tests {
             call_number: "10 NUM 35238".into(),
             ..Default::default()
         })
+    }
+
+    #[test]
+    fn contradicting_date_is_settled_by_the_choice() {
+        use crate::act::Conflict;
+        let g = ged();
+        let mut p = birth(SourceChoice::Existing("S1".into()));
+        p.act.date = "4 APR 1812".into();
+        p.complete(&g);
+        assert_eq!(p.compare(&g)[0].change, Change::Differs);
+        let births = |c: Conflict| {
+            let mut p = p.clone();
+            p.conflicts.event = c;
+            let mut g2 = g.clone();
+            p.apply(&mut g2).unwrap();
+            g2.get("I2")
+                .unwrap()
+                .children
+                .iter()
+                .filter(|c| c.tag == "BIRT")
+                .map(|b| (b.child_val("DATE").unwrap_or("").to_string(), b.child("SOUR").is_some()))
+                .collect::<Vec<_>>()
+        };
+        let (old, new) = (("ABT 1802".to_string(), false), ("4 APR 1812".to_string(), true));
+        assert_eq!(births(Conflict::KeepBoth), vec![old.clone(), new.clone()]);
+        assert_eq!(births(Conflict::Replace), vec![new, old]);
+        // The tree's date stays, the record's citation is added to it.
+        assert_eq!(births(Conflict::Ignore), vec![("ABT 1802".to_string(), true)]);
     }
 
     #[test]
@@ -586,7 +696,7 @@ mod tests {
         p.act.date = "4 APR 1802".into();
         assert_eq!(p.act.place, "Rennes");
         assert_eq!(p.act.participants[0].get(PersonField::Given), "Jean");
-        p.check(&g, 2026).unwrap();
+        p.check(&g).unwrap();
         let rows = p.compare(&g);
         assert_eq!(rows[0].field, Field::Date);
         assert_eq!(rows[0].change, Change::Refined, "{rows:?}");
@@ -615,25 +725,85 @@ mod tests {
     }
 
     #[test]
+    fn people_to_create_who_resemble_the_tree_are_flagged() {
+        let g = ged();
+        // Pierre BLANC, father of Jean, proposed as a new person: he is already in the tree.
+        let mut p = birth(new_source());
+        p.act.participants[1] =
+            Participant::new(ActRole::Father).with(PersonField::Given, "Pierre").with(PersonField::Surname, "BLANC");
+        let dups = p.duplicates(&g);
+        assert_eq!(dups.len(), 1, "{dups:?}");
+        assert_eq!(dups[0].0, 1);
+        assert_eq!(dups[0].1[0].xref, "I3");
+        let father = p.compare(&g).into_iter().find(|r| matches!(&r.field, Field::Person { index: 1, .. })).unwrap();
+        assert!(father.similar[0].contains("Pierre BLANC"), "{father:?}");
+        // Marie DURAND has no one like her; a mention is never checked.
+        assert!(!dups.iter().any(|(i, _)| *i == 2));
+        p.act.participants[1].choice = PersonChoice::Mention;
+        assert!(p.duplicates(&g).is_empty());
+        // A namesake ruled out by the dates is not a duplicate: Louis BLANC (1800–1870) is not a
+        // father in 1802.
+        p.act.participants[1] =
+            Participant::new(ActRole::Father).with(PersonField::Given, "Louis").with(PersonField::Surname, "BLANC");
+        assert!(p.duplicates(&g).is_empty(), "{:?}", p.duplicates(&g));
+    }
+
+    #[test]
+    fn every_fact_written_is_a_row_of_the_review() {
+        let g = ged();
+        let mut p = birth(new_source());
+        p.act.event = "BAPM".into();
+        // Jean (I2) is born ABT 1802 in the tree: the baptism gives the exact date. The mother,
+        // new, is a weaver aged 25.
+        let mut b = crate::act::Fact::new("BIRT");
+        b.date = "2 APR 1802".into();
+        p.act.participants[0].facts.push(b);
+        p.act.participants[2].set(PersonField::Occupation, "tisserande");
+        p.act.participants[2].set(PersonField::Age, "25");
+        p.complete(&g);
+        let mother = &p.act.participants[2];
+        assert_eq!(mother.get(PersonField::Occupation), "", "the deduced occupation became a fact");
+        let tags: Vec<(&str, &str)> = mother.facts.iter().map(|f| (f.tag.as_str(), f.date.as_str())).collect();
+        assert_eq!(tags, [("OCCU", "4 APR 1802"), ("BIRT", "EST 1777")]);
+        let facts: Vec<Row> = p.compare(&g).into_iter().filter(|r| matches!(r.field, Field::Fact { .. })).collect();
+        assert_eq!(facts.len(), 3, "{facts:?}");
+        assert_eq!(facts[0].change, Change::Refined, "{facts:?}");
+        assert!(facts[1..].iter().all(|r| r.change == Change::Added));
+        // Written as before: the occupation at the record's date, the estimated birth.
+        let mut copy = g.clone();
+        let res = p.apply(&mut copy).unwrap();
+        let m = copy.get(res.persons[2].as_ref().unwrap()).unwrap();
+        assert_eq!(m.path_val(&["OCCU", "DATE"]), Some("4 APR 1802"));
+        assert_eq!(m.path_val(&["BIRT", "DATE"]), Some("EST 1777"));
+        assert_eq!(copy.get("I2").unwrap().path_val(&["BIRT", "DATE"]), Some("2 APR 1802"));
+        // Back in record entry: the deduced facts return to their fields.
+        let mut act = p.act.clone();
+        act.fold_deduced_facts();
+        assert_eq!(act.participants[2].get(PersonField::Occupation), "tisserande");
+        assert!(act.participants[2].facts.is_empty() && act.estimate_births);
+        assert_eq!(act.participants[0].facts.len(), 1, "the baptism's birth date stays a fact");
+    }
+
+    #[test]
     fn incoherent_proposals_are_refused_with_reason() {
         let g = ged();
-        // Source of a single record: the file keeps one record per source.
-        let e = birth(SourceChoice::Existing("S1".into())).check(&g, 2026).unwrap_err();
-        assert!(e.contains("one source per act"), "{e}");
+        // How the file arranges its sources is left to the agent and the review.
+        assert!(birth(SourceChoice::Existing("S1".into())).check(&g).is_ok());
+        assert!(birth(SourceChoice::Existing("S9".into())).check(&g).unwrap_err().contains("no source"));
         // Unknown repository.
         let mut s = NewSource { register: "X".into(), repository: Some("R9".into()), ..Default::default() };
-        let e = birth(SourceChoice::New(s.clone())).check(&g, 2026).unwrap_err();
+        let e = birth(SourceChoice::New(s.clone())).check(&g).unwrap_err();
         assert!(e.contains("no repository"), "{e}");
         s.repository = None;
         // Another father than the tree's.
         let mut p = birth(SourceChoice::New(s));
         p.act.participants[1] = Participant::new(ActRole::Father).with(PersonField::Given, "Paul");
-        let e = p.check(&g, 2026).unwrap_err();
+        let e = p.check(&g).unwrap_err();
         assert!(e.contains("Pierre BLANC"), "{e}");
         // Impossible date (record entry check).
         let mut p = birth(new_source());
         p.act.date = "31 FEB 1802".into();
-        assert!(p.check(&g, 2026).is_err());
+        assert!(p.check(&g).is_err());
     }
 
     #[test]
@@ -645,9 +815,9 @@ mod tests {
         p.act.participants.truncate(1);
         p.complete(&g);
         // EVEN without a type is refused, with the reason.
-        assert!(p.check(&g, 2026).is_err());
+        assert!(p.check(&g).is_err());
         p.act.event_type = "Military service".into();
-        p.check(&g, 2026).unwrap();
+        p.check(&g).unwrap();
         let mut g2 = g.clone();
         p.apply(&mut g2).unwrap();
         let even = g2.get("I2").unwrap().children.iter().find(|c| c.tag == "EVEN").unwrap();
@@ -660,7 +830,7 @@ mod tests {
         let g = ged();
         let mut p = birth(new_source());
         p.url = "https://archives.ille-et-vilaine.fr/ark:/12345/v45".into();
-        p.check(&g, 2026).unwrap();
+        p.check(&g).unwrap();
         let diff = p.diff(&g).unwrap();
         assert!(
             diff.iter()
@@ -675,7 +845,7 @@ mod tests {
         assert_eq!(links.len(), 1);
         assert_eq!(links[0].title.as_deref(), Some(format!("{}, vue 45", p.act.auto_title()).as_str()));
         p.url = "not a url".into();
-        assert!(p.check(&g, 2026).unwrap_err().starts_with("url:"));
+        assert!(p.check(&g).unwrap_err().starts_with("url:"));
     }
 
     #[test]
@@ -712,6 +882,8 @@ mod tests {
         assert_eq!(date_change("ABT 1802", "4 APR 1802"), Change::Refined);
         assert_eq!(date_change("1802", "4 APR 1802"), Change::Refined);
         assert_eq!(date_change("1810", "4 APR 1802"), Change::Differs);
+        // An exact date a year apart contradicts it.
+        assert_eq!(date_change("4 MAY 1796", "4 MAY 1797"), Change::Differs);
         assert_eq!(date_change("", "1802"), Change::Added);
         assert_eq!(date_change("FRENCH_R 30 GERM 4", "@#DFRENCH R@ 30 GERM 4"), Change::Same);
     }

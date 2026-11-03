@@ -2543,9 +2543,14 @@ dependencies = [
 name = "gedcom"
 version = "0.1.0"
 dependencies = [
+ "blake3",
+ "flate2",
  "rust-i18n",
  "schemars",
  "serde",
+ "serde-saphyr",
+ "uuid",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2557,6 +2562,7 @@ dependencies = [
  "axum",
  "base64 0.22.1",
  "block2 0.6.2",
+ "chrono",
  "dirs 6.0.0",
  "gedcom",
  "gedroots-sync",

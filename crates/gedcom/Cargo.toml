@@ -8,9 +8,16 @@ license.workspace = true
 
 [dependencies]
 rust-i18n = "4.2.4"
-serde = { version = "1", features = ["derive"], optional = true }
+blake3 = "1.8"
+flate2 = "1.1"
+uuid = { version = "1.29", features = ["v4"] }
+serde = { version = "1", features = ["derive"] }
+serde-saphyr = { version = "1.2", default-features = false, features = ["deserialize"] }
 schemars = { version = "1", optional = true }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem"] }
 
 [features]
 # Serialization of research data (the app's MCP server).
-serde = ["dep:serde", "dep:schemars"]
+serde = ["dep:schemars"]

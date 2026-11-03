@@ -44,6 +44,8 @@ pub struct Issue {
     /// Other records involved.
     pub related: Vec<String>,
     pub message: String,
+    /// Second line under the message; empty: the label of the code.
+    pub detail: String,
     /// Position of the faulty structure in the record (indices of the substructures from the
     /// record); empty for the whole record.
     pub path: Vec<usize>,
@@ -123,6 +125,7 @@ pub fn code_label(code: &str) -> Cow<'static, str> {
         "place_hierarchy" => t!("check.code.place_hierarchy"),
         "role_sex_mismatch" => t!("check.code.role_sex_mismatch"),
         "outside_source_period" => t!("check.code.outside_source_period"),
+        "possible_duplicate" => t!("check.code.possible_duplicate"),
         _ => t!("check.code.other"),
     }
 }
@@ -191,6 +194,7 @@ pub(crate) fn check_all(g: &Gedcom, t: &Thresholds) -> Vec<Issue> {
             xref: xref.to_string(),
             related,
             message,
+            detail: String::new(),
             path: Vec::new(),
             ignored: false,
         });

@@ -1,0 +1,134 @@
+_version: 2
+# Possible duplicate individuals and merging (crates/gedcom/src/duplicates.rs, merge.rs).
+duplicates.level.possible:
+  en: "Possible"
+  fr: "Possible"
+duplicates.level.likely:
+  en: "Likely"
+  fr: "Probable"
+duplicates.exclusion.same_person:
+  en: "It is the same record"
+  fr: "C’est la même fiche"
+duplicates.exclusion.not_individuals:
+  en: "Both records must be people"
+  fr: "Les deux fiches doivent être des individus"
+duplicates.exclusion.opposite_sex:
+  en: "One is a man and the other a woman"
+  fr: "L’un est un homme, l’autre une femme"
+duplicates.exclusion.close_relatives:
+  en: "They are close relatives"
+  fr: "Ce sont de proches parents"
+duplicates.exclusion.same_event:
+  en: "Both appear in the same event"
+  fr: "Les deux figurent dans le même événement"
+duplicates.exclusion.lives_apart:
+  en: "Their lives do not overlap"
+  fr: "Leurs vies ne se recoupent pas"
+duplicates.exclusion.marked_distinct:
+  en: "Marked as different people"
+  fr: "Marqués comme personnes différentes"
+duplicates.clue.same_name:
+  en: "Same given names and surname"
+  fr: "Mêmes prénoms et nom"
+duplicates.clue.same_surname:
+  en: "Same surname"
+  fr: "Même nom"
+duplicates.clue.surname_variant:
+  en: "Surname spelled differently"
+  fr: "Nom écrit différemment"
+duplicates.clue.same_given:
+  en: "Same given names"
+  fr: "Mêmes prénoms"
+duplicates.clue.given_subset:
+  en: "Same first given name"
+  fr: "Même premier prénom"
+duplicates.clue.other_given_differ:
+  en: "Different second given names"
+  fr: "Seconds prénoms différents"
+duplicates.clue.seen_in:
+  en: "Both seen in %{year}"
+  fr: "Vus tous deux en %{year}"
+duplicates.clue.seen_between:
+  en: "Both seen between %{from} and %{to}"
+  fr: "Vus tous deux entre %{from} et %{to}"
+duplicates.clue.given_shared:
+  en: "A given name in common"
+  fr: "Un prénom en commun"
+duplicates.clue.given_variant:
+  en: "Given names spelled differently"
+  fr: "Prénoms écrits différemment"
+duplicates.clue.given_differ:
+  en: "Different given names"
+  fr: "Prénoms différents"
+duplicates.clue.same_birth_date:
+  en: "Same date of birth"
+  fr: "Même date de naissance"
+duplicates.clue.birth_years_match:
+  en: "Born the same years"
+  fr: "Nés les mêmes années"
+duplicates.clue.birth_differs:
+  en: "Different births"
+  fr: "Naissances différentes"
+duplicates.clue.same_birth_place:
+  en: "Born in the same place"
+  fr: "Nés au même endroit"
+duplicates.clue.birth_place_differs:
+  en: "Born in different places"
+  fr: "Nés à des endroits différents"
+duplicates.clue.death_years_match:
+  en: "Died the same years"
+  fr: "Décédés les mêmes années"
+duplicates.clue.death_differs:
+  en: "Different deaths"
+  fr: "Décès différents"
+duplicates.clue.same_father:
+  en: "Same father’s name"
+  fr: "Même nom de père"
+duplicates.clue.father_differs:
+  en: "Different fathers"
+  fr: "Pères différents"
+duplicates.clue.same_mother:
+  en: "Same mother’s name"
+  fr: "Même nom de mère"
+duplicates.clue.mother_differs:
+  en: "Different mothers"
+  fr: "Mères différentes"
+duplicates.clue.same_spouse:
+  en: "Same spouse"
+  fr: "Même conjoint"
+duplicates.clue.spouse_names_match:
+  en: "Same spouse’s name"
+  fr: "Même nom de conjoint"
+duplicates.clue.spouses_differ:
+  en: "Different spouses"
+  fr: "Conjoints différents"
+duplicates.clue.children_names_match:
+  en: "%{n} children with the same names"
+  fr: "%{n} enfants de mêmes noms"
+duplicates.clue.same_principal:
+  en: "Attended events of the same people"
+  fr: "Présents aux événements des mêmes personnes"
+duplicates.clue.same_place:
+  en: "Both seen in %{place}"
+  fr: "Vus tous deux à %{place}"
+duplicates.clue.places_differ:
+  en: "Never seen in the same place"
+  fr: "Jamais vus au même endroit"
+duplicates.clue.same_occupation:
+  en: "Same occupation"
+  fr: "Même profession"
+duplicates.clue.same_source:
+  en: "Cited in the same source"
+  fr: "Cités dans la même source"
+merge.name:
+  en: "Name"
+  fr: "Nom"
+merge.sex:
+  en: "Sex"
+  fr: "Sexe"
+merge.no_detail:
+  en: "No details"
+  fr: "Sans précision"
+merge.error.choices:
+  en: "Choose a value for each conflict before merging"
+  fr: "Choisissez une valeur pour chaque conflit avant de fusionner"

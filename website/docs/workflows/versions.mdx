@@ -1,0 +1,54 @@
+---
+title: Bring back an earlier version
+description: Browse the versions GEDRoots keeps of your tree, see what each one changed, undo one change, follow the history of one record, and restore a version or save it as a copy.
+---
+
+GEDRoots saves your tree as you work and keeps its earlier versions in a hidden folder next to the file, `.yourtree.ged.history`. A sync service such as Dropbox, iCloud Drive or OneDrive keeps that folder with the file, so the history follows the tree from one computer to another.
+
+## Browse the versions
+
+Select **File › Revert To › Browse All Versions…**. The versions are listed newest first, grouped by day:
+
+- **Saved**: while you edit, at most every five minutes, and each time you quit;
+- a name you gave, marked **Named**: see [Keep a version under a name](#keep-a-version-under-a-name);
+- **Changed Outside GEDRoots**: another program or a sync service changed the file;
+- what an AI agent did, marked with its name: each proposal you accept in **To Review** is a version of its own;
+- **Restore Point**: the tree just before an operation that changes many records, such as merging two people, **Fix All** in Quality, or the conversions of the import wizard;
+- **Restored**: you brought an earlier version back or undid a change;
+- **First Opened in GEDRoots**: the file as GEDRoots first found it.
+
+Select a version, or move with <kbd>↑</kbd> and <kbd>↓</kbd>, to see the records it added, changed and removed since the version before it. Click a record that still exists to open it.
+
+## Restore a version
+
+Select the version and click **Restore This Version**. Nothing is overwritten: the tree as it was becomes your current tree and is saved as a new version, and the version you had stays in the history. **Edit › Undo** takes you back right away.
+
+To go back to the tree as it was when you opened it, select **File › Revert To › Last Opened**.
+
+## Undo one change
+
+To undo only what one version changed, for example a proposal of an AI agent accepted an hour ago, select it and click **Undo This Change**. Each record it changed goes back to how it was before, and the rest of your work stays. A record you changed again since is left as it is, and GEDRoots tells you how many.
+
+To look at an old version without changing your tree, click **Save a Copy…**: it is saved as a separate `.ged` file that you can open next to yours.
+
+## Follow the history of a record
+
+Select a person, a family or any record, then **Edit › Record History…** (also in the record's context menu). Each change made to it is listed, newest first, with the fields that changed, what they were before and what they became: “Birth › Date: about 1764 → 12 Mar 1764”.
+
+Click **Restore This State** to bring the record back as it was after the selected change, or **Show in Version History** to see everything that version changed.
+
+## Keep a version under a name
+
+Before a big change, such as merging a branch or importing someone else's research, select **File › Save Version…** and give the version a name. Named versions are kept until you delete them.
+
+## How long versions are kept
+
+| Versions | Kept |
+| --- | --- |
+| The last 24 hours | All of them |
+| The last 30 days | The last one of each day |
+| Before that | The last one of each week |
+| Named versions | Until you delete them |
+| Restore points, AI agent changes, changed outside GEDRoots | 30 days |
+
+Only the records that changed take room: a hundred versions of a tree of a few thousand people take a few megabytes.
