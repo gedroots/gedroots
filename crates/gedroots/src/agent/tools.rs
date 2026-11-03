@@ -2,7 +2,7 @@
 //! `propose_act` and `propose_change`, only add a proposal to review in the app.
 
 use super::change::{self, ChangeParams, ChangeProposed};
-use super::propose::{self, MatchParams, Pending, ProposeParams};
+use super::propose::{self, Decision, Hypothesis, MatchParams, Pending, ProposeParams};
 use super::{Request, Snapshot};
 use axum::extract::State;
 use axum::http::{StatusCode, header};
@@ -21,6 +21,8 @@ use tokio_util::sync::CancellationToken;
 #[derive(Clone)]
 pub struct GedrootsMcp {
     bridge: async_channel::Sender<Request>,
+    /// Decisions already told to this session's agent.
+    told: std::sync::Arc<std::sync::atomic::AtomicUsize>,
     prompt_router: rmcp::handler::server::router::prompt::PromptRouter<Self>,
 }
 
@@ -96,7 +98,17 @@ pub struct Sources {
 }
 
 #[derive(Debug, Serialize, JsonSchema)]
+pub struct NewPerson {
+    /// Temporary id: link it (`identity` link) to name the same new person in another proposal.
+    pub id: String,
+    pub role: String,
+    pub name: String,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
 pub struct Proposed {
+    /// Id of the proposal (`P3`): give it in `replaces` to correct it, or to `withdraw_proposal`.
+    pub id: String,
     /// Always "waiting for review": the user compares and saves it in GEDRoots.
     pub status: String,
     /// Proposals waiting for review in GEDRoots.
@@ -104,6 +116,53 @@ pub struct Proposed {
     /// What saving it will write, one line per change the user reviews (deduced facts included):
     /// check it against the act.
     pub will_write: Vec<String>,
+    /// The people it creates, with their temporary id.
+    pub new_people: Vec<NewPerson>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct ProposalId {
+    /// Id of a waiting proposal (`P3`), from `propose_act` or `list_proposals`.
+    pub id: String,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct ProposalPerson {
+    pub role: String,
+    pub name: String,
+    /// link, create or mention.
+    pub identity: String,
+    /// Id in the tree (link), or temporary id (create).
+    pub id: Option<String>,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct WaitingProposal {
+    pub id: String,
+    /// What is proposed: "act" (a record found in the archives).
+    pub kind: String,
+    /// GEDCOM tag of the act's event, and its date.
+    pub event: String,
+    pub date: String,
+    /// Reference of the act in its source.
+    pub page: String,
+    pub people: Vec<ProposalPerson>,
+    /// What saving it will write, as `propose_act` answered.
+    pub will_write: Vec<String>,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct Proposals {
+    /// Waiting for the user in the review page, in its order.
+    pub waiting: Vec<WaitingProposal>,
+    /// What became of the others since GEDRoots started, most recent first.
+    pub decided: Vec<Decision>,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct Withdrawn {
+    /// Proposals still waiting for review.
+    pub waiting: usize,
 }
 
 #[derive(Debug, Serialize, JsonSchema)]
@@ -156,13 +215,36 @@ pub struct Gaps {
     pub total: usize,
 }
 
+/// A tool's answer, with what the user decided about the proposals since the agent's last call.
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct Answer<T> {
+    #[serde(flatten)]
+    pub result: T,
+    /// What the user did with the proposals since your last call: saved (with the ids the new
+    /// people now have in the tree: link those), rejected, opened in record entry. Only present
+    /// when something happened.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub news: Vec<Decision>,
+}
+
 /// Error returned to the agent (tool result marked as an error, which it can read and correct).
-type Res<T> = Result<Json<T>, String>;
+type Res<T> = Result<Json<Answer<T>>, String>;
+
+/// Most news given at once (a new session gets the latest ones).
+const NEWS: usize = 20;
 
 #[tool_router]
 impl GedrootsMcp {
     pub fn new(bridge: async_channel::Sender<Request>) -> Self {
-        Self { bridge, prompt_router: Self::prompt_router() }
+        Self { bridge, told: Default::default(), prompt_router: Self::prompt_router() }
+    }
+
+    /// The answer, with the decisions this session has not been told yet.
+    fn answer<T>(&self, s: &Snapshot, result: T) -> Res<T> {
+        let all = &s.queue.decided;
+        let from = self.told.swap(all.len(), std::sync::atomic::Ordering::Relaxed).min(all.len());
+        let news = all[from.max(all.len().saturating_sub(NEWS))..].to_vec();
+        Ok(Json(Answer { result, news }))
     }
 
     async fn snapshot(&self) -> Result<Snapshot, String> {
@@ -180,19 +262,22 @@ impl GedrootsMcp {
         let s = self.snapshot().await?;
         let g = &s.ged;
         let year = current_year();
-        Ok(Json(FileInfo {
-            file: s
-                .path
-                .as_ref()
-                .and_then(|p| p.file_name())
-                .map(|n| n.to_string_lossy().into_owned())
-                .unwrap_or_default(),
-            people: g.count(RecordKind::Individual),
-            families: g.count(RecordKind::Family),
-            sources: g.count(RecordKind::Source),
-            media: g.count(RecordKind::Media),
-            root: g.root().map(|r| g.person_ref(&r, year)),
-        }))
+        self.answer(
+            &s,
+            FileInfo {
+                file: s
+                    .path
+                    .as_ref()
+                    .and_then(|p| p.file_name())
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default(),
+                people: g.count(RecordKind::Individual),
+                families: g.count(RecordKind::Family),
+                sources: g.count(RecordKind::Source),
+                media: g.count(RecordKind::Media),
+                root: g.root().map(|r| g.person_ref(&r, year)),
+            },
+        )
     }
 
     #[tool(
@@ -202,7 +287,10 @@ impl GedrootsMcp {
     )]
     async fn search(&self, Parameters(p): Parameters<SearchParams>) -> Res<People> {
         let s = self.snapshot().await?;
-        Ok(Json(People { people: s.ged.search_people(&p.query, p.limit.unwrap_or(50).min(500), current_year()) }))
+        self.answer(
+            &s,
+            People { people: s.ged.search_people(&p.query, p.limit.unwrap_or(50).min(500), current_year()) },
+        )
     }
 
     #[tool(
@@ -216,7 +304,8 @@ impl GedrootsMcp {
         if s.ged.individual(id).is_none() {
             return Err(format!("no person with id {id}"));
         }
-        s.ged.person_sheet(id, current_year()).map(Json).ok_or_else(|| format!("no person with id {id}"))
+        let sheet = s.ged.person_sheet(id, current_year()).ok_or_else(|| format!("no person with id {id}"))?;
+        self.answer(&s, sheet)
     }
 
     #[tool(
@@ -231,7 +320,7 @@ impl GedrootsMcp {
         }
         let all = s.ged.research_gaps(p.generations.unwrap_or(6).clamp(1, 12), current_year());
         let total = all.len();
-        Ok(Json(Gaps { gaps: all.into_iter().take(p.limit.unwrap_or(100)).collect(), total }))
+        self.answer(&s, Gaps { gaps: all.into_iter().take(p.limit.unwrap_or(100)).collect(), total })
     }
 
     #[tool(
@@ -251,7 +340,8 @@ impl GedrootsMcp {
             include_hidden: p.include_hidden.unwrap_or(false),
         };
         let limit = p.limit.unwrap_or(100).min(500);
-        s.ged.quality_report(&issues, &filter, p.offset.unwrap_or(0), limit, current_year()).map(Json)
+        let report = s.ged.quality_report(&issues, &filter, p.offset.unwrap_or(0), limit, current_year())?;
+        self.answer(&s, report)
     }
 
     #[tool(
@@ -302,7 +392,7 @@ impl GedrootsMcp {
             .filter(|r| matches(&r.name))
             .take(limit)
             .collect();
-        Ok(Json(Sources { sources, repositories }))
+        self.answer(&s, Sources { sources, repositories })
     }
 
     #[tool(
@@ -334,12 +424,12 @@ impl GedrootsMcp {
                     .collect(),
             })
             .collect();
-        Ok(Json(Matches { people }))
+        self.answer(&s, Matches { people })
     }
 
     #[tool(
         name = "propose_act",
-        description = "Proposes an act found in the archives (birth, marriage, death…), with its source, people and image. Nothing is written: the proposal waits in GEDRoots' review page, where the user compares it with the tree and saves or rejects it. Each person says who they are: identity link (in the tree, with id), create or mention; call match_people first. Give every other fact the act states about a person in their `facts` (birth date in a baptism, marginal mention of a death, occupations, residences), each with its own date or none; the answer lists everything that will be written. It is refused, with the reason, if it does not fit the tree (unknown source or person, one source per act or per register as the file does, a parent other than the tree's, a person to create who resembles someone of the tree, impossible date): fix it and propose again. Give the place as the tree names it, the date in GEDCOM format, the downloaded file (a PDF register needs pdf_page) and the act's page in the archive's viewer (url): both are kept, the image and a web link.",
+        description = "Proposes an act found in the archives (birth, marriage, death…), with its source, people and image. Nothing is written: the proposal waits in GEDRoots' review page, where the user compares it with the tree and saves or rejects it. Each person says who they are: identity link (in the tree, with id), create or mention; call match_people first. Give every other fact the act states about a person in their `facts` (birth date in a baptism, marginal mention of a death, occupations, residences), each with its own date or none; the answer lists everything that will be written, the proposal's id (to correct it, propose it again with `replaces`) and the temporary id of each new person (link it to name the same person in another proposal: never create them twice). It is refused, with the reason, if it does not fit the tree (unknown source or person, one source per act or per register as the file does, a parent other than the tree's, a person to create who resembles someone of the tree, impossible date): fix it and propose again. Give the place as the tree names it, the date in GEDCOM format, the downloaded file (a PDF register needs pdf_page) and the act's page in the archive's viewer (url): both are kept, the image and a web link.",
         annotations(
             read_only_hint = false,
             destructive_hint = false,
@@ -349,10 +439,26 @@ impl GedrootsMcp {
     )]
     async fn propose(&self, Parameters(p): Parameters<ProposeParams>) -> Res<Proposed> {
         let s = self.snapshot().await?;
+        let replaces = p.replaces.as_deref().map(str::trim).filter(|r| !r.is_empty()).map(str::to_string);
+        if let Some(r) = &replaces
+            && !s.queue.waiting.iter().any(|w| &w.id == r)
+        {
+            return Err(match s.queue.decided.iter().rev().find(|d| &d.id == r) {
+                Some(_) => format!("proposal {r} is no longer waiting for review: call list_proposals"),
+                None => format!("no proposal {r}: call list_proposals"),
+            });
+        }
+        // Checked against the tree with the other waiting proposals saved.
+        let h = Hypothesis::new(&s.ged, &s.queue, replaces.as_deref());
         let mut proposal = propose::to_proposal(&p)?;
-        proposal.complete(&s.ged);
-        proposal.check(&s.ged)?;
-        propose::check_identities(&proposal, &propose::ruled_out(&p), &s.ged)?;
+        let temps = h.resolve(&mut proposal, &s.ged)?;
+        proposal.complete(&h.ged);
+        proposal.check(&h.ged)?;
+        propose::check_identities(&proposal, &propose::ruled_out(&p), &h)?;
+        // As the review page will show it: against the tree, a person another proposal creates is
+        // created by this one too.
+        h.unresolve(&mut proposal, &temps);
+        let will_write = propose::effects(&proposal, &s.ged);
         let original =
             p.file.as_ref().map(|f| std::path::PathBuf::from(f.trim())).filter(|f| !f.as_os_str().is_empty());
         // An act found online is kept twice: its image (downloaded file) and its web page.
@@ -378,15 +484,91 @@ impl GedrootsMcp {
             None => (None, None),
         };
         propose::attach(&mut proposal, image.as_deref());
-        let will_write = propose::effects(&proposal, &s.ged);
-        let pending = Pending { proposal, original, pdf_page: p.pdf_page, image, preview };
+        let people: Vec<(String, String)> = (0..proposal.act.participants.len())
+            .map(|i| (proposal.act.role_label(i).into_owned(), proposal.act.participants[i].display_name()))
+            .collect();
+        let pending = Pending { proposal, original, pdf_page: p.pdf_page, image, preview, temps, replaces };
         let (tx, rx) = tokio::sync::oneshot::channel();
         self.bridge
             .send(Request::Propose(Box::new(pending), tx))
             .await
             .map_err(|_| "GEDRoots is closing".to_string())?;
+        let queued = rx.await.map_err(|_| "GEDRoots is closing".to_string())??;
+        let new_people = queued
+            .temps
+            .iter()
+            .zip(people)
+            .filter_map(|(t, (role, name))| Some(NewPerson { id: t.clone()?, role, name }))
+            .collect();
+        self.answer(
+            &s,
+            Proposed {
+                id: queued.id,
+                status: "waiting for review".into(),
+                waiting: queued.waiting,
+                will_write,
+                new_people,
+            },
+        )
+    }
+
+    #[tool(
+        name = "list_proposals",
+        description = "The proposals waiting in GEDRoots' review page (id, act, people with their temporary ids, what each will write) and what became of the others: saved, rejected, opened in record entry by the user, withdrawn or replaced. Call it before proposing again, to correct a waiting proposal (propose_act with `replaces`) rather than send it twice.",
+        annotations(read_only_hint = true, open_world_hint = false)
+    )]
+    async fn list_proposals(&self) -> Res<Proposals> {
+        let s = self.snapshot().await?;
+        let waiting = s
+            .queue
+            .waiting
+            .iter()
+            .map(|w| {
+                let act = &w.proposal.act;
+                let people = act
+                    .participants
+                    .iter()
+                    .enumerate()
+                    .map(|(i, x)| {
+                        let (identity, id) = match &x.choice {
+                            gedcom::PersonChoice::Link(id) => ("link", Some(id.clone())),
+                            gedcom::PersonChoice::Create => ("create", w.temps.get(i).cloned().flatten()),
+                            gedcom::PersonChoice::Mention => ("mention", None),
+                        };
+                        ProposalPerson {
+                            role: act.role_label(i).into_owned(),
+                            name: x.display_name(),
+                            identity: identity.into(),
+                            id,
+                        }
+                    })
+                    .collect();
+                WaitingProposal {
+                    id: w.id.clone(),
+                    kind: "act".into(),
+                    event: act.event.clone(),
+                    date: act.date.clone(),
+                    page: act.page.clone(),
+                    people,
+                    will_write: propose::effects(&w.proposal, &s.ged),
+                }
+            })
+            .collect();
+        let decided = s.queue.decided.iter().rev().take(50).cloned().collect();
+        self.answer(&s, Proposals { waiting, decided })
+    }
+
+    #[tool(
+        name = "withdraw_proposal",
+        description = "Takes back a proposal still waiting in GEDRoots' review page (wrong act, wrong person…). Nothing was written. To correct it instead, call propose_act with `replaces`.",
+        annotations(read_only_hint = false, destructive_hint = false, idempotent_hint = true, open_world_hint = false)
+    )]
+    async fn withdraw(&self, Parameters(p): Parameters<ProposalId>) -> Res<Withdrawn> {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        self.bridge.send(Request::Withdraw(p.id, tx)).await.map_err(|_| "GEDRoots is closing".to_string())?;
         let waiting = rx.await.map_err(|_| "GEDRoots is closing".to_string())??;
-        Ok(Json(Proposed { status: "waiting for review".into(), waiting, will_write }))
+        let s = self.snapshot().await?;
+        self.answer(&s, Withdrawn { waiting })
     }
 
     #[tool(
@@ -407,7 +589,8 @@ impl GedrootsMcp {
             .await
             .map_err(|_| "GEDRoots is closing".to_string())?;
         let (waiting, new_issues) = rx.await.map_err(|_| "GEDRoots is closing".to_string())??;
-        Ok(Json(ChangeProposed { status: "waiting for review".into(), waiting, new_issues }))
+        let s = self.snapshot().await?;
+        self.answer(&s, ChangeProposed { status: "waiting for review".into(), waiting, new_issues })
     }
 }
 
@@ -422,8 +605,12 @@ only for passing between tools: never show them to the user. To look for records
 death acts), call `research_gaps`, then `person_sheet` on the person to learn their places, dates \
 and the sources already cited. When you find an act, read it, check it matches the person, \
 call `match_people` to know who each person named is in the tree (link them, create them or only \
-mention them), `search_sources` to reuse the source or repository, then `propose_act`. The prompts \
-`find_record` and `read_record` give the full method. To improve the data, `quality_issues` lists \
+mention them), `search_sources` to reuse the source or repository, then `propose_act`. A person \
+that a waiting proposal creates has a temporary id (new-3): link it to name them again. To correct a \
+waiting act, propose it again with `replaces`; `list_proposals` says which are still waiting. \
+Every answer carries `news` when the user saved, rejected or edited a proposal since your last call: \
+a saved proposal gives the ids its new people now have in the tree, to link from then on. \
+The prompts `find_record` and `read_record` give the full method. To improve the data, `quality_issues` lists \
 the tree's Data Quality issues and `propose_change` fixes, edits or hides one; the prompt \
 `review_quality` gives the method."
 )]
@@ -529,11 +716,12 @@ mod tests {
             while let Ok(req) = rx.recv_blocking() {
                 match req {
                     Request::Snapshot(reply) => {
-                        let _ = reply.send(Some(Snapshot { path: None, ged: ged() }));
+                        let _ = reply.send(Some(Snapshot { path: None, ged: ged(), queue: Default::default() }));
                     }
                     Request::Quality(reply) => {
                         let issues = gedcom::quality::run(&ged());
-                        let _ = reply.send(Some((Snapshot { path: None, ged: ged() }, issues)));
+                        let _ =
+                            reply.send(Some((Snapshot { path: None, ged: ged(), queue: Default::default() }, issues)));
                     }
                     _ => break,
                 }
@@ -563,11 +751,11 @@ mod tests {
         let (_, _, list) =
             post(port, "secret", Some(&sid), serde_json::json!({"jsonrpc":"2.0","id":2,"method":"tools/list"}));
         let tools = list["result"]["tools"].as_array().expect("tools");
-        assert_eq!(tools.len(), 9);
+        assert_eq!(tools.len(), 11);
         // Only the proposals are not read only, and they write nothing.
         let writers: Vec<_> =
             tools.iter().filter(|t| t["annotations"]["readOnlyHint"] != true).map(|t| t["name"].clone()).collect();
-        assert_eq!(writers, ["propose_act", "propose_change"]);
+        assert_eq!(writers, ["propose_act", "propose_change", "withdraw_proposal"]);
         let (_, _, call) = post(
             port,
             "secret",

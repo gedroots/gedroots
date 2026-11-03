@@ -24,8 +24,9 @@ When you save, GEDRoots updates two lines of the header: the software that saved
 ## Safety nets
 
 - **Undo.** Every change, including bulk fixes and imports, can be undone, up to 50 steps.
+- **Automatic save.** Your changes are written to the `.ged` file a second after you make them, when you switch to another window and when you quit. A new or imported tree is saved automatically once you have chosen where to save it with **File › Save**. If another program, or a sync service such as Dropbox, changes the file while it is open, GEDRoots reloads it, or keeps your changes and puts the other copy in the version history.
 - **Backup copy.** Each time you save, the previous version is kept as `yourtree.ged.bak` next to the file.
-- **Version history.** Each save is also kept in a hidden folder next to the file, `.yourtree.ged.history`, so that earlier versions of the tree can be brought back. Only the records that changed take room.
+- **Version history.** Your tree is also kept, at most every five minutes while you edit and each time you quit, in a hidden folder next to the file, `.yourtree.ged.history`, so that earlier versions of the tree can be brought back. Only the records that changed take room.
 - **Validation.** The raw GEDCOM editor checks what you type against the official GEDCOM 7 schema before applying it. The [Data Quality](/workflows/quality) page checks the whole file.
 
 ## When GEDCOM 7 has no field
