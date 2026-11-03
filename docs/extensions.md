@@ -209,12 +209,14 @@ tag).
 
 - **Under**: any record (`INDI`, `FAM`…), at level 1.
 - **Value**: the issue code (see below). One line per hidden issue.
-- **Substructures**: none.
+- **Substructures**: `NOTE` (optional): why the issue is correct, as written by an AI agent that
+  proposed hiding it (`propose_change`) and shown on the Data Quality page.
 
 ```
 0 @I263@ INDI
 1 NAME Antoine /GIRAUDON/
 1 _GR_IGNORE marriage_too_young
+2 NOTE The marriage act gives her age as 14, with her parents' consent
 ```
 
 Hidden issues are listed in **File › File Settings…**, where they can be shown again (the tag

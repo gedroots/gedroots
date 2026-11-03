@@ -1,6 +1,7 @@
-//! GEDRoots' MCP tools and the HTTP server that serves them. They read the file; the only writing
-//! tool, `propose_act`, adds a proposal to review in the app.
+//! GEDRoots' MCP tools and the HTTP server that serves them. They read the file; the writing tools,
+//! `propose_act` and `propose_change`, only add a proposal to review in the app.
 
+use super::change::{self, ChangeParams, ChangeProposed};
 use super::propose::{self, MatchParams, Pending, ProposeParams};
 use super::{Request, Snapshot};
 use axum::extract::State;
@@ -387,22 +388,44 @@ impl GedrootsMcp {
         let waiting = rx.await.map_err(|_| "GEDRoots is closing".to_string())??;
         Ok(Json(Proposed { status: "waiting for review".into(), waiting, will_write }))
     }
+
+    #[tool(
+        name = "propose_change",
+        description = "Proposes a change for a Data Quality issue (`quality_issues`). Nothing is written: it waits in GEDRoots' review page, where the user saves or rejects it. `fix` applies the Quality page's own fix (issues with `automatic_fix`). `edit` changes the records the issue is about, with the edits the issue lists in `edits` (a date read in the act, the sex of a spouse, a place's coordinates, a citation of an existing source…). `hide` keeps the issue as right, for instance a marriage really celebrated very young, and saves the reason with it. Give `reason` (what you read) and, when you can, `evidence`. Never hide an issue only to clear the list. It is refused, with the reason, if the edit is not one the issue allows, touches another record, or does not make the issue go away: GEDRoots applies it to a copy first. The answer lists the issues the change would create.",
+        annotations(
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
+    )]
+    async fn propose_change(&self, Parameters(p): Parameters<ChangeParams>) -> Res<ChangeProposed> {
+        let req = change::to_request(&p)?;
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        self.bridge
+            .send(Request::ProposeChange(Box::new(req), tx))
+            .await
+            .map_err(|_| "GEDRoots is closing".to_string())?;
+        let (waiting, new_issues) = rx.await.map_err(|_| "GEDRoots is closing".to_string())??;
+        Ok(Json(ChangeProposed { status: "waiting for review".into(), waiting, new_issues }))
+    }
 }
 
 // Instructions given to the agent on connection.
 #[tool_handler(
     name = "gedroots",
     instructions = "GEDRoots is a genealogy app. These tools read the GEDCOM 7 family tree open in \
-the app (its active window). They never change it: `propose_act` only adds an act to the \
-app's review page, where the user compares it with the tree before saving it. Of a living person, only \
+the app (its active window). They never change it: `propose_act` and `propose_change` only add \
+a proposal to the app's review page, where the user compares it with the tree before saving it. Of a living person, only \
 what identifies them is given (name, birth, close relatives). Ids (I12, F3, S4…) are \
 only for passing between tools: never show them to the user. To look for records (birth, marriage, \
 death acts), call `research_gaps`, then `person_sheet` on the person to learn their places, dates \
 and the sources already cited. When you find an act, read it, check it matches the person, \
 call `match_people` to know who each person named is in the tree (link them, create them or only \
 mention them), `search_sources` to reuse the source or repository, then `propose_act`. The prompts \
-`find_record` and `read_record` give the full method. `quality_issues` lists the tree's Data \
-Quality issues; `person_sheet` gives the events involved."
+`find_record` and `read_record` give the full method. To improve the data, `quality_issues` lists \
+the tree's Data Quality issues and `propose_change` fixes, edits or hides one; the prompt \
+`review_quality` gives the method."
 )]
 #[prompt_handler(router = self.prompt_router)]
 impl ServerHandler for GedrootsMcp {
@@ -540,11 +563,11 @@ mod tests {
         let (_, _, list) =
             post(port, "secret", Some(&sid), serde_json::json!({"jsonrpc":"2.0","id":2,"method":"tools/list"}));
         let tools = list["result"]["tools"].as_array().expect("tools");
-        assert_eq!(tools.len(), 8);
-        // Only `propose_act` is not read only, and it writes nothing.
+        assert_eq!(tools.len(), 9);
+        // Only the proposals are not read only, and they write nothing.
         let writers: Vec<_> =
             tools.iter().filter(|t| t["annotations"]["readOnlyHint"] != true).map(|t| t["name"].clone()).collect();
-        assert_eq!(writers, ["propose_act"]);
+        assert_eq!(writers, ["propose_act", "propose_change"]);
         let (_, _, call) = post(
             port,
             "secret",
@@ -572,7 +595,7 @@ mod tests {
             post(port, "secret", Some(&sid), serde_json::json!({"jsonrpc":"2.0","id":4,"method":"prompts/list"}));
         let names: Vec<_> =
             prompts["result"]["prompts"].as_array().expect("prompts").iter().map(|p| p["name"].clone()).collect();
-        assert_eq!(names.len(), 2, "{prompts}");
+        assert_eq!(names.len(), 3, "{prompts}");
         assert!(names.contains(&"find_record".into()) && names.contains(&"read_record".into()));
         let (_, _, got) = post(
             port,

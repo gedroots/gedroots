@@ -151,8 +151,11 @@ pub struct QualityIssue {
     pub kind: String,
     /// `error`, `warning` or `info`.
     pub severity: String,
-    /// The issue as the Quality page states it.
+    /// The issue as the Quality page states it, and its detail when it has one (likelihood and
+    /// clues of a possible duplicate).
     pub message: String,
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "String::is_empty"))]
+    pub detail: String,
     /// Main record (the one the Quality page opens); absent for an issue about places or files.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub record: Option<RecordRef>,
@@ -165,6 +168,9 @@ pub struct QualityIssue {
     /// The Quality page fixes it in one click; `batch_fix`: for the whole list at once.
     pub automatic_fix: bool,
     pub batch_fix: bool,
+    /// Edits `propose_change` accepts for it (`set_event`, `set_sex`…); empty: fix or hide only.
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Vec::is_empty"))]
+    pub edits: Vec<String>,
     /// The user can hide it on the Quality page, when they checked it is right.
     pub can_hide: bool,
     /// Hidden by the user.
@@ -455,11 +461,13 @@ impl Gedcom {
                     }
                     .to_string(),
                     message: i.message.clone(),
+                    detail: i.detail.clone(),
                     record: self.record_ref(&i.xref, this_year),
                     related: related.iter().filter_map(|x| self.record_ref(x, this_year)).collect(),
                     values: values.into_iter().cloned().collect(),
                     automatic_fix: fix.is_some(),
                     batch_fix: fix.is_some_and(|f| f.batch.is_some()),
+                    edits: crate::change::edits_for(i.code).iter().map(|e| e.to_string()).collect(),
                     can_hide: self.get(&i.xref).is_some(),
                     hidden: i.ignored,
                 }
@@ -683,6 +691,7 @@ mod tests {
         assert_eq!(death.record.as_ref().unwrap().kind, "person");
         assert!(!death.record.as_ref().unwrap().living);
         assert!(!death.automatic_fix && death.can_hide && !death.hidden);
+        assert_eq!(death.edits, ["set_event", "delete_event"]);
         // Places without coordinates: no record, the place as value.
         let coords = all.issues.iter().find(|i| i.code == "missing_coords").unwrap();
         assert!(coords.record.is_none() && !coords.can_hide);
