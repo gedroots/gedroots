@@ -2392,6 +2392,7 @@ dependencies = [
  "rust-i18n",
  "schemars",
  "serde",
+ "serde-saphyr",
  "uuid",
  "windows-sys 0.61.2",
 ]

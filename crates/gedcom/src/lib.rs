@@ -11,6 +11,7 @@
 //! - [`search`]: search and filters on individuals;
 //! - [`relations`]: adding/linking/removing relatives, places and media;
 //! - [`research`]: records and search for AI agents (read only, living people hidden);
+//! - [`atlas`]: the Atlas, country by country (which records were kept, access delays, ages);
 //! - [`leads`]: records to find (period, places, where to look); [`research_log`]: what was searched (`_GR_TASK`);
 //! - [`events`]: editing and deleting events;
 //! - [`duplicates`]: possible duplicate individuals, “not a duplicate” marks; [`merge`]: merging two individuals;
@@ -46,6 +47,7 @@ pub mod i18n;
 pub mod act;
 pub mod analysis;
 pub mod associations;
+pub mod atlas;
 pub mod change;
 pub mod complete;
 pub mod context;

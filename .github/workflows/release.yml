@@ -71,9 +71,11 @@ jobs:
         os: [macos-latest, windows-latest, ubuntu-22.04]
     runs-on: ${{ matrix.os }}
     steps:
+      # With the Atlas (crates/gedcom/atlas), embedded at build time.
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.prepare.outputs.version && format('v{0}', needs.prepare.outputs.version) || '' }}
+          submodules: true
       - name: GPUI's system libraries, and mksquashfs for the AppImage
         if: runner.os == 'Linux'
         run: |
