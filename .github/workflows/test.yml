@@ -37,8 +37,12 @@ jobs:
       - uses: jdx/mise-action@v5
         with:
           version: 2026.10.25
-      # Downloaded crates and build outputs: they follow Cargo.lock.
-      - uses: actions/cache@v6
+      # Downloaded crates and build outputs: they follow Cargo.lock. Only main saves them: a
+      # pull request's copy could only be read by that pull request, and those copies filled the
+      # repository's 10 GB, evicting main's cache.
+      - name: Restore the crates and build outputs
+        id: cache
+        uses: actions/cache/restore@v6
         with:
           path: |
             ~/.cargo/registry/index
@@ -48,3 +52,13 @@ jobs:
           key: ${{ github.job }}-${{ runner.os }}-${{ hashFiles('mise.lock', 'Cargo.lock') }}
           restore-keys: ${{ github.job }}-${{ runner.os }}-
       - run: mise run ci
+      - name: Save the crates and build outputs
+        if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: ${{ steps.cache.outputs.cache-primary-key }}
