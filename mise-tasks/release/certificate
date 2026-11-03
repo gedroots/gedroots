@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+#MISE description="Create GEDRoots' macOS signing certificate and store it in the repository secrets (once)"
+#MISE hide=true
+#USAGE flag "--throwaway" help="Print a throwaway certificate as lines for $GITHUB_ENV instead of storing it (tests the signature of pull request builds)"
+#
+# macOS remembers the permissions given to an app (folders, local network…) for its code identity.
+# An ad hoc signature has none that lasts: each version is a new app, and macOS asks again after
+# every update. A self-signed certificate gives a stable identity for free (it does not replace an
+# Apple Developer ID: Gatekeeper still asks to confirm the first launch).
+#
+# Run it once, with `gh` signed in with access to the repository's secrets. Never run it again
+# unless the certificate is lost or compromised: a new certificate is a new identity, and every
+# user is asked for the permissions once more. It is valid for 30 years.
+set -euo pipefail
+
+REPO=$(sed -n 's/^repository = "\(.*\)"/\1/p' Cargo.toml | head -n 1)
+REPO=${REPO#https://github.com/}
+NAME="GEDRoots Code Signing"
+throwaway=${usage_throwaway:-false}
+
+if [ "$throwaway" != true ] && gh secret list --repo "$REPO" --json name --jq '.[].name' | grep -qx MACOS_CERTIFICATE; then
+	echo "The MACOS_CERTIFICATE secret already exists in $REPO: replacing it would make macOS ask users for the app's permissions again." >&2
+	echo "Delete it first (gh secret delete MACOS_CERTIFICATE --repo $REPO) if that is really what you want." >&2
+	exit 1
+fi
+
+WORK=$(mktemp -d)
+trap 'rm -rf "$WORK"' EXIT
+cat > "$WORK/cert.cnf" << CNF
+[req]
+distinguished_name = dn
+prompt = no
+x509_extensions = ext
+[dn]
+CN = $NAME
+[ext]
+basicConstraints = critical, CA:false
+keyUsage = critical, digitalSignature
+extendedKeyUsage = critical, codeSigning
+subjectKeyIdentifier = hash
+CNF
+openssl req -x509 -newkey rsa:3072 -nodes -days 10950 -config "$WORK/cert.cnf" \
+	-keyout "$WORK/key.pem" -out "$WORK/cert.pem" 2> /dev/null
+PASSWORD=$(openssl rand -hex 24)
+# macOS' `security import` only reads the older .p12 encryption: `-legacy` on OpenSSL 3
+# (LibreSSL, macOS' `openssl`, uses it by default).
+legacy=()
+if openssl version | grep -q '^OpenSSL 3'; then
+	legacy=(-legacy)
+fi
+openssl pkcs12 -export ${legacy[@]+"${legacy[@]}"} -name "$NAME" -inkey "$WORK/key.pem" -in "$WORK/cert.pem" \
+	-passout "pass:$PASSWORD" -out "$WORK/cert.p12"
+
+if [ "$throwaway" = true ]; then
+	echo "MACOS_CERTIFICATE=$(base64 < "$WORK/cert.p12" | tr -d '\n')"
+	echo "MACOS_CERTIFICATE_PASSWORD=$PASSWORD"
+	exit 0
+fi
+base64 < "$WORK/cert.p12" | tr -d '\n' | gh secret set MACOS_CERTIFICATE --repo "$REPO"
+printf '%s' "$PASSWORD" | gh secret set MACOS_CERTIFICATE_PASSWORD --repo "$REPO"
+echo "→ MACOS_CERTIFICATE and MACOS_CERTIFICATE_PASSWORD set in $REPO ($(openssl x509 -in "$WORK/cert.pem" -noout -fingerprint -sha256))"

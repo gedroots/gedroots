@@ -15,6 +15,7 @@ on:
       - .github/workflows/release.yml
       - mise-tasks/package
       - mise-tasks/bundle
+      - mise-tasks/release/certificate
       - mise.release.toml
       - packaging/**
       - crates/gedroots/build.rs
@@ -99,9 +100,18 @@ jobs:
           restore-keys: |
             release-${{ runner.os }}-${{ hashFiles('mise.lock', 'Cargo.lock') }}-
             release-${{ runner.os }}-
+      # Pull requests without the secret test the signature with a throwaway certificate.
+      - name: Throwaway signing certificate
+        if: runner.os == 'macOS' && github.event_name == 'pull_request'
+        run: mise run release:certificate --throwaway >> "$GITHUB_ENV"
       - name: Installers and update packages
         shell: bash
         run: mise run package ${{ github.event_name != 'pull_request' && '--upload' || '' }}
+        env:
+          # macOS: GEDRoots' self-signed certificate (`mise run release:certificate`), so that
+          # macOS keeps the app's permissions after an update.
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE || env.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD || env.MACOS_CERTIFICATE_PASSWORD }}
       - if: github.event_name == 'pull_request'
         uses: actions/upload-artifact@v7
         with:
