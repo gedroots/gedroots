@@ -44,7 +44,9 @@ How to work:
    person found in another act before the user saved the first one (a father in two baptisms) is
    linked with that temporary id, never created twice. If you find a mistake in a proposal still
    waiting, propose it again with `replaces` (its id), or withdraw it with `withdraw_proposal`.
-9. Before the next proposal, call `list_proposals` and read the people again (`person_sheet`):
-   the user may have saved, changed or rejected the previous one in the meantime.
+9. Every answer of GEDRoots carries `news` when the user saved, rejected or edited one of your
+   proposals since your last call. Tell the user, and once a proposal is saved, link its new
+   people by the id they now have in the tree. Before the next proposal, read the people again
+   (`person_sheet`): the user may have changed them in record entry.
 
 Never show GEDRoots ids (I12, S4…) to the user.

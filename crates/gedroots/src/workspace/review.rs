@@ -90,7 +90,7 @@ pub(super) struct Review {
     last_id: usize,
     last_temp: usize,
     /// What became of the proposals no longer waiting, for the agent.
-    decided: Vec<(String, Outcome)>,
+    decided: Vec<propose::Decision>,
     /// Temporary id → person saved in the tree.
     saved: std::collections::HashMap<String, String>,
 }
@@ -123,6 +123,10 @@ fn show_date(v: &str) -> String {
 
 fn or_dash(v: &str) -> String {
     if v.trim().is_empty() { "—".into() } else { v.to_string() }
+}
+
+fn decision(id: String, outcome: Outcome) -> propose::Decision {
+    propose::Decision { id, outcome, new_people: Vec::new() }
 }
 
 /// What became of a proposal, for the agent.
@@ -167,8 +171,8 @@ impl Workspace {
         let g = &doc.ged;
         let replaced = match &pending.replaces {
             Some(r) => Some(self.review.items.iter().position(|it| &it.id == r).ok_or_else(|| {
-                match self.review.decided.iter().rev().find(|(id, _)| id == r) {
-                    Some((_, o)) => format!("proposal {r} is no longer waiting: {}", outcome_text(*o)),
+                match self.review.decided.iter().rev().find(|d| &d.id == r) {
+                    Some(d) => format!("proposal {r} is no longer waiting: {}", outcome_text(d.outcome)),
                     None => format!("no proposal {r}"),
                 }
             })?),
@@ -197,7 +201,7 @@ impl Workspace {
         match replaced {
             Some(i) => {
                 let old = std::mem::replace(&mut self.review.items[i], item);
-                self.review.decided.push((old.id, Outcome::Replaced));
+                self.review.decided.push(decision(old.id, Outcome::Replaced));
                 self.set_status(t!("review.replaced"), false);
             }
             None => {
@@ -217,8 +221,8 @@ impl Workspace {
     pub(crate) fn withdraw_proposal(&mut self, id: &str, cx: &mut Context<Self>) -> Result<usize, String> {
         let id = id.trim();
         let Some(i) = self.review.items.iter().position(|it| it.id == id) else {
-            return Err(match self.review.decided.iter().rev().find(|(x, _)| x == id) {
-                Some((_, o)) => format!("proposal {id} is no longer waiting: {}", outcome_text(*o)),
+            return Err(match self.review.decided.iter().rev().find(|d| d.id == id) {
+                Some(d) => format!("proposal {id} is no longer waiting: {}", outcome_text(d.outcome)),
                 None => format!("no proposal {id}"),
             });
         };
@@ -274,7 +278,7 @@ impl Workspace {
         }
         let item = self.review.items.remove(self.review.sel);
         if !item.demo {
-            self.review.decided.push((item.id.clone(), outcome));
+            self.review.decided.push(decision(item.id.clone(), outcome));
         }
         self.review.sel = self.review.sel.min(self.review.items.len().saturating_sub(1));
         if self.review.items.is_empty() {
@@ -324,16 +328,23 @@ impl Workspace {
                     }
                     _ => String::new(),
                 };
-                // The new people are linked in the other proposals that name them.
+                // The new people are linked in the other proposals that name them, and the agent
+                // learns their ids.
+                let mut saved = Vec::new();
                 for (t, x) in temps.iter().zip(&res.persons) {
                     if let (Some(t), Some(x)) = (t, x) {
                         self.review.saved.insert(t.clone(), x.clone());
+                        let name = doc.ged.individual(x).map(|i| i.display_name()).unwrap_or_default();
+                        saved.push(propose::SavedPerson { temp: t.clone(), id: x.clone(), name });
                     }
                 }
                 for it in &mut self.review.items {
                     propose::link_known(&mut it.pending.proposal, &it.pending.temps, &self.review.saved);
                 }
                 self.review_take(Outcome::Saved);
+                if let Some(d) = self.review.decided.last_mut().filter(|d| d.outcome == Outcome::Saved) {
+                    d.new_people = saved;
+                }
                 self.set_status(res.summary() + &note, false);
                 self.tour_did(super::tour::Advance::Decide, cx);
                 self.rebuild_rows(cx);

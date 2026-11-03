@@ -173,6 +173,26 @@ pub enum Outcome {
     Replaced,
 }
 
+/// What became of a proposal.
+#[derive(Debug, Clone, Serialize, JsonSchema)]
+pub struct Decision {
+    pub id: String,
+    pub outcome: Outcome,
+    /// Saved: the new people it created, now in the tree.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub new_people: Vec<SavedPerson>,
+}
+
+/// A new person saved to the tree: link `id` from now on.
+#[derive(Debug, Clone, Serialize, JsonSchema)]
+pub struct SavedPerson {
+    /// The temporary id the proposals gave them.
+    pub temp: String,
+    /// Their id in the tree.
+    pub id: String,
+    pub name: String,
+}
+
 /// A proposal waiting in the review page.
 #[derive(Debug, Clone)]
 pub struct Waiting {
@@ -186,7 +206,7 @@ pub struct Waiting {
 pub struct Queue {
     pub waiting: Vec<Waiting>,
     /// Proposals decided since launch, oldest first.
-    pub decided: Vec<(String, Outcome)>,
+    pub decided: Vec<Decision>,
     /// Temporary id → id of the person saved in the tree.
     pub saved: HashMap<String, String>,
 }

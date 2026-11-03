@@ -58,6 +58,8 @@ In Claude Code, prompts appear as commands: `/mcp__gedroots__find_record` and `/
 
 A proposal is checked against your tree as if the proposals already waiting were saved. A person created by a waiting proposal has a temporary id, such as `new-3`: the agent links it to name the same person in another record, and creating them a second time is refused. Whichever of those records you save first creates the person, and the others link to them.
 
+Each answer of a tool also tells the agent what you did with its proposals since its last call (`news`): saved, with the identifiers the new people now have in your tree, rejected, or opened in the record editor.
+
 A place named like a place of the tree becomes that place. A PDF register page is extracted as a JPEG image when the file's other records are images. The address of the record's page in the archive's viewer becomes a web link of the source.
 
 ## Living people

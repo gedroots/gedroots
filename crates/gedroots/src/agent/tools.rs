@@ -1,7 +1,7 @@
 //! GEDRoots' MCP tools and the HTTP server that serves them. They read the file; the only writing
 //! tool, `propose_act`, adds a proposal to review in the app.
 
-use super::propose::{self, Hypothesis, MatchParams, Outcome, Pending, ProposeParams};
+use super::propose::{self, Decision, Hypothesis, MatchParams, Pending, ProposeParams};
 use super::{Request, Snapshot};
 use axum::extract::State;
 use axum::http::{StatusCode, header};
@@ -20,6 +20,8 @@ use tokio_util::sync::CancellationToken;
 #[derive(Clone)]
 pub struct GedrootsMcp {
     bridge: async_channel::Sender<Request>,
+    /// Decisions already told to this session's agent.
+    told: std::sync::Arc<std::sync::atomic::AtomicUsize>,
     prompt_router: rmcp::handler::server::router::prompt::PromptRouter<Self>,
 }
 
@@ -133,17 +135,11 @@ pub struct WaitingProposal {
 }
 
 #[derive(Debug, Serialize, JsonSchema)]
-pub struct Decided {
-    pub id: String,
-    pub outcome: Outcome,
-}
-
-#[derive(Debug, Serialize, JsonSchema)]
 pub struct Proposals {
     /// Waiting for the user in the review page, in its order.
     pub waiting: Vec<WaitingProposal>,
     /// What became of the others since GEDRoots started, most recent first.
-    pub decided: Vec<Decided>,
+    pub decided: Vec<Decision>,
 }
 
 #[derive(Debug, Serialize, JsonSchema)]
@@ -202,13 +198,36 @@ pub struct Gaps {
     pub total: usize,
 }
 
+/// A tool's answer, with what the user decided about the proposals since the agent's last call.
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct Answer<T> {
+    #[serde(flatten)]
+    pub result: T,
+    /// What the user did with the proposals since your last call: saved (with the ids the new
+    /// people now have in the tree: link those), rejected, opened in record entry. Only present
+    /// when something happened.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub news: Vec<Decision>,
+}
+
 /// Error returned to the agent (tool result marked as an error, which it can read and correct).
-type Res<T> = Result<Json<T>, String>;
+type Res<T> = Result<Json<Answer<T>>, String>;
+
+/// Most news given at once (a new session gets the latest ones).
+const NEWS: usize = 20;
 
 #[tool_router]
 impl GedrootsMcp {
     pub fn new(bridge: async_channel::Sender<Request>) -> Self {
-        Self { bridge, prompt_router: Self::prompt_router() }
+        Self { bridge, told: Default::default(), prompt_router: Self::prompt_router() }
+    }
+
+    /// The answer, with the decisions this session has not been told yet.
+    fn answer<T>(&self, s: &Snapshot, result: T) -> Res<T> {
+        let all = &s.queue.decided;
+        let from = self.told.swap(all.len(), std::sync::atomic::Ordering::Relaxed).min(all.len());
+        let news = all[from.max(all.len().saturating_sub(NEWS))..].to_vec();
+        Ok(Json(Answer { result, news }))
     }
 
     async fn snapshot(&self) -> Result<Snapshot, String> {
@@ -226,19 +245,22 @@ impl GedrootsMcp {
         let s = self.snapshot().await?;
         let g = &s.ged;
         let year = current_year();
-        Ok(Json(FileInfo {
-            file: s
-                .path
-                .as_ref()
-                .and_then(|p| p.file_name())
-                .map(|n| n.to_string_lossy().into_owned())
-                .unwrap_or_default(),
-            people: g.count(RecordKind::Individual),
-            families: g.count(RecordKind::Family),
-            sources: g.count(RecordKind::Source),
-            media: g.count(RecordKind::Media),
-            root: g.root().map(|r| g.person_ref(&r, year)),
-        }))
+        self.answer(
+            &s,
+            FileInfo {
+                file: s
+                    .path
+                    .as_ref()
+                    .and_then(|p| p.file_name())
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default(),
+                people: g.count(RecordKind::Individual),
+                families: g.count(RecordKind::Family),
+                sources: g.count(RecordKind::Source),
+                media: g.count(RecordKind::Media),
+                root: g.root().map(|r| g.person_ref(&r, year)),
+            },
+        )
     }
 
     #[tool(
@@ -248,7 +270,10 @@ impl GedrootsMcp {
     )]
     async fn search(&self, Parameters(p): Parameters<SearchParams>) -> Res<People> {
         let s = self.snapshot().await?;
-        Ok(Json(People { people: s.ged.search_people(&p.query, p.limit.unwrap_or(50).min(500), current_year()) }))
+        self.answer(
+            &s,
+            People { people: s.ged.search_people(&p.query, p.limit.unwrap_or(50).min(500), current_year()) },
+        )
     }
 
     #[tool(
@@ -262,7 +287,8 @@ impl GedrootsMcp {
         if s.ged.individual(id).is_none() {
             return Err(format!("no person with id {id}"));
         }
-        s.ged.person_sheet(id, current_year()).map(Json).ok_or_else(|| format!("no person with id {id}"))
+        let sheet = s.ged.person_sheet(id, current_year()).ok_or_else(|| format!("no person with id {id}"))?;
+        self.answer(&s, sheet)
     }
 
     #[tool(
@@ -277,7 +303,7 @@ impl GedrootsMcp {
         }
         let all = s.ged.research_gaps(p.generations.unwrap_or(6).clamp(1, 12), current_year());
         let total = all.len();
-        Ok(Json(Gaps { gaps: all.into_iter().take(p.limit.unwrap_or(100)).collect(), total }))
+        self.answer(&s, Gaps { gaps: all.into_iter().take(p.limit.unwrap_or(100)).collect(), total })
     }
 
     #[tool(
@@ -328,7 +354,7 @@ impl GedrootsMcp {
             .filter(|r| matches(&r.name))
             .take(limit)
             .collect();
-        Ok(Json(Sources { sources, repositories }))
+        self.answer(&s, Sources { sources, repositories })
     }
 
     #[tool(
@@ -360,7 +386,7 @@ impl GedrootsMcp {
                     .collect(),
             })
             .collect();
-        Ok(Json(Matches { people }))
+        self.answer(&s, Matches { people })
     }
 
     #[tool(
@@ -379,7 +405,7 @@ impl GedrootsMcp {
         if let Some(r) = &replaces
             && !s.queue.waiting.iter().any(|w| &w.id == r)
         {
-            return Err(match s.queue.decided.iter().rev().find(|(id, _)| id == r) {
+            return Err(match s.queue.decided.iter().rev().find(|d| &d.id == r) {
                 Some(_) => format!("proposal {r} is no longer waiting for review: call list_proposals"),
                 None => format!("no proposal {r}: call list_proposals"),
             });
@@ -436,13 +462,16 @@ impl GedrootsMcp {
             .zip(people)
             .filter_map(|(t, (role, name))| Some(NewPerson { id: t.clone()?, role, name }))
             .collect();
-        Ok(Json(Proposed {
-            id: queued.id,
-            status: "waiting for review".into(),
-            waiting: queued.waiting,
-            will_write,
-            new_people,
-        }))
+        self.answer(
+            &s,
+            Proposed {
+                id: queued.id,
+                status: "waiting for review".into(),
+                waiting: queued.waiting,
+                will_write,
+                new_people,
+            },
+        )
     }
 
     #[tool(
@@ -487,15 +516,8 @@ impl GedrootsMcp {
                 }
             })
             .collect();
-        let decided = s
-            .queue
-            .decided
-            .iter()
-            .rev()
-            .take(50)
-            .map(|(id, outcome)| Decided { id: id.clone(), outcome: *outcome })
-            .collect();
-        Ok(Json(Proposals { waiting, decided }))
+        let decided = s.queue.decided.iter().rev().take(50).cloned().collect();
+        self.answer(&s, Proposals { waiting, decided })
     }
 
     #[tool(
@@ -507,7 +529,8 @@ impl GedrootsMcp {
         let (tx, rx) = tokio::sync::oneshot::channel();
         self.bridge.send(Request::Withdraw(p.id, tx)).await.map_err(|_| "GEDRoots is closing".to_string())?;
         let waiting = rx.await.map_err(|_| "GEDRoots is closing".to_string())??;
-        Ok(Json(Withdrawn { waiting }))
+        let s = self.snapshot().await?;
+        self.answer(&s, Withdrawn { waiting })
     }
 }
 
@@ -525,6 +548,8 @@ call `match_people` to know who each person named is in the tree (link them, cre
 mention them), `search_sources` to reuse the source or repository, then `propose_act`. A person \
 that a waiting proposal creates has a temporary id (new-3): link it to name them again. To correct a \
 waiting proposal, propose it again with `replaces`; `list_proposals` says which are still waiting. \
+Every answer carries `news` when the user saved, rejected or edited a proposal since your last call: \
+a saved proposal gives the ids its new people now have in the tree, to link from then on. \
 The prompts `find_record` and `read_record` give the full method."
 )]
 #[prompt_handler(router = self.prompt_router)]

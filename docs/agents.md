@@ -94,7 +94,9 @@ A proposal is checked against the tree as if every waiting proposal were saved
 another proposal links that id to name the same person, and creating them again is refused like
 any other likely duplicate. Both proposals then create the person; whichever the user saves
 first does, and the other is relinked to the saved person. The review page shows “Also in …”
-under such a person. A correction (`replaces: "P3"`) takes the place of the waiting proposal, and
+under such a person. Every tool answer carries `news` when the user decided about proposals since
+that session's last call (saved, with the ids the new people now have; rejected; edited in record
+entry): agents are not pushed anything between their turns, so the news rides on their next call. A correction (`replaces: "P3"`) takes the place of the waiting proposal, and
 the people of the replaced proposal keep their temporary ids when linked again.
 
 The downloaded file takes the format of the acts already attached to the file's sources: the
