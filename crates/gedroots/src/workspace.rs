@@ -2328,8 +2328,8 @@ impl Workspace {
     }
 
     /// Edit › Edit Record on an individual: their panel's header becomes fields, in place: names
-    /// next to the portrait, sex, note. Birth and death are events of the timeline below, edited
-    /// there like the others.
+    /// next to the portrait (the sex beside the surname), note. Birth and death are events of the
+    /// timeline below, edited there like the others.
     fn render_individual_fields(&self, ed: &RecordEditor, portrait: Div, cx: &mut Context<Self>) -> Div {
         let f = &ed.fields;
         v_flex()
@@ -2344,10 +2344,17 @@ impl Workspace {
                         .min_w_0()
                         .gap_2()
                         .child(self.render_field(&f[0], cx))
-                        .child(self.render_field(&f[1], cx)),
+                        // The sex is short: next to the surname, like the name line of most
+                        // genealogy software, rather than a full-width row.
+                        .child(
+                            h_flex()
+                                .gap_2()
+                                .items_start()
+                                .child(self.render_field(&f[1], cx).flex_1())
+                                .child(self.render_field(&f[2], cx).w(px(116.)).flex_none()),
+                        ),
                 ),
             )
-            .child(self.render_field(&f[2], cx))
             .when_some(ed.long_text.as_ref(), |d, (label, state)| {
                 d.child(v_flex().gap_1().child(label_caps(label.clone())).child(Textarea::new(state).h(px(80.))))
             })
