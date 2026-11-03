@@ -51,6 +51,26 @@ pub(crate) mod tour;
 mod tree;
 mod weblinks;
 
+/// Window widths below which a column folds away (like libadwaita's breakpoints and Mail's
+/// columns): first the sidebar, then the details panel. A folded column comes back over the others
+/// with its View menu command.
+const FOLD_SIDEBAR: f32 = 1200.;
+const FOLD_INSPECTOR: f32 = 1100.;
+
+/// Columns folded away in a narrow window.
+#[derive(Clone, Copy, Default, PartialEq)]
+struct Compact {
+    sidebar: bool,
+    inspector: bool,
+}
+
+/// Folded column shown over the others.
+#[derive(Clone, Copy, PartialEq)]
+enum Drawer {
+    Sidebar,
+    Inspector,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum View {
     Individuals,
@@ -64,9 +84,10 @@ pub enum View {
 }
 
 impl View {
-    /// The sidebar zones. The other lists (repositories, notes) and the pages (quality, statistics)
-    /// open from the View menu, the links of records and search.
+    /// The main sidebar zones.
     const SIDEBAR: [View; 4] = [View::Individuals, View::Sources, View::Places, View::Media];
+    /// The secondary group of the sidebar, under a separator.
+    const SECONDARY: [View; 4] = [View::Repositories, View::Notes, View::Quality, View::Stats];
 
     fn label(self) -> SharedString {
         match self {
@@ -246,8 +267,14 @@ pub struct Workspace {
     map: Entity<MapView>,
     tree_mode: tree::TreeMode,
     tree_gens: u32,
-    /// Sidebar shown (View › Hide or Show the Sidebar).
+    /// Sidebar shown (View › Show or Hide Sidebar) when the window is wide enough.
     sidebar: bool,
+    /// Details panel shown (View › Show or Hide Details Panel) when the window is wide enough.
+    inspector: bool,
+    /// Narrow window: which columns are folded away, as of the last frame.
+    compact: Compact,
+    /// Narrow window: folded column shown over the others on request.
+    drawer: Option<Drawer>,
     /// Raw GEDCOM tab opened on demand (View › Raw GEDCOM), closed when switching lists.
     raw_open: bool,
     /// Free chart: central person, generations loaded, panning.
@@ -380,6 +407,9 @@ impl Workspace {
             tree_mode: tree::TreeMode::Chart,
             tree_gens: 5,
             sidebar: true,
+            inspector: true,
+            compact: Compact::default(),
+            drawer: None,
             raw_open: false,
             chart: Default::default(),
             picker: None,
@@ -1542,8 +1572,7 @@ impl Workspace {
             .border_color(theme::border())
             .child(
                 h_flex()
-                    .flex_1()
-                    .min_w_0()
+                    .flex_none()
                     .gap_3()
                     .items_center()
                     .child(
@@ -1560,18 +1589,20 @@ impl Workspace {
                     // to the file name in the center (VS Code, Zed), with the menus on the left.
                     .when(mac && self.doc.is_some(), |d| d.child(self.render_history_buttons(cx))),
             )
-            .children(title.map(|t| {
+            // The file name is centred in the room the menus leave, and shortened rather than
+            // running under them in a narrow window.
+            .child(h_flex().flex_1().min_w_0().px_3().justify_center().children(title.map(|t| {
                 h_flex()
-                    .flex_none()
+                    .min_w_0()
                     .gap_2()
                     .items_center()
                     .when(!mac, |d| d.child(self.render_history_buttons(cx)))
-                    .child(div().text_sm().font_weight(FontWeight::MEDIUM).child(t))
-            }))
+                    .child(div().min_w_0().truncate().text_sm().font_weight(FontWeight::MEDIUM).child(t))
+            })))
             .child(
                 h_flex()
-                    .flex_1()
-                    .min_w_0()
+                    .flex_none()
+                    .max_w(px(320.))
                     .gap_3()
                     .items_center()
                     .justify_end()
@@ -1651,51 +1682,147 @@ impl Workspace {
             .child(arrow(false))
     }
 
-    /// Sidebar: the four zones, named, with their count. It launches no action; the commands are in
-    /// the menus.
+    /// Sidebar: the four zones, named, with their count, then a secondary group (repositories and
+    /// notes when the file has some, quality, statistics), like Mail's or Finder's sections. It
+    /// launches no action; the commands are in the menus.
     fn render_sidebar(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let doc = self.doc.as_ref();
         // Active zone filtered: its counter gives the number of results.
         let filtered = self.is_filtered(cx);
+        let count = |v: View| -> Option<usize> {
+            let d = doc?;
+            Some(match v {
+                _ if v == self.view && filtered => self.rows.len(),
+                View::Places => d.ged.places().len(),
+                // Only once the checks have run: a stale count would mislead.
+                View::Quality if self.quality.stale => return None,
+                View::Quality => self.quality.issues.iter().filter(|i| !i.ignored).count(),
+                View::Stats => return None,
+                v => d.ged.count(v.kind()?),
+            })
+        };
+        let zone = |v: View, n: Option<usize>, cx: &mut Context<Self>| {
+            let active = v == self.view;
+            h_flex()
+                .id(SharedString::from(format!("zone-{}", v.label())))
+                .px_2()
+                .py_1()
+                .gap_2()
+                .items_center()
+                .rounded(theme::RADIUS_SM)
+                .cursor_pointer()
+                .when(active, |d| d.bg(theme::accent_soft()).font_weight(FontWeight::SEMIBOLD))
+                .when(!active, |d| d.hover(|d| d.bg(theme::hover())))
+                .child(Icon::new(v.icon()).size(px(16.)).text_color(if active {
+                    theme::accent()
+                } else {
+                    theme::muted()
+                }))
+                .child(div().flex_1().min_w_0().truncate().child(v.label()))
+                .children(n.map(|n| div().text_xs().text_color(theme::muted()).child(group_thousands(n))))
+                .on_click(cx.listener(move |this, _, w, cx| this.show_view(v, w, cx)))
+        };
+        let primary: Vec<_> = View::SIDEBAR.into_iter().map(|v| zone(v, count(v), cx)).collect();
+        // Repositories and notes only when the file has some (or one is open).
+        let secondary: Vec<_> = View::SECONDARY
+            .into_iter()
+            .map(|v| (v, count(v)))
+            .filter(|&(v, n)| v == self.view || !matches!(v, View::Repositories | View::Notes) || n.unwrap_or(0) > 0)
+            .map(|(v, n)| zone(v, n, cx))
+            .collect();
         v_flex()
+            .id("sidebar")
             .relative()
             .w(px(184.))
             .flex_none()
+            .overflow_y_scroll()
             .p_2()
             .pt_3()
             .gap_0p5()
             .bg(theme::panel())
             .border_r_1()
             .border_color(theme::border())
-            .children(View::SIDEBAR.into_iter().map(|v| {
-                let active = v == self.view;
-                let n = doc.map(|d| match v.kind() {
-                    _ if active && filtered => self.rows.len(),
-                    Some(k) => d.ged.count(k),
-                    None => d.ged.places().len(),
-                });
-                h_flex()
-                    .id(SharedString::from(format!("zone-{}", v.label())))
-                    .px_2()
-                    .py_1()
-                    .gap_2()
-                    .items_center()
-                    .rounded(theme::RADIUS_SM)
-                    .cursor_pointer()
-                    .when(active, |d| d.bg(theme::accent_soft()).font_weight(FontWeight::SEMIBOLD))
-                    .when(!active, |d| d.hover(|d| d.bg(theme::hover())))
-                    .child(Icon::new(v.icon()).size(px(16.)).text_color(if active {
-                        theme::accent()
-                    } else {
-                        theme::muted()
-                    }))
-                    .child(div().flex_1().child(v.label()))
-                    .children(n.map(|n| div().text_xs().text_color(theme::muted()).child(group_thousands(n))))
-                    .on_click(cx.listener(move |this, _, w, cx| this.show_view(v, w, cx)))
-            }))
+            .children(primary)
+            .when(doc.is_some(), |d| d.child(div().h(px(1.)).my_1().bg(theme::border())).children(secondary))
             .children(self.render_review_zone(cx))
             .children(self.render_saved(cx))
             .children(self.tour_anchor(tour::Target::Sidebar, cx))
+    }
+
+    /// Whether the current view has a details panel (individuals and places, record selected).
+    fn has_inspector(&self) -> bool {
+        self.doc.is_some()
+            && self.selected.is_some()
+            && self.act_editor.is_none()
+            && !self.review.open
+            && matches!(self.view, View::Individuals | View::Places)
+    }
+
+    /// View › Show or Hide Sidebar / Details Panel: in a wide window the column is docked; in a
+    /// narrow one it is folded away and the command shows it over the others.
+    fn toggle_column(&mut self, which: Drawer, cx: &mut Context<Self>) {
+        let folded = match which {
+            Drawer::Sidebar => self.compact.sidebar,
+            Drawer::Inspector => self.compact.inspector,
+        };
+        if folded {
+            self.drawer = if self.drawer == Some(which) { None } else { Some(which) };
+        } else {
+            match which {
+                Drawer::Sidebar => self.sidebar = !self.sidebar,
+                Drawer::Inspector => self.inspector = !self.inspector,
+            }
+        }
+        cx.notify();
+    }
+
+    /// Folded column shown over the others, with a shadow since it floats. A click outside, `Esc`
+    /// or choosing a zone puts it away.
+    fn render_drawer(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let which = self.drawer?;
+        let column: AnyElement = match which {
+            Drawer::Sidebar => div()
+                .absolute()
+                .top_0()
+                .bottom_0()
+                .left_0()
+                .flex()
+                .shadow_lg()
+                .occlude()
+                // A zone or a saved search chosen: the drawer has done its job.
+                .on_mouse_up(
+                    MouseButton::Left,
+                    cx.listener(|this, _, _, cx| {
+                        this.drawer = None;
+                        cx.notify();
+                    }),
+                )
+                .child(self.render_sidebar(cx))
+                .into_any_element(),
+            Drawer::Inspector => div()
+                .absolute()
+                .top_0()
+                .bottom_0()
+                .right_0()
+                .flex()
+                .shadow_lg()
+                .child(self.render_detail(cx))
+                .into_any_element(),
+        };
+        Some(
+            div()
+                .absolute()
+                .size_full()
+                .child(div().id("drawer-outside").absolute().size_full().on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(|this, _, _, cx| {
+                        this.drawer = None;
+                        cx.notify();
+                    }),
+                ))
+                .child(column)
+                .into_any_element(),
+        )
     }
 
     fn render_list(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -3170,14 +3297,42 @@ impl Render for Workspace {
                 crate::commands::install_menus(cx);
             }
         }
-        // Recent files or search sites changed (here or in another window): the menu bar picks them
-        // up.
+        // Menu bar drawn in the window (Linux, Windows): once this frame is drawn, grey out the
+        // commands that do not apply to it (macOS asks the window itself when a menu opens).
+        if self.menu_bar.is_some() && (window.is_window_active() || cx.windows().len() == 1) {
+            let focus = self.focus.clone();
+            window.on_next_frame(move |window, cx| {
+                let unavailable = crate::commands::menu_actions()
+                    .into_iter()
+                    .filter(|a| {
+                        !window.is_action_available_in(a.as_ref(), &focus) && !crate::is_global_action(a.as_ref())
+                    })
+                    .map(|a| a.name())
+                    .collect();
+                if crate::commands::set_unavailable(unavailable) {
+                    crate::commands::install_menus(cx);
+                    window.refresh();
+                }
+            });
+        }
+        // Recent files, search sites or available commands changed (here or in another window): the
+        // menu bar picks them up.
         let menus_gen = (crate::recent::generation(), crate::commands::search_sites_generation());
         if self.recent_gen != menus_gen {
             self.recent_gen = menus_gen;
             if let Some(bar) = &self.menu_bar {
                 bar.update(cx, |bar, cx| bar.reload(cx));
             }
+        }
+        // Narrow window: fold the sidebar, then the details panel (see `FOLD_SIDEBAR`).
+        let width = f32::from(window.viewport_size().width);
+        let compact = Compact { sidebar: width < FOLD_SIDEBAR, inspector: width < FOLD_INSPECTOR };
+        if compact != self.compact {
+            self.compact = compact;
+            self.drawer = None;
+        }
+        if self.drawer == Some(Drawer::Inspector) && !self.has_inspector() {
+            self.drawer = None;
         }
         // Shortcuts (Save…) go through this node: keep it in the focus chain.
         if window.focused(cx).is_none() {
@@ -3190,7 +3345,7 @@ impl Render for Workspace {
                 .flex_1()
                 .min_h_0()
                 .items_stretch()
-                .when(self.sidebar, |d| d.child(self.render_sidebar(cx)))
+                .when(self.sidebar && !self.compact.sidebar, |d| d.child(self.render_sidebar(cx)))
                 .child(self.render_list(cx))
                 .child(editor.clone())
                 .into_any_element()
@@ -3200,7 +3355,7 @@ impl Render for Workspace {
                 .flex_1()
                 .min_h_0()
                 .items_stretch()
-                .when(self.sidebar, |d| d.child(self.render_sidebar(cx)))
+                .when(self.sidebar && !self.compact.sidebar, |d| d.child(self.render_sidebar(cx)))
                 .child(self.render_review(cx))
                 .into_any_element()
         } else if self.doc.is_some() {
@@ -3208,10 +3363,10 @@ impl Render for Workspace {
                 .flex_1()
                 .min_h_0()
                 .items_stretch()
-                .when(self.sidebar, |d| d.child(self.render_sidebar(cx)))
+                .when(self.sidebar && !self.compact.sidebar, |d| d.child(self.render_sidebar(cx)))
                 .when(self.view != View::Stats, |d| d.child(self.render_list(cx)))
                 .child(self.render_center(cx))
-                .child(self.render_detail(cx))
+                .when(self.inspector && !self.compact.inspector, |d| d.child(self.render_detail(cx)))
                 .into_any_element()
         } else {
             self.render_welcome(window, cx).into_any_element()
@@ -3248,6 +3403,9 @@ impl Render for Workspace {
                     if this.gallery_escape(w, cx) {
                         return;
                     }
+                    if this.drawer.take().is_some() {
+                        return cx.notify();
+                    }
                     if this.photo_draw.is_some() {
                         this.cancel_draw(cx);
                     } else if this.kinship.take().is_some() || this.close_event_detail(cx) {
@@ -3261,7 +3419,7 @@ impl Render for Workspace {
             .text_color(theme::text())
             .text_sm()
             .child(self.render_header(cx))
-            .child(body)
+            .child(div().flex_1().min_h_0().flex().relative().child(body).children(self.render_drawer(cx)))
             .children(self.render_picker(cx))
             .children(self.render_kinship(cx))
             .children(self.render_event_detail(cx))

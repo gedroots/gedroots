@@ -220,5 +220,5 @@ ws.recent:
   en: Recent
   fr: Récents
 ws.media_tooltip:
-  en: "Media… (⌘⇧M)"
-  fr: "Médias… (⌘⇧M)"
+  en: "Record Media… (⌘⇧M)"
+  fr: "Médias de la fiche… (⌘⇧M)"

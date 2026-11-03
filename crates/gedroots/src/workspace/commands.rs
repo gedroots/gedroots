@@ -87,10 +87,12 @@ impl Workspace {
         let d = on!(d, cx, NewMedia, |this, w, cx| this.create_in(View::Media, w, cx));
         let d = on!(d, cx, NewRepository, |this, w, cx| this.create_in(View::Repositories, w, cx));
         let d = on!(d, cx, NewNote, |this, w, cx| this.create_in(View::Notes, w, cx));
-        let d = on!(d, cx, ToggleSidebar, |this, w, cx| {
-            this.sidebar = !this.sidebar;
-            cx.notify();
-        });
+        let d = on!(d, cx, ToggleSidebar, |this, w, cx| this.toggle_column(Drawer::Sidebar, cx));
+        let d = if self.has_inspector() {
+            on!(d, cx, ToggleInspector, |this, w, cx| this.toggle_column(Drawer::Inspector, cx))
+        } else {
+            d
+        };
 
         // Vues.
         let d = on!(d, cx, ShowIndividuals, |this, w, cx| this.show_view(View::Individuals, w, cx));

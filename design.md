@@ -59,7 +59,7 @@ A proposal without this research is not ready to show.
   placeholder; empty sections are hidden.
 - **Progressive disclosure**: technical fields are inferred, not shown (e.g. a media's
   `FORM`); rare or destructive actions are collapsed or in menus; GEDCOM identifiers only
-  appear through Edit › Copy ID and the advanced search.
+  appear through Edit › Copy Special › Copy ID and the advanced search.
 - **Read first, edit in place**: a record opens as text (empty values hidden, linked records
   clickable). Edit › Edit Record (`⌘L`, like Contacts) or the small pencil next to it turns the
   same layout into fields; Done saves (one undo point), Cancel or `Esc` drops the changes. A
@@ -195,6 +195,14 @@ Rules shared by the three guidelines, to apply everywhere.
   Contacts or Mail): the record is read whole in the centre, in one readable column (720 px at
   most): title with the repository and call number under it, facts, records, images, web
   links, links, then "Used by".
+- Sidebar: the four areas (Individuals, Sources, Places, Media), then a secondary group under
+  a separator, like Mail's or Finder's sections: Repositories and Notes when the file has some,
+  Quality (with its count) and Statistics. The Go menu lists the same places (`⌘1`–`⌘8`).
+- **Narrow window**: below 1200 px the sidebar folds away, below 1100 px the details panel does
+  too (like libadwaita's breakpoints or Mail's columns); the list and the centre never shrink
+  under their content. View › Show or Hide Sidebar (`⌃⌘S`) or Details Panel (`⌥⌘I`) then shows
+  the column over the others, with a shadow; a click outside, `Esc` or a choice puts it away.
+  The file name in the top bar is centred in the room the menus leave and shortened if needed.
 - **Back/forward history** across all navigation (`workspace/history.rs`): keyboard, side
   mouse buttons and, on a trackpad, swipe. Each list reopens the last item viewed; Individuals
   falls back to the root individual.
@@ -208,9 +216,13 @@ Rules shared by the three guidelines, to apply everywhere.
   événement »).
 - **Ellipsis "…"** when the command still asks for something before acting (window, picker);
   never otherwise.
-- A command that does not apply is greyed out, not hidden (only context menus show just what
-  applies). An empty submenu is hidden (e.g. Open Recent).
-- Menus: 3 to 12 items, grouped by separators, submenus one level deep.
+- A command that does not apply is greyed out, not hidden, on every platform: a command is only
+  declared on the window when it applies (`workspace/commands.rs`); macOS asks the window when a
+  menu opens, the bar drawn in the window (Linux, Windows) is refreshed after each frame. Only
+  context menus show just what applies. An empty submenu is hidden (e.g. Open Recent).
+- Menus: 3 to 12 items, grouped by separators, submenus one level deep (checked by the
+  `menus_stay_short` test). Navigation lives in the Go menu (history, then the places of the
+  file), like Finder.
 - Context menu: right click (and `⇧F10` / Menu key outside macOS), same labels as the menu
   bar; it acts on the clicked item without changing the selection.
 - Shortcuts: only for frequent commands; reuse the platform's before inventing new ones (see

@@ -1,4 +1,4 @@
-//! “Media” window (Edit › Media…, ⌘⇧M, the images’ “+”, right-click on an event): a single entry
+//! “Media” window (Media › Record Media…, ⌘⇧M, the images’ “+”, right-click on an event): a single entry
 //! point for the media of an individual, a family, an event or a source.
 //!
 //! - **Attached**: the linked media, grouped by origin (the event, the cited record, the

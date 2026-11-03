@@ -38,7 +38,7 @@ The details (which apps, what to hand in) are in [design.md › Before any mocku
   `t!("…")` (see [`docs/localization.md`](docs/localization.md)). Search keywords
   (`born:`, `without:source`…) are a technical language and stay in English; only their labels
   are translated.
-- **GEDCOM identifiers hidden** in the interface, except Edit › Copy ID and the advanced
+- **GEDCOM identifiers hidden** in the interface, except Edit › Copy Special › Copy ID and the advanced
   search.
 - **Test on a copy** of a real file, never on the original. Never commit a `.ged` containing
   living people.
