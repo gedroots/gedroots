@@ -1,0 +1,29 @@
+# The Netherlands. Civil registration from 1811 (earlier in the south); public after 100 years
+# for births, 75 for marriages, 50 for deaths.
+format: 1
+code: NL
+name: Netherlands
+names: [Nederland, Pays-Bas, Netherlands, Holland]
+marriage_age:
+  - { until: 1811, male: 14, female: 12 }
+  - { from: 1811, until: 1970, male: 18, female: 16 }
+  - { from: 1970, male: 18, female: 18 }
+records:
+  - type: civil_registration
+    local_name: burgerlijke stand
+    goals: [birth, marriage, death, parents]
+    from: 1811
+    public_after: { birth: 100, marriage: 75, death: 50 }
+  - type: church_registers
+    local_name: doop-, trouw- en begraafboeken (DTB)
+    goals: [birth, marriage, death, parents]
+    until: 1811
+  - type: population_registers
+    local_name: bevolkingsregister
+    goals: [death, parents]
+    from: 1850
+  - type: probate
+    local_name: memories van successie
+    goals: [death]
+    from: 1806
+    extends_by: 2

@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/gedroots/gedroots/blob/main/crates/gedcom/countries/schema.json",
+  "title": "Country pack",
+  "description": "What genealogy records a country kept, from when to when, who may read them, and the legal age at marriage. Format 1.",
+  "type": "object",
+  "required": ["format", "code", "name"],
+  "additionalProperties": false,
+  "properties": {
+    "format": { "const": 1, "description": "Version of the format." },
+    "code": {
+      "type": "string",
+      "pattern": "^([A-Z]{2}|generic)$",
+      "description": "ISO 3166-1 alpha-2 code, or `generic` for the countries without a pack. Also the file name."
+    },
+    "name": { "type": "string", "description": "English name." },
+    "names": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Names of the country found in places, in any language. Compared without case or accents."
+    },
+    "marriage_age": {
+      "type": "array",
+      "description": "Minimum age at marriage by period. The first period containing the year applies.",
+      "items": {
+        "type": "object",
+        "required": ["male", "female"],
+        "additionalProperties": false,
+        "properties": {
+          "from": { "type": "integer", "description": "First year (included); open when absent." },
+          "until": { "type": "integer", "description": "Year the next rule starts (excluded); open when absent." },
+          "male": { "type": "integer", "minimum": 0 },
+          "female": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "records": {
+      "type": "array",
+      "description": "Kinds of records, best first.",
+      "items": { "$ref": "#/$defs/record" }
+    }
+  },
+  "$defs": {
+    "goal": { "enum": ["birth", "marriage", "death", "parents"] },
+    "record": {
+      "type": "object",
+      "required": ["type", "goals"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "enum": [
+            "civil_registration",
+            "registration_index",
+            "church_registers",
+            "census",
+            "probate",
+            "marriage_contracts",
+            "military_registers",
+            "death_index",
+            "population_registers"
+          ]
+        },
+        "local_name": { "type": "string", "description": "Name in the country, as archives call it." },
+        "goals": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/goal" },
+          "description": "What the record helps to find. `parents`: the parents of a person whose parents are unknown."
+        },
+        "from": { "type": "integer", "description": "First year kept (included)." },
+        "until": { "type": "integer", "description": "Last year kept (included)." },
+        "online_until": { "type": "integer", "description": "Last year that archives usually put online." },
+        "index": { "type": "boolean", "description": "An index of other records: suggested only when the period is three years or more." },
+        "public_after": {
+          "description": "Years after which a record is open to everyone, for every goal or by goal (`parents` uses `birth`).",
+          "oneOf": [
+            { "type": "integer", "minimum": 0 },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "birth": { "type": "integer", "minimum": 0 },
+                "marriage": { "type": "integer", "minimum": 0 },
+                "death": { "type": "integer", "minimum": 0 }
+              }
+            }
+          ]
+        },
+        "years": {
+          "type": "array",
+          "items": { "type": "integer" },
+          "description": "Years of the record when it was not kept every year (census years), in order."
+        },
+        "extends_by": { "type": "integer", "description": "Years to add after the event (a probate record follows the death)." },
+        "sex": { "enum": ["male", "female"], "description": "Only for people of this sex." },
+        "born": {
+          "type": "array",
+          "items": { "type": "integer" },
+          "minItems": 2,
+          "maxItems": 2,
+          "description": "Only for people born in these years (included)."
+        },
+        "offset": { "type": "integer", "description": "With `born`: the record's year is the birth year plus this." }
+      }
+    }
+  }
+}

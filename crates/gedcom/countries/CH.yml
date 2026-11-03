@@ -1,0 +1,17 @@
+# Switzerland. Federal civil registration from 1876; access to the registers depends on the canton.
+format: 1
+code: CH
+name: Switzerland
+names: [Suisse, Schweiz, Svizzera, Svizra, Switzerland]
+marriage_age:
+  - { until: 1876, male: 14, female: 12 }
+  - { from: 1876, until: 1912, male: 18, female: 16 }
+  - { from: 1912, male: 20, female: 18 }
+records:
+  - type: civil_registration
+    local_name: état civil / Zivilstandsamt
+    goals: [birth, marriage, death, parents]
+    from: 1876
+  - type: church_registers
+    local_name: registres paroissiaux / Kirchenbücher
+    goals: [birth, marriage, death, parents]

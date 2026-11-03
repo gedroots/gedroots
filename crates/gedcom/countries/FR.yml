@@ -1,0 +1,53 @@
+# France. Sources: Code du patrimoine (art. L213-2) for access delays; Archives nationales and
+# departmental archives for the series.
+format: 1
+code: FR
+name: France
+names: [France]
+# Minimum age at marriage: canon law, then the laws of 1792, 1804 (Code civil) and 2006.
+marriage_age:
+  - { until: 1792, male: 14, female: 12 }
+  - { from: 1792, until: 1804, male: 15, female: 13 }
+  - { from: 1804, until: 2006, male: 18, female: 15 }
+  - { from: 2006, male: 18, female: 18 }
+records:
+  - type: registration_index
+    local_name: tables décennales
+    goals: [birth, marriage, death]
+    from: 1793
+    online_until: 1942
+    index: true
+    public_after: { birth: 75, marriage: 75 }
+  - type: death_index
+    local_name: fichier des personnes décédées, INSEE
+    goals: [death]
+    from: 1970
+  - type: civil_registration
+    local_name: état civil
+    goals: [birth, marriage, death, parents]
+    from: 1792
+    public_after: { birth: 75, marriage: 75 }
+  - type: church_registers
+    local_name: registres paroissiaux
+    goals: [birth, marriage, death, parents]
+    until: 1792
+  - type: census
+    local_name: recensements
+    goals: [death]
+    years: [1836, 1841, 1846, 1851, 1856, 1861, 1866, 1872, 1876, 1881, 1886, 1891, 1896, 1901,
+      1906, 1911, 1921, 1926, 1931, 1936, 1946]
+    public_after: 75
+  - type: probate
+    local_name: tables des successions et absences
+    goals: [death]
+    from: 1791
+    extends_by: 2
+  - type: marriage_contracts
+    local_name: actes notariés
+    goals: [marriage]
+  - type: military_registers
+    local_name: registres matricules
+    goals: [parents]
+    sex: male
+    born: [1847, 1921]
+    offset: 20

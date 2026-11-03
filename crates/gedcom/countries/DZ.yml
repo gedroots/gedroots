@@ -1,0 +1,32 @@
+# Algeria, under French civil registration from 1830 to 1962; the registers are kept by the
+# Archives nationales d'outre-mer (ANOM). After 1962, the generic rules apply.
+format: 1
+code: DZ
+name: Algeria
+names: [Algérie, Algeria, الجزائر]
+marriage_age:
+  - { until: 1804, male: 14, female: 12 }
+  - { from: 1804, male: 18, female: 15 }
+records:
+  - type: civil_registration
+    local_name: état civil, Archives nationales d’outre-mer
+    goals: [birth, marriage, death, parents]
+    from: 1830
+    until: 1962
+    public_after: { birth: 75, marriage: 75 }
+  # Many left for France in 1962: the French index lists the deaths there.
+  - type: death_index
+    local_name: fichier des personnes décédées, INSEE, France
+    goals: [death]
+    from: 1970
+  - type: marriage_contracts
+    local_name: actes notariés
+    goals: [marriage]
+    from: 1830
+    until: 1962
+  - type: military_registers
+    local_name: registres matricules, Archives nationales d’outre-mer
+    goals: [parents]
+    sex: male
+    born: [1847, 1921]
+    offset: 20

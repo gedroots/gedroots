@@ -11,6 +11,7 @@
 //! - [`search`]: search and filters on individuals;
 //! - [`relations`]: adding/linking/removing relatives, places and media;
 //! - [`research`]: records and search for AI agents (read only, living people hidden);
+//! - [`countries`]: country packs (which records each country kept, access delays, ages);
 //! - [`leads`]: records to find (period, places, where to look); [`research_log`]: what was searched (`_GR_TASK`);
 //! - [`events`]: editing and deleting events;
 //! - [`duplicates`]: possible duplicate individuals, “not a duplicate” marks; [`merge`]: merging two individuals;
@@ -49,6 +50,7 @@ pub mod associations;
 pub mod change;
 pub mod complete;
 pub mod context;
+pub mod countries;
 pub mod crop;
 pub mod custom;
 pub mod date;

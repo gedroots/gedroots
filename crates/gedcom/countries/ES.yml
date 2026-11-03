@@ -1,0 +1,15 @@
+# Spain. Civil registration (Registro Civil) from 1871; parish registers before and after.
+format: 1
+code: ES
+name: Spain
+names: [España, Espagne, Spain]
+marriage_age:
+  - { male: 14, female: 12 }
+records:
+  - type: civil_registration
+    local_name: Registro Civil
+    goals: [birth, marriage, death, parents]
+    from: 1871
+  - type: church_registers
+    local_name: registros parroquiales
+    goals: [birth, marriage, death, parents]

@@ -21,6 +21,7 @@
 //! translates them from their stable identifiers ([`RecordType::id`]).
 
 use crate::analysis::span::Span;
+use crate::countries::{self, Pack, Sex};
 use crate::document::{Gedcom, RecordKind};
 use crate::model::{Individual, event_label, sort_key};
 use crate::research::PersonRef;
@@ -28,9 +29,9 @@ use crate::research_log::{SearchResult, TaskState};
 use std::collections::{BTreeMap, HashMap};
 
 /// Record to find.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize, schemars::JsonSchema))]
-#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Deserialize)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, schemars::JsonSchema))]
+#[serde(rename_all = "snake_case")]
 pub enum Goal {
     Birth,
     Marriage,
@@ -122,14 +123,14 @@ impl std::fmt::Display for Years {
 }
 
 /// Kind of records to search.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Deserialize)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, schemars::JsonSchema))]
-#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[serde(rename_all = "snake_case")]
 pub enum RecordType {
     /// Civil registers (births, marriages, deaths).
     CivilRegistration,
-    /// Indexes of the civil registers by period (French decennial tables, from 1793).
-    DecennialTables,
+    /// Indexes of the civil registers by period (French decennial tables, GRO indexes).
+    RegistrationIndex,
     /// Parish or church registers (baptisms, marriages, burials).
     ChurchRegisters,
     /// Census lists: presence or absence of the person in the household narrows the period.
@@ -142,6 +143,9 @@ pub enum RecordType {
     MilitaryRegisters,
     /// National index of deaths (French INSEE file of deceased persons, from 1970).
     DeathIndex,
+    /// Population registers: every household of a municipality and its moves (Belgium, the
+    /// Netherlands).
+    PopulationRegisters,
 }
 
 impl RecordType {
@@ -149,13 +153,29 @@ impl RecordType {
     pub fn id(self) -> &'static str {
         match self {
             RecordType::CivilRegistration => "civil_registration",
-            RecordType::DecennialTables => "decennial_tables",
+            RecordType::RegistrationIndex => "registration_index",
             RecordType::ChurchRegisters => "church_registers",
             RecordType::Census => "census",
             RecordType::Probate => "probate",
             RecordType::MarriageContracts => "marriage_contracts",
             RecordType::MilitaryRegisters => "military_registers",
             RecordType::DeathIndex => "death_index",
+            RecordType::PopulationRegisters => "population_registers",
+        }
+    }
+
+    /// English name, for agents.
+    pub fn name(self) -> &'static str {
+        match self {
+            RecordType::CivilRegistration => "Civil registration",
+            RecordType::RegistrationIndex => "Registration indexes",
+            RecordType::ChurchRegisters => "Church registers",
+            RecordType::Census => "Census lists",
+            RecordType::Probate => "Probate records",
+            RecordType::MarriageContracts => "Marriage contracts",
+            RecordType::MilitaryRegisters => "Military registers",
+            RecordType::DeathIndex => "Death index",
+            RecordType::PopulationRegisters => "Population registers",
         }
     }
 }
@@ -192,6 +212,10 @@ pub struct WhereToLook {
     /// Census years, for `census`.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Vec::is_empty"))]
     pub census_years: Vec<i32>,
+    /// Last year open to everyone, when the years go beyond it: later records are given on request
+    /// to the people concerned and their descendants (French births and marriages: 75 years).
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
+    pub public_until: Option<i32>,
     /// Registers of this place the file already cites, most cited first.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Vec::is_empty"))]
     pub used_registers: Vec<UsedRegister>,
@@ -280,15 +304,6 @@ pub const DEFAULT_FOCUS: &str = "sosa:1-63";
 /// Oldest age considered for a death without a known date.
 const MAX_AGE: i32 = 105;
 
-/// Nominative census years of France (every five years from 1836, none in 1916 and 1941).
-const FRENCH_CENSUS: &[i32] = &[
-    1836, 1841, 1846, 1851, 1856, 1861, 1866, 1872, 1876, 1881, 1886, 1891, 1896, 1901, 1906, 1911, 1921, 1926, 1931,
-    1936, 1946,
-];
-
-/// Last year of the French decennial tables that archives usually put online.
-const TABLES_ONLINE_UNTIL: i32 = 1942;
-
 /// Years of a GEDCOM date: (earliest, latest).
 fn years_of(raw: &str) -> Option<(i32, i32)> {
     let s = Span::parse(raw)?;
@@ -320,60 +335,6 @@ struct Seen {
     place: String,
     /// “witness at the marriage of Louis MARCHAND”.
     what: String,
-}
-
-/// Countries with their own rules; every other place gets the generic ones.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-enum Country {
-    France,
-    /// French civil registration until 1962, kept by the Archives nationales d'outre-mer.
-    Algeria,
-    Other,
-}
-
-/// Names of countries, as found in places (normalized by `sort_key`).
-const COUNTRIES: &[(&str, Country)] = &[
-    ("france", Country::France),
-    ("belgique", Country::Other),
-    ("belgium", Country::Other),
-    ("suisse", Country::Other),
-    ("switzerland", Country::Other),
-    ("italia", Country::Other),
-    ("italie", Country::Other),
-    ("italy", Country::Other),
-    ("espana", Country::Other),
-    ("espagne", Country::Other),
-    ("spain", Country::Other),
-    ("deutschland", Country::Other),
-    ("allemagne", Country::Other),
-    ("germany", Country::Other),
-    ("algerie", Country::Algeria),
-    ("algeria", Country::Algeria),
-    ("canada", Country::Other),
-    ("united kingdom", Country::Other),
-    ("england", Country::Other),
-    ("royaume-uni", Country::Other),
-    ("usa", Country::Other),
-    ("united states", Country::Other),
-    ("etats-unis", Country::Other),
-    ("luxembourg", Country::Other),
-    ("nederland", Country::Other),
-    ("pays-bas", Country::Other),
-    ("netherlands", Country::Other),
-    ("portugal", Country::Other),
-    ("polska", Country::Other),
-    ("pologne", Country::Other),
-    ("poland", Country::Other),
-];
-
-/// Country named in a place (“Agneaux, Manche, France”, “Agneaux (Manche, France)”).
-fn country_in(place: &str) -> Option<Country> {
-    place
-        .split([',', '(', ')'])
-        .map(|s| sort_key(s.trim()))
-        .filter(|s| !s.is_empty())
-        .rev()
-        .find_map(|s| COUNTRIES.iter().find(|(n, _)| *n == s).map(|(_, c)| *c))
 }
 
 /// Municipality of a place, normalized (“Saint-Lô, Manche” → `saint-lo`): the municipality
@@ -456,7 +417,7 @@ struct Context<'g> {
     /// Registers cited, by place key and event tag, to rank those of the same kind first.
     register_tags: HashMap<(String, String), BTreeMap<String, usize>>,
     /// Country of places that name none: the most frequent one of the file.
-    default_country: Country,
+    default_country: &'static Pack,
     /// Index of the municipality in the place format, and the format's length.
     town: Option<(usize, usize)>,
 }
@@ -474,7 +435,7 @@ impl<'g> Context<'g> {
             candidates: HashMap::new(),
             towns: Default::default(),
             register_tags: HashMap::new(),
-            default_country: Country::Other,
+            default_country: countries::generic(),
             town: None,
         };
         let form = g.place_form();
@@ -488,7 +449,7 @@ impl<'g> Context<'g> {
 
     fn read(&mut self) {
         let g = self.g;
-        let mut countries: HashMap<Country, usize> = HashMap::new();
+        let mut countries: HashMap<&'static str, (&'static Pack, usize)> = HashMap::new();
         let name = |x: &str| g.individual(x).map(|i| i.display_name()).unwrap_or_default();
         for r in g.records_of(RecordKind::Individual).chain(g.records_of(RecordKind::Family)) {
             let Some(owner) = r.xref.as_deref() else { continue };
@@ -503,8 +464,8 @@ impl<'g> Context<'g> {
             };
             for ev in r.children.iter().filter(|e| event_label(&e.tag).is_some()) {
                 let place = ev.path_val(&["PLAC"]).unwrap_or("").to_string();
-                if let Some(c) = country_in(&place) {
-                    *countries.entry(c).or_default() += 1;
+                if let Some(c) = countries::in_place(&place) {
+                    countries.entry(c.code.as_str()).or_insert((c, 0)).1 += 1;
                 }
                 let years = years_of(ev.path_val(&["DATE"]).unwrap_or(""));
                 // Registers cited for this place, by the events its civil or church registers
@@ -569,7 +530,10 @@ impl<'g> Context<'g> {
             }
         }
         self.keep_registers();
-        self.default_country = countries.into_iter().max_by_key(|(_, n)| *n).map(|(c, _)| c).unwrap_or(Country::Other);
+        self.default_country = countries
+            .into_values()
+            .max_by_key(|(c, n)| (*n, std::cmp::Reverse(c.code.as_str())))
+            .map_or(countries::generic(), |(c, _)| c);
     }
 
     fn cite(&mut self, source: &str, place: &str, tag: &str, years: Option<(i32, i32)>) {
@@ -671,8 +635,8 @@ impl<'g> Context<'g> {
         place_key(place, self.town)
     }
 
-    fn country(&self, place: &str) -> Country {
-        country_in(place).unwrap_or(self.default_country)
+    fn country(&self, place: &str) -> &'static Pack {
+        countries::in_place(place).unwrap_or(self.default_country)
     }
 
     /// Registers of `place` already cited, those of the same kind of event first.
@@ -718,174 +682,96 @@ fn dedup_places(ctx: &Context, places: impl IntoIterator<Item = String>) -> Vec<
     out
 }
 
-/// Kinds of records for a goal, in a country and a period, best first.
-fn rules(
-    country: Country,
-    goal: Goal,
-    years: Option<Years>,
-    male: bool,
-) -> Vec<(RecordType, String, Option<Years>, Vec<i32>)> {
+/// A kind of records to search: type, label, years, census years and last public year.
+type Rule = (RecordType, String, Option<Years>, Vec<i32>, Option<i32>);
+
+/// Kinds of records for a goal, in a country and a period, best first: those of the country's
+/// pack, or the generic ones when the pack kept none for the period (records still closed to the
+/// public do not count as none).
+fn rules(pack: &'static Pack, goal: Goal, years: Option<Years>, male: bool, this_year: i32) -> Vec<Rule> {
+    let y = years.unwrap_or(Years { from: i32::MIN / 2, to: i32::MAX / 2 });
+    let covered = pack
+        .records
+        .iter()
+        .any(|r| r.goals.contains(&goal) && y.overlaps(r.from.unwrap_or(i32::MIN), r.until.unwrap_or(i32::MAX)));
+    match covered || pack.is_generic() {
+        true => pack_rules(pack, goal, years, male, this_year),
+        false => pack_rules(countries::generic(), goal, years, male, this_year),
+    }
+}
+
+fn pack_rules(pack: &Pack, goal: Goal, years: Option<Years>, male: bool, this_year: i32) -> Vec<Rule> {
     let mut out = Vec::new();
-    let what = match goal {
-        Goal::Birth => "births",
-        Goal::Marriage => "marriages",
-        Goal::Death => "deaths",
-        Goal::Parents => "births, marriages and deaths",
-    };
-    let church = match goal {
-        Goal::Birth => "baptisms",
-        Goal::Marriage => "marriages",
-        Goal::Death => "burials",
-        Goal::Parents => "baptisms and marriages",
-    };
     let y = years.unwrap_or(Years { from: i32::MIN / 2, to: i32::MAX / 2 });
     let known = years.is_some();
-    let clip = |from: Option<i32>, to: Option<i32>| if known { y.clip(from, to) } else { None };
-    match country {
-        Country::France => {
-            // Decennial tables first when the period is long: one table gives the year of the act.
-            let tables = y.overlaps(1793, TABLES_ONLINE_UNTIL) && (!known || y.to - y.from >= 3);
-            if tables && goal != Goal::Parents {
-                out.push((
-                    RecordType::DecennialTables,
-                    format!("Decennial tables (tables décennales): {what}"),
-                    clip(Some(1793), Some(TABLES_ONLINE_UNTIL)),
-                    Vec::new(),
-                ));
-            }
-            // The national index gives the date and place of every death since 1970.
-            if goal == Goal::Death && known && y.overlaps(1970, i32::MAX) {
-                out.push((
-                    RecordType::DeathIndex,
-                    "National death index (fichier des personnes décédées, INSEE)".to_string(),
-                    y.clip(Some(1970), None),
-                    Vec::new(),
-                ));
-            }
-            if y.overlaps(1792, i32::MAX) {
-                out.push((
-                    RecordType::CivilRegistration,
-                    format!("Civil registers (état civil): {what}"),
-                    clip(Some(1792), None),
-                    Vec::new(),
-                ));
-            }
-            if y.overlaps(i32::MIN, 1792) {
-                out.push((
-                    RecordType::ChurchRegisters,
-                    format!("Parish registers (registres paroissiaux): {church}"),
-                    clip(None, Some(1792)),
-                    Vec::new(),
-                ));
-            }
-            match goal {
-                Goal::Death if known => {
-                    let census: Vec<i32> =
-                        FRENCH_CENSUS.iter().copied().filter(|c| *c >= y.from && *c <= y.to).collect();
-                    if !census.is_empty() {
-                        out.push((
-                            RecordType::Census,
-                            "Census lists (recensements): present or absent from the household".to_string(),
-                            clip(None, None),
-                            census,
-                        ));
-                    }
-                    if y.overlaps(1791, i32::MAX) {
-                        out.push((
-                            RecordType::Probate,
-                            "Probate records (tables des successions et absences)".to_string(),
-                            y.clip(Some(1791), None).map(|v| Years::new(v.from, v.to + 2)),
-                            Vec::new(),
-                        ));
-                    }
-                }
-                Goal::Marriage => out.push((
-                    RecordType::MarriageContracts,
-                    "Marriage contracts (notarial records)".to_string(),
-                    clip(None, None),
-                    Vec::new(),
-                )),
-                Goal::Parents if male && y.overlaps(1847, 1921) => out.push((
-                    RecordType::MilitaryRegisters,
-                    "Military registers (registres matricules), class of the year of birth + 20".to_string(),
-                    y.clip(Some(1847), Some(1921)).map(|v| Years::new(v.from + 20, v.to + 20)),
-                    Vec::new(),
-                )),
-                _ => {}
-            }
+    for r in pack.records.iter().filter(|r| r.goals.contains(&goal)) {
+        if r.sex.is_some_and(|s| (s == Sex::Male) != male) {
+            continue;
         }
-        // French civil registration from 1830 to 1962, at the Archives nationales d'outre-mer.
-        Country::Algeria if y.overlaps(1830, 1962) => {
-            out.push((
-                RecordType::CivilRegistration,
-                format!("Civil registers (état civil), Archives nationales d'outre-mer: {what}"),
-                clip(Some(1830), Some(1962)),
-                Vec::new(),
-            ));
-            // Many left for France in 1962: the French index lists the deaths there from 1970.
-            if goal == Goal::Death && known && y.overlaps(1970, i32::MAX) {
-                out.push((
-                    RecordType::DeathIndex,
-                    "National death index of France (fichier des personnes décédées, INSEE)".to_string(),
-                    y.clip(Some(1970), None),
-                    Vec::new(),
-                ));
-            }
-            match goal {
-                Goal::Marriage => out.push((
-                    RecordType::MarriageContracts,
-                    "Marriage contracts (notarial records)".to_string(),
-                    clip(Some(1830), Some(1962)),
-                    Vec::new(),
-                )),
-                Goal::Parents if male && y.overlaps(1847, 1921) => out.push((
-                    RecordType::MilitaryRegisters,
-                    "Military registers (registres matricules), class of the year of birth + 20".to_string(),
-                    y.clip(Some(1847), Some(1921)).map(|v| Years::new(v.from + 20, v.to + 20)),
-                    Vec::new(),
-                )),
-                _ => {}
-            }
+        // An index is worth it when the period is long: one table gives the year of the act.
+        if r.index && known && y.to - y.from < 3 {
+            continue;
         }
-        Country::Algeria | Country::Other => {
-            out.push((
-                RecordType::CivilRegistration,
-                format!("Civil registration: {what}"),
-                clip(None, None),
-                Vec::new(),
-            ));
-            out.push((
-                RecordType::ChurchRegisters,
-                format!("Church registers: {church}"),
-                clip(None, None),
-                Vec::new(),
-            ));
-            match goal {
-                Goal::Death => {
-                    out.push((
-                        RecordType::Census,
-                        "Census lists: present or absent from the household".to_string(),
-                        clip(None, None),
-                        Vec::new(),
-                    ));
-                    out.push((
-                        RecordType::Probate,
-                        "Probate and inheritance records".to_string(),
-                        clip(None, None),
-                        Vec::new(),
-                    ));
-                }
-                Goal::Parents => out.push((
-                    RecordType::Census,
-                    "Census lists: the household with its parents".to_string(),
-                    clip(None, None),
-                    Vec::new(),
-                )),
-                _ => {}
-            }
+        let from = r.from;
+        let to = [r.until, r.online_until].into_iter().flatten().min();
+        // Last year open to everyone: later records are given on request to the people concerned
+        // and their descendants.
+        let public = r.public_after.as_ref().and_then(|p| p.years(goal)).map(|d| this_year - d);
+        if !y.overlaps(from.unwrap_or(i32::MIN), to.unwrap_or(i32::MAX)) {
+            continue;
         }
+        let mut found = if known { y.clip(from, to) } else { None };
+        if let Some([a, b]) = r.born {
+            // Kept for people born in these years, `offset` years after the birth.
+            let Some(v) = y.clip(Some(a), Some(b)) else { continue };
+            found = Some(Years::new(v.from + r.offset, v.to + r.offset));
+        }
+        if r.extends_by != 0 {
+            found = found.map(|v| Years::new(v.from, v.to + r.extends_by));
+        }
+        let census: Vec<i32> = r
+            .years
+            .iter()
+            .copied()
+            .filter(|c| *c >= y.from && *c <= y.to && [to, public].into_iter().flatten().all(|t| *c <= t))
+            .collect();
+        if !r.years.is_empty() && (!known || census.is_empty()) {
+            continue;
+        }
+        let public = public.filter(|p| found.is_none_or(|f| f.to > *p) && r.years.is_empty());
+        out.push((r.kind, label(r, goal), found, census, public));
     }
     out
+}
+
+/// “Civil registration (état civil): births”.
+fn label(r: &countries::Record, goal: Goal) -> String {
+    let what = match (r.kind, goal) {
+        (RecordType::CivilRegistration | RecordType::RegistrationIndex, Goal::Birth) => "births".to_string(),
+        (RecordType::CivilRegistration | RecordType::RegistrationIndex, Goal::Marriage) => "marriages".to_string(),
+        (RecordType::CivilRegistration | RecordType::RegistrationIndex, Goal::Death) => "deaths".to_string(),
+        (RecordType::CivilRegistration | RecordType::RegistrationIndex, Goal::Parents) => {
+            "births, marriages and deaths".to_string()
+        }
+        (RecordType::ChurchRegisters, Goal::Birth) => "baptisms".to_string(),
+        (RecordType::ChurchRegisters, Goal::Marriage) => "marriages".to_string(),
+        (RecordType::ChurchRegisters, Goal::Death) => "burials".to_string(),
+        (RecordType::ChurchRegisters, Goal::Parents) => "baptisms and marriages".to_string(),
+        (RecordType::Census | RecordType::PopulationRegisters, Goal::Death) => {
+            "present or absent from the household".to_string()
+        }
+        (RecordType::Census | RecordType::PopulationRegisters, _) => "the household with its parents".to_string(),
+        (RecordType::MilitaryRegisters, _) => format!("class of the year of birth + {}", r.offset),
+        _ => String::new(),
+    };
+    let name = match r.local_name.is_empty() {
+        true => r.kind.name().to_string(),
+        false => format!("{} ({})", r.kind.name(), r.local_name),
+    };
+    match what.is_empty() {
+        true => name,
+        false => format!("{name}: {what}"),
+    }
 }
 
 impl Gedcom {
@@ -1111,7 +997,7 @@ impl Gedcom {
         let places: Vec<String> = if l.places.is_empty() { vec![String::new()] } else { l.places.clone() };
         for (i, place) in places.iter().enumerate() {
             let country = ctx.country(place);
-            for (record, label, years, census) in rules(country, l.goal, l.years, male) {
+            for (record, label, years, census, public_until) in rules(country, l.goal, l.years, male, ctx.this_year) {
                 // The other places only get the main registers.
                 if i > 0 && !matches!(record, RecordType::CivilRegistration | RecordType::ChurchRegisters) {
                     continue;
@@ -1122,9 +1008,10 @@ impl Gedcom {
                     place: place.clone(),
                     years,
                     census_years: census,
+                    public_until,
                     // Registers of the place: civil or church registers and their indexes.
                     used_registers: match record {
-                        RecordType::CivilRegistration | RecordType::ChurchRegisters | RecordType::DecennialTables
+                        RecordType::CivilRegistration | RecordType::ChurchRegisters | RecordType::RegistrationIndex
                             if !place.is_empty() =>
                         {
                             ctx.used_registers(place, l.goal, years.or(l.years))
@@ -1220,19 +1107,30 @@ impl Gedcom {
         (Some(Years::new(lo, hi.max(lo))), reasons)
     }
 
-    /// Possible years of a marriage: after both spouses were 15, before the first child.
+    /// Possible years of a marriage: after both spouses reached the legal age of their country,
+    /// before the first child.
     fn marriage_years(&self, ctx: &Context, f: &str, known: Option<&str>) -> (Option<Years>, Vec<String>) {
         if let Some((lo, hi)) = known.and_then(years_of) {
             return (Some(Years::new(lo, hi)), vec![format!("marriage dated {}", Years::new(lo, hi))]);
         }
         let Some(fam) = self.family(f) else { return (None, Vec::new()) };
         let mut reasons = Vec::new();
-        let births: Vec<i32> = [fam.husband(), fam.wife()]
+        let spouses: Vec<(Individual, bool)> = [(fam.husband(), true), (fam.wife(), false)]
             .into_iter()
-            .flatten()
-            .filter_map(|s| self.individual(s))
-            .filter_map(|s| self.birth_years(ctx, &s).0)
-            .map(|y| y.from)
+            .filter_map(|(s, male)| s.and_then(|s| self.individual(s)).map(|s| (s, male)))
+            .collect();
+        // Country of the marriage, otherwise of a spouse's birth.
+        let pack = fam
+            .events()
+            .iter()
+            .filter_map(|e| e.place().map(str::to_string))
+            .chain(spouses.iter().filter_map(|(s, _)| s.birth().and_then(|b| b.place().map(str::to_string))))
+            .find_map(|p| countries::in_place(&p))
+            .unwrap_or(ctx.default_country);
+        let births: Vec<(i32, i32)> = spouses
+            .iter()
+            .filter_map(|(s, male)| self.birth_years(ctx, s).0.map(|y| (y.from, *male)))
+            .map(|(b, male)| (b, b + pack.marriage_age(b + 15, male)))
             .collect();
         let first_child = fam
             .children()
@@ -1242,10 +1140,10 @@ impl Gedcom {
                 c.birth().and_then(|b| b.date_raw().and_then(years_of)).map(|(lo, _)| (lo, c.display_name()))
             })
             .min();
-        let lo = births.iter().max().map(|b| {
-            reasons.push(format!("spouses born from {b}"));
-            b + 15
-        });
+        let lo = births.iter().map(|(_, adult)| *adult).max();
+        if let Some(born) = births.iter().map(|(b, _)| *b).max() {
+            reasons.push(format!("spouses born from {born}"));
+        }
         let hi = first_child.as_ref().map(|(y, n)| {
             reasons.push(format!("first child {n} born in {y}"));
             *y
@@ -1480,7 +1378,7 @@ mod tests {
             death.where_to_look.iter().filter(|w| w.place == death.places[0]).map(|w| w.record).collect();
         assert_eq!(
             kinds,
-            vec![RecordType::DecennialTables, RecordType::CivilRegistration, RecordType::Census, RecordType::Probate]
+            vec![RecordType::RegistrationIndex, RecordType::CivilRegistration, RecordType::Census, RecordType::Probate]
         );
         let census = death.where_to_look.iter().find(|w| w.record == RecordType::Census).unwrap();
         assert_eq!(census.census_years, vec![1856]);
@@ -1538,13 +1436,46 @@ mod tests {
     #[test]
     fn unknown_country_uses_generic_rules() {
         let g = Gedcom::parse(
-            "0 HEAD\n1 GEDC\n2 VERS 7.0\n1 _GR_ROOT @I1@\n0 @I1@ INDI\n1 NAME Ann /SMITH/\n1 BIRT\n2 DATE 1840\n2 PLAC Leeds, England\n0 TRLR\n",
+            "0 HEAD\n1 GEDC\n2 VERS 7.0\n1 _GR_ROOT @I1@\n0 @I1@ INDI\n1 NAME Ann /SMITH/\n1 BIRT\n2 DATE 1840\n2 PLAC Montréal, Québec, Canada\n0 TRLR\n",
         )
         .unwrap();
         let leads = g.research_leads("", 2026);
         let birth = leads.iter().find(|l| l.goal == Goal::Birth).unwrap();
         assert_eq!(birth.where_to_look[0].record, RecordType::CivilRegistration);
         assert!(birth.where_to_look[0].label.starts_with("Civil registration"));
+    }
+
+    #[test]
+    fn country_packs_close_recent_records_and_set_marriage_ages() {
+        let be = countries::by_code("BE").unwrap();
+        // Belgian births are public after 100 years: those after 1926 are given on request.
+        let r = rules(be, Goal::Birth, Some(Years::new(1900, 1950)), true, 2026);
+        let civil = r.iter().find(|r| r.0 == RecordType::CivilRegistration).unwrap();
+        assert_eq!((civil.2, civil.4), (Some(Years::new(1900, 1950)), Some(1926)));
+        let r = rules(be, Goal::Birth, Some(Years::new(1800, 1850)), true, 2026);
+        assert!(r.iter().all(|r| r.4.is_none()));
+        // Population registers help to date a death.
+        let r = rules(be, Goal::Death, Some(Years::new(1880, 1900)), true, 2026);
+        assert!(r.iter().any(|r| r.0 == RecordType::PopulationRegisters));
+        // Census years stop at the access delay (British census: 100 years).
+        let gb = countries::by_code("GB").unwrap();
+        let r = rules(gb, Goal::Death, Some(Years::new(1900, 1940)), true, 2026);
+        let census = r.iter().find(|r| r.0 == RecordType::Census).unwrap();
+        assert_eq!(census.3, vec![1901, 1911, 1921]);
+        // A pack without a rule for the period falls back to the generic rules.
+        let dz = countries::by_code("DZ").unwrap();
+        let r = rules(dz, Goal::Birth, Some(Years::new(1700, 1720)), true, 2026);
+        assert!(r.iter().any(|r| r.0 == RecordType::ChurchRegisters));
+
+        // In France, a woman could marry at 15 from 1804: the marriage is not looked for earlier.
+        let g = Gedcom::parse(
+            "0 HEAD\n1 GEDC\n2 VERS 7.0\n1 _GR_ROOT @I1@\n0 @I1@ INDI\n1 NAME Jean /OHL/\n1 SEX M\n1 BIRT\n2 DATE 1820\n2 PLAC Troyes, Aube, France\n1 FAMS @F1@\n\
+0 @I2@ INDI\n1 NAME Rose /LEROY/\n1 SEX F\n1 BIRT\n2 DATE 1830\n2 PLAC Troyes, Aube, France\n1 FAMS @F1@\n\
+0 @F1@ FAM\n1 HUSB @I1@\n1 WIFE @I2@\n0 TRLR\n",
+        )
+        .unwrap();
+        let m = g.lead("I1", Goal::Marriage, Some("F1"), 2026).unwrap();
+        assert_eq!(m.years.map(|y| y.from), Some(1845));
     }
 
     #[test]
@@ -1572,8 +1503,8 @@ mod tests {
             death.where_to_look.iter().filter(|w| w.record == RecordType::Census).all(|w| w.used_registers.is_empty())
         );
         // Decennial tables after 1902, the 1946 census, the national index of deaths since 1970.
-        let tables = death.where_to_look.iter().find(|w| w.record == RecordType::DecennialTables).unwrap();
-        assert_eq!(tables.years, Some(Years::new(1905, TABLES_ONLINE_UNTIL)));
+        let tables = death.where_to_look.iter().find(|w| w.record == RecordType::RegistrationIndex).unwrap();
+        assert_eq!(tables.years, Some(Years::new(1905, 1942)));
         let census = death.where_to_look.iter().find(|w| w.record == RecordType::Census).unwrap();
         assert!(census.census_years.contains(&1946));
         assert!(death.where_to_look.iter().any(|w| w.record == RecordType::DeathIndex));

@@ -1,0 +1,19 @@
+# Germany. Civil registration (Standesamt) nationwide from 1876 (Prussia from October 1874);
+# Personenstandsgesetz 2009: public after 110 years for births, 80 for marriages, 30 for deaths.
+format: 1
+code: DE
+name: Germany
+names: [Deutschland, Allemagne, Germany]
+marriage_age:
+  - { until: 1876, male: 14, female: 12 }
+  - { from: 1876, until: 1900, male: 20, female: 16 }
+  - { from: 1900, male: 18, female: 16 }
+records:
+  - type: civil_registration
+    local_name: Standesamt
+    goals: [birth, marriage, death, parents]
+    from: 1876
+    public_after: { birth: 110, marriage: 80, death: 30 }
+  - type: church_registers
+    local_name: Kirchenbücher
+    goals: [birth, marriage, death, parents]

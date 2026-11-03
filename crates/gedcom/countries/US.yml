@@ -1,0 +1,30 @@
+# United States. Federal census every ten years from 1790 (1890 mostly lost), open after 72 years;
+# vital records kept by each state, mostly from the late 19th century; Social Security Death
+# Index from 1962.
+format: 1
+code: US
+name: United States
+names: [United States, USA, États-Unis, Etats-Unis, United States of America]
+marriage_age:
+  - { male: 14, female: 12 }
+records:
+  - type: death_index
+    local_name: Social Security Death Index
+    goals: [death]
+    from: 1962
+  - type: civil_registration
+    local_name: state vital records
+    goals: [birth, marriage, death, parents]
+  - type: census
+    local_name: federal census
+    goals: [death, parents]
+    years: [1790, 1800, 1810, 1820, 1830, 1840, 1850, 1860, 1870, 1880, 1900, 1910, 1920, 1930,
+      1940, 1950]
+    public_after: 72
+  - type: church_registers
+    local_name: church records
+    goals: [birth, marriage, death, parents]
+  - type: probate
+    local_name: county probate court records
+    goals: [death]
+    extends_by: 2

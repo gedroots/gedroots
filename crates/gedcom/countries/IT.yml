@@ -1,0 +1,29 @@
+# Italy. Napoleonic civil registration (1806–1815), then the Restoration registers in some states
+# (1816–1865), then the Italian state's from 1866 (1871 in Rome). Many are online on Antenati.
+format: 1
+code: IT
+name: Italy
+names: [Italia, Italie, Italy]
+marriage_age:
+  - { until: 1866, male: 14, female: 12 }
+  - { from: 1866, until: 1975, male: 18, female: 15 }
+  - { from: 1975, male: 18, female: 18 }
+records:
+  - type: civil_registration
+    local_name: stato civile napoleonico
+    goals: [birth, marriage, death, parents]
+    from: 1806
+    until: 1815
+  - type: civil_registration
+    local_name: stato civile della restaurazione
+    goals: [birth, marriage, death, parents]
+    from: 1816
+    until: 1865
+  - type: civil_registration
+    local_name: stato civile italiano
+    goals: [birth, marriage, death, parents]
+    from: 1866
+    public_after: { birth: 70 }
+  - type: church_registers
+    local_name: registri parrocchiali
+    goals: [birth, marriage, death, parents]

@@ -1,0 +1,36 @@
+# Belgium. Civil registration from the French annexation (1796); access delays of the law of
+# 18 June 2018 (100 years for births, 75 for marriages, 50 for deaths).
+format: 1
+code: BE
+name: Belgium
+names: [Belgique, België, Belgien, Belgium]
+marriage_age:
+  - { until: 1796, male: 14, female: 12 }
+  - { from: 1796, until: 1804, male: 15, female: 13 }
+  - { from: 1804, until: 1999, male: 18, female: 15 }
+  - { from: 1999, male: 18, female: 18 }
+records:
+  - type: registration_index
+    local_name: tables décennales / tienjarige tafels
+    goals: [birth, marriage, death]
+    from: 1802
+    index: true
+    public_after: { birth: 100, marriage: 75, death: 50 }
+  - type: civil_registration
+    local_name: état civil / burgerlijke stand
+    goals: [birth, marriage, death, parents]
+    from: 1796
+    public_after: { birth: 100, marriage: 75, death: 50 }
+  - type: church_registers
+    local_name: registres paroissiaux / parochieregisters
+    goals: [birth, marriage, death, parents]
+    until: 1796
+  - type: population_registers
+    local_name: registres de population / bevolkingsregisters
+    goals: [death, parents]
+    from: 1846
+  - type: probate
+    local_name: déclarations de succession / aangiften van nalatenschap
+    goals: [death]
+    from: 1796
+    extends_by: 2

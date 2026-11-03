@@ -85,19 +85,18 @@ its record is cited. A baptism counts as a birth, a burial as a death.
 
 - **Estimated years**: a death falls after the last time the person was seen alive (their events,
   the events they attended as a witness or godparent, their children's births) and before a
-  spouse's remarriage, at most 105 years after the birth; a marriage after both spouses were 15 and
-  before the first child; a birth 15 years before the first sighting, after a parent's birth.
+  spouse's remarriage, at most 105 years after the birth; a marriage after both spouses reached the legal
+  age of their country and before the first child; a birth 15 years before the first sighting, after a parent's birth.
   Searches that found nothing at an end of the period narrow it.
 - **Places**: the last places where the person was seen for a death, the bride's places for a
   marriage, the parents' marriage and siblings' births for a birth, the birth place for parents. A
   locality counts with its municipality (place format).
-- **Where to look**: kinds of records by country and period. France (country named in the place,
-  otherwise the file's most frequent country): decennial tables (from 1793, online until 1942)
-  first, civil registers from 1792, parish registers before; for a death, the national death index
-  (INSEE, from 1970), census lists (1836–1946) and probate tables; marriage contracts; military
-  registers (men born 1847–1921) for parents. Algeria from 1830 to 1962: French civil registers at
-  the Archives nationales d'outre-mer. Elsewhere: civil registration, church registers, census,
-  probate. Civil and church registers and their indexes list the registers of the same town the
+- **Where to look**: kinds of records by country and period, from the [country packs](country-packs.md)
+  (country named in the place, otherwise the file's most frequent country; the generic pack for
+  countries without one and periods a pack does not cover). Records still closed to the public
+  keep their years and give `public_until`: later ones are given on request to the people
+  concerned and their descendants. The legal age at marriage of the country bounds a marriage.
+  Civil and church registers and their indexes list the registers of the same town the
   file already cites (sources whose title or publication names the town, “St” read as “Saint”,
   and acts filed in its registers: same call number cited twice or same series; one per call
   number and period:

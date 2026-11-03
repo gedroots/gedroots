@@ -1,0 +1,19 @@
+# Rules for countries without a pack, and for periods a pack does not cover.
+format: 1
+code: generic
+name: Other countries
+# Countries without a pack: a place naming one of them is not in the file's main country.
+names: [Canada, Luxembourg, Portugal, Polska, Pologne, Poland, Österreich, Autriche, Austria,
+  Россия, Russie, Russia, Ireland, Irlande, Danmark, Danemark, Denmark, Sverige, Suède, Sweden,
+  Norge, Norvège, Norway, Maroc, Morocco, Tunisie, Tunisia, Argentina, Argentine, Brasil, Brésil, Brazil]
+marriage_age:
+  - { male: 14, female: 12 }
+records:
+  - type: civil_registration
+    goals: [birth, marriage, death, parents]
+  - type: church_registers
+    goals: [birth, marriage, death, parents]
+  - type: census
+    goals: [death, parents]
+  - type: probate
+    goals: [death]
