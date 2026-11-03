@@ -145,6 +145,12 @@ review:
   hide_issue:
     en: Hide Issue
     fr: Masquer la remarque
+  merge_people:
+    en: one person
+    fr: un seul individu
+  compare_merge:
+    en: Compare and Merge…
+    fr: Comparer et fusionner…
   apply:
     en: "Apply %{n}"
     fr: "Appliquer (%{n})"

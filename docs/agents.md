@@ -40,7 +40,7 @@ nothing either: they only add a proposal to review.
 | `search_sources` | Sources (register, repository, call number, number of acts) and repositories, to cite an existing one |
 | `match_people` | For the people named in an act (role, names, sex, age, act date), the people of the tree who could be them, with the reason and whether the match is likely |
 | `propose_act` | Adds an act to the To Review page: event, date, place, source, reference, transcription, people with their role, downloaded file |
-| `propose_change` | Adds a change for one Data Quality issue to the To Review page: the page's own fix (`fix`), edits among those the issue allows (`edit`), or hiding a correct issue (`hide`), with the reason and the evidence. The answer lists the issues the change would create |
+| `propose_change` | Adds a change for one Data Quality issue to the To Review page: the page's own fix (`fix`), edits among those the issue allows (`edit`), merging a possible duplicate (`merge`), or hiding a correct issue (`hide`), with the reason and the evidence. The answer lists the issues the change would create |
 
 Ids (`I12`, `F3`…) are only for passing between tools; the server's instructions ask the agent
 not to show them.
@@ -141,3 +141,10 @@ Fixes of the same kind are grouped into one To Review item, applied together. Th
 values in the tree and the proposed ones, the reason, the evidence and the GEDCOM diff; saving it
 is one undo step. Hiding keeps the reason as a `NOTE` under `_GR_IGNORE`, and a possible duplicate
 is hidden with `_GR_DISTINCT`. Filiations (parents, unions) cannot be changed this way.
+
+A possible duplicate can also be merged (`merge`). Its issue lists, under `merge`, the person
+kept, the person merged into it and the facts that contradict each other (`conflicts`: `NAME`,
+`BIRT`…). The agent gives, in `choices`, whose value to keep for each of them; a merge without a
+choice for every conflict, for two people the engine rules out (close relatives, lives too far
+apart), or without a reason, is refused. In To Review, **Compare and Merge…** opens the merge
+window with the agent's choices already ticked: the user checks them and merges there.

@@ -143,6 +143,15 @@ impl Workspace {
         group
     }
 
+    /// After the merge window merged two people or set them apart: their proposed merge is done.
+    pub(super) fn drop_merge_changes(&mut self, a: &str, b: &str) {
+        let same =
+            |c: &ChangeItem| c.change.merge_pair().is_some_and(|(x, y)| (x == a && y == b) || (x == b && y == a));
+        while let Some(i) = self.review.changes.iter().position(|g| g.items.iter().any(same)) {
+            self.take_change(i);
+        }
+    }
+
     pub(super) fn reject_change(&mut self, i: usize, cx: &mut Context<Self>) {
         self.take_change(i);
         self.set_status(t!("review.rejected"), false);
@@ -156,6 +165,11 @@ impl Workspace {
         let kept: Vec<&ChangeItem> = group.kept().collect();
         if kept.is_empty() {
             return;
+        }
+        // A merge is decided in the merge window, the agent's choices already ticked.
+        if let (Action::Merge(choices), Some(pair)) = (&kept[0].change.action, kept[0].change.merge_pair()) {
+            let choices = choices.clone();
+            return self.open_merge_prefilled(pair, &choices, cx);
         }
         let title = group.title(&doc.ged);
         // Checked on a copy first: an error leaves the tree as it is, with its reason.
@@ -199,6 +213,14 @@ impl Workspace {
         let meta = match (&c.action, group.batch()) {
             (_, Some(_)) => t!("review.automatic").into_owned(),
             (Action::Hide, _) => t!("review.hide_issue").into_owned(),
+            (Action::Merge(_), _) => c
+                .rows(g)
+                .into_iter()
+                .filter(|r| r.change == Change::Differs)
+                .map(|r| format!("{} → {}", r.label, r.proposed))
+                .chain(Some(t!("review.merge_people").into_owned()))
+                .collect::<Vec<_>>()
+                .join(" · "),
             _ => c.rows(g).into_iter().map(|r| format!("{} → {}", r.label, r.proposed)).collect::<Vec<_>>().join(" · "),
         };
         v_flex()
@@ -401,6 +423,8 @@ impl Workspace {
             t!("review.apply", n = kept).into_owned()
         } else if c.action == Action::Hide {
             t!("review.hide_issue").into_owned()
+        } else if matches!(c.action, Action::Merge(_)) {
+            t!("review.compare_merge").into_owned()
         } else {
             t!("review.save").into_owned()
         };

@@ -284,3 +284,39 @@ fn the_quality_page_lists_duplicates_and_hides_distinct_pairs() {
     let blanc = dup(&g).into_iter().find(|i| i.xref == "I20" || i.related.first().is_some_and(|r| r == "I20"));
     assert!(blanc.is_some_and(|i| i.ignored));
 }
+
+#[test]
+fn an_agent_merge_is_checked_and_needs_a_choice_for_each_conflict() {
+    use gedcom::change::{Action, QualityChange};
+    use gedcom::quality::{self, issue_ids};
+    // The witness entered twice, the second time with his middle name.
+    let mut g = ged();
+    g.get_mut("I11").unwrap().set_child_val("NAME", "Abraham Salomon /DARMON/");
+    let issues = quality::run(&g);
+    let ids = issue_ids(&issues);
+    let (n, issue) = issues
+        .iter()
+        .enumerate()
+        .find(|(_, i)| i.code == "possible_duplicate" && [i.xref.as_str(), i.related[0].as_str()].contains(&"I11"))
+        .expect("the witness is a possible duplicate");
+    let plan = g.merge_plan(&issue.xref, &issue.related[0]).unwrap();
+    assert_eq!(plan.conflicts.iter().map(|c| c.tag.as_str()).collect::<Vec<_>>(), ["NAME"]);
+    let change = |choices: Vec<(&str, &str)>| QualityChange {
+        issue: issue.clone(),
+        issue_id: ids[n].clone(),
+        action: Action::Merge(choices.into_iter().map(|(a, b)| (a.to_string(), b.to_string())).collect()),
+        reason: "Same witness of two acts seven months apart".into(),
+        evidence: Default::default(),
+    };
+    let rerun = |g: &Gedcom| quality::run(g);
+    assert!(change(vec![]).check(&g, &rerun).unwrap_err().contains("NAME"));
+    assert!(change(vec![("BIRT", "I10")]).check(&g, &rerun).unwrap_err().contains("does not differ"));
+    assert!(change(vec![("NAME", "I12")]).check(&g, &rerun).is_err());
+    let ok = change(vec![("NAME", "I10")]);
+    ok.check(&g, &rerun).unwrap();
+    assert!(ok.rows(&g).iter().any(|r| r.proposed == "Abraham DARMON"));
+    ok.apply(&mut g).unwrap();
+    assert!(g.get("I10").is_none() || g.get("I11").is_none());
+    let kept = if g.get("I10").is_some() { "I10" } else { "I11" };
+    assert_eq!(g.get(kept).unwrap().child_val("NAME"), Some("Abraham /DARMON/"));
+}
