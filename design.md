@@ -118,8 +118,9 @@ in `theme::apply`.
 
 - **Inter**, bundled with the app (Regular, Medium, SemiBold, Bold; SIL OFL licence in
   `crates/gedroots/assets/fonts/OFL.txt`). Rendering is the same on macOS, Linux and Windows.
-- **Tabular figures** enabled on the whole window (`theme::tabular_nums()`), to align dates
-  and counts.
+- **Tabular figures** (`theme::tabular_nums()`) only on dates, years and counts, to align them
+  in columns. Never on running text: Inter's `tnum` also widens the space, the hyphen and
+  punctuation (“Saint - Lô”).
 - Weights: 400 text, 500 labels, 600 titles and names, 700 reserved.
 - Scale (px): 12 `text_xs` (metadata, dense lists) · 14 `text_sm` (body text) · 16 base ·
   20 `text_xl` (record titles) · 24 `text_2xl`. No 18 px.
