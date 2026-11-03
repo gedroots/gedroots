@@ -689,6 +689,17 @@ impl Date {
         self.primary().and_then(|d| d.gregorian_year())
     }
 
+    /// Latest Gregorian year the date can be: the second date of a period, a few years after an
+    /// approximate date, none for an open date (“after 1850”).
+    pub fn latest_year(&self) -> Option<i32> {
+        match self {
+            Date::Exact(d) | Date::Before(d) | Date::To(d) => d.gregorian_year(),
+            Date::About(d) | Date::Calculated(d) | Date::Estimated(d) => d.gregorian_year().map(|y| y + 10),
+            Date::Between(_, d) | Date::FromTo(_, d) => d.gregorian_year(),
+            Date::After(_) | Date::From(_) | Date::Other(_) => None,
+        }
+    }
+
     pub fn sort_key(&self) -> (i32, u8, u8) {
         self.primary().map(|d| d.sort_key()).unwrap_or((i32::MIN, 0, 0))
     }

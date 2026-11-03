@@ -219,52 +219,109 @@ pub fn current_year() -> i32 {
     1970 + (secs as f64 / (365.2425 * 86_400.0)) as i32
 }
 
+/// Youngest age for a union or a child.
+pub const ADULT: i32 = 15;
+/// Oldest age for a parent at a child's birth.
+pub const MAX_PARENT_AGE: i32 = 60;
+/// Largest age gap between spouses.
+pub const MAX_SPOUSE_GAP: i32 = 30;
+/// Generations walked around a person to place their birth.
+const GENERATIONS: usize = 4;
+
 /// Events that prove a death.
 const DEATH_TAGS: [&str; 3] = ["DEAT", "BURI", "CREM"];
 
 impl Gedcom {
-    /// Could the person be living? Cautious: without a death or a date that places them more than
-    /// [`LIVING_YEARS`] years ago, they are considered living.
+    /// Could the person be living? Cautious: without a death, or a sign that they were born more
+    /// than [`LIVING_YEARS`] years ago ([`Gedcom::latest_birth_year`]), they are considered living.
     pub fn is_living(&self, xref: &str, this_year: i32) -> bool {
         let Some(ind) = self.individual(xref) else { return false };
         if ind.events().iter().any(|e| DEATH_TAGS.contains(&e.tag())) {
             return false;
         }
-        match self.estimated_birth_year(xref) {
-            Some(y) => y > this_year - LIVING_YEARS,
-            None => true,
+        let placed = |y: Option<i32>| y.is_some_and(|y| y <= this_year - LIVING_YEARS);
+        if placed(self.latest_birth(xref, GENERATIONS, &mut std::collections::HashSet::new())) {
+            return false;
         }
+        // The acts where they are named (a whole-file search) only matter without a dated birth.
+        let born = ind.events().iter().any(|e| matches!(e.tag(), "BIRT" | "BAPM" | "CHR") && e.date().is_some());
+        born || !placed(self.named_in_acts(xref))
     }
 
-    /// Birth year known or inferred: birth or baptism, otherwise the oldest dated event of the
-    /// person, their unions or their children (minus 15 years), otherwise the birth of a parent
-    /// (plus 15 years).
-    fn estimated_birth_year(&self, xref: &str) -> Option<i32> {
+    /// Latest year the person can have been born in, from what the tree says of them and their
+    /// family, a few generations around: their birth; any dated event of theirs or citation of
+    /// an act about them; their unions and children ([`ADULT`] years earlier); the acts where
+    /// they are a witness or godparent; their parents (dead, or born at most [`MAX_PARENT_AGE`]
+    /// years earlier) and spouses ([`MAX_SPOUSE_GAP`]). A 19th-century ancestor known only
+    /// through their grandchildren is placed too.
+    pub fn latest_birth_year(&self, xref: &str) -> Option<i32> {
+        let family = self.latest_birth(xref, GENERATIONS, &mut std::collections::HashSet::new());
+        [family, self.named_in_acts(xref)].into_iter().flatten().min()
+    }
+
+    /// Earliest dated event where the person is associated (witness, godparent…): they were born
+    /// by then.
+    fn named_in_acts(&self, xref: &str) -> Option<i32> {
+        self.referrers(xref)
+            .into_iter()
+            .flat_map(|r| &r.children)
+            .filter(|ev| ev.children_with("ASSO").any(|a| a.pointer() == Some(xref)))
+            .filter_map(|ev| ev.child_val("DATE").and_then(|d| crate::Date::parse(d).latest_year()))
+            .min()
+    }
+
+    fn latest_birth(&self, xref: &str, depth: usize, seen: &mut std::collections::HashSet<String>) -> Option<i32> {
+        if !seen.insert(xref.to_string()) {
+            return None;
+        }
         let ind = self.individual(xref)?;
-        let year = |e: &Event| e.date().and_then(|d| d.year());
+        let year = |e: &Event| e.date().and_then(|d| d.latest_year());
         if let Some(y) =
             ind.events().iter().filter(|e| matches!(e.tag(), "BIRT" | "BAPM" | "CHR")).filter_map(year).min()
         {
             return Some(y);
         }
-        let mut earliest: Option<i32> = ind.events().iter().filter_map(year).min().map(|y| y - 15);
-        for fam in ind.fams().iter().filter_map(|f| self.family(f)) {
-            let mut years: Vec<i32> = fam.events().iter().filter_map(year).collect();
-            years.extend(
-                fam.children()
-                    .iter()
-                    .filter_map(|c| self.individual(c))
-                    .filter_map(|c| c.birth().as_ref().and_then(year)),
-            );
-            for y in years.into_iter().map(|y| y - 15) {
-                earliest = Some(earliest.map_or(y, |e| e.min(y)));
+        let mut best: Option<i32> = None;
+        let mut take = |y: Option<i32>| {
+            if let Some(y) = y {
+                best = Some(best.map_or(y, |b| b.min(y)));
+            }
+        };
+        // Their own events, dated or cited from a dated act.
+        for e in ind.events() {
+            take(year(&e));
+            for c in e.node.children_with("SOUR") {
+                take(
+                    c.child("DATA").and_then(|d| d.child_val("DATE")).and_then(|d| crate::Date::parse(d).latest_year()),
+                );
             }
         }
-        if earliest.is_some() {
-            return earliest;
+        for fam in ind.fams().iter().filter_map(|f| self.family(f)) {
+            for e in fam.events() {
+                take(year(&e).map(|y| y - ADULT));
+            }
+            if depth > 0 {
+                for c in fam.children() {
+                    take(self.latest_birth(c, depth - 1, seen).map(|y| y - ADULT));
+                }
+                for sp in [fam.husband(), fam.wife()].into_iter().flatten().filter(|s| *s != xref) {
+                    take(self.latest_birth(sp, depth - 1, seen).map(|y| y + MAX_SPOUSE_GAP));
+                }
+            }
         }
-        let (f, m) = self.parents(xref);
-        [f, m].into_iter().flatten().filter_map(|p| p.birth().as_ref().and_then(year)).min().map(|y| y + 15)
+        for fam in ind.famc().iter().filter_map(|f| self.family(f)) {
+            for p in [fam.husband(), fam.wife()].into_iter().flatten() {
+                let Some(parent) = self.individual(p) else { continue };
+                // Born before their parent's death (a year at most for a father).
+                for e in parent.events().iter().filter(|e| DEATH_TAGS.contains(&e.tag())) {
+                    take(year(e).map(|y| y + 1));
+                }
+                if depth > 0 {
+                    take(self.latest_birth(p, depth - 1, seen).map(|y| y + MAX_PARENT_AGE));
+                }
+            }
+        }
+        best
     }
 
     /// Reference to a person; a living person's is reduced to their name and birth.
@@ -630,6 +687,39 @@ mod tests {
         assert!(sheet.events.iter().all(|e| e.tag == "BIRT") && sheet.notes.is_empty());
         assert!(g.search_people("", 10, 2026).iter().any(|p| p.id == "I1"));
         assert!(g.person_ref("I2", 2026).born.is_empty());
+    }
+
+    #[test]
+    fn ancestors_without_dates_are_placed_by_their_family_and_acts() {
+        let g = Gedcom::parse(
+            "0 HEAD\n1 GEDC\n2 VERS 7.0\n\
+             0 @A@ INDI\n1 NAME Jean /BLANC/\n1 FAMS @F1@\n\
+             0 @B@ INDI\n1 NAME Pierre /BLANC/\n1 FAMC @F1@\n1 FAMS @F2@\n\
+             0 @C@ INDI\n1 NAME Louis /BLANC/\n1 FAMC @F2@\n1 BIRT\n2 DATE 1880\n\
+             0 @F1@ FAM\n1 HUSB @A@\n1 CHIL @B@\n0 @F2@ FAM\n1 HUSB @B@\n1 CHIL @C@\n\
+             0 @W@ INDI\n1 NAME Marc /ROUX/\n\
+             0 @X@ INDI\n1 NAME Paul /ROUX/\n1 BAPM\n2 DATE 3 MAR 1850\n2 ASSO @W@\n3 ROLE GODP\n\
+             0 @D@ INDI\n1 NAME Anne /ROUX/\n1 DEAT\n2 DATE 1890\n1 FAMS @F3@\n\
+             0 @E@ INDI\n1 NAME Rose /ROUX/\n1 FAMC @F3@\n0 @F3@ FAM\n1 WIFE @D@\n1 CHIL @E@\n\
+             0 @Y@ INDI\n1 NAME Lucie /ROUX/\n1 BIRT\n2 DATE 1950\n1 FAMS @F4@\n\
+             0 @Z@ INDI\n1 NAME Léa /ROUX/\n1 FAMC @F4@\n0 @F4@ FAM\n1 WIFE @Y@\n1 CHIL @Z@\n\
+             0 @O@ INDI\n1 NAME Max /ROUX/\n1 OCCU tisserand\n2 DATE AFT 1850\n\
+             0 @Q@ INDI\n1 NAME Ida /ROUX/\n1 RESI\n2 SOUR @S1@\n3 DATA\n4 DATE 2 JUN 1872\n\
+             0 @S1@ SOUR\n1 TITL Recensement\n0 TRLR\n",
+        )
+        .unwrap();
+        // Grandfather of a child born in 1880: placed through two generations.
+        assert!(!g.is_living("A", 2026));
+        assert_eq!(g.latest_birth_year("A"), Some(1880 - 2 * ADULT));
+        // Godfather in an 1850 baptism.
+        assert!(!g.is_living("W", 2026));
+        // Daughter of a mother who died in 1890.
+        assert!(!g.is_living("E", 2026));
+        // Daughter of a mother born in 1950: may be living.
+        assert!(g.is_living("Z", 2026));
+        // An open date places nobody; a dated citation does.
+        assert!(g.is_living("O", 2026));
+        assert!(!g.is_living("Q", 2026));
     }
 
     #[test]
