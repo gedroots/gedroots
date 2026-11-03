@@ -1,0 +1,25 @@
+[package]
+name = "gedroots-mobile"
+version = "0.1.0"
+edition = "2024"
+description = "Rust core of the read-only mobile app, exposed to Swift with UniFFI"
+repository.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+crate-type = ["lib", "staticlib"]
+
+[[bin]]
+# Generates the Swift bindings: `cargo run -p gedroots-mobile --bin uniffi-bindgen -- generate …`
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+
+[dependencies]
+gedcom = { path = "../gedcom" }
+gedroots-sync = { path = "../sync" }
+uniffi = { version = "0.32.2", features = ["tokio", "cli"] }
+tokio = { version = "1", features = ["rt-multi-thread", "sync"] }
+thiserror = "2"
+anyhow = "1"
+rust-i18n = "4.2.4"
