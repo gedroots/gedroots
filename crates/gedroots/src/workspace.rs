@@ -206,6 +206,15 @@ struct Row {
     flagged: bool,
 }
 
+/// Record just created and opened on its fields (see `Workspace::edit_fresh`).
+struct Fresh {
+    xref: String,
+    /// Record shown before, shown again if the creation is cancelled.
+    back: Option<String>,
+    /// `Document::checkpoints` right after the creation.
+    checkpoints: u64,
+}
+
 struct Document {
     ged: Gedcom,
     /// File of the tree; media paths are relative to its folder.
@@ -234,6 +243,8 @@ struct Document {
     future: Vec<Gedcom>,
     /// `future` as it was before the last restore point, given back if it is abandoned.
     future_before_checkpoint: Vec<Gedcom>,
+    /// Restore points made and kept, to tell whether anything changed since a given moment.
+    checkpoints: u64,
 }
 
 impl Document {
@@ -510,6 +521,8 @@ pub struct Workspace {
     event_detail: Option<event_detail::EventDetail>,
     /// The record's fields are being edited (Edit › Edit Record); otherwise it is shown as text.
     editing: bool,
+    /// Record just created and opened on its fields: Cancel takes the creation back.
+    fresh: Option<Fresh>,
     /// Record page: also show the relatives' events (View › Relatives' Events).
     show_relative_events: bool,
     /// Statistics of the file (Statistics page).
@@ -624,6 +637,7 @@ impl Workspace {
             tour_pending: false,
             event_detail: None,
             editing: false,
+            fresh: None,
             show_relative_events: false,
             stats: None,
             recent_gen: (crate::recent::generation(), crate::commands::search_sites_generation()),
@@ -717,6 +731,7 @@ impl Workspace {
             history: Vec::new(),
             future: Vec::new(),
             future_before_checkpoint: Vec::new(),
+            checkpoints: 0,
         });
         self.view = View::Individuals;
         self.selected = None;
@@ -906,6 +921,7 @@ impl Workspace {
     fn checkpoint(&mut self) {
         if let Some(doc) = &mut self.doc {
             doc.history.push(doc.ged.clone());
+            doc.checkpoints += 1;
             doc.future_before_checkpoint = std::mem::take(&mut doc.future);
             doc.dirty_before_checkpoint = doc.dirty;
             if doc.history.len() > 50 {
@@ -919,6 +935,7 @@ impl Workspace {
     fn drop_checkpoint(&mut self) {
         if let Some(doc) = &mut self.doc {
             doc.history.pop();
+            doc.checkpoints -= 1;
             doc.future = std::mem::take(&mut doc.future_before_checkpoint);
             doc.dirty = doc.dirty_before_checkpoint;
         }
@@ -1092,6 +1109,7 @@ impl Workspace {
 
     fn refresh_editor(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.editing = false;
+        self.fresh = None;
         let (Some(doc), Some(key), None) = (&self.doc, &self.selected, self.view.page()) else {
             self.editor = None;
             return;
@@ -1143,6 +1161,7 @@ impl Workspace {
         self.checkpoint();
         let Some(doc) = &mut self.doc else { return };
         let x = doc.ged.create(kind);
+        let back = self.selected.clone();
         self.filter.update(cx, |f, cx| f.set_value("", window, cx));
         self.rebuild_rows(cx);
         self.select(x.clone(), window, cx);
@@ -1150,7 +1169,7 @@ impl Workspace {
             self.tab = CenterTab::Form;
         }
         // A new record opens on its fields.
-        self.start_edit(window, cx);
+        self.edit_fresh(x, back, window, cx);
         self.set_status(t!("ws.created", kind = crate::i18n::record_kind(kind)), false);
     }
 
@@ -2867,8 +2886,47 @@ impl Workspace {
         cx.notify();
     }
 
-    /// Cancel (or Esc): the typed values are dropped, back to reading.
+    /// Opens the record `xref`, just created by the last restore point, on its fields. Until it
+    /// is saved or left, Cancel takes the creation back and returns to `back` (like a new contact
+    /// in Contacts): no empty record is left behind.
+    pub(super) fn edit_fresh(
+        &mut self,
+        xref: String,
+        back: Option<String>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(checkpoints) = self.doc.as_ref().map(|d| d.checkpoints) else { return };
+        self.start_edit(window, cx);
+        self.fresh = Some(Fresh { xref, back, checkpoints });
+    }
+
+    /// Cancel (or Esc): the typed values are dropped, back to reading. On a record just created
+    /// and not changed since, the creation is undone too.
     pub(super) fn cancel_edit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(f) = self.fresh.take()
+            && self.editing
+            && self.selected.as_deref() == Some(f.xref.as_str())
+            && let Some(doc) = self.doc.as_mut()
+            && doc.checkpoints == f.checkpoints
+            && let Some(prev) = doc.history.pop()
+        {
+            doc.ged = prev;
+            doc.checkpoints -= 1;
+            doc.future = std::mem::take(&mut doc.future_before_checkpoint);
+            doc.dirty = doc.dirty_before_checkpoint;
+            let back = f.back.filter(|b| doc.ged.get(b).is_some());
+            self.selected = None;
+            self.editor = None;
+            self.rebuild_rows(cx);
+            match back {
+                Some(b) => self.select(b, window, cx),
+                None => self.refresh_editor(window, cx),
+            }
+            self.set_status(t!("ws.creation_cancelled"), false);
+            cx.notify();
+            return;
+        }
         self.refresh_editor(window, cx);
         cx.notify();
     }
@@ -4062,6 +4120,7 @@ mod autosave_tests {
             history: Vec::new(),
             future: Vec::new(),
             future_before_checkpoint: Vec::new(),
+            checkpoints: 0,
         }
     }
 

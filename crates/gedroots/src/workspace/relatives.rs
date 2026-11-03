@@ -133,6 +133,22 @@ impl Workspace {
         if self.doc.is_none() {
             return;
         }
+        self.mutate_then(window, cx, false, f);
+    }
+
+    /// Like `mutate`; with `edit`, the record to open is a new one, opened on its fields (Cancel
+    /// takes it back).
+    fn mutate_then(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+        edit: bool,
+        f: impl FnOnce(&mut Gedcom) -> Result<(String, Option<String>), String>,
+    ) {
+        if self.doc.is_none() {
+            return;
+        }
+        let back = self.selected.clone();
         self.checkpoint();
         let doc = self.doc.as_mut().unwrap();
         match f(&mut doc.ged) {
@@ -142,9 +158,12 @@ impl Workspace {
                 match open {
                     Some(x) => {
                         self.filter.update(cx, |f, cx| f.set_value("", window, cx));
-                        self.goto(x, window, cx);
+                        self.goto(x.clone(), window, cx);
                         self.rebuild_rows(cx);
                         self.tab = CenterTab::Form;
+                        if edit {
+                            self.edit_fresh(x, back, window, cx);
+                        }
                     }
                     None => self.refresh_editor(window, cx),
                 }
@@ -158,8 +177,9 @@ impl Workspace {
         cx.notify();
     }
 
+    /// Creates a relative of `indi` and opens them on their fields.
     pub(super) fn add_relative(&mut self, indi: String, rel: Relation, window: &mut Window, cx: &mut Context<Self>) {
-        self.mutate(window, cx, |g| {
+        self.mutate_then(window, cx, true, |g| {
             let name = g.record_label(&indi);
             let x = g.add_relative(&indi, rel, None)?;
             Ok((t!("picker.relative_added", rel = crate::i18n::relation(rel), name = name).into_owned(), Some(x)))
@@ -167,7 +187,7 @@ impl Workspace {
     }
 
     pub(super) fn add_family_child(&mut self, fam: String, window: &mut Window, cx: &mut Context<Self>) {
-        self.mutate(window, cx, |g| {
+        self.mutate_then(window, cx, true, |g| {
             let f = g.family(&fam).ok_or_else(|| t!("picker.family_not_found").to_string())?;
             let surname = f.husband().and_then(|h| g.individual(h)).map(|h| h.surname()).unwrap_or_default();
             let x = g.create_individual("", &surname, "U");

@@ -63,7 +63,8 @@ A proposal without this research is not ready to show.
 - **Read first, edit in place**: a record opens as text (empty values hidden, linked records
   clickable). Edit › Edit Record (`⌘L`, like Contacts) or the small pencil next to it turns the
   same layout into fields; Done saves (one undo point), Cancel or `Esc` drops the changes. A
-  new record opens on its fields. An item of a record (an event) opens read-only on click, with
+  new record (New Individual, a dashed slot of the tree, Add Relative) opens on its fields;
+  until Done, Cancel removes it again, like a new card in Contacts. An item of a record (an event) opens read-only on click, with
   "Edit…"; a double-click edits it directly.
 - **Undo rather than confirm**: every change goes through an undo point; confirmation is only
   asked for what cannot be undone (a file overwritten on disk…).
