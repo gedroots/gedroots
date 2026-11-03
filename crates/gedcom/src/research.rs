@@ -250,8 +250,8 @@ impl Gedcom {
 
     /// Latest year the person can have been born in, from what the tree says of them and their
     /// family, a few generations around: their birth; any dated event of theirs or citation of
-    /// an act about them; their unions and children ([`ADULT`] years earlier); the acts where
-    /// they are a witness or godparent; their parents (dead, or born at most [`MAX_PARENT_AGE`]
+    /// an act about them (an occupation [`ADULT`] years earlier); their unions and children
+    /// ([`ADULT`] years earlier); the acts where they are a witness or godparent (an adult); their parents (dead, or born at most [`MAX_PARENT_AGE`]
     /// years earlier) and spouses ([`MAX_SPOUSE_GAP`]). A 19th-century ancestor known only
     /// through their grandchildren is placed too.
     pub fn latest_birth_year(&self, xref: &str) -> Option<i32> {
@@ -259,14 +259,19 @@ impl Gedcom {
         [family, self.named_in_acts(xref)].into_iter().flatten().min()
     }
 
-    /// Earliest dated event where the person is associated (witness, godparent…): they were born
-    /// by then.
+    /// Earliest dated event where the person is associated: they were born by then, and
+    /// [`ADULT`] years earlier for a witness or a godparent.
     fn named_in_acts(&self, xref: &str) -> Option<i32> {
         self.referrers(xref)
             .into_iter()
             .flat_map(|r| &r.children)
-            .filter(|ev| ev.children_with("ASSO").any(|a| a.pointer() == Some(xref)))
-            .filter_map(|ev| ev.child_val("DATE").and_then(|d| crate::Date::parse(d).latest_year()))
+            .filter_map(|ev| {
+                let asso = ev.children_with("ASSO").find(|a| a.pointer() == Some(xref))?;
+                let year = ev.child_val("DATE").and_then(|d| crate::Date::parse(d).latest_year())?;
+                // A witness or a godparent is an adult.
+                let adult = matches!(asso.child_val("ROLE"), Some("WITN" | "GODP"));
+                Some(if adult { year - ADULT } else { year })
+            })
             .min()
     }
 
@@ -287,13 +292,13 @@ impl Gedcom {
                 best = Some(best.map_or(y, |b| b.min(y)));
             }
         };
-        // Their own events, dated or cited from a dated act.
+        // Their own events, dated or cited from a dated act; an occupation is an adult's.
         for e in ind.events() {
-            take(year(&e));
+            let age = if e.tag() == "OCCU" { ADULT } else { 0 };
+            take(year(&e).map(|y| y - age));
             for c in e.node.children_with("SOUR") {
-                take(
-                    c.child("DATA").and_then(|d| d.child_val("DATE")).and_then(|d| crate::Date::parse(d).latest_year()),
-                );
+                let cited = c.child("DATA").and_then(|d| d.child_val("DATE"));
+                take(cited.and_then(|d| crate::Date::parse(d).latest_year()).map(|y| y - age));
             }
         }
         for fam in ind.fams().iter().filter_map(|f| self.family(f)) {
@@ -704,6 +709,7 @@ mod tests {
              0 @Y@ INDI\n1 NAME Lucie /ROUX/\n1 BIRT\n2 DATE 1950\n1 FAMS @F4@\n\
              0 @Z@ INDI\n1 NAME Léa /ROUX/\n1 FAMC @F4@\n0 @F4@ FAM\n1 WIFE @Y@\n1 CHIL @Z@\n\
              0 @O@ INDI\n1 NAME Max /ROUX/\n1 OCCU tisserand\n2 DATE AFT 1850\n\
+             0 @J@ INDI\n1 NAME Jules /ROUX/\n1 OCCU chauffeur\n2 DATE 1929\n\
              0 @Q@ INDI\n1 NAME Ida /ROUX/\n1 RESI\n2 SOUR @S1@\n3 DATA\n4 DATE 2 JUN 1872\n\
              0 @S1@ SOUR\n1 TITL Recensement\n0 TRLR\n",
         )
@@ -720,6 +726,8 @@ mod tests {
         // An open date places nobody; a dated citation does.
         assert!(g.is_living("O", 2026));
         assert!(!g.is_living("Q", 2026));
+        // A chauffeur in 1929 was an adult.
+        assert!(!g.is_living("J", 2026));
     }
 
     #[test]

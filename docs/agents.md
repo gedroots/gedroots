@@ -125,10 +125,10 @@ the act editor. Proposals live in memory: they are lost when the app closes.
 - **Living people are reduced to what identifies them.** A person with no death, burial or
   cremation is treated as living unless they were born more than 100 years ago, as their birth
   shows or the tree places it (`Gedcom::latest_birth_year`): the latest year their own dated
-  events and the dated acts cited about them allow, their unions and children (15 years
+  events and the dated acts cited about them allow (an occupation 15 years earlier), their unions and children (15 years
   earlier), grandchildren and further down, their parents (born at most 60 years earlier, or
   dead), spouses (30 years apart), and the dated events where they are a witness or godparent
-  (`ASSO`). An open date (“after 1850”) places nobody; an approximate one is taken 10 years later. The agent can find and
+  (`ASSO`, 15 years earlier). An open date (“after 1850”) places nobody; an approximate one is taken 10 years later. The agent can find and
   link a living person, but only gets their name, their birth (date and place, `born`) and their
   close relatives: their sheet leaves out their other events and notes, and `research_gaps` skips
   them (`crates/gedcom/src/research.rs`). `quality_issues` lists their issues too, their records
