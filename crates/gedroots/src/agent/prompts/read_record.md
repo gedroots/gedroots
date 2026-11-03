@@ -20,9 +20,11 @@ How to work:
    occupation or residence may be current, former or undated.
 3. Check that the act is about the person in the tree: call `person_sheet` and compare names,
    dates, places and parents. If it does not match, stop and tell the user why.
-4. Call `search_sources` with the register or the archive's name. Reuse the repository, and the
-   source when the file keeps one source per register (`acts` above 1); otherwise propose a new
-   source with the register (PUBL), the repository and the call number.
+4. Call `file_context` if you have not yet: read the user's description of the file and the
+   latest sources and people. Then call `search_sources` with the register or the archive's name.
+   Reuse the repository, and write the source the way this file does: reuse a register's source
+   when the file keeps one source per register, otherwise propose a new source, with a title,
+   register (PUBL) and call number shaped like the file's examples.
 5. Call `match_people` with the act's event, date and everyone named (give the id of the
    principal person already identified). Decide for each person who they are: `link` someone of
    the tree (check a likely candidate with `person_sheet`), `create` a new person, or `mention`

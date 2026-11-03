@@ -4,8 +4,10 @@
 //! with the same model as record entry ([`Act`]), and the source that contains it (existing, or new
 //! with its register and repository). Before it is shown, a proposal is checked
 //! ([`Proposal::check`]): it must fit into the tree's structure (repository → source → file → event
-//! → people) and follow the file's habits (one source per record, or per register). An inconsistent
-//! proposal is rejected with the reason, which the agent reads to correct it.
+//! → people). An inconsistent proposal is rejected with the reason, which the agent reads to correct
+//! it. How the file writes its records (one source per act or per register, titles…) is not
+//! checked: the agent learns it from the file's context ([`crate::context`]) and the user reviews
+//! the proposal.
 //!
 //! For the review, [`Proposal::compare`] puts what the tree contains next to what is proposed, and
 //! [`Proposal::diff`] gives the exact GEDCOM lines that will change, computed on a copy of the
@@ -241,17 +243,6 @@ impl Proposal {
                 if ged.get(x).is_none_or(|n| n.tag != "SOUR") {
                     return Err(format!("no source with id {x}"));
                 }
-                // Source of a single record (without a reference): the file keeps one record per
-                // source.
-                let acts = ged.acts(x);
-                if self.act.original.is_none() && acts.len() == 1 && acts[0].page.trim().is_empty() {
-                    let s = crate::model::Source::new(ged.get(x).unwrap());
-                    return Err(format!(
-                        "source {x} (\"{}\") already holds one act: this file keeps one source per act; \
-                         propose a new source with the same register and repository",
-                        s.title()
-                    ));
-                }
             }
             SourceChoice::New(s) => {
                 if let Some(r) = &s.repository
@@ -261,12 +252,6 @@ impl Proposal {
                 }
                 if s.register.trim().is_empty() && s.title.trim().is_empty() {
                     return Err("give the new source's register (e.g. \"Rennes, births 1802\")".into());
-                }
-                // Register already described by a source that gathers several records.
-                if let Some(x) = ged.register_sources(&s.register).into_iter().find(|x| ged.acts(x).len() > 1) {
-                    return Err(format!(
-                        "this file keeps one source per register: use source {x} with the act's reference as page"
-                    ));
                 }
             }
         }
@@ -766,9 +751,9 @@ mod tests {
     #[test]
     fn incoherent_proposals_are_refused_with_reason() {
         let g = ged();
-        // Source of a single record: the file keeps one record per source.
-        let e = birth(SourceChoice::Existing("S1".into())).check(&g).unwrap_err();
-        assert!(e.contains("one source per act"), "{e}");
+        // How the file arranges its sources is left to the agent and the review.
+        assert!(birth(SourceChoice::Existing("S1".into())).check(&g).is_ok());
+        assert!(birth(SourceChoice::Existing("S9".into())).check(&g).unwrap_err().contains("no source"));
         // Unknown repository.
         let mut s = NewSource { register: "X".into(), repository: Some("R9".into()), ..Default::default() };
         let e = birth(SourceChoice::New(s.clone())).check(&g).unwrap_err();

@@ -33,6 +33,7 @@ either: it only adds a proposal to review.
 | Tool | Returns |
 | --- | --- |
 | `file_info` | File name, counts, root person |
+| `file_context` | How the file is written: the description the user wrote (File Settings › General, `HEAD.NOTE`, word for word), language, place format, events, custom event types and occupations in use with their counts, media folders and naming, and the latest sources, people, families, media and repositories changed as raw GEDCOM (`examples`, never a living person). Also served as the resource `gedroots://file/context` |
 | `search_people` | People matching a search, as in the app's search box |
 | `person_sheet` | Events with their position in the record, date, place, cited sources (`PAGE`) and media; parents, unions, children; Sosa number |
 | `research_gaps` | Births, marriages and deaths missing or without a source among the root person's direct ancestors, by Sosa number, with each person's known places |
@@ -43,6 +44,10 @@ either: it only adds a proposal to review.
 
 Ids (`I12`, `F3`…) are only for passing between tools; the server's instructions ask the agent
 not to show them.
+
+How the file is written (one source per act or per register, source titles, name forms) is not
+checked: `file_context` shows it to the agent, and the user reviews each proposal. The file's
+description is where the user writes their own conventions, in plain words, for agents to follow.
 
 ## Prompts
 
@@ -77,8 +82,6 @@ Before a proposal reaches the review page it must fit the tree. Otherwise it is 
 reason, which the agent reads to fix it:
 
 - the source and repository must exist, or the new source must name its register;
-- the source follows the file's habit for that register: one source per act, or one per register
-  with the act's reference as `PAGE`;
 - a parent other than the one already in the tree is refused (link that person, or mention the
   other one);
 - a person to create must not resemble someone of the tree (same names, or a relative of a linked
