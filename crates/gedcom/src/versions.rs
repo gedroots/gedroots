@@ -106,7 +106,55 @@ pub struct Version {
     records: Vec<(Hash, String)>,
 }
 
+/// Records added, changed and removed between two states of a tree, by identifier, in file order.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Changes {
+    pub added: Vec<String>,
+    pub changed: Vec<String>,
+    pub removed: Vec<String>,
+}
+
+impl Changes {
+    fn between(before: &[(Hash, String)], after: &[(Hash, String)]) -> Self {
+        let index = |l: &[(Hash, String)]| -> HashMap<String, Hash> {
+            l.iter().filter(|(_, x)| !x.is_empty()).map(|(h, x)| (x.clone(), h.clone())).collect()
+        };
+        let (old, new) = (index(before), index(after));
+        let mut c = Changes::default();
+        for (_, x) in after.iter().filter(|(_, x)| !x.is_empty()) {
+            match old.get(x) {
+                None => c.added.push(x.clone()),
+                Some(h) if *h != new[x] => c.changed.push(x.clone()),
+                Some(_) => {}
+            }
+        }
+        c.removed =
+            before.iter().filter(|(_, x)| !x.is_empty() && !new.contains_key(x)).map(|(_, x)| x.clone()).collect();
+        c
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.added.is_empty() && self.changed.is_empty() && self.removed.is_empty()
+    }
+}
+
 impl Version {
+    /// What this version changed since `earlier` (every record when there is none).
+    pub fn changes_since(&self, earlier: Option<&Version>) -> Changes {
+        Changes::between(earlier.map_or(&[][..], |e| &e.records), &self.records)
+    }
+
+    /// What `ged` changed since this version.
+    pub fn changes_to(&self, ged: &Gedcom) -> Changes {
+        Changes::between(&self.records, &Snapshot::of(ged).list())
+    }
+
+    /// Same records and header as `ged`.
+    pub fn is_same_as(&self, ged: &Gedcom) -> bool {
+        let snap = Snapshot::of(ged);
+        self.same_content(&snap.head.0, &snap.list())
+    }
+
     /// Identifiers of the records, in file order.
     pub fn xrefs(&self) -> impl Iterator<Item = &str> {
         self.records.iter().map(|(_, x)| x.as_str()).filter(|x| !x.is_empty())
@@ -658,6 +706,24 @@ mod tests {
         for v in s.versions().unwrap() {
             s.load(&v).unwrap();
         }
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn changes_between_versions_and_the_tree() {
+        let (s, dir) = store();
+        let mut g = Gedcom::parse(SAMPLE).unwrap();
+        let first = s.record_at(&g, Kind::Saved, None, None, 1_000_000).unwrap().unwrap();
+        assert!(first.is_same_as(&g));
+        assert_eq!(first.changes_since(None).added.len(), g.records.iter().filter(|r| r.xref.is_some()).count());
+        g.get_mut("I00003").unwrap().set_child_val("SEX", "M");
+        let gone = g.records.iter().position(|r| r.xref.as_deref() == Some("I00002")).unwrap();
+        g.records.remove(gone);
+        let second = s.record_at(&g, Kind::Saved, None, None, 2_000_000).unwrap().unwrap();
+        let c = second.changes_since(Some(&first));
+        assert_eq!((c.added, c.changed, c.removed), (vec![], vec!["I00003".to_string()], vec!["I00002".to_string()]));
+        assert!(second.changes_to(&g).is_empty());
+        assert_eq!(first.changes_to(&g).changed, vec!["I00003".to_string()]);
         std::fs::remove_dir_all(dir).unwrap();
     }
 

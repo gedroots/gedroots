@@ -15,6 +15,7 @@ export default defineMeta({
     "quality",
     "ai-agents",
     "share",
+    "versions",
     "file-settings",
   ],
 });

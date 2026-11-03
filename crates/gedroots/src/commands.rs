@@ -23,6 +23,9 @@ actions!(
         OpenFileSettings,
         SaveFile,
         SaveFileAs,
+        SaveVersion,
+        RevertToOpened,
+        BrowseVersions,
         ExportFile,
         ConnectAgent,
         MobileDevices,
@@ -462,6 +465,12 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
         Sep,
         a(t!("cmd.save"), SaveFile),
         a(t!("cmd.save_as"), SaveFileAs),
+        a(t!("cmd.save_version"), SaveVersion),
+        // Like macOS documents: Revert To › Last Opened, Browse All Versions….
+        Sub(
+            t!("menu.revert_to").into(),
+            vec![a(t!("cmd.revert_to_opened"), RevertToOpened), Sep, a(t!("cmd.browse_versions"), BrowseVersions)],
+        ),
         Sep,
         a(t!("cmd.export"), ExportFile),
         Sep,

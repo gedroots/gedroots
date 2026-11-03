@@ -71,6 +71,13 @@ impl Workspace {
         let d = on!(d, cx, MobileDevices, |this, w, cx| this.open_mobile_dialog(w, cx));
         let d = if sample { d } else { on!(d, cx, SaveFileAs, |this, w, cx| this.save_file_as(w, cx)) };
         let d = on!(d, cx, ExportFile, |this, w, cx| this.export(w, cx));
+        let d = d.when(self.has_version_history(), |d| {
+            let d = on!(d, cx, SaveVersion, |this, w, cx| this.open_save_version(w, cx));
+            on!(d, cx, BrowseVersions, |this, w, cx| this.open_version_history(w, cx))
+        });
+        let d = d.when(self.changed_since_opened(), |d| {
+            on!(d, cx, RevertToOpened, |this, w, cx| this.revert_to_opened(w, cx))
+        });
         let d = on!(d, cx, EnterRecord, |this, w, cx| this.enter_act(w, cx));
         let d = on!(d, cx, FocusSearch, |this, w, cx| this.filter.update(cx, |f, cx| f.focus(w, cx)));
         let d = on!(d, cx, ClearSearch, |this, w, cx| this.set_query(String::new(), w, cx));

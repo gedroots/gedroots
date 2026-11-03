@@ -77,6 +77,7 @@ gpui_kit::assets::icon_assets!(
         Quote,
         Smartphone,
         Tablet,
+        RotateCcwClock,
     ]
 );
 
