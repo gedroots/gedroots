@@ -27,12 +27,6 @@ act.page_placeholder:
 act.date_placeholder:
   en: 3 March 1912
   fr: 3 mars 1912
-act.age_placeholder:
-  en: 32 years
-  fr: 32 ans
-act.kinship_placeholder:
-  en: son, wife, neighbour
-  fr: fils, épouse, voisin
 act.image:
   en: Record Image
   fr: "Image de l'acte"
@@ -45,9 +39,6 @@ act.file_missing:
 act.no_image:
   en: No Image
   fr: Aucune image
-act.existing_media:
-  en: Existing media…
-  fr: Média existant…
 act.other_file:
   en: Other File…
   fr: Autre fichier…
@@ -72,12 +63,9 @@ act.reference:
 act.quality:
   en: Quality
   fr: Qualité
-act.linked_to:
-  en: "Linked to %{name}"
-  fr: "Lié à %{name}"
 act.mentioned:
-  en: Mentioned without creating a person
-  fr: "Mentionné sans créer d'individu"
+  en: Mentioned
+  fr: Mentionné
 act.matches.one:
   en: "%{n} possible match"
   fr: "%{n} correspondance possible"
@@ -87,15 +75,9 @@ act.matches.other:
 act.of:
   en: "of %{name}"
   fr: "de %{name}"
-act.unlink:
-  en: Unlink
-  fr: Délier
 act.remove_person:
   en: Remove from Record
   fr: "Retirer de l'acte"
-act.link:
-  en: Link…
-  fr: Lier…
 act.mention:
   en: Mention Without Creating
   fr: Mentionner sans créer
@@ -129,9 +111,6 @@ act.saved.one:
 act.saved.other:
   en: " · %{n} records saved"
   fr: " · %{n} actes enregistrés"
-act.hide_preview:
-  en: Hide Preview
-  fr: "Masquer l'aperçu"
 act.preview:
   en: GEDCOM Preview
   fr: Aperçu GEDCOM
@@ -150,3 +129,21 @@ act.transcription:
 act.summary:
   en: Generate a Summary
   fr: Générer un résumé
+act.matches_header:
+  en: Possible Matches
+  fr: Correspondances possibles
+act.other_person:
+  en: Other Person…
+  fr: Autre personne…
+act.status_tooltip:
+  en: Create, Mention or Link This Person
+  fr: Créer, mentionner ou lier cette personne
+act.change_image:
+  en: Change Image
+  fr: Changer l’image
+act.source_media:
+  en: Source Media
+  fr: Médias de la source
+act.other_media:
+  en: Other Media…
+  fr: Autre média…

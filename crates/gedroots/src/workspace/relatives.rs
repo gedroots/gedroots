@@ -24,6 +24,8 @@ pub enum PickPurpose {
     /// The chosen person is the person at `idx` in the record being entered; the likely
     /// individuals (individual, why) come first.
     ActPerson { idx: usize, suggestions: Vec<(String, String)> },
+    /// The chosen media is the image of the record being entered.
+    ActMedia,
 }
 
 impl PickPurpose {
@@ -37,6 +39,7 @@ impl PickPurpose {
             PickPurpose::MergeInto { media } => t!("picker.merge_into", name = g.record_label(media)).into_owned(),
             PickPurpose::ActSource => t!("picker.act_source").into(),
             PickPurpose::ActPerson { .. } => t!("picker.act_person").into(),
+            PickPurpose::ActMedia => t!("picker.act_media").into(),
         }
     }
 }
@@ -180,7 +183,7 @@ impl Workspace {
 
     pub(super) fn open_picker(&mut self, purpose: PickPurpose, window: &mut Window, cx: &mut Context<Self>) {
         let hint = match purpose {
-            PickPurpose::MergeInto { .. } => t!("picker.media_hint"),
+            PickPurpose::MergeInto { .. } | PickPurpose::ActMedia => t!("picker.media_hint"),
             PickPurpose::ActSource => t!("picker.source_hint"),
             _ => t!("picker.person_hint"),
         };
@@ -261,11 +264,16 @@ impl Workspace {
             (distance, sort_key(&i.surname()), sort_key(&i.given()))
         });
         let mut out: Vec<String> = Vec::new();
-        if let PickPurpose::MergeInto { media } = &p.purpose {
+        let merge_into = match &p.purpose {
+            PickPurpose::MergeInto { media } => Some(Some(media.as_str())),
+            PickPurpose::ActMedia => Some(None),
+            _ => None,
+        };
+        if let Some(skip) = merge_into {
             // Media, by their title or their files.
             let words: Vec<String> = text.split_whitespace().map(sort_key).collect();
             for r in g.records_of(RecordKind::Media) {
-                let Some(x) = r.xref.as_deref().filter(|x| *x != media) else { continue };
+                let Some(x) = r.xref.as_deref().filter(|x| Some(*x) != skip) else { continue };
                 let m = Media::new(r);
                 let k = sort_key(&format!(
                     "{} {}",
@@ -355,6 +363,12 @@ impl Workspace {
             self.open_act(source, None, window, cx);
             return;
         }
+        if let PickPurpose::ActMedia = p.purpose {
+            if let Some((editor, _)) = &self.act_editor {
+                editor.update(cx, |e, cx| e.set_media(gedcom::MediaChoice::Existing(chosen), cx));
+            }
+            return;
+        }
         if let PickPurpose::ActPerson { idx, .. } = p.purpose {
             if let Some((editor, _)) = &self.act_editor {
                 editor.update(cx, |e, cx| e.link_person(idx, chosen, window, cx));
@@ -403,7 +417,9 @@ impl Workspace {
                     Ok((t!("picker.tagged", who = who).into_owned(), None))
                 }
                 // Handled before: nothing to change.
-                PickPurpose::Kinship { .. } | PickPurpose::ActPerson { .. } => Err(t!("stats.kinship_title").into()),
+                PickPurpose::Kinship { .. } | PickPurpose::ActPerson { .. } | PickPurpose::ActMedia => {
+                    Err(t!("stats.kinship_title").into())
+                }
             }
         });
     }

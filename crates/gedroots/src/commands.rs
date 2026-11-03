@@ -98,6 +98,7 @@ actions!(
         ShowTree,
         ShowForm,
         ShowRaw,
+        ToggleRecordPreview,
         TreeChart,
         TreeFan,
         CenterTree,
@@ -531,6 +532,7 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
         t!("menu.source").into(),
         vec![
             a(label::enter_act(), EnterRecord),
+            a(t!("cmd.record_preview"), ToggleRecordPreview),
             Sep,
             a(t!("cmd.review_proposals"), ReviewProposals),
             a(t!("cmd.accept_proposal"), AcceptProposal),

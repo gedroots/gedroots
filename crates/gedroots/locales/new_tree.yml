@@ -151,8 +151,8 @@ tour:
     en: Link Who Is Already There
     fr: Liez qui existe déjà
   link_body:
-    en: Jacques is already in the tree. Click “Link…” on the father’s card and choose Jacques MARCHAND, first in the list, so the record becomes his source too, without a duplicate.
-    fr: "Jacques est déjà dans l’arbre. Cliquez « Lier… » sur la carte du père et choisissez Jacques MARCHAND, en tête de liste : l’acte devient aussi sa source, sans doublon."
+    en: Jacques is already in the tree. Open the menu next to “Father” and choose Jacques MARCHAND, the first possible match, so the record becomes his source too, without a duplicate.
+    fr: "Jacques est déjà dans l’arbre. Ouvrez le menu à côté de « Père » et choisissez Jacques MARCHAND, première correspondance : l’acte devient aussi sa source, sans doublon."
   save_title:
     en: Save the Record
     fr: Enregistrez l’acte

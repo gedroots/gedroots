@@ -72,6 +72,8 @@ gpui_kit::assets::icon_assets!(
         Compass,
         Sprout,
         Import,
+        UserSearch,
+        Quote,
     ]
 );
 

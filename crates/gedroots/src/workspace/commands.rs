@@ -166,6 +166,14 @@ impl Workspace {
                     }
                 })
             })
+            // Record entry: what the record will write.
+            .when(self.act_editor.is_some(), |d| {
+                on!(d, cx, ToggleRecordPreview, |this, _w, cx| {
+                    if let Some((editor, _)) = &this.act_editor {
+                        editor.update(cx, |e, cx| e.toggle_preview(cx));
+                    }
+                })
+            })
             // Zoom of the large image shown (act, proposal to review, media).
             .when(self.active_zoom(cx).is_some(), |d| {
                 let d = on!(d, cx, ZoomIn, |this, w, cx| this.with_zoom(w, cx, |z| z.zoom_in()));
