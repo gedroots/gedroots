@@ -119,7 +119,7 @@ final class TreeModel {
         }
         pairing = true
         defer { pairing = false }
-        let again = adding ? nil : current.filter(\.removed)
+        let again = adding ? nil : current.flatMap { $0.removed ? $0 : nil }
         let id = again?.id ?? UUID().uuidString
         let dir = folder(id)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
