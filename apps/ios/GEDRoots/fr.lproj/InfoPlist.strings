@@ -1,0 +1,3 @@
+"NSCameraUsageDescription" = "Scannez le code de jumelage affiché par GEDRoots sur l’ordinateur.";
+"NSLocalNetworkUsageDescription" = "Recevez votre arbre directement depuis GEDRoots sur l’ordinateur.";
+"NSLocationWhenInUseUsageDescription" = "Voir où vous êtes parmi les lieux de votre arbre.";

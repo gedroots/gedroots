@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/gedcom", "crates/gedroots", "crates/sync"]
+members = ["crates/gedcom", "crates/gedroots", "crates/sync", "crates/mobile"]
 
 # Shared metadata. `repository` also builds the extension URIs (`HEAD.SCHMA`) and the
 # User-Agent sent to the map and geocoding services.

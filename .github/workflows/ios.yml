@@ -1,0 +1,47 @@
+name: iOS
+
+# Builds the iOS app (apps/ios) for the simulator, unsigned: the Rust core with its Swift
+# bindings, then the Xcode project. Only when the app or its Rust core change; the Rust crates
+# themselves are tested by the Test workflow.
+on:
+  pull_request:
+    paths:
+      - apps/ios/**
+      - crates/mobile/**
+      - .github/workflows/ios.yml
+  push:
+    branches: [main]
+    paths:
+      - apps/ios/**
+      - crates/mobile/**
+      - .github/workflows/ios.yml
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+      - name: Rust toolchain in the mise folder
+        run: echo "MISE_RUSTUP_HOME=$HOME/.local/share/mise/rustup" >> "$GITHUB_ENV"
+      - uses: jdx/mise-action@v5
+        with:
+          version: 2026.10.25
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: ${{ github.job }}-ios-${{ hashFiles('mise.lock', 'Cargo.lock') }}
+          restore-keys: ${{ github.job }}-ios-
+      - name: XcodeGen
+        run: brew install xcodegen
+      - run: mise run ios:build

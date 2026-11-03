@@ -1512,7 +1512,7 @@ fn age_text(s: &str) -> String {
 }
 
 /// “Témoin : Paul MARCHAND” (“Witness: Paul MARCHAND”).
-fn labelled(label: &str, value: &str) -> String {
+pub(crate) fn labelled(label: &str, value: &str) -> String {
     t!("act.labelled", label = label, value = value).into_owned()
 }
 
