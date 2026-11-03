@@ -37,6 +37,7 @@ actions!(
         Undo,
         Redo,
         EditRecord,
+        RecordHistory,
         DeleteRecord,
         CopyId,
         CopyName,
@@ -299,6 +300,9 @@ pub mod label {
     pub fn media_gallery() -> SharedString {
         t!("cmd.media_gallery").into()
     }
+    pub fn record_history() -> SharedString {
+        t!("cmd.record_history").into()
+    }
     pub fn copy_id() -> SharedString {
         t!("cmd.copy_id").into()
     }
@@ -492,6 +496,7 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
             Item::Os(t!("cmd.select_all").into(), Box::new(input::SelectAll), OsAction::SelectAll),
             Sep,
             a(t!("cmd.edit_record"), EditRecord),
+            a(label::record_history(), RecordHistory),
             a(t!("cmd.add_web_link"), AddWebLink),
             Sep,
             // Rarely used: one level down, so that Edit stays within 12 items.

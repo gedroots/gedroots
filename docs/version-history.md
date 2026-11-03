@@ -23,8 +23,12 @@ file.
 - when an earlier version is brought back (File › Revert To): a `restored` version, after the
   changes not recorded yet have become a version of their own.
 
-Later: accepted AI agent proposals and restore points before bulk operations (the kinds exist
-already).
+- when a proposal of an AI agent is accepted in To Review: an `agent` version of its own, saved
+  at once, labelled with what it did and authored by the agent (the changes not recorded yet
+  become a version first, so that the agent's version holds only its changes);
+- before an operation that changes many records (merging two people, Quality › Fix All, the
+  import wizard's conversions): a `restore-point` version, labelled with the operation, recorded
+  even when nothing changed since the latest version.
 
 ## Browsing and restoring
 
@@ -36,6 +40,20 @@ only shows its number of records.
 Restore This Version and Revert To › Last Opened never overwrite anything: the tree as it was
 becomes the current tree as one undo point, is saved, and is recorded as a `restored` version.
 Save a Copy… writes the selected version to a separate `.ged`.
+
+Undo This Change (`Store::undo_changes`) undoes only what the selected version changed: each
+record it added, changed or removed goes back to how it was in the version before, unless it was
+changed again since (its current hash differs from its hash in the selected version), in which
+case it is left as it is and counted. The result is a `restored` version labelled `undo <id>`.
+
+## Record history
+
+Edit › Record History… (`crates/gedroots/src/workspace/record_history.rs`) lists the versions
+that changed the selected record (`Store::record_history`), newest first, each with the fields
+that changed, before and after, in the genealogist's words (`crates/gedcom/src/record_diff.rs`:
+facts matched by tag and `TYPE`, a fact that only moved and the change dates `CHAN`/`CREA` are not
+changes). Restore This State brings the record back as it was after the selected change, as one
+undo point.
 
 ## Files
 
@@ -75,8 +93,9 @@ rec <hash> F00001
 
 - `kind`: `opened`, `saved`, `named`, `agent`, `restore-point`, `outside`, `restored`.
 - `label`, `author`, `tree` (`HEAD._GR_TREE`) are optional. The `label` of a `named` version is
-  its name; that of a `restored` version is the id of the version it brought back, or `opened`
-  for the tree as it was opened.
+  its name; that of a `restored` version is the id of the version it brought back, `opened` for
+  the tree as it was opened, or `undo <id>` for the version whose changes were undone; that of an
+  `agent` version or a `restore-point` says what was done. `author` is the AI agent's name.
 - `added`, `changed`, `removed`: records compared with the previous version, by identifier.
 - `head`: the header; `rec`: the records in file order, with their identifier when they have one.
 - A hash is the BLAKE3 hash of the record's GEDCOM lines (`\n` line endings), first 128 bits in

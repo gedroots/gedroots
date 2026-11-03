@@ -134,3 +134,35 @@ versions:
   named_status:
     en: "Version “%{name}” saved"
     fr: "Version « %{name} » enregistrée"
+  undo:
+    en: Undo This Change
+    fr: Annuler ce changement
+  undone_from:
+    en: "Change of %{from} undone"
+    fr: "Changement du %{from} annulé"
+  undone:
+    one:
+      en: "%{n} record put back"
+      fr: "%{n} fiche rétablie"
+    other:
+      en: "%{n} records put back"
+      fr: "%{n} fiches rétablies"
+  left:
+    one:
+      en: "%{n} record changed since, left as it is"
+      fr: "%{n} fiche modifiée depuis, laissée telle quelle"
+    other:
+      en: "%{n} records changed since, left as they are"
+      fr: "%{n} fiches modifiées depuis, laissées telles quelles"
+  nothing_to_undo:
+    en: Every record of this change has been changed since; nothing was undone
+    fr: Toutes les fiches de ce changement ont été modifiées depuis ; rien n’a été annulé
+  before_merge:
+    en: "Before merging %{a} and %{b}"
+    fr: "Avant la fusion de %{a} et %{b}"
+  before_fix_all:
+    en: "Before fixing all: %{label}"
+    fr: "Avant de tout corriger : %{label}"
+  before_import:
+    en: Before the import wizard
+    fr: Avant l’assistant d’import

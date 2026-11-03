@@ -44,6 +44,7 @@ mod pages;
 mod photo;
 mod places;
 mod quality;
+mod record_history;
 mod relatives;
 mod report;
 mod review;
@@ -261,11 +262,11 @@ impl Document {
         let due = self.versioned_at.is_none_or(|t| t.elapsed() >= VERSION_EVERY);
         let versioned = versioning != Versioning::Throttled || due;
         if versioned {
-            let (kind, label) = versioning.kind();
+            let (kind, label, author) = versioning.kind();
             let kind = Some(kind);
             match wait {
-                true => record_version_now(path, &self.ged, kind, label),
-                false => record_version(path, &self.ged, kind, label),
+                true => record_version_now(path, &self.ged, kind, label, author),
+                false => record_version(path, &self.ged, kind, label, author),
             }
             self.versioned_at = Some(std::time::Instant::now());
         }
@@ -282,7 +283,7 @@ impl Document {
                 Err(e) => eprintln!("save before closing: {}: {e}", path.display()),
             }
         } else if self.unversioned {
-            record_version_now(&path, &self.ged, Some(gedcom::versions::Kind::Saved), None);
+            record_version_now(&path, &self.ged, Some(gedcom::versions::Kind::Saved), None, None);
             self.unversioned = false;
         }
     }
@@ -304,9 +305,15 @@ impl Document {
 /// Records the tree in the history folder beside its file, on its own thread: as it was found
 /// on opening (`kind` none: first version, or changes made outside GEDRoots), or as saved. The
 /// old versions are pruned after a save.
-fn record_version(path: &std::path::Path, ged: &Gedcom, kind: Option<gedcom::versions::Kind>, label: Option<String>) {
+fn record_version(
+    path: &std::path::Path,
+    ged: &Gedcom,
+    kind: Option<gedcom::versions::Kind>,
+    label: Option<String>,
+    author: Option<String>,
+) {
     let (path, ged) = (path.to_path_buf(), ged.clone());
-    std::thread::spawn(move || record_version_now(&path, &ged, kind, label));
+    std::thread::spawn(move || record_version_now(&path, &ged, kind, label, author));
 }
 
 /// [`record_version`] on the calling thread: when the window closes or the app quits, or before
@@ -316,11 +323,12 @@ fn record_version_now(
     ged: &Gedcom,
     kind: Option<gedcom::versions::Kind>,
     label: Option<String>,
+    author: Option<String>,
 ) {
     let store = gedcom::versions::Store::for_file(path, ged.tree_id());
     let result = match kind {
         None => store.record_opened(ged).map(|_| ()),
-        Some(k) => store.record(ged, k, label.as_deref(), None).and_then(|_| store.prune().map(|_| ())),
+        Some(k) => store.record(ged, k, label.as_deref(), author.as_deref()).and_then(|_| store.prune().map(|_| ())),
     };
     if let Err(e) = result {
         eprintln!("version history: {}: {e}", store.dir().display());
@@ -347,19 +355,27 @@ enum Versioning {
     Now,
     /// File › Save Version…: a version with this name, kept until deleted.
     Named(String),
-    /// An earlier version brought back: its id, or `opened` for Revert To › Last Opened.
+    /// An earlier version brought back: its id, `opened` for Revert To › Last Opened, or
+    /// `undo <id>` for the changes of a version taken back.
     Restored(String),
+    /// A proposal of an AI agent accepted in To Review: what it did, and the agent.
+    Agent(String, Option<String>),
+    /// Before an operation that changes many records (merge, fixes of a whole kind).
+    RestorePoint(String),
     /// Automatic save: a version if the last one is old enough.
     Throttled,
 }
 
 impl Versioning {
-    fn kind(&self) -> (gedcom::versions::Kind, Option<String>) {
+    /// Kind, label and author of the version.
+    fn kind(&self) -> (gedcom::versions::Kind, Option<String>, Option<String>) {
         use gedcom::versions::Kind;
         match self {
-            Versioning::Now | Versioning::Throttled => (Kind::Saved, None),
-            Versioning::Named(n) => (Kind::Named, Some(n.clone())),
-            Versioning::Restored(from) => (Kind::Restored, Some(from.clone())),
+            Versioning::Now | Versioning::Throttled => (Kind::Saved, None, None),
+            Versioning::Named(n) => (Kind::Named, Some(n.clone()), None),
+            Versioning::Restored(from) => (Kind::Restored, Some(from.clone()), None),
+            Versioning::Agent(what, who) => (Kind::Agent, Some(what.clone()), who.clone()),
+            Versioning::RestorePoint(what) => (Kind::RestorePoint, Some(what.clone()), None),
         }
     }
 }
@@ -482,6 +498,8 @@ pub struct Workspace {
     merge: Option<merging::MergeDialog>,
     /// File › Revert To › Browse All Versions… window.
     version_history: Option<version_history::VersionHistory>,
+    /// Edit › Record History… window.
+    record_history: Option<record_history::RecordHistory>,
     /// Guided tour in progress.
     tour: Option<tour::Tour>,
     /// Chapters of the tour offered (Help › Take the Tour).
@@ -600,6 +618,7 @@ impl Workspace {
             kinship: None,
             merge: None,
             version_history: None,
+            record_history: None,
             tour: None,
             tour_chooser: false,
             tour_pending: false,
@@ -679,7 +698,7 @@ impl Workspace {
         let first = ged.root();
         let dirty = imported || path.is_none();
         if let Some(p) = path.as_ref().filter(|_| !imported) {
-            record_version(p, &ged, None, None);
+            record_version(p, &ged, None, None, None);
         }
         let disk = path.as_deref().filter(|_| !imported).and_then(disk_stamp);
         self.doc = Some(Document {
@@ -844,14 +863,14 @@ impl Workspace {
             return;
         }
         if doc.unsaved() {
-            record_version(&path, &theirs, Some(gedcom::versions::Kind::Outside), None);
+            record_version(&path, &theirs, Some(gedcom::versions::Kind::Outside), None, None);
             self.set_status(t!("ws.outside_kept"), false);
         } else {
             // Undo goes back to the tree before the reload.
             doc.history.push(std::mem::replace(&mut doc.ged, theirs));
             doc.future.clear();
             doc.saved = doc.ged.clone();
-            record_version(&path, &doc.ged, None, None);
+            record_version(&path, &doc.ged, None, None, None);
             self.rebuild_rows(cx);
             self.refresh_editor(window, cx);
             self.set_status(t!("ws.outside_reloaded"), false);
@@ -3701,6 +3720,13 @@ impl Render for Workspace {
                         _ => {}
                     }
                 }
+                if this.record_history.is_some() {
+                    match ev.keystroke.key.as_str() {
+                        "down" => return this.step_record_change(1, cx),
+                        "up" => return this.step_record_change(-1, cx),
+                        _ => {}
+                    }
+                }
                 if ev.keystroke.key == "escape" {
                     if this.tour_chooser {
                         this.tour_chooser = false;
@@ -3724,6 +3750,7 @@ impl Render for Workspace {
                     } else if this.kinship.take().is_some()
                         || this.close_merge(cx)
                         || this.close_version_history(cx)
+                        || this.close_record_history(cx)
                         || this.close_event_detail(cx)
                     {
                         cx.notify();
@@ -3741,6 +3768,7 @@ impl Render for Workspace {
             .children(self.render_kinship(cx))
             .children(self.render_merge(cx))
             .children(self.render_version_history(cx))
+            .children(self.render_record_history(cx))
             .children(self.render_event_detail(cx))
             .children(self.render_media_gallery(cx))
             .children(self.render_add_dialog(cx))

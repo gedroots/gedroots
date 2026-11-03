@@ -107,6 +107,7 @@ impl Workspace {
         let issues: Vec<Issue> = self.quality.issues.iter().filter(|i| i.code == code && !i.ignored).cloned().collect();
         let n = issues.len();
         let msg = crate::tn!("quality.fixed", n, label = check::code_label(code)).to_string();
+        self.restore_point(t!("versions.before_fix_all", label = check::code_label(code)).into());
         self.quality_edit(|g| g.fix_issues(&issues) > 0, msg, window, cx);
     }
 

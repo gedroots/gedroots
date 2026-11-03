@@ -408,6 +408,7 @@ impl Workspace {
             cx.notify();
             return;
         }
+        self.before_agent_change();
         self.checkpoint();
         let doc = self.doc.as_mut().unwrap();
         match proposal.apply(&mut doc.ged) {
@@ -441,6 +442,7 @@ impl Workspace {
                     d.new_people = saved;
                 }
                 self.set_status(res.summary() + &note, false);
+                self.record_agent_change(res.summary(), cx);
                 self.tour_did(super::tour::Advance::Decide, cx);
                 self.rebuild_rows(cx);
                 self.refresh_editor(window, cx);

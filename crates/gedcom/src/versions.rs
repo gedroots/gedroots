@@ -231,6 +231,27 @@ fn one_line(s: &str) -> String {
     s.replace(['\r', '\n'], " ")
 }
 
+/// A change of one record (see [`Store::record_history`]).
+#[derive(Debug, Clone)]
+pub struct RecordChange {
+    pub version: Version,
+    pub before: Option<Node>,
+    pub after: Option<Node>,
+}
+
+/// GEDCOM lines of a record, as a version stores them.
+fn record_text(n: &Node) -> String {
+    let mut s = String::new();
+    parse::write_nodes(std::iter::once(n), 0, "\n", &mut s);
+    s
+}
+
+/// A record from its stored lines.
+fn parse_record(text: &str) -> Option<Node> {
+    let g = Gedcom::parse(&format!("0 HEAD\n1 GEDC\n2 VERS 7.0\n{text}0 TRLR\n")).ok()?;
+    g.records.first().map(|r| (**r).clone())
+}
+
 /// A tree split into the blobs a version stores.
 struct Snapshot {
     head: (Hash, String),
@@ -239,11 +260,7 @@ struct Snapshot {
 
 impl Snapshot {
     fn of(ged: &Gedcom) -> Self {
-        let text = |n: &Node| {
-            let mut s = String::new();
-            parse::write_nodes(std::iter::once(n), 0, "\n", &mut s);
-            s
-        };
+        let text = record_text;
         let head = text(&ged.header);
         let records = ged
             .records
@@ -462,7 +479,7 @@ impl Store {
         let latest = self.versions()?.pop();
         if let Some(l) = &latest
             && l.same_content(&snap.head.0, &list)
-            && kind != Kind::Named
+            && !matches!(kind, Kind::Named | Kind::RestorePoint)
         {
             return Ok(None);
         }
@@ -523,6 +540,85 @@ impl Store {
     pub fn load(&self, version: &Version) -> Result<Gedcom, String> {
         let wanted: HashSet<&str> =
             std::iter::once(version.head.as_str()).chain(version.records.iter().map(|(h, _)| h.as_str())).collect();
+        let texts = self.blobs(&wanted)?;
+        let mut s = texts[&version.head].clone();
+        for (h, _) in &version.records {
+            s.push_str(&texts[h]);
+        }
+        s.push_str("0 TRLR\n");
+        Gedcom::parse(&s).map_err(|e| e.to_string())
+    }
+
+    /// Every change of record `xref`, oldest first: the version that made it, and the record
+    /// before and after (`None`: not in the tree). The oldest version that holds the record counts
+    /// as a change from nothing.
+    pub fn record_history(&self, xref: &str) -> Result<Vec<RecordChange>, String> {
+        let versions = self.versions().map_err(|e| e.to_string())?;
+        let mut steps: Vec<(usize, Option<String>, Option<String>)> = Vec::new();
+        let mut prev: Option<String> = None;
+        for (i, v) in versions.iter().enumerate() {
+            let h = v.records.iter().find(|(_, x)| x == xref).map(|(h, _)| h.clone());
+            if h != prev {
+                steps.push((i, prev.clone(), h.clone()));
+                prev = h;
+            }
+        }
+        let wanted: HashSet<&str> = steps.iter().flat_map(|(_, a, b)| [a.as_deref(), b.as_deref()]).flatten().collect();
+        let texts = self.blobs(&wanted)?;
+        let node = |h: &Option<String>| h.as_ref().and_then(|h| parse_record(&texts[h]));
+        Ok(steps
+            .iter()
+            .map(|(i, a, b)| RecordChange { version: versions[*i].clone(), before: node(a), after: node(b) })
+            .collect())
+    }
+
+    /// `current` with the changes `version` made since `earlier` taken back: each record it
+    /// changed, added or removed returns to its state in `earlier`, unless it changed again since
+    /// (such records are left as they are and counted). Returns the tree and the numbers of records
+    /// taken back and left.
+    pub fn undo_changes(
+        &self,
+        version: &Version,
+        earlier: &Version,
+        current: &Gedcom,
+    ) -> Result<(Gedcom, usize, usize), String> {
+        let changes = version.changes_since(Some(earlier));
+        let before = self.load(earlier)?;
+        let hash_in = |v: &Version, x: &str| v.records.iter().find(|(_, r)| r == x).map(|(h, _)| h.clone());
+        let unchanged_since = |x: &str| current.get(x).map(|n| hash(&record_text(n))) == hash_in(version, x);
+        let mut g = current.clone();
+        let (mut done, mut left) = (0, 0);
+        for x in changes.changed.iter().chain(&changes.added) {
+            if !unchanged_since(x) {
+                left += 1;
+                continue;
+            }
+            match before.get(x) {
+                Some(old) => {
+                    let i = g.records.iter().position(|r| r.xref.as_deref() == Some(x.as_str()));
+                    if let Some(i) = i {
+                        g.records[i] = std::sync::Arc::new(old.clone());
+                    }
+                }
+                None => g.records.retain(|r| r.xref.as_deref() != Some(x.as_str())),
+            }
+            done += 1;
+        }
+        for x in &changes.removed {
+            match (g.get(x), before.get(x)) {
+                (None, Some(old)) => {
+                    g.records.push(std::sync::Arc::new(old.clone()));
+                    done += 1;
+                }
+                _ => left += 1,
+            }
+        }
+        g.reindex();
+        Ok((g, done, left))
+    }
+
+    /// Texts of the blobs with these hashes, read from the packs.
+    fn blobs(&self, wanted: &HashSet<&str>) -> Result<HashMap<String, String>, String> {
         let mut texts: HashMap<String, String> = HashMap::new();
         for pack in self.packs() {
             if !pack.blobs.iter().any(|(h, _, _)| wanted.contains(h.as_str()) && !texts.contains_key(h)) {
@@ -541,12 +637,7 @@ impl Store {
         if missing > 0 {
             return Err(rust_i18n::t!("error.version_incomplete", count = missing).into());
         }
-        let mut s = texts[&version.head].clone();
-        for (h, _) in &version.records {
-            s.push_str(&texts[h]);
-        }
-        s.push_str("0 TRLR\n");
-        Gedcom::parse(&s).map_err(|e| e.to_string())
+        Ok(texts)
     }
 
     /// Deletes the versions the retention no longer keeps, then the packs no version needs.
@@ -724,6 +815,42 @@ mod tests {
         assert_eq!((c.added, c.changed, c.removed), (vec![], vec!["I00003".to_string()], vec!["I00002".to_string()]));
         assert!(second.changes_to(&g).is_empty());
         assert_eq!(first.changes_to(&g).changed, vec!["I00003".to_string()]);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn a_record_history_and_undoing_one_version() {
+        let (s, dir) = store();
+        let mut g = Gedcom::parse(SAMPLE).unwrap();
+        let v1 = s.record_at(&g, Kind::Saved, None, None, 1_000_000).unwrap().unwrap();
+        g.get_mut("I00003").unwrap().set_child_val("SEX", "M");
+        s.record_at(&g, Kind::Saved, None, None, 2_000_000).unwrap();
+        // An agent changes I00003 again and I00002.
+        let before_agent = s.versions().unwrap().pop().unwrap();
+        g.get_mut("I00003").unwrap().set_child_val("SEX", "F");
+        g.get_mut("I00002").unwrap().set_child_val("NOTE", "agent");
+        let agent = s.record_at(&g, Kind::Agent, Some("Act saved"), Some("Claude"), 3_000_000).unwrap().unwrap();
+        // Unchanged versions do not count; the first one is a change from nothing.
+        let h = s.record_history("I00003").unwrap();
+        assert_eq!(h.len(), 3);
+        assert!(h[0].before.is_none() && h[0].version.id == v1.id);
+        assert_eq!(h[2].after.as_ref().unwrap().child_val("SEX"), Some("F"));
+        // The user changes I00002 again: undoing the agent's version leaves it as it is.
+        g.get_mut("I00002").unwrap().set_child_val("NOTE", "user");
+        let (back, done, left) = s.undo_changes(&agent, &before_agent, &g).unwrap();
+        assert_eq!((done, left), (1, 1));
+        assert_eq!(back.get("I00003").unwrap().child_val("SEX"), Some("M"));
+        assert_eq!(back.get("I00002").unwrap().child_val("NOTE"), Some("user"));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn a_restore_point_is_recorded_even_without_a_change() {
+        let (s, dir) = store();
+        let g = Gedcom::parse(SAMPLE).unwrap();
+        s.record_at(&g, Kind::Saved, None, None, 1_000_000).unwrap();
+        assert!(s.record_at(&g, Kind::Saved, None, None, 2_000_000).unwrap().is_none());
+        assert!(s.record_at(&g, Kind::RestorePoint, Some("Before merging"), None, 3_000_000).unwrap().is_some());
         std::fs::remove_dir_all(dir).unwrap();
     }
 

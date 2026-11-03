@@ -187,6 +187,7 @@ impl Workspace {
         }
         self.take_change(i);
         let msg = t!("review.change_saved", title = title).into_owned();
+        self.before_agent_change();
         self.edit_ged(
             move |g| {
                 *g = copy;
@@ -196,6 +197,7 @@ impl Workspace {
             window,
             cx,
         );
+        self.record_agent_change(title, cx);
     }
 
     /// Row of the list.

@@ -267,9 +267,13 @@ fn ellipsize(s: &str, n: usize) -> String {
 
 /// Common entries at the bottom of the menu, in the Edit menu’s order: copy the name, the
 /// identifier, delete (from the list).
-fn tail(menu: PopupMenu, ws: &Ws, xref: &str, from: &From) -> PopupMenu {
-    let (a, b, c) = (xref.to_string(), xref.to_string(), xref.to_string());
+fn tail(menu: PopupMenu, ws: &Ws, xref: &str, from: &From, cx: &App) -> PopupMenu {
+    let (a, b, c, d) = (xref.to_string(), xref.to_string(), xref.to_string(), xref.to_string());
+    let history = read(ws, cx, |this, _| this.has_version_history()).unwrap_or(false);
     menu.separator()
+        .when(history, |m| {
+            m.item(act(ws, label::record_history(), move |this, w, cx| this.open_record_history(d.clone(), w, cx)))
+        })
         .item(act(ws, label::copy_name(), move |this, _, cx| this.copy_name(&c, cx)))
         .item(act(ws, label::copy_id(), move |this, _, cx| this.copy_id(&a, cx)))
         .when(matches!(from, From::List), |m| {
@@ -358,16 +362,16 @@ pub(super) fn person_menu(ws: Ws, x: String, from: From) -> MenuBuilder {
                 m.separator().item(act(&ws, label, move |this, w, cx| this.unlink(indi.clone(), fam.clone(), w, cx)))
             },
         )
-        .map(|m| tail(m, &ws, &x, &from))
+        .map(|m| tail(m, &ws, &x, &from, cx))
     })
 }
 
 /// Family cited in a link (source, media…): it opens on the record of a spouse.
 fn family_menu(ws: Ws, x: String, from: From) -> MenuBuilder {
-    Rc::new(move |menu, _, _| {
+    Rc::new(move |menu, _, cx| {
         let x1 = x.clone();
         menu.item(act(&ws, t!("context.open_details"), move |this, w, cx| this.goto(x1.clone(), w, cx)))
-            .map(|m| tail(m, &ws, &x, &from))
+            .map(|m| tail(m, &ws, &x, &from, cx))
     })
 }
 
@@ -483,6 +487,6 @@ fn other_menu(ws: Ws, x: String, kind: RecordKind, from: From) -> MenuBuilder {
                 }))
             },
         )
-        .map(|m| tail(m, &ws, &x, &from))
+        .map(|m| tail(m, &ws, &x, &from, cx))
     })
 }
