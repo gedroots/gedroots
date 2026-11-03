@@ -47,6 +47,7 @@ mod quality;
 mod relatives;
 mod report;
 mod review;
+mod review_change;
 mod saved;
 mod settings;
 pub(crate) mod tour;

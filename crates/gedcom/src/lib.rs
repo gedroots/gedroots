@@ -45,6 +45,7 @@ pub mod i18n;
 pub mod act;
 pub mod analysis;
 pub mod associations;
+pub mod change;
 pub mod complete;
 pub mod context;
 pub mod crop;

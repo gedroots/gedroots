@@ -42,3 +42,6 @@ quality.unhide:
 quality.hide:
   en: Hide
   fr: Masquer
+quality.pending:
+  en: "Change proposed · To Review"
+  fr: "Correction proposée · À relire"

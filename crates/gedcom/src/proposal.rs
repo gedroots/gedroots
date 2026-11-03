@@ -581,7 +581,7 @@ impl Gedcom {
 }
 
 /// Line by line diff (longest common subsequence; records are short).
-fn line_diff(before: &str, after: &str) -> Vec<DiffLine> {
+pub(crate) fn line_diff(before: &str, after: &str) -> Vec<DiffLine> {
     let a: Vec<&str> = before.lines().collect();
     let b: Vec<&str> = after.lines().collect();
     let (n, m) = (a.len(), b.len());
