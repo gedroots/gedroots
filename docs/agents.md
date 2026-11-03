@@ -87,7 +87,9 @@ its record is cited. A baptism counts as a birth, a burial as a death.
   registers (men born 1847–1921) for parents. Algeria from 1830 to 1962: French civil registers at
   the Archives nationales d'outre-mer. Elsewhere: civil registration, church registers, census,
   probate. Civil and church registers and their indexes list the registers of the same town the
-  file already cites (sources whose title or publication names the town, one per call number:
+  file already cites (sources whose title or publication names the town, “St” read as “Saint”,
+  and acts filed in its registers: same call number cited twice or same series; one per call
+  number and period:
   register, source, archive, call number, number of events, years), close in time, those of the
   same kind of event first.
 

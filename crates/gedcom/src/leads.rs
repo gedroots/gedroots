@@ -385,9 +385,9 @@ fn place_key(p: &str, town: Option<(usize, usize)>) -> String {
         && parts.len() == len
         && !parts[i].is_empty()
     {
-        return sort_key(parts[i]);
+        return town_text(parts[i]);
     }
-    sort_key(p.split([',', '(']).map(str::trim).find(|s| !s.is_empty()).unwrap_or(""))
+    town_text(p.split([',', '(']).map(str::trim).find(|s| !s.is_empty()).unwrap_or(""))
 }
 
 /// Whether a normalized text names a municipality (a whole word: `troyes`, not `troyesville`).
@@ -398,6 +398,41 @@ fn names(text: &str, town: &str) -> bool {
             let after = text[i + town.len()..].chars().next();
             !before.is_some_and(char::is_alphanumeric) && !after.is_some_and(char::is_alphanumeric)
         })
+}
+
+/// A source cited by the events of a town, maybe one of its registers.
+struct Candidate {
+    reg: UsedRegister,
+    /// Its title or publication names the town.
+    named: bool,
+    /// Titles and publications of the sources filed under it ([`town_text`]).
+    texts: Vec<String>,
+}
+
+/// Text normalized to compare town names: accents, case, hyphens and apostrophes, `St`/`Ste`
+/// (“St Étienne” and “Saint-Etienne” → `saint etienne`).
+fn town_text(s: &str) -> String {
+    sort_key(s)
+        .replace(['-', '\'', '’', '.'], " ")
+        .split_whitespace()
+        .map(|w| match w {
+            "st" => "saint",
+            "ste" => "sainte",
+            w => w,
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// Years written in a text (“Naissances (1863-1892)” → 1863–1892), between 1500 and 2100.
+fn period_in(text: &str) -> Option<Years> {
+    let years: Vec<i32> = text
+        .split(|c: char| !c.is_ascii_digit())
+        .filter(|w| w.len() == 4)
+        .filter_map(|w| w.parse().ok())
+        .filter(|y| (1500..=2100).contains(y))
+        .collect();
+    Some(Years::new(*years.iter().min()?, *years.iter().max()?))
 }
 
 /// Letters and digits only, to compare call numbers and titles (“5MI 3679 - Décès”).
@@ -414,6 +449,10 @@ struct Context<'g> {
     seen: HashMap<String, Vec<Seen>>,
     /// Registers cited by the events of each place: place key → register key → register.
     registers: HashMap<String, BTreeMap<String, UsedRegister>>,
+    /// Sources cited by the events of each place, before [`Context::keep_registers`].
+    candidates: HashMap<String, BTreeMap<String, Candidate>>,
+    /// Towns of the file (place keys).
+    towns: std::collections::HashSet<String>,
     /// Registers cited, by place key and event tag, to rank those of the same kind first.
     register_tags: HashMap<(String, String), BTreeMap<String, usize>>,
     /// Country of places that name none: the most frequent one of the file.
@@ -432,6 +471,8 @@ impl<'g> Context<'g> {
             sosa,
             seen: HashMap::new(),
             registers: HashMap::new(),
+            candidates: HashMap::new(),
+            towns: Default::default(),
             register_tags: HashMap::new(),
             default_country: Country::Other,
             town: None,
@@ -468,6 +509,7 @@ impl<'g> Context<'g> {
                 let years = years_of(ev.path_val(&["DATE"]).unwrap_or(""));
                 // Registers cited for this place.
                 if !place.is_empty() {
+                    self.towns.insert(self.key(&place));
                     for s in ev.children_with("SOUR").filter_map(|s| s.pointer()) {
                         self.cite(s, &place, &ev.tag, years);
                     }
@@ -521,6 +563,7 @@ impl<'g> Context<'g> {
                 }
             }
         }
+        self.keep_registers();
         self.default_country = countries.into_iter().max_by_key(|(_, n)| *n).map(|(c, _)| c).unwrap_or(Country::Other);
     }
 
@@ -529,36 +572,86 @@ impl<'g> Context<'g> {
         let Some(node) = g.get(source).filter(|n| n.tag == "SOUR") else { return };
         let src = crate::model::Source::new(node);
         let pk = self.key(place);
-        // A register of the place names it: a national file, a single act or another town's
-        // register cited by an event of this place is not one of its registers.
         let title = src.title();
         let publ = src.publication().filter(|p| !p.trim().is_empty());
-        let text = sort_key(&format!("{title} {}", publ.as_deref().unwrap_or("")));
-        if !names(&text, &pk) {
-            return;
-        }
+        let text = town_text(&format!("{title} {}", publ.as_deref().unwrap_or("")));
+        let named = names(&text, &pk);
+        // The period in the title or publication (“Naissances (1863-1892)”) tells registers sharing
+        // a call number apart, and is more exact than the years of the events citing it.
+        let period = period_in(&text);
         let register = publ.unwrap_or(title);
         let repo = src.repository();
         let call = src.call_number().unwrap_or_default();
         let id = if call.trim().is_empty() { compact(&register) } else { compact(call) };
-        let key = format!("{}|{id}", repo.unwrap_or(""));
-        let reg = self.registers.entry(pk.clone()).or_default().entry(key.clone()).or_insert_with(|| UsedRegister {
-            register: register.clone(),
-            source_id: source.to_string(),
-            repository_id: repo.map(str::to_string),
-            repository: repo.and_then(|r| g.get(r)).and_then(|n| n.child_val("NAME")).unwrap_or("").to_string(),
-            call_number: src.call_number().unwrap_or_default().to_string(),
-            cited: 0,
-            years: None,
+        let key = format!("{}|{id}|{}", repo.unwrap_or(""), period.map(|p| p.to_string()).unwrap_or_default());
+        let c = self.candidates.entry(pk.clone()).or_default().entry(key.clone()).or_insert_with(|| Candidate {
+            reg: UsedRegister {
+                register: register.clone(),
+                source_id: source.to_string(),
+                repository_id: repo.map(str::to_string),
+                repository: repo.and_then(|r| g.get(r)).and_then(|n| n.child_val("NAME")).unwrap_or("").to_string(),
+                call_number: call.to_string(),
+                cited: 0,
+                years: period,
+            },
+            named: false,
+            texts: Vec::new(),
         });
-        reg.cited += 1;
-        if let Some((lo, hi)) = years {
-            reg.years = Some(match reg.years {
+        // A source naming the town gives the register its name.
+        if named && !c.named {
+            c.named = true;
+            c.reg.register = register;
+            c.reg.source_id = source.to_string();
+        }
+        c.texts.push(text);
+        c.reg.cited += 1;
+        if let Some((lo, hi)) = years
+            && period.is_none()
+        {
+            c.reg.years = Some(match c.reg.years {
                 Some(y) => Years::new(y.from.min(lo), y.to.max(hi)),
                 None => Years::new(lo, hi),
             });
         }
         *self.register_tags.entry((pk, tag.to_string())).or_default().entry(key).or_default() += 1;
+    }
+
+    /// Registers of each town, among the sources cited by its events: those naming the town, and
+    /// the acts filed in a register of the town (same archive and call number cited twice, or a
+    /// call number of the same series as a register naming it), unless they name another town. A
+    /// national file, an act without call number or another town's register is not one.
+    fn keep_registers(&mut self) {
+        let towns = std::mem::take(&mut self.towns);
+        let series = |call: &str| {
+            let c = call.trim();
+            c.rfind([' ', '_', '/', '-']).map(|i| compact(&c[..i])).unwrap_or_default()
+        };
+        for (pk, cands) in std::mem::take(&mut self.candidates) {
+            let named_series: Vec<(Option<String>, String)> = cands
+                .values()
+                .filter(|c| c.named && !c.reg.call_number.trim().is_empty())
+                .map(|c| (c.reg.repository_id.clone(), series(&c.reg.call_number)))
+                .filter(|(_, s)| !s.is_empty())
+                .collect();
+            let kept: BTreeMap<String, UsedRegister> = cands
+                .into_iter()
+                .filter(|(_, c)| {
+                    if c.named {
+                        return true;
+                    }
+                    if c.reg.call_number.trim().is_empty() {
+                        return false;
+                    }
+                    let elsewhere = c.texts.iter().any(|t| towns.iter().any(|o| *o != pk && names(t, o)));
+                    let same_series = named_series.contains(&(c.reg.repository_id.clone(), series(&c.reg.call_number)));
+                    !elsewhere && (c.reg.cited >= 2 || same_series)
+                })
+                .map(|(k, c)| (k, c.reg))
+                .collect();
+            if !kept.is_empty() {
+                self.registers.insert(pk, kept);
+            }
+        }
     }
 
     fn person(&self, x: &str) -> PersonRef {
@@ -724,6 +817,15 @@ fn rules(
                 clip(Some(1830), Some(1962)),
                 Vec::new(),
             ));
+            // Many left for France in 1962: the French index lists the deaths there from 1970.
+            if goal == Goal::Death && known && y.overlaps(1970, i32::MAX) {
+                out.push((
+                    RecordType::DeathIndex,
+                    "National death index of France (fichier des personnes décédées, INSEE)".to_string(),
+                    y.clip(Some(1970), None),
+                    Vec::new(),
+                ));
+            }
             match goal {
                 Goal::Marriage => out.push((
                     RecordType::MarriageContracts,
@@ -1447,7 +1549,7 @@ mod tests {
 0 @I1@ INDI\n1 NAME Jean /OHL/\n1 SEX M\n1 BIRT\n2 DATE 1880\n2 PLAC , Troyes, Aube, France\n2 SOUR @S1@\n\
 1 RESI\n2 DATE 1905\n2 PLAC Les Noës, Troyes, Aube, France\n2 SOUR @S2@\n2 SOUR @S3@\n2 SOUR @S4@\n\
 0 @S1@ SOUR\n1 TITL Troyes - Naissances\n1 REPO @R1@\n2 CALN 4E 387\n\
-0 @S2@ SOUR\n1 TITL Troyes -Naissances 1880\n1 REPO @R1@\n2 CALN 4E387\n\
+0 @S2@ SOUR\n1 TITL Troyes -Naissances\n1 REPO @R1@\n2 CALN 4E387\n\
 0 @S3@ SOUR\n1 TITL Fichier des personnes décédées\n\
 0 @S4@ SOUR\n1 TITL Saint-Etienne, Mariages\n\
 0 @R1@ REPO\n1 NAME Archives de l'Aube\n0 TRLR\n",
@@ -1483,5 +1585,33 @@ mod tests {
         let kinds: Vec<RecordType> = parents.where_to_look.iter().map(|w| w.record).collect();
         assert_eq!(kinds, vec![RecordType::CivilRegistration, RecordType::MilitaryRegisters]);
         assert!(parents.where_to_look[0].label.contains("outre-mer"));
+    }
+
+    #[test]
+    fn acts_filed_in_a_register_of_the_town() {
+        let g = Gedcom::parse(
+            "0 HEAD\n1 GEDC\n2 VERS 7.0\n1 _GR_ROOT @I1@\n\
+0 @I1@ INDI\n1 NAME Michel /OHL/\n1 SEX M\n1 BIRT\n2 DATE 1870\n2 PLAC St Étienne, Loire, France\n2 SOUR @S1@\n\
+1 MARR\n2 DATE 1896\n2 PLAC St Étienne, Loire, France\n2 SOUR @S2@\n\
+1 RESI\n2 DATE 1900\n2 PLAC St Étienne, Loire, France\n2 SOUR @S3@\n2 SOUR @S4@\n2 SOUR @S5@\n\
+1 EVEN\n2 DATE 1901\n2 PLAC St Étienne, Loire, France\n2 SOUR @S4@\n2 SOUR @S6@\n\
+0 @S1@ SOUR\n1 TITL Saint-Etienne, Naissances (1870)\n1 REPO @R1@\n2 CALN 2 E 80\n\
+0 @S2@ SOUR\n1 TITL Acte de mariage de Michel OHL\n1 REPO @R1@\n2 CALN 2 E 81\n\
+0 @S3@ SOUR\n1 TITL Acte de naissance de Jean OHL\n1 REPO @R1@\n2 CALN 3 E 1\n\
+0 @S4@ SOUR\n1 TITL Acte de décès de Paul OHL\n1 REPO @R1@\n2 CALN 4 E 9\n\
+0 @S5@ SOUR\n1 TITL Lyon, Décès\n1 REPO @R1@\n2 CALN 2 E 82\n\
+0 @S6@ SOUR\n1 TITL Acte de décès de Louis OHL\n\
+0 @R1@ REPO\n1 NAME Archives de Saint-Étienne\n\
+0 @I2@ INDI\n1 NAME X /Y/\n1 BIRT\n2 DATE 1850\n2 PLAC Lyon, Rhône, France\n0 TRLR\n",
+        )
+        .unwrap();
+        let death = g.lead("I1", Goal::Death, None, 2026).unwrap();
+        let civil = death.where_to_look.iter().find(|w| w.record == RecordType::CivilRegistration).unwrap();
+        let mut calls: Vec<&str> = civil.used_registers.iter().map(|r| r.call_number.as_str()).collect();
+        calls.sort();
+        // “St Étienne” is “Saint-Etienne”: an act of the same series as its births register, an
+        // act cited twice; not an act cited once, a register of Lyon or an act without call
+        // number. The births register itself (1870) is too far from the death.
+        assert_eq!(calls, vec!["2 E 81", "4 E 9"], "{:?}", civil.used_registers);
     }
 }
