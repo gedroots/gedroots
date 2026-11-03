@@ -274,3 +274,39 @@ fn add_event_with_note() {
     let n = g.get("I2").unwrap().children.iter().find(|c| c.tag == "BURI").unwrap();
     assert_eq!((n.value.as_deref(), n.child_val("NOTE")), (None, Some("caveau familial")));
 }
+
+#[test]
+fn edit_window_reads_and_writes_the_address() {
+    let mut g = Gedcom::parse(GED).unwrap();
+    let i = idx(&g, "BIRT");
+    let mut ev = g.read_event("I1", i).unwrap();
+    assert_eq!(ev.address, "");
+    ev.address = "12, rue de la Cité".into();
+    g.update_event("I1", i, &ev).unwrap();
+    let birth = g.get("I1").unwrap().children[i].clone();
+    assert_eq!(birth.child_val("ADDR"), Some("12, rue de la Cité"));
+    assert_eq!(g.read_event("I1", i).unwrap().address, "12, rue de la Cité");
+    // Saved again unchanged: nothing moves.
+    let again = g.read_event("I1", i).unwrap();
+    g.update_event("I1", i, &again).unwrap();
+    assert_eq!(g.get("I1").unwrap().children[i], birth);
+    // Emptied: the address is removed, the place stays.
+    g.update_event("I1", i, &NewEvent { address: String::new(), ..again }).unwrap();
+    let birth = &g.get("I1").unwrap().children[i];
+    assert!(birth.child("ADDR").is_none());
+    assert_eq!(birth.child_val("PLAC"), Some("Troyes, Aube"));
+
+    // Added with an address.
+    g.add_event(
+        "I1",
+        &NewEvent {
+            tag: "RESI".into(),
+            place: "Troyes, Aube".into(),
+            address: "Hôtel-Dieu".into(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let resi = g.get("I1").unwrap().children.iter().rfind(|c| c.tag == "RESI").unwrap();
+    assert_eq!(address_of(resi).as_deref(), Some("Hôtel-Dieu"));
+}

@@ -107,6 +107,9 @@ impl Workspace {
                     .into_any_element(),
             ));
         }
+        if let Some(a) = e.address() {
+            body = body.child(row(t!("ws.ev_address"), div().child(a).into_any_element()));
+        }
         if !associates.is_empty() {
             body = body.child(row(
                 t!("ws.ev_associates"),

@@ -309,6 +309,8 @@ pub struct Fact {
     /// Date in GEDCOM form; empty: undated.
     pub date: String,
     pub place: String,
+    /// Street address within the place (`ADDR`).
+    pub address: String,
 }
 
 impl Fact {
@@ -322,7 +324,7 @@ impl Fact {
     }
 
     pub fn is_blank(&self) -> bool {
-        [&self.value, &self.date, &self.place].iter().all(|v| v.trim().is_empty())
+        [&self.value, &self.date, &self.place, &self.address].iter().all(|v| v.trim().is_empty())
     }
 
     /// “Birth”, or the type of a custom event.
@@ -333,10 +335,11 @@ impl Fact {
         crate::model::event_label(&self.tag).map(|l| l.into_owned()).unwrap_or_else(|| self.tag.clone())
     }
 
-    /// “tisserand, 30 germinal an IV, Agneaux (Manche)”: value, date and place, as displayed.
+    /// “tisserand, 30 germinal an IV, Agneaux (Manche)”: value, date, address and place, as
+    /// displayed.
     pub fn summary(&self) -> String {
         let date = if self.date.trim().is_empty() { String::new() } else { crate::Date::parse(&self.date).display() };
-        [self.value.trim().to_string(), date, crate::model::short_place(&self.place)]
+        [self.value.trim().to_string(), date, self.address.trim().to_string(), crate::model::short_place(&self.place)]
             .into_iter()
             .filter(|s| !s.is_empty())
             .collect::<Vec<_>>()
@@ -355,6 +358,7 @@ impl Fact {
         if !self.place.trim().is_empty() {
             n.children.push(Node::with_value("PLAC", self.place.trim()));
         }
+        n.children.extend(crate::address::address_node(&self.address));
         n
     }
 }
@@ -456,6 +460,8 @@ pub struct Act {
     pub date: String,
     pub date_phrase: String,
     pub place: String,
+    /// Street address of the event within the place (`ADDR`).
+    pub address: String,
     /// Reference of the record in the source (`PAGE`): “Record no. 27, image 12”.
     pub page: String,
     /// Date the record was written, if different (`DATA.DATE` of the citation).
@@ -530,6 +536,7 @@ impl Act {
             date: String::new(),
             date_phrase: String::new(),
             place: String::new(),
+            address: String::new(),
             page: String::new(),
             record_date: String::new(),
             record_date_phrase: String::new(),
@@ -773,7 +780,12 @@ impl Act {
                 let at_date = f.date.trim() == date && f.event_type.is_empty();
                 match f.tag.as_str() {
                     "OCCU" if at_date && p.get(Occupation).is_empty() => p.set(Occupation, f.value.trim()),
-                    "RESI" if at_date && p.get(Residence).is_empty() && f.value.is_empty() => {
+                    "RESI"
+                        if at_date
+                            && p.get(Residence).is_empty()
+                            && f.value.is_empty()
+                            && f.address.trim().is_empty() =>
+                    {
                         p.set(Residence, f.place.trim())
                     }
                     "BIRT"
@@ -1346,6 +1358,7 @@ impl Act {
         if !self.place.trim().is_empty() {
             ev.children.push(Node::with_value("PLAC", self.place.trim()));
         }
+        ev.children.extend(crate::address::address_node(&self.address));
         if let Some(a) = age {
             ev.children.push(Node::with_value("AGE", a));
         }
@@ -1702,9 +1715,13 @@ impl Writer<'_> {
             let date = old.child_val("DATE").is_some_and(|d| {
                 crate::proposal::date_change(d, ev.child_val("DATE").unwrap_or("")) == crate::proposal::Change::Differs
             });
-            let place = old.child_val("PLAC").is_some_and(|p| {
-                crate::proposal::text_change(p, ev.child_val("PLAC").unwrap_or("")) == crate::proposal::Change::Differs
-            });
+            let differs = |tag: &str| {
+                old.child_val(tag).is_some_and(|p| {
+                    crate::proposal::text_change(p, ev.child_val(tag).unwrap_or("")) == crate::proposal::Change::Differs
+                })
+            };
+            // The address goes with the place: another address is another place.
+            let place = differs("PLAC") || differs("ADDR");
             if date || place {
                 match conflict {
                     Conflict::KeepBoth | Conflict::Replace => {
@@ -1713,7 +1730,9 @@ impl Writer<'_> {
                         self.touch(x);
                         return at;
                     }
-                    Conflict::Ignore => ev.children.retain(|c| !(date && c.tag == "DATE" || place && c.tag == "PLAC")),
+                    Conflict::Ignore => ev
+                        .children
+                        .retain(|c| !(date && c.tag == "DATE" || place && matches!(c.tag.as_str(), "PLAC" | "ADDR"))),
                 }
             }
         }
@@ -1739,6 +1758,19 @@ impl Writer<'_> {
                                     .iter()
                                     .position(|c| c.tag == "SOUR")
                                     .unwrap_or(target.children.len());
+                                target.children.insert(at, c);
+                            }
+                        }
+                        "ADDR" => {
+                            if target.child("ADDR").is_none() {
+                                let at = match target.children.iter().position(|c| c.tag == "PLAC") {
+                                    Some(p) => p + 1,
+                                    None => target
+                                        .children
+                                        .iter()
+                                        .position(|c| c.tag == "SOUR")
+                                        .unwrap_or(target.children.len()),
+                                };
                                 target.children.insert(at, c);
                             }
                         }
@@ -1780,6 +1812,7 @@ impl Writer<'_> {
                 && c.val() == fact.val()
                 && c.child_val("DATE") == fact.child_val("DATE")
                 && c.child_val("PLAC") == fact.child_val("PLAC")
+                && fact.child("ADDR").is_none_or(|_| crate::address::address_of(c) == crate::address::address_of(&fact))
         });
         match same {
             Some(existing) => {
@@ -1997,6 +2030,7 @@ impl Gedcom {
                 act.date_phrase = d.child_val("PHRASE").unwrap_or("").to_string();
             }
             act.place = e.child_val("PLAC").unwrap_or("").to_string();
+            act.address = crate::address::address_of(e).unwrap_or_default();
         }
         // Citation data: the main citation first.
         let ordered: Vec<&&Hit> = main.iter().copied().chain(group.iter().filter(|h| !is_main(h))).collect();
@@ -2088,7 +2122,13 @@ impl Gedcom {
                 Some(e) if e.tag == "OCCU" && at_act_date(e) && p.get(Occupation).is_empty() => {
                     p.set(Occupation, e.val())
                 }
-                Some(e) if e.tag == "RESI" && at_act_date(e) && p.get(Residence).is_empty() => {
+                // A residence with a street address stays a fact, which keeps it.
+                Some(e)
+                    if e.tag == "RESI"
+                        && at_act_date(e)
+                        && p.get(Residence).is_empty()
+                        && e.child("ADDR").is_none() =>
+                {
                     p.set(Residence, e.child_val("PLAC").unwrap_or(""))
                 }
                 // A dated birth or baptism is a fact; an estimated one comes from the age.
@@ -2114,6 +2154,7 @@ impl Gedcom {
                         value: if crate::events::detail_in_value(&e.tag) { e.val().to_string() } else { String::new() },
                         date: e.child_val("DATE").unwrap_or("").to_string(),
                         place: e.child_val("PLAC").unwrap_or("").to_string(),
+                        address: crate::address::address_of(e).unwrap_or_default(),
                     };
                     if !p.facts.contains(&fact) {
                         p.facts.push(fact);
@@ -2241,7 +2282,7 @@ impl Gedcom {
                 if c.tag == event {
                     // The record's event: the new version completes it at the same place.
                     c.children.retain(|n| {
-                        !(matches!(n.tag.as_str(), "DATE" | "PLAC" | "AGE")
+                        !(matches!(n.tag.as_str(), "DATE" | "PLAC" | "ADDR" | "AGE")
                             || (matches!(n.tag.as_str(), "HUSB" | "WIFE") && n.children.iter().all(|a| a.tag == "AGE")))
                     });
                 } else if matches!(c.tag.as_str(), "OCCU" | "RESI" | "BIRT")
