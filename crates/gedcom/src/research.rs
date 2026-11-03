@@ -7,7 +7,8 @@ use crate::document::{Gedcom, RecordKind};
 use crate::model::{Event, Media};
 use std::collections::HashMap;
 
-/// A person named in a result. A living person has neither name nor years.
+/// A person named in a result. A living person is given only what identifies them: their name and
+/// their birth.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, schemars::JsonSchema))]
 pub struct PersonRef {
@@ -15,6 +16,9 @@ pub struct PersonRef {
     pub name: String,
     pub years: String,
     pub living: bool,
+    /// Living person: date and place of birth (“4 MAR 1990, Rennes”).
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "String::is_empty"))]
+    pub born: String,
 }
 
 /// Source cited by an event, with the reference in the source (`PAGE`).
@@ -173,15 +177,26 @@ impl Gedcom {
         [f, m].into_iter().flatten().filter_map(|p| p.birth().as_ref().and_then(year)).min().map(|y| y + 15)
     }
 
-    /// Reference to a person, hidden if they are living.
+    /// Reference to a person; a living person's is reduced to their name and birth.
     pub fn person_ref(&self, xref: &str, this_year: i32) -> PersonRef {
         let living = self.is_living(xref, this_year);
         let ind = self.individual(xref);
+        let born = match ind.as_ref().and_then(|i| i.birth()) {
+            Some(b) if living => {
+                [b.node.child_val("DATE").unwrap_or_default().to_string(), b.place().unwrap_or_default().to_string()]
+                    .into_iter()
+                    .filter(|s| !s.is_empty())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            }
+            _ => String::new(),
+        };
         PersonRef {
             id: xref.to_string(),
-            name: if living { "Living person".to_string() } else { ind.map(|i| i.display_name()).unwrap_or_default() },
+            name: ind.as_ref().map(|i| i.display_name()).unwrap_or_default(),
             years: if living { String::new() } else { ind.map(|i| i.years()).unwrap_or_default() },
             living,
+            born,
         }
     }
 
@@ -223,12 +238,11 @@ impl Gedcom {
         })
     }
 
-    /// Record of an individual. `None` if they do not exist or are living.
+    /// Record of an individual. A living person's is a summary that identifies them: their birth,
+    /// parents, spouses and children, without their other events or notes.
     pub fn person_sheet(&self, xref: &str, this_year: i32) -> Option<PersonSheet> {
         let ind = self.individual(xref)?;
-        if self.is_living(xref, this_year) {
-            return None;
-        }
+        let living = self.is_living(xref, this_year);
         let sosa = self.sosa_numbers().get(xref).filter(|n| n.branch.is_empty()).map(|n| n.sosa);
         let (father, mother) = self.parents(xref);
         let unions = ind
@@ -240,7 +254,7 @@ impl Gedcom {
                 Union {
                     family_id: fam.xref().to_string(),
                     spouse: spouse.map(|s| self.person_ref(s, this_year)),
-                    events: fam.events().iter().map(|e| self.event_info(e)).collect(),
+                    events: if living { Vec::new() } else { fam.events().iter().map(|e| self.event_info(e)).collect() },
                     children: fam.children().iter().map(|c| self.person_ref(c, this_year)).collect(),
                 }
             })
@@ -249,27 +263,22 @@ impl Gedcom {
             person: self.person_ref(xref, this_year),
             sex: ind.sex().to_string(),
             sosa,
-            events: ind.events().iter().map(|e| self.event_info(e)).collect(),
+            events: ind.events().iter().filter(|e| !living || e.tag() == "BIRT").map(|e| self.event_info(e)).collect(),
             father: father.map(|p| self.person_ref(p.xref(), this_year)),
             mother: mother.map(|p| self.person_ref(p.xref(), this_year)),
             unions,
-            notes: ind.notes(),
+            notes: if living { Vec::new() } else { ind.notes() },
         })
     }
 
-    /// Individuals matching the query (the app's search syntax), living people excluded, at most
-    /// `limit`.
+    /// Individuals matching the query (the app's search syntax), at most `limit`.
     pub fn search_people(&self, query: &str, limit: usize, this_year: i32) -> Vec<PersonRef> {
         let ids: Vec<String> = if query.trim().is_empty() {
             self.records_of(RecordKind::Individual).filter_map(|n| n.xref.clone()).collect()
         } else {
             self.search_individuals(query)
         };
-        ids.iter()
-            .filter(|x| !self.is_living(x, this_year))
-            .take(limit)
-            .map(|x| self.person_ref(x, this_year))
-            .collect()
+        ids.iter().take(limit).map(|x| self.person_ref(x, this_year)).collect()
     }
 
     /// Records to look for, for the direct ancestors up to generation `max_generation`: birth,
@@ -396,7 +405,7 @@ mod tests {
     }
 
     #[test]
-    fn living_people_are_hidden() {
+    fn living_people_are_reduced_to_what_identifies_them() {
         let g = ged();
         assert!(g.is_living("I1", 2026));
         assert!(!g.is_living("I2", 2026));
@@ -404,9 +413,13 @@ mod tests {
         assert!(!g.is_living("I3", 2026));
         // No date, but father of a child born in 1850.
         assert!(!g.is_living("I4", 2026));
-        assert_eq!(g.person_ref("I1", 2026).name, "Living person");
-        assert!(g.person_sheet("I1", 2026).is_none());
-        assert!(g.search_people("MARCHAND", 10, 2026).iter().all(|p| p.id != "I1"));
+        let r = g.person_ref("I1", 2026);
+        assert_eq!((r.name.as_str(), r.born.as_str()), ("Paul MARCHAND", "1 JAN 1990"), "{r:?}");
+        assert!(r.living && r.years.is_empty());
+        let sheet = g.person_sheet("I1", 2026).unwrap();
+        assert!(sheet.events.iter().all(|e| e.tag == "BIRT") && sheet.notes.is_empty());
+        assert!(g.search_people("", 10, 2026).iter().any(|p| p.id == "I1"));
+        assert!(g.person_ref("I2", 2026).born.is_empty());
     }
 
     #[test]
