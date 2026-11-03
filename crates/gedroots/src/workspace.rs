@@ -95,6 +95,12 @@ impl View {
         }
     }
 
+    /// Individuals and places: the centre shows the tree or the map, and the record is the right
+    /// panel (read, and edited in place).
+    fn has_panel(self) -> bool {
+        matches!(self, View::Individuals | View::Places)
+    }
+
     /// Pages without a record (Quality, Statistics).
     fn page(self) -> Option<View> {
         matches!(self, View::Quality | View::Stats).then_some(self)
@@ -820,7 +826,9 @@ impl Workspace {
         self.filter.update(cx, |f, cx| f.set_value("", window, cx));
         self.rebuild_rows(cx);
         self.select(x.clone(), window, cx);
-        self.tab = CenterTab::Form;
+        if !self.view.has_panel() {
+            self.tab = CenterTab::Form;
+        }
         // A new record opens on its fields.
         self.start_edit(window, cx);
         self.set_status(t!("ws.created", kind = crate::i18n::record_kind(kind)), false);
@@ -1822,9 +1830,10 @@ impl Workspace {
         }
         // Raw GEDCOM: a tab only when it was asked for. With no other view than the record, no tab
         // bar.
+        // Individuals and places: the record is the right panel, not a tab.
         let mut tabs: Vec<CenterTab> = match self.view {
-            View::Individuals => vec![CenterTab::Tree, CenterTab::Form],
-            View::Places => vec![CenterTab::Map, CenterTab::Form],
+            View::Individuals => vec![CenterTab::Tree],
+            View::Places => vec![CenterTab::Map],
             _ => vec![CenterTab::Form],
         };
         if self.raw_open && self.view != View::Places {
@@ -1939,27 +1948,7 @@ impl Workspace {
         let editable = !ed.fields.is_empty() || !ed.pickers.is_empty() || ed.long_text.is_some();
         let editing = self.editing && editable;
         // Deletion: Edit › Delete Item, then confirmation here.
-        let confirm_buttons = confirm.then(|| {
-            h_flex()
-                .gap_2()
-                .child(Button::new("cancel-delete").ghost().small().label(t!("ws.keep")).on_click(cx.listener(
-                    |this, _, _, cx| {
-                        this.pending_delete = None;
-                        cx.notify();
-                    },
-                )))
-                .child(
-                    Button::new("delete")
-                        .danger()
-                        .small()
-                        .icon(IconName::Trash)
-                        .label(match &ed.target {
-                            Target::Place(_) => t!("ws.confirm_remove_place"),
-                            _ => t!("ws.confirm_delete"),
-                        })
-                        .on_click(cx.listener(|this, _, w, cx| this.delete_selected(w, cx))),
-                )
-        });
+        let confirm_buttons = confirm.then(|| self.delete_buttons(matches!(ed.target, Target::Place(_)), cx));
         // Sources, media, repositories and notes are read whole in the centre, with no side panel:
         // their images, web links and links follow the record.
         let record = match &ed.target {
@@ -1977,32 +1966,8 @@ impl Workspace {
             .gap_6()
             .when(editing, |d| d.child(self.render_form_fields(ed, cx)))
             .when(!editing && editable, |d| d.child(self.render_form_read(ed, cx)))
-            .when(editing || confirm, |d| {
-                d.child(
-                    h_flex()
-                        .gap_2()
-                        .when(editing, |d| {
-                            d.child(
-                                Button::new("cancel-form")
-                                    .ghost()
-                                    .small()
-                                    .label(t!("ws.cancel_edit"))
-                                    .tooltip(t!("ws.cancel_edit_tip"))
-                                    .on_click(cx.listener(|this, _, w, cx| this.cancel_edit(w, cx))),
-                            )
-                            .child(
-                                Button::new("apply-form")
-                                    .primary()
-                                    .small()
-                                    .icon(IconName::Check)
-                                    .label(t!("ws.done"))
-                                    .on_click(cx.listener(|this, _, w, cx| this.apply_form(w, cx))),
-                            )
-                        })
-                        .child(div().flex_1())
-                        .children(confirm_buttons),
-                )
-            })
+            .when(editing, |d| d.child(self.edit_buttons(cx).justify_start()))
+            .children(confirm_buttons)
             .when_some(
                 match &ed.target {
                     Target::Record { xref, kind: RecordKind::Source } => Some(xref.clone()),
@@ -2090,28 +2055,133 @@ impl Workspace {
                     )
                 })))
             })
-            .child(div().grid().grid_cols(2).gap_3().children(ed.fields.iter().map(|f| {
-                v_flex()
-                    .gap_1()
-                    .min_w_0()
-                    .child(label_caps(f.label.clone()))
-                    .child(match &f.state {
-                        FieldState::Text(e) => Input::new(e).small().into_any_element(),
-                        FieldState::Choice(e) => Select::new(e)
-                            .small()
-                            .cleanable(true)
-                            .placeholder(t!("event_dialog.choose"))
-                            .into_any_element(),
-                        FieldState::Date(e) => e.clone().into_any_element(),
-                    })
-                    .children(match &f.state {
-                        FieldState::Text(e) if f.place => self.place_suggestions(e, cx),
-                        _ => None,
-                    })
-            })))
+            .child(div().grid().grid_cols(2).gap_3().children(ed.fields.iter().map(|f| self.render_field(f, cx))))
             .when_some(ed.long_text.as_ref(), |d, (label, state)| {
                 d.child(v_flex().gap_1().child(label_caps(label.clone())).child(Textarea::new(state).h(px(120.))))
             })
+    }
+
+    /// One field of the record being edited: its label above its input.
+    fn render_field(&self, f: &crate::editor::Field, cx: &mut Context<Self>) -> Div {
+        v_flex()
+            .gap_1()
+            .min_w_0()
+            .child(label_caps(f.label.clone()))
+            .child(match &f.state {
+                FieldState::Text(e) => Input::new(e).small().into_any_element(),
+                FieldState::Choice(e) => {
+                    Select::new(e).small().cleanable(true).placeholder(t!("event_dialog.choose")).into_any_element()
+                }
+                FieldState::Date(e) => e.clone().into_any_element(),
+            })
+            .children(match &f.state {
+                FieldState::Text(e) if f.place => self.place_suggestions(e, cx),
+                _ => None,
+            })
+    }
+
+    /// Cancel and Done, under the fields of the record being edited.
+    fn edit_buttons(&self, cx: &mut Context<Self>) -> Div {
+        h_flex()
+            .gap_2()
+            .justify_end()
+            .child(
+                Button::new("cancel-form")
+                    .ghost()
+                    .small()
+                    .label(t!("ws.cancel_edit"))
+                    .tooltip(t!("ws.cancel_edit_tip"))
+                    .on_click(cx.listener(|this, _, w, cx| this.cancel_edit(w, cx))),
+            )
+            .child(
+                Button::new("apply-form")
+                    .primary()
+                    .small()
+                    .icon(IconName::Check)
+                    .label(t!("ws.done"))
+                    .on_click(cx.listener(|this, _, w, cx| this.apply_form(w, cx))),
+            )
+    }
+
+    /// Keep and Delete, after Edit › Delete Item.
+    fn delete_buttons(&self, place: bool, cx: &mut Context<Self>) -> Div {
+        h_flex()
+            .gap_2()
+            .justify_end()
+            .child(Button::new("cancel-delete").ghost().small().label(t!("ws.keep")).on_click(cx.listener(
+                |this, _, _, cx| {
+                    this.pending_delete = None;
+                    cx.notify();
+                },
+            )))
+            .child(
+                Button::new("delete")
+                    .danger()
+                    .small()
+                    .icon(IconName::Trash)
+                    .label(if place { t!("ws.confirm_remove_place") } else { t!("ws.confirm_delete") })
+                    .on_click(cx.listener(|this, _, w, cx| this.delete_selected(w, cx))),
+            )
+    }
+
+    /// The editor of the record shown in the right panel, when it is this one (`key`).
+    fn panel_editor(&self, key: &str) -> Option<&RecordEditor> {
+        self.editor.as_ref().filter(|ed| match &ed.target {
+            Target::Record { xref, .. } => xref == key,
+            Target::Place(name) => name == key,
+        })
+    }
+
+    /// The small pencil next to a record's title: Edit › Edit Record.
+    fn edit_pencil(&self, cx: &mut Context<Self>) -> Button {
+        Button::new("edit-record")
+            .ghost()
+            .small()
+            .icon(IconName::Pencil)
+            .tooltip_with_action(t!("cmd.edit_record"), &EditRecord, Some("Workspace"))
+            .on_click(cx.listener(|this, _, w, cx| this.start_edit(w, cx)))
+    }
+
+    /// Edit › Edit Record on an individual: their panel's header becomes fields, in place: names
+    /// next to the portrait, sex, birth and death for quick entry, note. The timeline and the
+    /// family stay below.
+    fn render_individual_fields(&self, ed: &RecordEditor, portrait: Div, cx: &mut Context<Self>) -> Div {
+        let f = &ed.fields;
+        let event = |title: SharedString, n: usize, cx: &mut Context<Self>| {
+            v_flex()
+                .gap_2()
+                .child(div().text_xs().font_weight(FontWeight::SEMIBOLD).text_color(theme::muted()).child(title))
+                // The place takes the room: its names are long.
+                .child(
+                    h_flex()
+                        .gap_2()
+                        .items_start()
+                        .child(self.render_field(&f[n], cx).w(px(136.)).flex_none())
+                        .child(self.render_field(&f[n + 1], cx).flex_1()),
+                )
+        };
+        v_flex()
+            .p_4()
+            .gap_3()
+            .border_b_1()
+            .border_color(theme::border())
+            .child(
+                h_flex().gap_3().items_center().child(portrait).child(
+                    v_flex()
+                        .flex_1()
+                        .min_w_0()
+                        .gap_2()
+                        .child(self.render_field(&f[0], cx))
+                        .child(self.render_field(&f[1], cx)),
+                ),
+            )
+            .child(self.render_field(&f[2], cx))
+            .child(event(t!("editor.birth").into(), 3, cx))
+            .child(event(t!("editor.death").into(), 5, cx))
+            .when_some(ed.long_text.as_ref(), |d, (label, state)| {
+                d.child(v_flex().gap_1().child(label_caps(label.clone())).child(Textarea::new(state).h(px(80.))))
+            })
+            .child(self.edit_buttons(cx))
     }
 
     /// The record as it is saved, in text: its title (with a source's repository and call number
@@ -2165,12 +2235,7 @@ impl Workspace {
             (None, Some((_, text))) => (Some(text), None),
             (_, long) => (None, long.map(|(label, text)| row(label, text.into_any_element()))),
         };
-        let edit = Button::new("edit-record")
-            .ghost()
-            .small()
-            .icon(IconName::Pencil)
-            .tooltip_with_action(t!("cmd.edit_record"), &EditRecord, Some("Workspace"))
-            .on_click(cx.listener(|this, _, w, cx| this.start_edit(w, cx)));
+        let edit = self.edit_pencil(cx);
         let head = v_flex()
             .flex_1()
             .min_w_0()
@@ -2193,7 +2258,9 @@ impl Workspace {
             self.apply_form(window, cx);
             return;
         }
-        self.tab = CenterTab::Form;
+        if !self.view.has_panel() {
+            self.tab = CenterTab::Form;
+        }
         self.editing = true;
         if let Some(f) = self.editor.as_ref().and_then(|ed| ed.fields.first()) {
             match &f.state {
@@ -2454,14 +2521,43 @@ impl Workspace {
             View::Places => {
                 let place = g.places().into_iter().find(|p| &p.name == key);
                 let refs = place.as_ref().map(|p| p.records.clone()).unwrap_or_default();
-                panel
+                let confirm = self.pending_delete.as_ref() == Some(key);
+                // Edit › Edit Record: one field per jurisdiction, then the coordinates, in place.
+                let fields = self.panel_editor(key).filter(|_| self.editing).map(|ed| {
+                    v_flex()
+                        .p_4()
+                        .gap_3()
+                        .border_b_1()
+                        .border_color(theme::border())
+                        // The name (one field, or one per jurisdiction), then the coordinates.
+                        .map(|d| {
+                            let (names, coords) = ed.fields.split_at(ed.fields.len().saturating_sub(2));
+                            let grid = || div().grid().grid_cols(2).gap_3();
+                            match names {
+                                [one] => d.child(self.render_field(one, cx)),
+                                _ => d.child(grid().children(names.iter().map(|f| self.render_field(f, cx)))),
+                            }
+                            .child(grid().children(coords.iter().map(|f| self.render_field(f, cx))))
+                        })
+                        .child(self.edit_buttons(cx))
+                });
+                let editing = fields.is_some();
+                let header = h_flex()
+                    .p_4()
+                    .gap_2()
+                    .items_start()
+                    .border_b_1()
+                    .border_color(theme::border())
                     .child(
                         v_flex()
-                            .p_4()
+                            .flex_1()
+                            .min_w_0()
                             .gap_1()
-                            .border_b_1()
-                            .border_color(theme::border())
                             .child(div().text_xl().font_weight(FontWeight::SEMIBOLD).child(short_place(key)))
+                            .children(place.iter().map(|p| {
+                                let parts = p.parts().join(" › ");
+                                div().text_color(theme::muted()).child(parts)
+                            }))
                             .children(place.iter().map(|p| {
                                 mono(match (&p.latitude, &p.longitude) {
                                     (Some(a), Some(b)) => {
@@ -2470,12 +2566,15 @@ impl Workspace {
                                     _ => t!("ws.place_no_coords", n = p.uses).into_owned(),
                                 })
                             }))
-                            .children(place.iter().map(|p| {
-                                let parts = p.parts().join(" › ");
-                                div().text_color(theme::muted()).child(parts)
-                            })),
+                            .when(confirm, |d| d.child(self.delete_buttons(true, cx).pt_2())),
                     )
-                    .children(place.as_ref().and_then(|p| self.render_locate(p, cx)))
+                    .child(self.edit_pencil(cx));
+                panel
+                    .map(|d| match fields {
+                        Some(f) => d.child(f),
+                        None => d.child(header),
+                    })
+                    .when(!editing, |d| d.children(place.as_ref().and_then(|p| self.render_locate(p, cx))))
                     .child(self.render_links(t!("ws.cited_by").into(), refs, cx))
                     .into_any_element()
             }
@@ -2759,6 +2858,12 @@ impl Workspace {
         let lineage =
             sosa.as_deref().and_then(|s| s.parse().ok()).map(theme::lineage).unwrap_or(theme::border_strong());
         let xref = i.xref().to_string();
+        // Edit › Edit Record: the header becomes fields, in place.
+        let fields = self
+            .panel_editor(&xref)
+            .filter(|ed| self.editing && ed.fields.len() >= 7)
+            .map(|ed| self.render_individual_fields(ed, avatar(doc, &i, 64., lineage), cx));
+        let confirm = self.pending_delete.as_deref() == Some(xref.as_str());
 
         let header = h_flex()
             .p_4()
@@ -2811,8 +2916,10 @@ impl Workspace {
                                     .child(div().h_full().rounded_full().bg(theme::ok()).w(px(120. * pct))),
                             )
                             .child(mono(t!("ws.sourced", sourced = sourced, total = total))),
-                    ),
-            );
+                    )
+                    .when(confirm, |d| d.child(self.delete_buttons(false, cx).pt_2())),
+            )
+            .child(self.edit_pencil(cx));
 
         let events_el = self.render_events(&xref, cx);
 
@@ -2892,10 +2999,15 @@ impl Workspace {
         }
         let web = self.render_web_links(&xref, cx);
         let gallery = self.render_gallery(&xref, false, true, cx);
-        let mut notes = i.notes();
+        let editing = fields.is_some();
+        // While editing, the first note is in the fields.
+        let mut notes: Vec<String> = i.notes().into_iter().skip(usize::from(editing)).collect();
         notes.extend(unions.iter().flat_map(|f| f.notes()));
         v_flex()
-            .child(header)
+            .map(|d| match fields {
+                Some(f) => d.child(f),
+                None => d.child(header),
+            })
             .when_some(gallery, |d, el| d.child(el))
             .child(events_el)
             .child(family_el)

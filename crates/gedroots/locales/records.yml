@@ -72,18 +72,15 @@ editor.sex:
 editor.occupation:
   en: Occupation
   fr: Profession
-editor.birth_date:
-  en: Birth — Date
-  fr: Naissance — date
-editor.birth_place:
-  en: Birth — Place
-  fr: Naissance — lieu
-editor.death_date:
-  en: Death — Date
-  fr: Décès — date
-editor.death_place:
-  en: Death — Place
-  fr: Décès — lieu
+editor.date:
+  en: Date
+  fr: Date
+editor.birth:
+  en: Birth
+  fr: Naissance
+editor.death:
+  en: Death
+  fr: Décès
 editor.note:
   en: Note
   fr: Note
