@@ -784,8 +784,6 @@ pub struct IndividualForm {
     pub given: String,
     pub surname: String,
     pub sex: String,
-    pub birth: EventForm,
-    pub death: EventForm,
     pub occupation: String,
     pub note: String,
 }
@@ -797,8 +795,6 @@ impl IndividualForm {
             given: i.given(),
             surname: i.surname(),
             sex: i.sex().to_string(),
-            birth: EventForm::read(node, "BIRT"),
-            death: EventForm::read(node, "DEAT"),
             occupation: node.child_val("OCCU").unwrap_or("").to_string(),
             note: node.child("NOTE").map(|n| n.text()).unwrap_or_default(),
         }
@@ -811,8 +807,6 @@ impl IndividualForm {
         name.set_child_val("GIVN", given);
         name.set_child_val("SURN", surname);
         node.set_child_val("SEX", if self.sex.trim().is_empty() { "U" } else { self.sex.trim() });
-        self.birth.apply(node, "BIRT");
-        self.death.apply(node, "DEAT");
         node.set_child_val("OCCU", &self.occupation);
         node.set_child_text("NOTE", &self.note);
     }
