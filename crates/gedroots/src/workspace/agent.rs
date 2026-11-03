@@ -58,6 +58,13 @@ impl Workspace {
         Some(agent::Snapshot { path: doc.path.clone(), ged: doc.ged.clone() })
     }
 
+    /// Copy of the document and its issues (media files checked too), for the MCP server.
+    pub(crate) fn agent_quality(&mut self) -> Option<(agent::Snapshot, Vec<gedcom::analysis::check::Issue>)> {
+        self.refresh_quality();
+        let snapshot = self.agent_snapshot()?;
+        Some((snapshot, self.quality.issues.as_ref().clone()))
+    }
+
     fn agent_dialog(&mut self) -> Option<&mut AgentDialog> {
         match &mut self.add_dialog {
             Some(AddDialog::Agent(d)) => Some(d),

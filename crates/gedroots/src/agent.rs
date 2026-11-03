@@ -36,6 +36,8 @@ pub fn url() -> String {
 /// What the app asks of the displayed document, from the server's thread.
 pub enum Request {
     Snapshot(tokio::sync::oneshot::Sender<Option<Snapshot>>),
+    /// Copy of the document with its Data Quality issues, as the Quality page computes them.
+    Quality(tokio::sync::oneshot::Sender<Option<(Snapshot, Vec<gedcom::analysis::check::Issue>)>>),
     /// Record proposal: added to the window's “To Review” page, or refused.
     Propose(Box<propose::Pending>, tokio::sync::oneshot::Sender<Result<usize, String>>),
     /// An agent has just opened a session: the “AI Agents” window updates.
@@ -118,6 +120,13 @@ pub fn install(cx: &mut App) {
                         ws.read(cx).agent_snapshot()
                     });
                     let _ = reply.send(snap);
+                }
+                Request::Quality(reply) => {
+                    let res = cx.update(|cx| {
+                        let ws = cx.global::<Target>().0.as_ref()?.upgrade()?;
+                        ws.update(cx, |ws, _| ws.agent_quality())
+                    });
+                    let _ = reply.send(res);
                 }
                 Request::Propose(pending, reply) => {
                     let res = cx.update(|cx| {

@@ -8,7 +8,7 @@ use axum::http::{StatusCode, header};
 use axum::middleware::Next;
 use axum::response::Response;
 use gedcom::RecordKind;
-use gedcom::research::{Gap, PersonRef, PersonSheet, current_year};
+use gedcom::research::{Gap, PersonRef, PersonSheet, QualityFilter, QualityReport, current_year};
 use rmcp::handler::server::wrapper::{Json, Parameters};
 use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
 use rmcp::transport::streamable_http_server::{StreamableHttpServerConfig, StreamableHttpService};
@@ -42,6 +42,22 @@ pub struct GapsParams {
     /// Last generation examined (1: the root person, 2: their parents…). Default 6, at most 12.
     pub generations: Option<u32>,
     /// Maximum number of gaps returned (default 100).
+    pub limit: Option<usize>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct QualityParams {
+    /// Only this category: dates, family, structure, empty, media, places, sources, files, coords.
+    pub category: Option<String>,
+    /// Only this kind of issue (`death_before_birth`, `empty_fact`…).
+    pub code: Option<String>,
+    /// Only the issues about this record (person, family, source… id).
+    pub record: Option<String>,
+    /// Also the issues the user hid because they checked them (default false).
+    pub include_hidden: Option<bool>,
+    /// Issues to skip, to read the next page (default 0).
+    pub offset: Option<usize>,
+    /// Maximum number of issues (default 100, at most 500).
     pub limit: Option<usize>,
 }
 
@@ -215,6 +231,26 @@ impl GedrootsMcp {
     }
 
     #[tool(
+        name = "quality_issues",
+        description = "The Data Quality issues of the tree, as GEDRoots' Quality page lists them: inconsistent dates and ages, family links, GEDCOM structure, empty or unused items, media, places, events without a source, files to attach, places without coordinates. Each issue has its record, what is involved, whether the Quality page fixes it in one click, and whether the user can hide it. Filter by category, kind or record; `categories` counts every category. Records of people who may be living are marked `living`.",
+        annotations(read_only_hint = true, open_world_hint = false)
+    )]
+    async fn quality(&self, Parameters(p): Parameters<QualityParams>) -> Res<QualityReport> {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        self.bridge.send(Request::Quality(tx)).await.map_err(|_| "GEDRoots is closing".to_string())?;
+        let (s, issues) = rx.await.ok().flatten().ok_or_else(|| "no file is open in GEDRoots".to_string())?;
+        let trim = |v: Option<String>| v.map(|v| v.trim().trim_matches('@').to_string()).filter(|v| !v.is_empty());
+        let filter = QualityFilter {
+            category: trim(p.category),
+            code: trim(p.code),
+            record: trim(p.record),
+            include_hidden: p.include_hidden.unwrap_or(false),
+        };
+        let limit = p.limit.unwrap_or(100).min(500);
+        s.ged.quality_report(&issues, &filter, p.offset.unwrap_or(0), limit, current_year()).map(Json)
+    }
+
+    #[tool(
         name = "search_sources",
         description = "Searches the tree's sources (with their register, repository and number of acts) and repositories. Use it before proposing an act, to cite an existing source or repository.",
         annotations(read_only_hint = true, open_world_hint = false)
@@ -361,7 +397,8 @@ death acts), call `research_gaps`, then `person_sheet` on the person to learn th
 and the sources already cited. When you find an act, read it, check it matches the person, \
 call `match_people` to know who each person named is in the tree (link them, create them or only \
 mention them), `search_sources` to reuse the source or repository, then `propose_act`. The prompts \
-`find_record` and `read_record` give the full method."
+`find_record` and `read_record` give the full method. `quality_issues` lists the tree's Data \
+Quality issues; `person_sheet` gives the events involved."
 )]
 #[prompt_handler(router = self.prompt_router)]
 impl ServerHandler for GedrootsMcp {
@@ -461,8 +498,18 @@ mod tests {
         let (tx, rx) = async_channel::unbounded::<Request>();
         // Fake app loop: always returns the same document.
         std::thread::spawn(move || {
-            while let Ok(Request::Snapshot(reply)) = rx.recv_blocking() {
-                let _ = reply.send(Some(Snapshot { path: None, ged: gedcom::Gedcom::parse(FILE).unwrap() }));
+            let ged = || gedcom::Gedcom::parse(FILE).unwrap();
+            while let Ok(req) = rx.recv_blocking() {
+                match req {
+                    Request::Snapshot(reply) => {
+                        let _ = reply.send(Some(Snapshot { path: None, ged: ged() }));
+                    }
+                    Request::Quality(reply) => {
+                        let issues = gedcom::quality::run(&ged());
+                        let _ = reply.send(Some((Snapshot { path: None, ged: ged() }, issues)));
+                    }
+                    _ => break,
+                }
             }
         });
         // Any free port: the app can run alongside on the usual port.
@@ -489,7 +536,7 @@ mod tests {
         let (_, _, list) =
             post(port, "secret", Some(&sid), serde_json::json!({"jsonrpc":"2.0","id":2,"method":"tools/list"}));
         let tools = list["result"]["tools"].as_array().expect("tools");
-        assert_eq!(tools.len(), 7);
+        assert_eq!(tools.len(), 8);
         // Only `propose_act` is not read only, and it writes nothing.
         let writers: Vec<_> =
             tools.iter().filter(|t| t["annotations"]["readOnlyHint"] != true).map(|t| t["name"].clone()).collect();
@@ -504,6 +551,18 @@ mod tests {
         let sheet = &call["result"]["structuredContent"];
         assert_eq!(sheet["person"]["name"], "Jean MARCHAND", "{call}");
         assert_eq!(sheet["events"][0]["place"], "Rennes");
+        // Data Quality: the place of the birth has no coordinates.
+        let (_, _, call) = post(
+            port,
+            "secret",
+            Some(&sid),
+            serde_json::json!({"jsonrpc":"2.0","id":7,"method":"tools/call",
+            "params":{"name":"quality_issues","arguments":{"category":"coords"}}}),
+        );
+        let report = &call["result"]["structuredContent"];
+        assert_eq!(report["issues"][0]["code"], "missing_coords", "{call}");
+        assert_eq!(report["issues"][0]["values"][0], "Rennes");
+        assert!(report["categories"].as_array().is_some_and(|c| !c.is_empty()));
         // The working methods are served as prompts, with or without an argument.
         let (_, _, prompts) =
             post(port, "secret", Some(&sid), serde_json::json!({"jsonrpc":"2.0","id":4,"method":"prompts/list"}));

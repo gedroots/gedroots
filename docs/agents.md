@@ -34,8 +34,9 @@ either: it only adds a proposal to review.
 | --- | --- |
 | `file_info` | File name, counts, root person |
 | `search_people` | People matching a search, as in the app's search box |
-| `person_sheet` | Events with date, place, cited sources (`PAGE`) and media; parents, unions, children; Sosa number |
+| `person_sheet` | Events with their position in the record, date, place, cited sources (`PAGE`) and media; parents, unions, children; Sosa number |
 | `research_gaps` | Births, marriages and deaths missing or without a source among the root person's direct ancestors, by Sosa number, with each person's known places |
+| `quality_issues` | The Data Quality page's issues, filtered by category, kind or record and paged (`offset`, `limit`): message, records and places involved, whether the page fixes it in one click, whether it can be hidden, counts per category |
 | `search_sources` | Sources (register, repository, call number, number of acts) and repositories, to cite an existing one |
 | `match_people` | For the people named in an act (role, names, sex, age, act date), the people of the tree who could be them, with the reason and whether the match is likely |
 | `propose_act` | Adds an act to the To Review page: event, date, place, source, reference, transcription, people with their role, downloaded file |
@@ -108,7 +109,8 @@ the act editor. Proposals live in memory: they are lost when the app closes.
   a union, a child's birth, a parent's birth), is more than 100 years ago. The agent can find and
   link a living person, but only gets their name, their birth (date and place, `born`) and their
   close relatives: their sheet leaves out their other events and notes, and `research_gaps` skips
-  them (`crates/gedcom/src/research.rs`).
+  them (`crates/gedcom/src/research.rs`). `quality_issues` lists their issues too, their records
+  marked `living`.
 - **Local only.** The server listens on `127.0.0.1:47280`, requires the token in the
   `Authorization` header and rejects requests sent by a web page (`Origin` header).
 - **Nothing is written by the agent.** It can only propose; a person reviews, compares and saves.

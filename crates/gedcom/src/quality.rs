@@ -159,6 +159,39 @@ pub fn fix_of(code: &str) -> Option<Fix> {
     })
 }
 
+/// Identifier of a problem, stable while the file does not change around it: its code, its record,
+/// the position of the faulty structure and the other records or values involved
+/// (`death_before_birth:I214`, `empty_fact:I12@3`, `missing_backlink:I5>F2`,
+/// `missing_coords:>Agneaux, Manche`). Two problems can share it; [`issue_ids`] tells them apart.
+pub fn issue_key(i: &Issue) -> String {
+    let mut key = format!("{}:{}", i.code, i.xref);
+    if !i.path.is_empty() {
+        let path: Vec<String> = i.path.iter().map(usize::to_string).collect();
+        key.push('@');
+        key.push_str(&path.join("."));
+    }
+    if !i.related.is_empty() {
+        key.push('>');
+        key.push_str(&i.related.join("|"));
+    }
+    key
+}
+
+/// Identifiers of a list of problems, in the same order: [`issue_key`], followed by `#2`, `#3`…
+/// for the following problems with the same key.
+pub fn issue_ids(issues: &[Issue]) -> Vec<String> {
+    let mut seen: HashMap<String, usize> = HashMap::new();
+    issues
+        .iter()
+        .map(|i| {
+            let key = issue_key(i);
+            let n = seen.entry(key.clone()).or_default();
+            *n += 1;
+            if *n == 1 { key } else { format!("{key}#{n}") }
+        })
+        .collect()
+}
+
 /// Access to the media files, provided by the application (the library does not read the disk).
 pub struct Files<'a> {
     /// Does the file designated by a `FILE` value exist?
