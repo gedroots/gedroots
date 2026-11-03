@@ -6,6 +6,7 @@
 use super::relatives::PickPurpose;
 use super::tree::TreeMode;
 use super::*;
+use crate::editor::NamePart;
 use gpui_kit::component::command::{Command, CommandItem, CommandState};
 use rust_i18n::t;
 
@@ -251,6 +252,13 @@ impl Workspace {
                         this.open_event_dialog(x, None, w, cx)
                     }
                 })
+            })
+            .when(indi.is_some() && self.editor.as_ref().is_some_and(|ed| ed.names.is_some()), |d| {
+                let d = on!(d, cx, AddOtherName, |this, w, cx| this.add_to_name(None, w, cx));
+                let d = on!(d, cx, AddNickname, |this, w, cx| this.add_to_name(Some(NamePart::Nickname), w, cx));
+                let d = on!(d, cx, AddNameTitle, |this, w, cx| this.add_to_name(Some(NamePart::Title), w, cx));
+                let d = on!(d, cx, AddNameParticle, |this, w, cx| this.add_to_name(Some(NamePart::Particle), w, cx));
+                on!(d, cx, AddNameSuffix, |this, w, cx| this.add_to_name(Some(NamePart::Suffix), w, cx))
             })
             .when(web_linkable, |d| {
                 on!(d, cx, AddWebLink, |this, w, cx| {

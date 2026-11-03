@@ -3,7 +3,7 @@
 
 use crate::act_editor::{ActEditor, ActEditorEvent};
 use crate::commands::*;
-use crate::editor::{FieldState, RecordEditor, Slot, Target};
+use crate::editor::{FieldState, NamePart, NamesEditor, RecordEditor, Slot, Target, name_type_label};
 use crate::images::picture;
 use crate::map::{MapEvent, MapView};
 use crate::theme;
@@ -2555,35 +2555,192 @@ impl Workspace {
     /// Edit › Edit Record on an individual: their panel's header becomes fields, in place: names
     /// next to the portrait (the sex beside the surname), note. Birth and death are events of the
     /// timeline below, edited there like the others.
-    fn render_individual_fields(&self, ed: &RecordEditor, portrait: Div, cx: &mut Context<Self>) -> Div {
+    fn render_individual_fields(&self, ed: &RecordEditor, cx: &mut Context<Self>) -> Div {
         let f = &ed.fields;
         v_flex()
             .p_4()
             .gap_3()
             .border_b_1()
             .border_color(theme::border())
+            // No portrait while editing: it cannot be changed here. The whole name sits on one
+            // line, in reading order (given names, particle, surname, suffix); title, sex and
+            // nickname go below. A part only gets a field once added.
             .child(
-                h_flex().gap_3().items_center().child(portrait).child(
-                    v_flex()
-                        .flex_1()
-                        .min_w_0()
-                        .gap_2()
-                        .child(self.render_field(&f[0], cx))
-                        // The sex is short: next to the surname, like the name line of most
-                        // genealogy software, rather than a full-width row.
-                        .child(
-                            h_flex()
-                                .gap_2()
-                                .items_start()
-                                .child(self.render_field(&f[1], cx).flex_1())
-                                .child(self.render_field(&f[2], cx).w(px(116.)).flex_none()),
-                        ),
-                ),
+                h_flex()
+                    .gap_2()
+                    .items_start()
+                    .child(self.render_field(&f[0], cx).flex_1())
+                    .children(name_part_field(ed, NamePart::Particle).map(|d| d.w(px(56.)).flex_none()))
+                    .child(self.render_field(&f[1], cx).flex_1())
+                    .children(name_part_field(ed, NamePart::Suffix).map(|d| d.w(px(64.)).flex_none())),
             )
+            .child(
+                h_flex()
+                    .gap_2()
+                    .items_start()
+                    .children(name_part_field(ed, NamePart::Title).map(|d| d.flex_1()))
+                    .child(self.render_field(&f[2], cx).w(px(116.)).flex_none())
+                    .children(name_part_field(ed, NamePart::Nickname).map(|d| d.flex_1())),
+            )
+            .when_some(ed.names.as_ref(), |d, names| d.children(self.render_name_extras(names, cx)))
             .when_some(ed.long_text.as_ref(), |d, (label, state)| {
                 d.child(v_flex().gap_1().child(label_caps(label.clone())).child(Textarea::new(state).h(px(80.))))
             })
-            .child(self.edit_buttons(cx))
+            .child(
+                h_flex()
+                    .gap_2()
+                    .items_center()
+                    .child(self.add_to_name_button(cx))
+                    .child(div().flex_1())
+                    .child(self.edit_buttons(cx)),
+            )
+    }
+
+    /// The other names of the person: each one a line, unfolded into its fields when clicked.
+    fn render_name_extras(&self, names: &NamesEditor, cx: &mut Context<Self>) -> Vec<AnyElement> {
+        let mut out = Vec::new();
+        if names.others.is_empty() {
+            return out;
+        }
+        let rows = names.others.iter().enumerate().map(|(ix, other)| {
+            if names.open == Some(ix) {
+                return v_flex()
+                    .gap_2()
+                    .p_2()
+                    .rounded(theme::RADIUS_SM)
+                    .border_1()
+                    .border_color(theme::border_strong())
+                    .bg(theme::bg())
+                    .child(
+                        v_flex()
+                            .gap_1()
+                            .child(label_caps(t!("editor.name_type")))
+                            .child(Select::new(&other.kind).small().placeholder(t!("event_dialog.choose"))),
+                    )
+                    .child(
+                        h_flex()
+                            .gap_2()
+                            .child(
+                                v_flex()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .gap_1()
+                                    .child(label_caps(t!("editor.given")))
+                                    .child(Input::new(&other.given).small()),
+                            )
+                            .child(
+                                v_flex()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .gap_1()
+                                    .child(label_caps(t!("editor.name")))
+                                    .child(Input::new(&other.surname).small()),
+                            ),
+                    )
+                    .child(
+                        h_flex()
+                            .justify_between()
+                            .child(
+                                Button::new(("remove-name", ix))
+                                    .ghost()
+                                    .small()
+                                    .label(t!("editor.remove_name"))
+                                    .text_color(theme::danger())
+                                    .on_click(cx.listener(move |this, _, _, cx| {
+                                        if let Some(n) = this.editor.as_mut().and_then(|ed| ed.names.as_mut()) {
+                                            n.remove_other(ix);
+                                        }
+                                        cx.notify();
+                                    })),
+                            )
+                            .child(
+                                Button::new(("fold-name", ix))
+                                    .primary()
+                                    .small()
+                                    .label(t!("editor.fold_name"))
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        if let Some(n) = this.editor.as_mut().and_then(|ed| ed.names.as_mut()) {
+                                            n.open = None;
+                                        }
+                                        cx.notify();
+                                    })),
+                            ),
+                    )
+                    .into_any_element();
+            }
+            let form = other.read(cx);
+            let shown = join_words(&[&form.prefix, &form.given, &form.particle, &form.surname, &form.suffix]);
+            h_flex()
+                .id(("other-name", ix))
+                .justify_between()
+                .gap_2()
+                .h(px(30.))
+                .px_2()
+                .rounded(theme::RADIUS_SM)
+                .cursor_pointer()
+                .hover(|d| d.bg(theme::hover()))
+                .child(div().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(shown))
+                .child(div().flex_none().text_xs().text_color(theme::muted()).child(name_type_label(&form.kind)))
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    if let Some(n) = this.editor.as_mut().and_then(|ed| ed.names.as_mut()) {
+                        n.open = Some(ix);
+                    }
+                    cx.notify();
+                }))
+                .into_any_element()
+        });
+        out.push(v_flex().gap_1().child(label_caps(t!("editor.other_names"))).children(rows).into_any_element());
+        out
+    }
+
+    /// “+ Add ▾” under an individual's fields: the commands of Person › Add to Name.
+    fn add_to_name_button(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+        let shown: Vec<NamePart> = self
+            .editor
+            .as_ref()
+            .and_then(|ed| ed.names.as_ref())
+            .map(|n| n.parts.iter().map(|(p, _)| *p).collect())
+            .unwrap_or_default();
+        let me = cx.entity().downgrade();
+        Button::new("add-to-name")
+            .ghost()
+            .small()
+            .icon(IconName::Plus)
+            .label(t!("common.add"))
+            .dropdown_caret(true)
+            .dropdown_menu(move |menu, _, _| {
+                let item = |label: SharedString, part: Option<NamePart>| {
+                    let me = me.clone();
+                    PopupMenuItem::new(label).on_click(move |_, w, cx| {
+                        let _ = me.update(cx, |this, cx| this.add_to_name(part, w, cx));
+                    })
+                };
+                let mut menu = menu.item(item(t!("cmd.other_name").into(), None)).separator();
+                for part in NamePart::ALL {
+                    menu = menu.item(item(part.label(), Some(part)).disabled(shown.contains(&part)));
+                }
+                menu
+            })
+    }
+
+    /// Person › Add to Name: edits the record if needed, then shows the part's field (or a new
+    /// other name, unfolded) and focuses it.
+    pub(super) fn add_to_name(&mut self, part: Option<NamePart>, window: &mut Window, cx: &mut Context<Self>) {
+        if self.editor.as_ref().and_then(|ed| ed.names.as_ref()).is_none() {
+            return;
+        }
+        if !self.editing {
+            self.start_edit(window, cx);
+        }
+        let Some(ed) = self.editor.as_mut() else { return };
+        let given = ed.fields.first().map(|f| f.state.value(cx)).unwrap_or_default();
+        let Some(names) = ed.names.as_mut() else { return };
+        let input = match part {
+            Some(p) => names.add_part(p, window, cx),
+            None => names.add_other(&given, window, cx),
+        };
+        input.update(cx, |e, cx| e.focus(window, cx));
+        cx.notify();
     }
 
     /// The record as it is saved, in text: its title (with a source's repository and call number
@@ -3305,8 +3462,11 @@ impl Workspace {
         let fields = self
             .panel_editor(&xref)
             .filter(|ed| self.editing && ed.fields.len() >= 3)
-            .map(|ed| self.render_individual_fields(ed, avatar(doc, &i, 64., lineage), cx));
+            .map(|ed| self.render_individual_fields(ed, cx));
         let confirm = self.pending_delete.as_deref() == Some(xref.as_str());
+        let names = i.names();
+        let main_name = names.first().cloned().unwrap_or_default();
+        let names_line = names_line(&names, i.sex() == "F");
 
         let header = h_flex()
             .p_4()
@@ -3326,9 +3486,19 @@ impl Workspace {
                             .flex_wrap()
                             .gap_x_1()
                             .text_xl()
-                            .child(div().font_weight(FontWeight::SEMIBOLD).child(i.surname()))
-                            .child(div().min_w_0().max_w_full().child(i.given())),
+                            .child(
+                                div()
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .child(join_words(&[&main_name.particle, &main_name.surname])),
+                            )
+                            .child(div().min_w_0().max_w_full().child(join_words(&[
+                                &main_name.prefix,
+                                &main_name.given,
+                                &main_name.suffix,
+                            ]))),
                     )
+                    // Other names and nickname, only when there are some.
+                    .when(!names_line.is_empty(), |d| d.child(div().text_color(theme::muted()).child(names_line)))
                     .child(div().text_color(theme::muted()).child(format!(
                         "{} · {}{}",
                         i.sex_label(),
@@ -3812,6 +3982,61 @@ impl Workspace {
         }
         cx.notify();
     }
+}
+
+/// The field of a main-name part, when it has been added to the record being edited.
+fn name_part_field(ed: &RecordEditor, part: NamePart) -> Option<Div> {
+    let state = ed.names.as_ref()?.parts.iter().find(|(p, _)| *p == part)?.1.clone();
+    Some(v_flex().gap_1().min_w_0().child(label_caps(part.label())).child(Input::new(&state).small()))
+}
+
+/// Words joined by spaces, empty ones left out.
+fn join_words(words: &[&str]) -> String {
+    words.iter().map(|w| w.trim()).filter(|w| !w.is_empty()).collect::<Vec<_>>().join(" ")
+}
+
+/// Under an individual's name: their nickname and their other names, by type, each showing only
+/// what differs from the main name (“called Messaoud · also QUIRIEL, QUIRIELLE”). Empty if none.
+fn names_line(names: &[NameForm], female: bool) -> String {
+    let Some(main) = names.first() else { return String::new() };
+    let surname = |n: &NameForm| join_words(&[&n.particle, &n.surname]);
+    let mut groups: Vec<(&str, Vec<String>)> = Vec::new();
+    for n in &names[1..] {
+        let shown = if n.given.trim() == main.given.trim() || n.given.trim().is_empty() {
+            surname(n)
+        } else if surname(n) == surname(main) || n.surname.trim().is_empty() {
+            n.given.trim().to_string()
+        } else {
+            join_words(&[&n.given, &surname(n)])
+        };
+        if shown.is_empty() {
+            continue;
+        }
+        let kind = match n.kind.as_str() {
+            k @ ("BIRTH" | "MAIDEN" | "MARRIED" | "IMMIGRANT" | "PROFESSIONAL") => k,
+            _ => "AKA",
+        };
+        match groups.iter_mut().find(|(k, _)| *k == kind) {
+            Some((_, list)) => list.push(shown),
+            None => groups.push((kind, vec![shown])),
+        }
+    }
+    let nickname = main.nickname.trim();
+    let called = (!nickname.is_empty()).then(|| t!("names.called", name = nickname).into_owned());
+    let others = groups.into_iter().map(|(kind, list)| {
+        let names = list.join(", ");
+        match kind {
+            "BIRTH" if female => t!("names.born_f", names = names),
+            "BIRTH" => t!("names.born", names = names),
+            "MAIDEN" => t!("names.maiden", names = names),
+            "MARRIED" => t!("names.married", names = names),
+            "IMMIGRANT" => t!("names.immigrant", names = names),
+            "PROFESSIONAL" => t!("names.professional", names = names),
+            _ => t!("names.also", names = names),
+        }
+        .into_owned()
+    });
+    called.into_iter().chain(others).collect::<Vec<_>>().join(" · ")
 }
 
 #[cfg(test)]

@@ -203,6 +203,168 @@ pub struct RecordEditor {
     /// Text of the raw GEDCOM editor when it opened, to know whether it was changed.
     pub raw_original: String,
     pub error: Option<SharedString>,
+    /// An individual's names beyond the given name and surname of `fields`.
+    pub names: Option<NamesEditor>,
+}
+
+/// Parts of a name that only show once filled, added from the “Add” menu.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NamePart {
+    Nickname,
+    Title,
+    Particle,
+    Suffix,
+}
+
+impl NamePart {
+    pub const ALL: [NamePart; 4] = [NamePart::Nickname, NamePart::Title, NamePart::Particle, NamePart::Suffix];
+
+    pub fn label(self) -> SharedString {
+        match self {
+            NamePart::Nickname => t!("editor.nickname"),
+            NamePart::Title => t!("editor.name_title"),
+            NamePart::Particle => t!("editor.particle"),
+            NamePart::Suffix => t!("editor.suffix"),
+        }
+        .into()
+    }
+
+    fn get(self, f: &NameForm) -> &str {
+        match self {
+            NamePart::Nickname => &f.nickname,
+            NamePart::Title => &f.prefix,
+            NamePart::Particle => &f.particle,
+            NamePart::Suffix => &f.suffix,
+        }
+    }
+
+    fn set(self, f: &mut NameForm, v: String) {
+        *match self {
+            NamePart::Nickname => &mut f.nickname,
+            NamePart::Title => &mut f.prefix,
+            NamePart::Particle => &mut f.particle,
+            NamePart::Suffix => &mut f.suffix,
+        } = v;
+    }
+}
+
+/// Label of a `NAME.TYPE` value (empty for none).
+pub fn name_type_label(kind: &str) -> String {
+    match kind {
+        "BIRTH" => t!("name_type.birth"),
+        "MARRIED" => t!("name_type.married"),
+        "AKA" => t!("name_type.aka"),
+        "MAIDEN" => t!("name_type.maiden"),
+        "IMMIGRANT" => t!("name_type.immigrant"),
+        "PROFESSIONAL" => t!("name_type.professional"),
+        "OTHER" => t!("name_type.other"),
+        _ => return String::new(),
+    }
+    .into_owned()
+}
+
+/// A name other than the main one, edited in place.
+pub struct OtherName {
+    pub kind: Entity<PickerState>,
+    pub given: Entity<InputState>,
+    pub surname: Entity<InputState>,
+    /// As read: keeps the parts that are not edited here.
+    pub form: NameForm,
+}
+
+/// An individual's names: parts of the main name shown, and the other names.
+pub struct NamesEditor {
+    /// Main name as read.
+    pub main: NameForm,
+    /// Parts of the main name shown (filled, or just added), with their field.
+    pub parts: Vec<(NamePart, Entity<InputState>)>,
+    pub others: Vec<OtherName>,
+    /// Other name unfolded for editing.
+    pub open: Option<usize>,
+}
+
+impl NamesEditor {
+    fn new<T: 'static>(names: &[NameForm], window: &mut Window, cx: &mut Context<T>) -> Self {
+        let main = names.first().cloned().unwrap_or_default();
+        let parts = NamePart::ALL
+            .into_iter()
+            .filter(|p| !p.get(&main).trim().is_empty())
+            .map(|p| (p, input(window, cx, p.get(&main), "")))
+            .collect();
+        let others = names.iter().skip(1).map(|f| OtherName::new(f.clone(), window, cx)).collect();
+        Self { main, parts, others, open: None }
+    }
+
+    /// Shows the field of a part of the main name; returns it, to be focused.
+    pub fn add_part<T: 'static>(
+        &mut self,
+        part: NamePart,
+        window: &mut Window,
+        cx: &mut Context<T>,
+    ) -> Entity<InputState> {
+        if let Some((_, e)) = self.parts.iter().find(|(p, _)| *p == part) {
+            return e.clone();
+        }
+        let e = input(window, cx, "", "");
+        self.parts.push((part, e.clone()));
+        self.parts.sort_by_key(|(p, _)| NamePart::ALL.iter().position(|q| q == p));
+        e
+    }
+
+    /// Adds an other name (“also known as”, same given names), unfolded; returns its surname
+    /// field, to be focused.
+    pub fn add_other<T: 'static>(
+        &mut self,
+        given: &str,
+        window: &mut Window,
+        cx: &mut Context<T>,
+    ) -> Entity<InputState> {
+        let form = NameForm { given: given.to_string(), kind: "AKA".into(), ..Default::default() };
+        self.others.push(OtherName::new(form, window, cx));
+        self.open = Some(self.others.len() - 1);
+        self.others.last().unwrap().surname.clone()
+    }
+
+    pub fn remove_other(&mut self, ix: usize) {
+        if ix < self.others.len() {
+            self.others.remove(ix);
+        }
+        self.open = None;
+    }
+
+    /// The names to write, the main one first.
+    fn forms(&self, given: &str, surname: &str, cx: &App) -> Vec<NameForm> {
+        let mut main = self.main.clone();
+        main.given = given.trim().to_string();
+        main.surname = surname.trim().to_string();
+        for (p, e) in &self.parts {
+            p.set(&mut main, e.read(cx).value().trim().to_string());
+        }
+        let others = self.others.iter().map(|o| o.read(cx)).filter(|f| !(f.given.is_empty() && f.surname.is_empty()));
+        std::iter::once(main).chain(others).collect()
+    }
+}
+
+impl OtherName {
+    fn new<T: 'static>(form: NameForm, window: &mut Window, cx: &mut Context<T>) -> Self {
+        let types: Vec<(String, String)> = NAME_TYPES.iter().map(|k| (k.to_string(), name_type_label(k))).collect();
+        let types: Vec<(&str, &str)> = types.iter().map(|(v, l)| (v.as_str(), l.as_str())).collect();
+        Self {
+            kind: choice(&types, &form.kind, window, cx),
+            given: input(window, cx, &form.given, ""),
+            surname: input(window, cx, &form.surname, ""),
+            form,
+        }
+    }
+
+    /// The name with the typed values.
+    pub fn read(&self, cx: &App) -> NameForm {
+        let mut f = self.form.clone();
+        f.kind = self.kind.read(cx).selected_value().cloned().unwrap_or_default();
+        f.given = self.given.read(cx).value().trim().to_string();
+        f.surname = self.surname.read(cx).value().trim().to_string();
+        f
+    }
 }
 
 /// Input field; the format example is shown greyed out while it is empty.
@@ -229,6 +391,7 @@ impl RecordEditor {
         let mut long_text = None;
         let mut raw = None;
         let mut raw_original = String::new();
+        let mut names = None;
         macro_rules! field {
             ($label:expr, $hint:expr, $v:expr) => {
                 fields.push(Field {
@@ -281,13 +444,15 @@ impl RecordEditor {
                         raw,
                         raw_original,
                         error: Some(t!("editor.not_found").into()),
+                        names,
                     };
                 };
                 match kind {
                     RecordKind::Individual => {
                         let f = IndividualForm::read(node);
-                        field!(t!("editor.given"), "", f.given);
-                        field!(t!("editor.name"), "", f.surname);
+                        field!(t!("editor.given"), "", f.names[0].given);
+                        field!(t!("editor.name"), "", f.names[0].surname);
+                        names = Some(NamesEditor::new(&f.names, window, cx));
                         fields[0].slot = Slot::Title;
                         fields[1].slot = Slot::Title;
                         let sexes = sexes();
@@ -382,7 +547,7 @@ impl RecordEditor {
                 }));
             }
         }
-        Self { target, pickers, fields, long_text, raw, raw_original, error: None }
+        Self { target, pickers, fields, long_text, raw, raw_original, error: None, names }
     }
 
     fn picked(&self, n: usize, cx: &App) -> String {
@@ -434,8 +599,10 @@ impl RecordEditor {
                 let node = ged.get_mut(xref).ok_or_else(|| t!("editor.not_found").to_string())?;
                 match kind {
                     RecordKind::Individual => IndividualForm {
-                        given: v[0].clone(),
-                        surname: v[1].clone(),
+                        names: match &self.names {
+                            Some(n) => n.forms(&v[0], &v[1], cx),
+                            None => vec![NameForm { given: v[0].clone(), surname: v[1].clone(), ..Default::default() }],
+                        },
                         sex: v[2].clone(),
                         occupation: IndividualForm::read(node).occupation,
                         note,
