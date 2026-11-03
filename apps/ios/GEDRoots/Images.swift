@@ -9,9 +9,11 @@ struct Portrait: View {
     var crop: ImageCrop?
     let name: String
     let size: CGFloat
+    @State private var image: UIImage?
+
     var body: some View {
         Group {
-            if let path, let image = Thumbnails.image(path, crop: crop) {
+            if let image {
                 Image(uiImage: image).resizable().scaledToFill()
             } else {
                 Text(initials).font(.system(size: size / 3.6, weight: .semibold)).foregroundStyle(.secondary)
@@ -21,6 +23,7 @@ struct Portrait: View {
         .frame(width: size, height: size)
         .clipShape(Circle())
         .accessibilityHidden(true)
+        .task(id: Thumbnails.key(path, crop)) { image = await Thumbnails.load(path, crop: crop) }
     }
 
     /// First letters of the first given name and of the surname.
@@ -60,11 +63,23 @@ struct MediaStrip: View {
 struct Thumbnail: View {
     let path: String?
     var crop: ImageCrop?
+    @State private var image: UIImage?
+
     var body: some View {
-        if let path, let image = Thumbnails.image(path, crop: crop) {
-            Image(uiImage: image).resizable().scaledToFill()
-        } else {
+        ZStack {
             Theme.hover
+            if let image {
+                Image(uiImage: image).resizable().scaledToFill().transition(.opacity)
+            }
+        }
+        // Decoded off the main thread, so that scrolling a grid of scans stays smooth; a cell
+        // scrolled away before its image is ready cancels it.
+        .task(id: Thumbnails.key(path, crop)) {
+            image = Thumbnails.cached(path, crop: crop)
+            if image == nil {
+                let decoded = await Thumbnails.load(path, crop: crop)
+                withAnimation(.easeOut(duration: 0.15)) { image = decoded }
+            }
         }
     }
 }
@@ -110,11 +125,28 @@ enum ImageFile {
 enum Thumbnails {
     private static let cache = NSCache<NSString, UIImage>()
 
+    static func key(_ path: String?, _ crop: ImageCrop?, side: CGFloat = 320) -> String {
+        let area = crop.map { "\($0.left),\($0.top),\($0.width ?? 0),\($0.height ?? 0)" } ?? ""
+        return "\(path ?? "")#\(area)#\(side)"
+    }
+
+    static func cached(_ path: String?, crop: ImageCrop?, side: CGFloat = 320) -> UIImage? {
+        cache.object(forKey: NSString(string: key(path, crop, side: side)))
+    }
+
+    /// Like `image`, off the main thread.
+    static func load(_ path: String?, crop: ImageCrop?, side: CGFloat = 320) async -> UIImage? {
+        guard let path else { return nil }
+        if let hit = cached(path, crop: crop, side: side) { return hit }
+        let task = Task.detached(priority: .userInitiated) { image(path, crop: crop, side: side) }
+        return await withTaskCancellationHandler { await task.value } onCancel: { task.cancel() }
+    }
+
     /// The image, or only its `crop` area, decoded so that it is about `side` pixels.
     static func image(_ path: String, crop: ImageCrop? = nil, side: CGFloat = 320) -> UIImage? {
-        let area = crop.map { "\($0.left),\($0.top),\($0.width ?? 0),\($0.height ?? 0)" } ?? ""
-        let key = NSString(string: "\(path)#\(area)#\(side)")
-        if let hit = cache.object(forKey: key) { return hit }
+        let cacheKey = NSString(string: key(path, crop, side: side))
+        if let hit = cache.object(forKey: cacheKey) { return hit }
+        if Task.isCancelled { return nil }
         guard let source = ImageFile.source(path) else { return nil }
         var cg: CGImage?
         if let crop, let size = ImageFile.size(source), let rect = crop.rect(in: size), rect.size != size {
@@ -131,7 +163,7 @@ enum Thumbnails {
         }
         guard let cg else { return nil }
         let image = UIImage(cgImage: cg)
-        cache.setObject(image, forKey: key)
+        cache.setObject(image, forKey: cacheKey)
         return image
     }
 }
