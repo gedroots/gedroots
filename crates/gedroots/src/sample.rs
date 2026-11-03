@@ -149,6 +149,19 @@ mod tests {
         }
     }
 
+    /// What a new user sees first passes its own structure and media checks.
+    #[test]
+    fn sample_tree_passes_its_own_structure_checks() {
+        use gedcom::quality::{Category, category};
+        let (g, _) = open().unwrap();
+        let wrong: Vec<String> = gedcom::quality::run(&g)
+            .into_iter()
+            .filter(|i| matches!(category(i.code), Category::Structure | Category::Media | Category::Family))
+            .map(|i| format!("{} {}: {}", i.code, i.xref, i.message))
+            .collect();
+        assert!(wrong.is_empty(), "{wrong:#?}");
+    }
+
     #[test]
     fn birth_record_cites_the_register_for_three_people() {
         let (mut g, _) = open().unwrap();
