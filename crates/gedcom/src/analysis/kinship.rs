@@ -221,6 +221,12 @@ fn blood(g: &Gedcom, a: &str, b: &str) -> Option<(Kinship, u32, u32)> {
     ))
 }
 
+/// Generations from `a` and from `b` up to their closest common ancestor, if they are blood
+/// relatives (`(0, 1)`: `b` is a parent of `a`; `(1, 1)`: siblings).
+pub(crate) fn blood_degrees(g: &Gedcom, a: &str, b: &str) -> Option<(u32, u32)> {
+    blood(g, a, b).map(|(_, da, db)| (da, db))
+}
+
 fn spouses(g: &Gedcom, x: &str) -> Vec<String> {
     let Some(ind) = g.get(x) else { return vec![] };
     ind.children_with("FAMS")

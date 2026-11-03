@@ -14,6 +14,7 @@ start with `_GR_` and are declared in the header, as GEDCOM 7 requires:
 2 TAG _GR_MEDIA https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_media
 2 TAG _GR_FIND https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_find
 2 TAG _GR_WEB https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_web
+2 TAG _GR_DISTINCT https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_distinct
 ```
 
 Other software ignores these tags without losing data.
@@ -272,6 +273,26 @@ reported.
 
 Imprecise dates (`ABT`, `BEF`, `BET … AND …`, year only) are treated as ranges: an issue is
 only reported if it holds for every possible date. "About" dates have a 5-year margin.
+
+## `_GR_DISTINCT`
+
+Two individuals that look alike but are different people: the user answered **Not a
+Duplicate**, so the pair is no longer suggested among the possible duplicates, and an AI agent
+cannot propose to merge them.
+
+- **Under**: `INDI`, at level 1. One line per individual known to be someone else.
+- **Value**: pointer to the other individual. Written on one of the two; GEDRoots reads it in
+  both directions.
+- **Substructures**: none.
+
+```
+0 @I710@ INDI
+1 NAME Abraham /DARMON/
+1 _GR_DISTINCT @I729@
+```
+
+Merging two individuals carries the marks of the merged-away one over to the kept one. If the
+other individual is deleted, the line goes with it, like any pointer to a deleted record.
 
 ## Source and media types (no extension)
 

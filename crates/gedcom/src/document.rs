@@ -237,7 +237,7 @@ impl Gedcom {
         Ok(())
     }
 
-    fn rename_pointers(&mut self, old: &str, new: &str) {
+    pub(crate) fn rename_pointers(&mut self, old: &str, new: &str) {
         let old_p = format!("@{old}@");
         let new_p = format!("@{new}@");
         let mentions = |n: &Node| n.any(&|n| n.value.as_deref() == Some(old_p.as_str()));
