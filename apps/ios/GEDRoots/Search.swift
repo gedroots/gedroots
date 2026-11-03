@@ -9,8 +9,11 @@ extension View {
     /// tokens that read as phrases (“Born 1850–1900”), picked from suggestions made of the file's
     /// values. Nobody has to type the criteria syntax, though it still works. `query` receives
     /// the whole query of the zone.
-    func treeSearch(model: TreeModel, zone: SearchZone, prompt: LocalizedStringKey, query: Binding<String>) -> some View {
-        modifier(TreeSearch(model: model, zone: zone, prompt: prompt, query: query))
+    /// `onClose`: the search was closed (Cancel), e.g. to clear a scope that only shows while
+    /// searching.
+    func treeSearch(model: TreeModel, zone: SearchZone, prompt: LocalizedStringKey, query: Binding<String>,
+                    onClose: @escaping () -> Void = {}) -> some View {
+        modifier(TreeSearch(model: model, zone: zone, prompt: prompt, query: query, onClose: onClose))
     }
 }
 
@@ -19,13 +22,15 @@ private struct TreeSearch: ViewModifier {
     let zone: SearchZone
     let prompt: LocalizedStringKey
     @Binding var query: String
+    let onClose: () -> Void
+    @State private var presented = false
     @State private var text = ""
     @State private var tokens: [SearchToken] = []
     @State private var suggestions: [SearchSuggestion] = []
 
     func body(content: Content) -> some View {
         content
-            .searchable(text: $text, tokens: $tokens, prompt: Text(prompt)) { token in
+            .searchable(text: $text, tokens: $tokens, isPresented: $presented, prompt: Text(prompt)) { token in
                 Text(token.label)
             }
             .searchSuggestions {
@@ -44,6 +49,13 @@ private struct TreeSearch: ViewModifier {
                 publish()
             }
             .onChange(of: tokens) { publish() }
+            .onChange(of: presented) {
+                guard !presented else { return }
+                // Closed: nothing filters what the tab shows any more.
+                tokens = []
+                text = ""
+                onClose()
+            }
             .task(id: "\(text)#\(tokens.map(\.criterion))#\(model.revision)") { await suggest() }
     }
 

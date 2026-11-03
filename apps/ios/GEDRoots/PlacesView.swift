@@ -28,7 +28,7 @@ struct PlacesView: View {
                     ContentUnavailableView("No Located Places", systemImage: "mappin.slash")
                 }
             }
-            .treeSearch(model: model, zone: .places, prompt: "Search Places", query: $query)
+            .treeSearch(model: model, zone: .places, prompt: "Search Places", query: $query) { scope = .all }
             // Like People: everyone's places, or only the ancestors'.
             .searchScopes($scope, activation: .onSearchPresentation) {
                 Text("All").tag(Scope.all)

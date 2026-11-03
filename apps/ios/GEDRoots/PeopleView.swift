@@ -55,7 +55,7 @@ struct PeopleView: View {
             .overlay {
                 if model.tree != nil, results.isEmpty, !query.isEmpty { ContentUnavailableView.search }
             }
-            .treeSearch(model: model, zone: .people, prompt: "Search People", query: $query)
+            .treeSearch(model: model, zone: .people, prompt: "Search People", query: $query) { scope = .all }
             .searchScopes($scope, activation: .onSearchPresentation) {
                 Text("All").tag(Scope.all)
                 Text("Ancestors").tag(Scope.ancestors)
