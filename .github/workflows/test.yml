@@ -29,7 +29,10 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
+      # With the Atlas (crates/gedcom/atlas), embedded at build time.
       - uses: actions/checkout@v7
+        with:
+          submodules: true
       - name: GPUI system dependencies
         run: |
           sudo apt-get update
