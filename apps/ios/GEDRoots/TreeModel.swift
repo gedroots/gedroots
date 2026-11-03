@@ -1,6 +1,13 @@
+import CoreSpotlight
 import Foundation
 import Observation
 import UIKit
+import UniformTypeIdentifiers
+
+/// The app's tabs.
+enum AppTab: Hashable {
+    case tree, people, places, sources, media
+}
 
 /// State of the app: the paired computer, the last sync and the received tree.
 @MainActor
@@ -21,6 +28,13 @@ final class TreeModel {
     /// The computer removed this device: it must be paired again.
     var removed = false
     var error: String?
+    var tab = AppTab.tree
+    /// The person the Tree tab is centred on; the root person when `nil`.
+    var treeFocus: String?
+    /// A record to open in the People tab (from Spotlight).
+    var personToOpen: String?
+    /// Changes when the app goes to another tab: open sheets and viewers close.
+    var jumps = 0
 
     private let dataDir: URL = {
         let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -82,6 +96,20 @@ final class TreeModel {
         }
     }
 
+    /// Shows the person in the Tree tab, centred on them.
+    func showInTree(_ id: String) {
+        treeFocus = id
+        tab = .tree
+        jumps += 1
+    }
+
+    /// Opens the person's record in the People tab.
+    func openPerson(_ id: String) {
+        personToOpen = id
+        tab = .people
+        jumps += 1
+    }
+
     private func openTree() {
         let dir = dataDir.appendingPathComponent("tree").path
         guard FileManager.default.fileExists(atPath: dir + "/gedcom.ged") else { return }
@@ -90,6 +118,22 @@ final class TreeModel {
         places = tree?.places() ?? []
         sources = tree?.sources() ?? []
         revision += 1
+        Self.index(people)
+    }
+
+    /// Lists the individuals in the iPhone's search: a result opens their record. The index
+    /// stays on the device.
+    private static func index(_ people: [PersonRow]) {
+        let items = people.map { p in
+            let about = CSSearchableItemAttributeSet(contentType: .content)
+            about.title = p.name
+            about.contentDescription = [p.years, p.place].filter { !$0.isEmpty }.joined(separator: " · ")
+            return CSSearchableItem(uniqueIdentifier: p.id, domainIdentifier: "people", attributeSet: about)
+        }
+        let index = CSSearchableIndex.default()
+        index.deleteSearchableItems(withDomainIdentifiers: ["people"]) { _ in
+            index.indexSearchableItems(items) { _ in }
+        }
     }
 }
 

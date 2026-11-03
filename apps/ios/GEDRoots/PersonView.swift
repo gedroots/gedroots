@@ -11,12 +11,26 @@ struct PersonView: View {
     @State private var viewing: MediaRow?
     @State private var detail: PersonDetail?
     @State private var loaded = false
+    @Namespace private var zoom
 
     var body: some View {
-        content.task(id: "\(id)#\(model.revision)") {
-            detail = model.tree?.person(id: id)
-            loaded = true
-        }
+        content
+            .task(id: "\(id)#\(model.revision)") {
+                detail = model.tree?.person(id: id)
+                loaded = true
+            }
+            .toolbar {
+                // The tree is another tab here, unlike the desktop.
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Show in Tree", systemImage: "point.3.connected.trianglepath.dotted") {
+                        model.showInTree(id)
+                    }
+                }
+            }
+            .onChange(of: model.jumps) {
+                openEvent = nil
+                viewing = nil
+            }
     }
 
     @ViewBuilder private var content: some View {
@@ -26,7 +40,7 @@ struct PersonView: View {
                     .listRowBackground(Color.clear)
                     .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
                 if !p.media.isEmpty {
-                    Section { MediaStrip(media: p.media, open: { viewing = $0 }) }
+                    Section { MediaStrip(media: p.media, zoom: zoom, open: { viewing = $0 }) }
                         .listRowInsets(EdgeInsets())
                         .listRowBackground(Color.clear)
                 }
@@ -73,7 +87,7 @@ struct PersonView: View {
                 EventSheet(model: model, ref: ref)
                     .presentationDetents([.medium, .large])
             }
-            .fullScreenCover(item: $viewing) { m in ImageViewer(model: model, media: m) }
+            .mediaViewer(model: model, media: $viewing, zoom: zoom)
         } else if loaded {
             ContentUnavailableView("Not Found", systemImage: "person.slash")
         }
@@ -86,7 +100,7 @@ struct PersonView: View {
                 Text(p.row.name).font(.title3).fontWeight(.semibold)
                 let line = [p.row.years, p.occupation ?? ""].filter { !$0.isEmpty }.joined(separator: " · ")
                 if !line.isEmpty { Text(line).foregroundStyle(.secondary).monospacedDigit() }
-                if let kin = kinshipLine(p) {
+                if let kin = Self.kinshipLine(p) {
                     HStack(spacing: 6) {
                         LineageDot(lineage: p.row.lineage)
                         Text(kin)
@@ -98,7 +112,7 @@ struct PersonView: View {
     }
 
     /// “Sosa 2 · Father of Marcel Lemaire”.
-    private func kinshipLine(_ p: PersonDetail) -> String? {
+    static func kinshipLine(_ p: PersonDetail) -> String? {
         var parts: [String] = []
         if let sosa = p.row.sosa { parts.append(String(localized: "Sosa \(sosa)")) }
         if let kin = p.kinship, let root = p.rootName {
@@ -111,6 +125,7 @@ struct PersonView: View {
     private func links(_ people: [PersonRow]) -> some View {
         ForEach(people) { person in
             NavigationLink(value: person.id) { PersonLabel(person: person) }
+                .personMenu(model: model, id: person.id)
         }
     }
 }

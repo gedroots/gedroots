@@ -39,6 +39,7 @@ struct PlacesView: View {
             .navigationTitle("Places")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .topBarTrailing) { MoreMenu(model: model) } }
+            .onChange(of: model.jumps) { selection = nil }
             .sheet(item: Binding(get: { selection.flatMap { s in pins.first { $0.name == s } } },
                                  set: { selection = $0?.name })) { pin in
                 PlaceSheet(model: model, pin: pin)
@@ -223,6 +224,7 @@ struct PlaceSheet: View {
             }
         }
         .task(id: "\(pin.name)#\(model.revision)") { events = model.tree?.placeEvents(name: pin.name) ?? [] }
+        .onChange(of: model.jumps) { openEvent = nil }
         // Opaque: the map behind is too busy for text over glass.
         .presentationBackground(Color(UIColor.systemGroupedBackground))
     }

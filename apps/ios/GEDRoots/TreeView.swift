@@ -5,11 +5,10 @@ import SwiftUI
 /// their record. Lineages are told by a dot and by their place in the tree, never colour alone.
 struct TreeView: View {
     let model: TreeModel
-    @State private var focus: String?
     @State private var path = NavigationPath()
     @State private var family: FamilyView?
 
-    private var current: String? { focus ?? model.tree?.root() }
+    private var current: String? { model.treeFocus ?? model.tree?.root() }
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -33,18 +32,20 @@ struct TreeView: View {
             .navigationDestination(for: String.self) { id in PersonView(model: model, id: id) }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("Root Person", systemImage: "house") { withAnimation { focus = nil } }
-                        .disabled(focus == nil)
+                    Button("Root Person", systemImage: "house") { withAnimation { model.treeFocus = nil } }
+                        .disabled(model.treeFocus == nil)
                 }
                 ToolbarItem(placement: .topBarTrailing) { MoreMenu(model: model) }
             }
         }
         .tint(Theme.accent)
         .task(id: "\(current ?? "")#\(model.revision)") { family = current.flatMap { model.tree?.family(id: $0) } }
+        // Show in Tree from a record: back to the chart, centred on the person.
+        .onChange(of: model.jumps) { if model.tab == .tree { path = NavigationPath() } }
     }
 
     private func center(_ id: String) {
-        withAnimation(.snappy(duration: 0.2)) { focus = id }
+        withAnimation(.snappy(duration: 0.2)) { model.treeFocus = id }
     }
 }
 

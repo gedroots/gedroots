@@ -9,6 +9,7 @@ struct EventSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var detail: EventDetail?
     @State private var loaded = false
+    @State private var viewing: MediaRow?
 
     var body: some View {
         NavigationStack {
@@ -44,7 +45,7 @@ struct EventSheet: View {
                         }
                     }
                     if !e.media.isEmpty {
-                        Section { MediaStrip(media: e.media) }
+                        Section { MediaStrip(media: e.media, open: { viewing = $0 }) }
                             .listRowInsets(EdgeInsets())
                             .listRowBackground(Color.clear)
                     }
@@ -62,11 +63,13 @@ struct EventSheet: View {
                         Button("Done") { dismiss() }
                     }
                 }
+                .mediaViewer(model: model, media: $viewing)
             } else if loaded {
                 ContentUnavailableView("Not Found", systemImage: "calendar.badge.exclamationmark")
             }
         }
         .tint(Theme.accent)
+        .onChange(of: model.jumps) { dismiss() }
         .task(id: "\(ref.id)#\(model.revision)") {
             detail = model.tree?.event(event: ref)
             loaded = true

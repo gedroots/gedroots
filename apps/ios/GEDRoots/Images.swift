@@ -1,4 +1,5 @@
 import ImageIO
+import QuickLook
 import SwiftUI
 import UIKit
 
@@ -37,19 +38,23 @@ struct Portrait: View {
 /// Horizontal strip of the record's images (the portrait first); a tap opens the viewer.
 struct MediaStrip: View {
     let media: [MediaRow]
+    /// Where the viewer zooms from (iOS 18 and later).
+    var zoom: Namespace.ID?
     var open: ((MediaRow) -> Void)?
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                ForEach(media.filter(\.isImage), id: \.id) { m in
+                ForEach(media, id: \.id) { m in
                     Button { open?(m) } label: {
-                        Thumbnail(path: m.path, crop: m.crop)
+                        MediaTile(media: m)
                             .frame(width: 96, height: 72)
                             .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .zoomSource(m.id, in: zoom)
                     }
                     .buttonStyle(.plain)
                     .disabled(open == nil)
                     .accessibilityLabel(m.title)
+                    .mediaMenu(m)
                 }
             }
         }
@@ -81,6 +86,75 @@ struct Thumbnail: View {
                 withAnimation(.easeOut(duration: 0.15)) { image = decoded }
             }
         }
+    }
+}
+
+/// A media in a grid or a strip: its image, or for a document (a PDF…) its icon and title.
+struct MediaTile: View {
+    let media: MediaRow
+    var body: some View {
+        if media.isImage {
+            Thumbnail(path: media.path, crop: media.crop)
+        } else {
+            ZStack {
+                Theme.hover
+                VStack(spacing: 4) {
+                    Image(systemName: "doc.richtext").font(.title2)
+                    Text(media.title).font(.caption2).lineLimit(2).multilineTextAlignment(.center)
+                }
+                .foregroundStyle(.secondary)
+                .padding(6)
+            }
+        }
+    }
+}
+
+extension View {
+    /// Opens a media: images in the viewer, zooming from their thumbnail, other documents in
+    /// Quick Look.
+    func mediaViewer(model: TreeModel, media: Binding<MediaRow?>, zoom: Namespace.ID? = nil) -> some View {
+        modifier(MediaPresenter(model: model, media: media, zoom: zoom))
+    }
+
+    /// The thumbnail the viewer zooms from (iOS 18 and later).
+    @ViewBuilder func zoomSource(_ id: String, in zoom: Namespace.ID?) -> some View {
+        if #available(iOS 18.0, *), let zoom { matchedTransitionSource(id: id, in: zoom) } else { self }
+    }
+
+    @ViewBuilder fileprivate func zoomTransition(_ id: String, in zoom: Namespace.ID?) -> some View {
+        if #available(iOS 18.0, *), let zoom { navigationTransition(.zoom(sourceID: id, in: zoom)) } else { self }
+    }
+
+    /// Long press on a media: a larger preview, and sharing.
+    func mediaMenu(_ media: MediaRow) -> some View {
+        contextMenu {
+            if let path = media.path {
+                ShareLink(item: URL(fileURLWithPath: path))
+            }
+        } preview: {
+            if media.isImage, let path = media.path, let image = Thumbnails.image(path, side: 1200) {
+                Image(uiImage: image).resizable().scaledToFit().frame(maxWidth: 400, maxHeight: 500)
+            } else {
+                Label(media.title, systemImage: "doc.richtext").padding()
+            }
+        }
+    }
+}
+
+private struct MediaPresenter: ViewModifier {
+    let model: TreeModel
+    @Binding var media: MediaRow?
+    let zoom: Namespace.ID?
+
+    func body(content: Content) -> some View {
+        content
+            .fullScreenCover(item: Binding(get: { media.flatMap { $0.isImage ? $0 : nil } }, set: { media = $0 })) { m in
+                ImageViewer(model: model, media: m).zoomTransition(m.id, in: zoom)
+            }
+            .quickLookPreview(Binding(
+                get: { media.flatMap { $0.isImage ? nil : $0.path.map { URL(fileURLWithPath: $0) } } },
+                set: { if $0 == nil { media = nil } }
+            ))
     }
 }
 

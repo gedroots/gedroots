@@ -6,6 +6,7 @@ struct PeopleView: View {
     let model: TreeModel
     @State private var query = ""
     @State private var scope = Scope.all
+    @State private var path = NavigationPath()
 
     private var results: [PersonRow] {
         guard let tree = model.tree else { return [] }
@@ -24,7 +25,7 @@ struct PeopleView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             List {
                 if model.tree == nil {
                     ContentUnavailableView {
@@ -37,6 +38,7 @@ struct PeopleView: View {
                     Section(letter) {
                         ForEach(people) { person in
                             NavigationLink(value: person.id) { PersonLabel(person: person) }
+                                .personMenu(model: model, id: person.id)
                         }
                     }
                     .indexLabel(letter)
@@ -61,6 +63,15 @@ struct PeopleView: View {
             }
         }
         .tint(Theme.accent)
+        // A record opened from the iPhone's search, also when it launched the app.
+        .onChange(of: model.jumps) { openRequested() }
+        .onAppear { openRequested() }
+    }
+
+    private func openRequested() {
+        guard model.tab == .people, let id = model.personToOpen else { return }
+        model.personToOpen = nil
+        path = NavigationPath([id])
     }
 }
 
@@ -108,5 +119,49 @@ private extension View {
 
     @ViewBuilder func sectionIndex() -> some View {
         if #available(iOS 26.0, *) { listSectionIndexVisibility(.visible) } else { self }
+    }
+}
+
+extension View {
+    /// Long press on a person: their header as a preview, and Show in Tree.
+    func personMenu(model: TreeModel, id: String) -> some View {
+        contextMenu {
+            Button("Show in Tree", systemImage: "point.3.connected.trianglepath.dotted") { model.showInTree(id) }
+        } preview: {
+            PersonPreview(model: model, id: id)
+        }
+    }
+}
+
+/// A person's header, for previews. The portrait is decoded at once: a preview is drawn once.
+struct PersonPreview: View {
+    let model: TreeModel
+    let id: String
+    var body: some View {
+        if let p = model.tree?.person(id: id) {
+            HStack(spacing: 16) {
+                Group {
+                    if let path = p.portrait, let image = Thumbnails.image(path, crop: p.portraitCrop) {
+                        Image(uiImage: image).resizable().scaledToFill()
+                    } else {
+                        Image(systemName: "person.fill").font(.title).foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity).background(Theme.hover)
+                    }
+                }
+                .frame(width: 64, height: 64)
+                .clipShape(Circle())
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(p.row.name).font(.headline)
+                    let line = [p.row.years, p.occupation ?? ""].filter { !$0.isEmpty }.joined(separator: " · ")
+                    if !line.isEmpty { Text(line).foregroundStyle(.secondary).monospacedDigit() }
+                    if !p.row.place.isEmpty { Text(p.row.place).font(.footnote).foregroundStyle(.secondary) }
+                    if let kin = PersonView.kinshipLine(p) {
+                        Text(kin).font(.footnote).foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .padding(16)
+            .frame(width: 320, alignment: .leading)
+        }
     }
 }

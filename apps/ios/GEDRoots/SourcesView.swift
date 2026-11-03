@@ -43,6 +43,7 @@ struct SourceView: View {
     @State private var openEvent: EventRef?
     @State private var viewing: MediaRow?
     @State private var detail: SourceDetail?
+    @Namespace private var zoom
     @State private var loaded = false
 
     var body: some View {
@@ -73,7 +74,7 @@ struct SourceView: View {
                 if !s.media.isEmpty {
                     Section("Images") {
                         // Insets on the row only: on the section they would move its header too.
-                        MediaStrip(media: s.media, open: { viewing = $0 })
+                        MediaStrip(media: s.media, zoom: zoom, open: { viewing = $0 })
                             .listRowInsets(EdgeInsets())
                             .listRowBackground(Color.clear)
                     }
@@ -92,7 +93,11 @@ struct SourceView: View {
             .sheet(item: $openEvent) { ref in
                 EventSheet(model: model, ref: ref).presentationDetents([.medium, .large])
             }
-            .fullScreenCover(item: $viewing) { m in ImageViewer(model: model, media: m) }
+            .mediaViewer(model: model, media: $viewing, zoom: zoom)
+            .onChange(of: model.jumps) {
+                openEvent = nil
+                viewing = nil
+            }
         } else if loaded {
             ContentUnavailableView("Not Found", systemImage: "book.closed")
         }

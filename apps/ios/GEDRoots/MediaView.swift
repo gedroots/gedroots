@@ -6,6 +6,7 @@ struct MediaView: View {
     @State private var kind = MediaKind.all
     @State private var viewing: MediaRow?
     @State private var items: [MediaRow] = []
+    @Namespace private var zoom
 
     var body: some View {
         NavigationStack {
@@ -14,11 +15,13 @@ struct MediaView: View {
                     ForEach(items) { m in
                         Button { viewing = m } label: {
                             Color.clear.aspectRatio(1, contentMode: .fit)
-                                .overlay { Thumbnail(path: m.path) }
+                                .overlay { MediaTile(media: m) }
                                 .clipped()
+                                .zoomSource(m.id, in: zoom)
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel(m.title)
+                        .mediaMenu(m)
                     }
                 }
             }
@@ -40,10 +43,11 @@ struct MediaView: View {
             .navigationBarTitleDisplayMode(.inline)
             .refreshable { await model.syncIfPaired() }
             .toolbar { ToolbarItem(placement: .topBarTrailing) { MoreMenu(model: model) } }
-            .fullScreenCover(item: $viewing) { m in ImageViewer(model: model, media: m) }
+            .mediaViewer(model: model, media: $viewing, zoom: zoom)
+            .onChange(of: model.jumps) { viewing = nil }
         }
         .tint(Theme.accent)
-        .task(id: "\(kind)#\(model.revision)") { items = (model.tree?.media(kind: kind) ?? []).filter(\.isImage) }
+        .task(id: "\(kind)#\(model.revision)") { items = model.tree?.media(kind: kind) ?? [] }
     }
 }
 
