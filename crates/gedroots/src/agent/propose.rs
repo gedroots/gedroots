@@ -95,6 +95,9 @@ pub struct PersonParams {
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct ProposeParams {
+    /// Tree to work on, as `list_trees` names it, when several are open (default: the one in
+    /// front in GEDRoots).
+    pub tree: Option<String>,
     /// GEDCOM event tag: BIRT, BAPM, CHR, MARR, DEAT, BURI, CENS… Any other event (military
     /// service, conscription, emigration…) is EVEN with `event_type`.
     pub event: String,
@@ -450,6 +453,9 @@ pub struct MatchPersonParams {
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct MatchParams {
+    /// Tree to work on, as `list_trees` names it, when several are open (default: the one in
+    /// front in GEDRoots).
+    pub tree: Option<String>,
     /// GEDCOM event tag of the act (BIRT, BAPM, MARR, DEAT…, EVEN).
     pub event: String,
     /// With EVEN: the event belongs to the couple.

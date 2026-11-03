@@ -51,8 +51,53 @@ pub enum Request {
     /// Change to the research log (plan, searches), never to the tree's data: applied at once,
     /// with an undo point, and announced in the top bar.
     Edit(Edit, tokio::sync::oneshot::Sender<Result<(), String>>),
+    /// The trees open in GEDRoots, the one in front first.
+    Trees(tokio::sync::oneshot::Sender<Vec<Tree>>),
     /// An agent has just opened a session: the “AI Agents” window updates.
     Connected,
+}
+
+/// A request for the tree named `tree` (as `list_trees` names it), or for the window in front.
+pub struct Ask {
+    pub tree: Option<String>,
+    pub request: Request,
+}
+
+/// A tree open in a window, as `list_trees` shows it.
+#[derive(Clone, Debug)]
+pub struct Tree {
+    /// Name shown in the window's title bar.
+    pub name: String,
+    /// File name, if the tree has one.
+    pub file: Option<String>,
+    /// `HEAD._GR_TREE`, once the tree was saved by GEDRoots.
+    pub id: Option<String>,
+    pub people: usize,
+    /// The window in front: the tree used when a tool names none.
+    pub in_front: bool,
+}
+
+impl Tree {
+    /// Whether the agent means this tree by `name`: its id, its name or its file name, with or
+    /// without the extension, ignoring case.
+    pub fn is_named(&self, name: &str) -> bool {
+        let name = name.trim().to_lowercase();
+        let eq = |s: &str| s.to_lowercase() == name;
+        self.id.as_deref().is_some_and(eq)
+            || eq(&self.name)
+            || self
+                .file
+                .as_deref()
+                .is_some_and(|f| eq(f) || std::path::Path::new(f).file_stem().is_some_and(|s| eq(&s.to_string_lossy())))
+    }
+}
+
+/// Error for a tool when the tree it asked for is not open.
+pub fn no_tree(tree: Option<&str>) -> String {
+    match tree {
+        None => "no file is open in GEDRoots".to_string(),
+        Some(t) => format!("no tree named “{t}” is open in GEDRoots: call list_trees for the open trees"),
+    }
 }
 
 /// A change applied to the displayed document; an error leaves it untouched.
@@ -64,8 +109,10 @@ pub struct Edit {
     pub message: String,
 }
 
-/// Copy of the active window's document.
+/// Copy of a window's document.
 pub struct Snapshot {
+    /// Which tree it is, to tell each tree's news apart (its id, else its file).
+    pub key: String,
     pub path: Option<PathBuf>,
     pub ged: Gedcom,
     /// The review page: waiting proposals and what became of the others.
@@ -103,7 +150,7 @@ struct Running {
 static SERVER: Mutex<Option<Running>> = Mutex::new(None);
 static STATUS: Mutex<Status> = Mutex::new(Status::Off);
 /// Queue to the app's loop, created at startup.
-static BRIDGE: Mutex<Option<async_channel::Sender<Request>>> = Mutex::new(None);
+static BRIDGE: Mutex<Option<async_channel::Sender<Ask>>> = Mutex::new(None);
 /// Last agent connected since launch: name given by the client, and when.
 static LAST: Mutex<Option<(String, std::time::Instant)>> = Mutex::new(None);
 
@@ -116,7 +163,7 @@ pub fn last_client() -> Option<(String, std::time::Duration)> {
 pub(crate) fn note_client(name: &str) {
     *LAST.lock().unwrap_or_else(|e| e.into_inner()) = Some((name.to_string(), std::time::Instant::now()));
     if let Some(tx) = BRIDGE.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
-        let _ = tx.try_send(Request::Connected);
+        let _ = tx.try_send(Ask { tree: None, request: Request::Connected });
     }
 }
 
@@ -131,64 +178,39 @@ fn set_status(s: Status) {
 /// Connects the request queue to the app's loop and starts the server if it is enabled.
 pub fn install(cx: &mut App) {
     cx.set_global(Target::default());
-    let (tx, rx) = async_channel::unbounded::<Request>();
+    let (tx, rx) = async_channel::unbounded::<Ask>();
     *BRIDGE.lock().unwrap_or_else(|e| e.into_inner()) = Some(tx);
     cx.spawn(async move |cx| {
-        while let Ok(req) = rx.recv().await {
-            match req {
+        while let Ok(Ask { tree, request }) = rx.recv().await {
+            let tree = tree.as_deref();
+            match request {
                 Request::Snapshot(reply) => {
-                    let snap = cx.update(|cx| {
-                        let ws = cx.global::<Target>().0.as_ref()?.upgrade()?;
-                        ws.read(cx).agent_snapshot()
-                    });
+                    let snap = cx.update(|cx| workspace(tree, cx).ok()?.read(cx).agent_snapshot());
                     let _ = reply.send(snap);
                 }
                 Request::Quality(reply) => {
-                    let res = cx.update(|cx| {
-                        let ws = cx.global::<Target>().0.as_ref()?.upgrade()?;
-                        ws.update(cx, |ws, _| ws.agent_quality())
-                    });
+                    let res = cx.update(|cx| workspace(tree, cx).ok()?.update(cx, |ws, _| ws.agent_quality()));
                     let _ = reply.send(res);
                 }
                 Request::ProposeChange(req, reply) => {
-                    let res = cx.update(|cx| {
-                        let ws = cx.global::<Target>().0.as_ref().and_then(|w| w.upgrade());
-                        match ws {
-                            Some(ws) => ws.update(cx, |ws, cx| ws.add_change(*req, cx)),
-                            None => Err("no file is open in GEDRoots".to_string()),
-                        }
-                    });
+                    let res = cx.update(|cx| workspace(tree, cx)?.update(cx, |ws, cx| ws.add_change(*req, cx)));
                     let _ = reply.send(res);
                 }
                 Request::Propose(pending, reply) => {
-                    let res = cx.update(|cx| {
-                        let ws = cx.global::<Target>().0.as_ref().and_then(|w| w.upgrade());
-                        match ws {
-                            Some(ws) => ws.update(cx, |ws, cx| ws.add_proposal(*pending, cx)),
-                            None => Err("no file is open in GEDRoots".to_string()),
-                        }
-                    });
+                    let res = cx.update(|cx| workspace(tree, cx)?.update(cx, |ws, cx| ws.add_proposal(*pending, cx)));
                     let _ = reply.send(res);
                 }
                 Request::Edit(edit, reply) => {
-                    let res = cx.update(|cx| {
-                        let ws = cx.global::<Target>().0.as_ref().and_then(|w| w.upgrade());
-                        match ws {
-                            Some(ws) => ws.update(cx, |ws, cx| ws.agent_edit(edit, cx)),
-                            None => Err("no file is open in GEDRoots".to_string()),
-                        }
-                    });
+                    let res = cx.update(|cx| workspace(tree, cx)?.update(cx, |ws, cx| ws.agent_edit(edit, cx)));
                     let _ = reply.send(res);
                 }
                 Request::Withdraw(id, reply) => {
-                    let res = cx.update(|cx| {
-                        let ws = cx.global::<Target>().0.as_ref().and_then(|w| w.upgrade());
-                        match ws {
-                            Some(ws) => ws.update(cx, |ws, cx| ws.withdraw_proposal(&id, cx)),
-                            None => Err("no file is open in GEDRoots".to_string()),
-                        }
-                    });
+                    let res = cx.update(|cx| workspace(tree, cx)?.update(cx, |ws, cx| ws.withdraw_proposal(&id, cx)));
                     let _ = reply.send(res);
+                }
+                Request::Trees(reply) => {
+                    let trees = cx.update(|cx| trees(cx).into_iter().map(|(t, _)| t).collect());
+                    let _ = reply.send(trees);
                 }
                 Request::Connected => cx.update(|cx| cx.refresh_windows()),
             }
@@ -198,6 +220,35 @@ pub fn install(cx: &mut App) {
     let settings = load();
     if settings.enabled {
         start(&settings.token);
+    }
+}
+
+/// The open trees, the one in front first, with their windows.
+fn trees(cx: &App) -> Vec<(Tree, Entity<crate::workspace::Workspace>)> {
+    let front = cx.global::<Target>().0.as_ref().and_then(|w| w.upgrade()).map(|w| w.entity_id());
+    let mut trees: Vec<_> = crate::windows::workspaces(cx)
+        .into_iter()
+        .filter_map(|w| w.upgrade())
+        .filter_map(|ws| {
+            let mut tree = ws.read(cx).agent_tree()?;
+            tree.in_front = Some(ws.entity_id()) == front;
+            Some((tree, ws))
+        })
+        .collect();
+    trees.sort_by_key(|(t, _)| !t.in_front);
+    trees
+}
+
+/// The window of the tree named `tree`, or the one in front.
+fn workspace(tree: Option<&str>, cx: &App) -> Result<Entity<crate::workspace::Workspace>, String> {
+    let Some(name) = tree else {
+        return trees(cx).into_iter().next().map(|(_, ws)| ws).ok_or_else(|| no_tree(None));
+    };
+    let mut found: Vec<_> = trees(cx).into_iter().filter(|(t, _)| t.is_named(name)).collect();
+    match found.len() {
+        0 => Err(no_tree(tree)),
+        1 => Ok(found.remove(0).1),
+        _ => Err(format!("several open trees are named “{name}”: name one by its id, as list_trees gives it")),
     }
 }
 
@@ -310,7 +361,22 @@ fn new_token() -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{Settings, new_token, parse};
+    use super::{Settings, Tree, new_token, parse};
+
+    #[test]
+    fn trees_are_named_by_name_file_or_id() {
+        let t = Tree {
+            name: "Guyot.ged".into(),
+            file: Some("Guyot.ged".into()),
+            id: Some("4b1d".into()),
+            people: 1,
+            in_front: false,
+        };
+        for name in ["Guyot", "guyot.ged", " GUYOT ", "4B1D"] {
+            assert!(t.is_named(name), "{name}");
+        }
+        assert!(!t.is_named("Marchand"));
+    }
 
     #[test]
     fn settings_round_trip() {

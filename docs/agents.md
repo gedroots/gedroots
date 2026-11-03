@@ -26,14 +26,17 @@ in the machine's settings. The commands and blocks are built in `crates/gedroots
 
 ## Tools
 
-The tools return structured JSON (`outputSchema`) and work on the file of the most recently
-active window. All are read-only (`readOnlyHint`) except `propose_act`, `propose_change` and
+The tools return structured JSON (`outputSchema`). GEDRoots shows one tree per window: every
+tool takes an optional `tree` (a name, file name or id, as `list_trees` gives them) and otherwise
+works on the tree of the window in front. A proposal goes to the To Review page of its own tree.
+All are read-only (`readOnlyHint`) except `propose_act`, `propose_change` and
 `withdraw_proposal`, which write nothing either: they only add or take back a proposal to review;
 and `plan_research` and `log_search`, which write only the research log (see below), never the
 tree's data.
 
 | Tool | Returns |
 | --- | --- |
+| `list_trees` | The trees open in GEDRoots, the one in front first: name, file, id, number of people |
 | `file_info` | File name, counts, root person |
 | `file_context` | How the file is written: the description the user wrote (File Settings › General, `HEAD.NOTE`, word for word), language, place format, events, custom event types and occupations in use with their counts, media folders and naming, and the latest sources, people, families, media and repositories changed as raw GEDCOM (`examples`, never a living person). Also served as the resource `gedroots://file/context` |
 | `search_people` | People matching a search, as in the app's search box |

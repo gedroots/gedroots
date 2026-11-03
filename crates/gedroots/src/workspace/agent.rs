@@ -71,7 +71,24 @@ impl Workspace {
     /// Copy of the document, for the MCP server.
     pub(crate) fn agent_snapshot(&self) -> Option<agent::Snapshot> {
         let doc = self.doc.as_ref()?;
-        Some(agent::Snapshot { path: doc.path.clone(), ged: doc.ged.clone(), queue: self.review_queue() })
+        let key = match (doc.ged.tree_id(), &doc.path) {
+            (Some(id), _) => id.to_string(),
+            (None, Some(p)) => p.to_string_lossy().into_owned(),
+            (None, None) => String::new(),
+        };
+        Some(agent::Snapshot { key, path: doc.path.clone(), ged: doc.ged.clone(), queue: self.review_queue() })
+    }
+
+    /// The tree of this window, for `list_trees` (not in front: the caller knows which one is).
+    pub(crate) fn agent_tree(&self) -> Option<agent::Tree> {
+        let doc = self.doc.as_ref()?;
+        Some(agent::Tree {
+            name: doc.title(),
+            file: doc.path.as_ref().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().into_owned()),
+            id: doc.ged.tree_id().map(str::to_string),
+            people: doc.ged.count(gedcom::RecordKind::Individual),
+            in_front: false,
+        })
     }
 
     /// Copy of the document and its issues (media files checked too), for the MCP server.

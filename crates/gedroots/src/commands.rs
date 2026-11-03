@@ -16,6 +16,7 @@ actions!(
     gedroots,
     [
         // File
+        NewWindow,
         NewFile,
         OpenFile,
         ClearRecent,
@@ -129,6 +130,11 @@ actions!(
         FilterNoMarriage,
         FilterWithMedia,
         ClearSearch,
+        // Window
+        CloseWindow,
+        MinimizeWindow,
+        ZoomWindow,
+        BringAllToFront,
         // Help
         CommandPalette,
         TakeTour,
@@ -145,6 +151,13 @@ actions!(
 #[action(namespace = gedroots, no_json)]
 pub struct OpenRecent {
     pub path: std::path::PathBuf,
+}
+
+/// Window › one of the open trees (the menu bar drawn in the window; macOS lists them itself).
+#[derive(Clone, PartialEq, Action)]
+#[action(namespace = gedroots, no_json)]
+pub struct ActivateWindowAt {
+    pub index: usize,
 }
 
 /// Opens the search for the selected person on a site of Person › Search On.
@@ -228,7 +241,10 @@ const WS: Option<&str> = Some("Workspace");
 
 pub fn bind_keys(cx: &mut App) {
     cx.bind_keys([
-        KeyBinding::new(shortcut!("n"), NewFile, None),
+        // Like any document-based app: a new window, on the welcome screen (create or open a tree).
+        KeyBinding::new(shortcut!("n"), NewWindow, None),
+        KeyBinding::new(shortcut!("w"), CloseWindow, WS),
+        KeyBinding::new(shortcut!("m"), MinimizeWindow, WS),
         KeyBinding::new(shortcut!("o"), OpenFile, None),
         KeyBinding::new(shortcut!("s"), SaveFile, None),
         KeyBinding::new(shortcut!("shift-s"), SaveFileAs, WS),
@@ -460,7 +476,8 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
         app.extend([Sep, a(t!("cmd.file_settings"), OpenFileSettings), Sep, a(t!("cmd.quit_app"), Quit)]);
         menus.push(("GEDRoots".into(), app));
     }
-    let mut file = vec![a(t!("cmd.new_file"), NewFile), a(t!("cmd.open"), OpenFile)];
+    let mut file =
+        vec![a(t!("cmd.new_window"), NewWindow), a(t!("cmd.new_file"), NewFile), a(t!("cmd.open"), OpenFile)];
     // Submenu hidden until a file has been opened.
     if !recents.is_empty() {
         let names = crate::recent::labels(recents);
@@ -472,6 +489,7 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
     file.extend([
         a(t!("cmd.import_gedcom"), ImportFile),
         Sep,
+        a(t!("cmd.close_window"), CloseWindow),
         a(t!("cmd.save"), SaveFile),
         a(t!("cmd.save_as"), SaveFileAs),
         a(t!("cmd.save_version"), SaveVersion),
@@ -687,6 +705,23 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
             a(label::go_to_root(), GoToRoot),
         ],
     ));
+    // One window per tree. macOS fills this menu with the windows and their tabs by itself.
+    let mut window = match mac {
+        true => vec![a(t!("cmd.minimize_mac"), MinimizeWindow), a(t!("cmd.zoom_mac"), ZoomWindow)],
+        false => vec![a(t!("cmd.minimize"), MinimizeWindow), a(t!("cmd.zoom"), ZoomWindow)],
+    };
+    if mac {
+        window.extend([Sep, a(t!("cmd.bring_all_to_front"), BringAllToFront)]);
+    } else {
+        let listed = crate::windows::listed();
+        if !listed.titles.is_empty() {
+            window.push(Sep);
+        }
+        for (index, title) in listed.titles.into_iter().enumerate() {
+            window.push(Item::Check(title.into(), Box::new(ActivateWindowAt { index }), listed.active == Some(index)));
+        }
+    }
+    menus.push((t!("menu.window").into(), window));
     let mut help = vec![
         a(t!("cmd.all_commands"), CommandPalette),
         a(t!("cmd.take_tour"), TakeTour),
@@ -736,6 +771,8 @@ pub fn menus() -> Vec<Menu> {
 /// (see `AppMenuBar`).
 pub fn install_menus(cx: &mut App) {
     cx.set_menus(menus());
+    #[cfg(target_os = "macos")]
+    crate::windows::adopt_windows_menu(&t!("menu.window"));
     let owned = menus().into_iter().map(Menu::owned).collect();
     gpui_kit::base::GlobalState::global_mut(cx).set_app_menus(owned);
 }
@@ -810,7 +847,17 @@ mod tests {
         let recents = [PathBuf::from("/a/Martin.ged")];
         let sites = ["Geneanet".to_string()];
         for (menu, items) in model_with(&recents, &sites) {
-            let n = items.iter().filter(|i| !matches!(i, Item::Separator)).count();
+            // Elsewhere than on macOS, File also holds the application menu's File Settings and Quit.
+            let app = [rust_i18n::t!("cmd.file_settings"), rust_i18n::t!("cmd.quit")];
+            let n = items
+                .iter()
+                .filter(|i| !matches!(i, Item::Separator))
+                .filter(|i| !matches!(i, Item::Action(name, _) if app.iter().any(|a| a.as_ref() == name.as_ref())))
+                .count();
+            // Window: the open trees fill it (the system, on macOS).
+            if menu.as_ref() == rust_i18n::t!("menu.window").as_ref() {
+                continue;
+            }
             assert!((3..=12).contains(&n), "{menu} has {n} items");
         }
     }

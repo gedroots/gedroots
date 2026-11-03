@@ -36,7 +36,7 @@ impl Workspace {
     /// tree imported and not saved yet).
     pub(super) fn mobile_share(&self) -> Option<String> {
         let doc = self.doc.as_ref().filter(|d| !d.sample && !d.imported)?;
-        Some(mobile::share_key(doc.path.as_ref()?))
+        Some(mobile::share_key(doc.path.as_ref()?, doc.ged.tree_id()))
     }
 
     pub(super) fn open_mobile_dialog(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -124,10 +124,12 @@ impl Workspace {
         let Some(share) = self.mobile_share().filter(|s| mobile::share(s).enabled) else { return };
         let Some(doc) = &self.doc else { return };
         let ged = doc.ged.clone();
+        let name = shared_name(&doc.title());
         let dir = doc.path.as_ref().and_then(|p| p.parent()).map(Path::to_path_buf);
         cx.background_spawn(async move {
             let find = |f: &str| export::find_file_in(dir.as_deref(), f);
-            let packed = gedcom::gedzip::pack(&ged, &|f| find(f).is_some());
+            let mut packed = gedcom::gedzip::pack(&ged, &|f| find(f).is_some());
+            packed.ged.set_shared_name(&name);
             let files = packed.files.into_iter().filter_map(|f| Some((f.name, find(&f.original)?))).collect();
             let people = ged.records.iter().filter(|r| r.tag == "INDI").count();
             mobile::publish(&share, packed.ged.to_gedcom_string(), files, people);
@@ -519,9 +521,25 @@ fn size(bytes: u64) -> String {
     }
 }
 
+/// The name a mobile device shows for the tree: the window's title, without `.ged`.
+fn shared_name(title: &str) -> String {
+    let lower = title.to_lowercase();
+    match lower.strip_suffix(".ged") {
+        Some(stem) if !stem.is_empty() => title[..stem.len()].to_string(),
+        _ => title.to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{QR_SIDE, day, qr_image, size};
+    use super::{QR_SIDE, day, qr_image, shared_name, size};
+
+    #[test]
+    fn shared_name_drops_the_extension_only() {
+        assert_eq!(shared_name("Guyot.ged"), "Guyot");
+        assert_eq!(shared_name("Famille.Dupont"), "Famille.Dupont");
+        assert_eq!(shared_name(".ged"), ".ged");
+    }
 
     #[test]
     fn qr_code_is_square_and_sharp() {

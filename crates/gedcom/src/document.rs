@@ -335,6 +335,21 @@ impl Gedcom {
         id
     }
 
+    /// Name of the tree on the computer that shares it with mobile devices (`HEAD._GR_NAME`, only
+    /// in the copy they receive).
+    pub fn shared_name(&self) -> Option<&str> {
+        self.header.child(NAME_TAG).map(|n| n.val().trim()).filter(|v| !v.is_empty())
+    }
+
+    /// Names the copy of the tree sent to mobile devices.
+    pub fn set_shared_name(&mut self, name: &str) {
+        self.declare_extension(NAME_TAG, NAME_URI);
+        match self.header.child_mut(NAME_TAG) {
+            Some(n) => n.value = Some(name.to_string()),
+            None => self.header.insert_child(Node::with_value(NAME_TAG, name.to_string())),
+        }
+    }
+
     /// Before saving: stamps `CHAN` on each record changed since `saved` whose edit did not stamp
     /// it, and `CREA` on each new record that has neither. Unchanged records are skipped without
     /// being compared when they are still shared with `saved`.
@@ -365,6 +380,8 @@ impl Gedcom {
 /// Tag of the tree identifier (in `HEAD`).
 pub const TREE_TAG: &str = "_GR_TREE";
 pub const TREE_URI: &str = extension_uri!("_gr_tree");
+pub const NAME_TAG: &str = "_GR_NAME";
+pub const NAME_URI: &str = extension_uri!("_gr_name");
 
 /// Tag of the root individual (in `HEAD`).
 pub const ROOT_TAG: &str = "_GR_ROOT";

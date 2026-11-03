@@ -27,6 +27,9 @@ menu:
   copy_special:
     en: Copy Special
     fr: Copie spéciale
+  window:
+    en: Window
+    fr: Fenêtre
   help:
     en: Help
     fr: Aide
@@ -60,9 +63,30 @@ cmd:
   quit:
     en: Quit
     fr: Quitter
+  new_window:
+    en: New Window
+    fr: Nouvelle fenêtre
   new_file:
     en: New Tree…
     fr: Nouvel arbre…
+  close_window:
+    en: Close Window
+    fr: Fermer la fenêtre
+  minimize:
+    en: Minimize
+    fr: Réduire
+  minimize_mac:
+    en: Minimize
+    fr: Placer dans le Dock
+  zoom:
+    en: Maximize
+    fr: Agrandir
+  zoom_mac:
+    en: Zoom
+    fr: Réduire/agrandir
+  bring_all_to_front:
+    en: Bring All to Front
+    fr: Tout ramener au premier plan
   open:
     en: Open…
     fr: Ouvrir…

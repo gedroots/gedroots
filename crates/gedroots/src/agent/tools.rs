@@ -4,7 +4,7 @@
 
 use super::change::{self, ChangeParams, ChangeProposed};
 use super::propose::{self, Decision, Hypothesis, MatchParams, Pending, ProposeParams};
-use super::{Request, Snapshot};
+use super::{Ask, Request, Snapshot};
 use axum::extract::State;
 use axum::http::{StatusCode, header};
 use axum::middleware::Next;
@@ -24,14 +24,24 @@ use tokio_util::sync::CancellationToken;
 
 #[derive(Clone)]
 pub struct GedrootsMcp {
-    bridge: async_channel::Sender<Request>,
-    /// Decisions already told to this session's agent.
-    told: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    bridge: async_channel::Sender<Ask>,
+    /// Decisions of each tree's review page already told to this session's agent.
+    told: std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, usize>>>,
     prompt_router: rmcp::handler::server::router::prompt::PromptRouter<Self>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+pub struct TreeParams {
+    /// Tree to work on, as `list_trees` names it, when several are open (default: the one in
+    /// front in GEDRoots).
+    pub tree: Option<String>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
 pub struct SearchParams {
+    /// Tree to work on, as `list_trees` names it, when several are open (default: the one in
+    /// front in GEDRoots).
+    pub tree: Option<String>,
     /// Query as typed in GEDRoots' search box: words of the name or place.
     pub query: String,
     /// Maximum number of results (default 50).
@@ -40,18 +50,27 @@ pub struct SearchParams {
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct PersonParams {
+    /// Tree to work on, as `list_trees` names it, when several are open (default: the one in
+    /// front in GEDRoots).
+    pub tree: Option<String>,
     /// Person id, as returned by another tool (e.g. `I12`).
     pub id: String,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct ContextParams {
+    /// Tree to work on, as `list_trees` names it, when several are open (default: the one in
+    /// front in GEDRoots).
+    pub tree: Option<String>,
     /// Records of each kind given as examples (default 5, at most 20).
     pub examples: Option<usize>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct LeadsParams {
+    /// Tree to work on, as `list_trees` names it, when several are open (default: the one in
+    /// front in GEDRoots).
+    pub tree: Option<String>,
     /// People to examine, in the syntax of GEDRoots' search: `sosa:1-63` (the root person's
     /// ancestors over 6 generations, the default), `sosa:1-15 place:manche`, `name:guyot
     /// born:<1850`, `descendants:@I12@`…
@@ -77,12 +96,18 @@ pub struct PlanItem {
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct PlanParams {
+    /// Tree to work on, as `list_trees` names it, when several are open (default: the one in
+    /// front in GEDRoots).
+    pub tree: Option<String>,
     /// Leads to search, in the order you will search them.
     pub items: Vec<PlanItem>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct LogParams {
+    /// Tree to work on, as `list_trees` names it, when several are open (default: the one in
+    /// front in GEDRoots).
+    pub tree: Option<String>,
     /// Person id (for a marriage, either spouse).
     pub person: String,
     pub goal: Goal,
@@ -107,12 +132,18 @@ pub struct LogParams {
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct LogReadParams {
+    /// Tree to work on, as `list_trees` names it, when several are open (default: the one in
+    /// front in GEDRoots).
+    pub tree: Option<String>,
     /// Person id.
     pub person: String,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct QualityParams {
+    /// Tree to work on, as `list_trees` names it, when several are open (default: the one in
+    /// front in GEDRoots).
+    pub tree: Option<String>,
     /// Only this category: dates, family, structure, empty, media, places, sources, files, coords.
     pub category: Option<String>,
     /// Only this kind of issue (`death_before_birth`, `empty_fact`…).
@@ -129,6 +160,9 @@ pub struct QualityParams {
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct SourceSearch {
+    /// Tree to work on, as `list_trees` names it, when several are open (default: the one in
+    /// front in GEDRoots).
+    pub tree: Option<String>,
     /// Words of the source's title, register, call number or repository name.
     pub query: String,
     /// Maximum number of results (default 30).
@@ -185,6 +219,9 @@ pub struct Proposed {
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct ProposalId {
+    /// Tree to work on, as `list_trees` names it, when several are open (default: the one in
+    /// front in GEDRoots).
+    pub tree: Option<String>,
     /// Id of a waiting proposal (`P3`), from `propose_act` or `list_proposals`.
     pub id: String,
 }
@@ -252,6 +289,25 @@ pub struct PersonMatches {
 pub struct Matches {
     /// The people of the act not yet identified (without `id`).
     pub people: Vec<PersonMatches>,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct Trees {
+    /// The trees open in GEDRoots, the one in front first.
+    pub trees: Vec<TreeInfo>,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct TreeInfo {
+    /// Name to give as `tree` to the other tools.
+    pub name: String,
+    /// Name of the `.ged` file (none for a tree never saved).
+    pub file: Option<String>,
+    /// Stable identifier of the tree, to tell apart two trees of the same name.
+    pub id: Option<String>,
+    pub people: usize,
+    /// The tree the tools use when they name none.
+    pub in_front: bool,
 }
 
 #[derive(Debug, Serialize, JsonSchema)]
@@ -363,32 +419,56 @@ const NEWS: usize = 20;
 
 #[tool_router]
 impl GedrootsMcp {
-    pub fn new(bridge: async_channel::Sender<Request>) -> Self {
+    pub fn new(bridge: async_channel::Sender<Ask>) -> Self {
         Self { bridge, told: Default::default(), prompt_router: Self::prompt_router() }
     }
 
     /// The answer, with the decisions this session has not been told yet.
     fn answer<T>(&self, s: &Snapshot, result: T) -> Res<T> {
         let all = &s.queue.decided;
-        let from = self.told.swap(all.len(), std::sync::atomic::Ordering::Relaxed).min(all.len());
+        let from = {
+            let mut told = self.told.lock().unwrap_or_else(|e| e.into_inner());
+            told.insert(s.key.clone(), all.len()).unwrap_or(0).min(all.len())
+        };
         let news = all[from.max(all.len().saturating_sub(NEWS))..].to_vec();
         Ok(Json(Answer { result, news }))
     }
 
-    async fn snapshot(&self) -> Result<Snapshot, String> {
+    /// Sends `request` to the window of `tree` (the one in front by default).
+    async fn send(&self, tree: Option<&str>, request: Request) -> Result<(), async_channel::SendError<Ask>> {
+        self.bridge.send(Ask { tree: tree.map(str::to_string), request }).await
+    }
+
+    async fn snapshot(&self, tree: Option<&str>) -> Result<Snapshot, String> {
         let (tx, rx) = tokio::sync::oneshot::channel();
-        self.bridge.send(Request::Snapshot(tx)).await.map_err(|_| "GEDRoots is closing".to_string())?;
-        rx.await.ok().flatten().ok_or_else(|| "no file is open in GEDRoots".to_string())
+        self.send(tree, Request::Snapshot(tx)).await.map_err(|_| "GEDRoots is closing".to_string())?;
+        rx.await.ok().flatten().ok_or_else(|| super::no_tree(tree))
     }
 
     /// Applies a change to the research log in the app.
-    async fn edit(&self, apply: super::Apply, message: String) -> Result<(), String> {
+    async fn edit(&self, tree: Option<&str>, apply: super::Apply, message: String) -> Result<(), String> {
         let (tx, rx) = tokio::sync::oneshot::channel();
-        self.bridge
-            .send(Request::Edit(super::Edit { apply, message }, tx))
+        self.send(tree, Request::Edit(super::Edit { apply, message }, tx))
             .await
             .map_err(|_| "GEDRoots is closing".to_string())?;
         rx.await.map_err(|_| "GEDRoots is closing".to_string())?
+    }
+
+    #[tool(
+        name = "list_trees",
+        description = "The trees open in GEDRoots, one per window, the one in front first. Every other tool works on the tree in front unless given `tree`: call this when the user names a tree, or before working when several may be open.",
+        annotations(read_only_hint = true, open_world_hint = false)
+    )]
+    async fn list_trees(&self) -> Result<Json<Trees>, String> {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        self.send(None, Request::Trees(tx)).await.map_err(|_| "GEDRoots is closing".to_string())?;
+        let trees = rx.await.map_err(|_| "GEDRoots is closing".to_string())?;
+        Ok(Json(Trees {
+            trees: trees
+                .into_iter()
+                .map(|t| TreeInfo { name: t.name, file: t.file, id: t.id, people: t.people, in_front: t.in_front })
+                .collect(),
+        }))
     }
 
     #[tool(
@@ -396,8 +476,9 @@ impl GedrootsMcp {
         description = "File open in GEDRoots: name, number of people, families, sources and media, root person.",
         annotations(read_only_hint = true, open_world_hint = false)
     )]
-    async fn file_info(&self) -> Res<FileInfo> {
-        let s = self.snapshot().await?;
+    async fn file_info(&self, Parameters(p): Parameters<TreeParams>) -> Res<FileInfo> {
+        let tree = p.tree.clone();
+        let s = self.snapshot(tree.as_deref()).await?;
         let g = &s.ged;
         let year = current_year();
         self.answer(
@@ -424,7 +505,8 @@ impl GedrootsMcp {
         annotations(read_only_hint = true, open_world_hint = false)
     )]
     async fn file_context(&self, Parameters(p): Parameters<ContextParams>) -> Res<FileContext> {
-        let s = self.snapshot().await?;
+        let tree = p.tree.clone();
+        let s = self.snapshot(tree.as_deref()).await?;
         let context = s.ged.file_context(p.examples.unwrap_or(5).min(20), current_year());
         self.answer(&s, context)
     }
@@ -435,7 +517,8 @@ impl GedrootsMcp {
         annotations(read_only_hint = true, open_world_hint = false)
     )]
     async fn search(&self, Parameters(p): Parameters<SearchParams>) -> Res<People> {
-        let s = self.snapshot().await?;
+        let tree = p.tree.clone();
+        let s = self.snapshot(tree.as_deref()).await?;
         self.answer(
             &s,
             People { people: s.ged.search_people(&p.query, p.limit.unwrap_or(50).min(500), current_year()) },
@@ -448,7 +531,8 @@ impl GedrootsMcp {
         annotations(read_only_hint = true, open_world_hint = false)
     )]
     async fn person(&self, Parameters(p): Parameters<PersonParams>) -> Res<PersonSheet> {
-        let s = self.snapshot().await?;
+        let tree = p.tree.clone();
+        let s = self.snapshot(tree.as_deref()).await?;
         let id = p.id.trim().trim_matches('@');
         if s.ged.individual(id).is_none() {
             return Err(format!("no person with id {id}"));
@@ -463,7 +547,8 @@ impl GedrootsMcp {
         annotations(read_only_hint = true, open_world_hint = false)
     )]
     async fn leads(&self, Parameters(p): Parameters<LeadsParams>) -> Res<Leads> {
-        let s = self.snapshot().await?;
+        let tree = p.tree.clone();
+        let s = self.snapshot(tree.as_deref()).await?;
         let year = current_year();
         let focus = p.focus.as_deref().map(str::trim).filter(|f| !f.is_empty()).unwrap_or(gedcom::leads::DEFAULT_FOCUS);
         let all = match p.person.as_deref().map(clean_id) {
@@ -497,7 +582,8 @@ impl GedrootsMcp {
         annotations(read_only_hint = true, open_world_hint = false)
     )]
     async fn research_log(&self, Parameters(p): Parameters<LogReadParams>) -> Res<ResearchLog> {
-        let s = self.snapshot().await?;
+        let tree = p.tree.clone();
+        let s = self.snapshot(tree.as_deref()).await?;
         let g = &s.ged;
         let x = clean_id(&p.person);
         owner(g, x, Goal::Birth, None)?;
@@ -535,7 +621,8 @@ impl GedrootsMcp {
         annotations(read_only_hint = false, destructive_hint = false, idempotent_hint = true, open_world_hint = false)
     )]
     async fn plan_research(&self, Parameters(p): Parameters<PlanParams>) -> Res<Planned> {
-        let s = self.snapshot().await?;
+        let tree = p.tree.clone();
+        let s = self.snapshot(tree.as_deref()).await?;
         let year = current_year();
         if p.items.is_empty() {
             return Err("give at least one lead".into());
@@ -558,6 +645,7 @@ impl GedrootsMcp {
         }
         let n = todo.len();
         self.edit(
+            tree.as_deref(),
             Box::new(move |g| {
                 for (owner, goal, reason) in &todo {
                     g.set_research_state(owner, *goal, TaskState::Planned, reason);
@@ -567,7 +655,7 @@ impl GedrootsMcp {
             crate::tn!("agent.planned", n).into_owned(),
         )
         .await?;
-        let s = self.snapshot().await?;
+        let s = self.snapshot(tree.as_deref()).await?;
         let planned =
             planned.iter().filter_map(|(x, goal, family)| s.ged.lead(x, *goal, family.as_deref(), year).ok()).collect();
         self.answer(&s, Planned { planned })
@@ -584,7 +672,8 @@ impl GedrootsMcp {
         )
     )]
     async fn log_search(&self, Parameters(p): Parameters<LogParams>) -> Res<Lead> {
-        let s = self.snapshot().await?;
+        let tree = p.tree.clone();
+        let s = self.snapshot(tree.as_deref()).await?;
         let year = current_year();
         let x = clean_id(&p.person).to_string();
         let (own, family) = owner(&s.ged, &x, p.goal, p.spouse.as_deref().map(clean_id))?;
@@ -608,6 +697,7 @@ impl GedrootsMcp {
         };
         let (goal, finished) = (p.goal, p.finished.unwrap_or(false));
         self.edit(
+            tree.as_deref(),
             Box::new(move |g| match g.log_research(&own, goal, &search, finished) {
                 true => Ok(()),
                 false => Err("could not note this search".into()),
@@ -615,7 +705,7 @@ impl GedrootsMcp {
             rust_i18n::t!("agent.logged", what = searched).into_owned(),
         )
         .await?;
-        let s = self.snapshot().await?;
+        let s = self.snapshot(tree.as_deref()).await?;
         match s.ged.lead(&x, p.goal, family.as_deref(), year) {
             Ok(lead) => self.answer(&s, lead),
             // The record is already cited: the lead is closed, its log stays.
@@ -637,8 +727,9 @@ impl GedrootsMcp {
         annotations(read_only_hint = true, open_world_hint = false)
     )]
     async fn quality(&self, Parameters(p): Parameters<QualityParams>) -> Res<QualityReport> {
+        let tree = p.tree.clone();
         let (tx, rx) = tokio::sync::oneshot::channel();
-        self.bridge.send(Request::Quality(tx)).await.map_err(|_| "GEDRoots is closing".to_string())?;
+        self.send(tree.as_deref(), Request::Quality(tx)).await.map_err(|_| "GEDRoots is closing".to_string())?;
         let (s, issues) = rx.await.ok().flatten().ok_or_else(|| "no file is open in GEDRoots".to_string())?;
         let trim = |v: Option<String>| v.map(|v| v.trim().trim_matches('@').to_string()).filter(|v| !v.is_empty());
         let filter = QualityFilter {
@@ -658,7 +749,8 @@ impl GedrootsMcp {
         annotations(read_only_hint = true, open_world_hint = false)
     )]
     async fn sources(&self, Parameters(p): Parameters<SourceSearch>) -> Res<Sources> {
-        let s = self.snapshot().await?;
+        let tree = p.tree.clone();
+        let s = self.snapshot(tree.as_deref()).await?;
         let g = &s.ged;
         let words: Vec<String> = p.query.split_whitespace().map(str::to_lowercase).collect();
         let matches = |text: &str| {
@@ -709,7 +801,8 @@ impl GedrootsMcp {
         annotations(read_only_hint = true, open_world_hint = false)
     )]
     async fn match_people(&self, Parameters(p): Parameters<MatchParams>) -> Res<Matches> {
-        let s = self.snapshot().await?;
+        let tree = p.tree.clone();
+        let s = self.snapshot(tree.as_deref()).await?;
         let act = propose::match_act(&p)?;
         let year = current_year();
         let people = act
@@ -746,7 +839,8 @@ impl GedrootsMcp {
         )
     )]
     async fn propose(&self, Parameters(p): Parameters<ProposeParams>) -> Res<Proposed> {
-        let s = self.snapshot().await?;
+        let tree = p.tree.clone();
+        let s = self.snapshot(tree.as_deref()).await?;
         let replaces = p.replaces.as_deref().map(str::trim).filter(|r| !r.is_empty()).map(str::to_string);
         if let Some(r) = &replaces
             && !s.queue.waiting.iter().any(|w| &w.id == r)
@@ -797,8 +891,7 @@ impl GedrootsMcp {
             .collect();
         let pending = Pending { proposal, original, pdf_page: p.pdf_page, image, preview, temps, replaces };
         let (tx, rx) = tokio::sync::oneshot::channel();
-        self.bridge
-            .send(Request::Propose(Box::new(pending), tx))
+        self.send(tree.as_deref(), Request::Propose(Box::new(pending), tx))
             .await
             .map_err(|_| "GEDRoots is closing".to_string())?;
         let queued = rx.await.map_err(|_| "GEDRoots is closing".to_string())??;
@@ -825,8 +918,9 @@ impl GedrootsMcp {
         description = "The proposals waiting in GEDRoots' review page (id, act, people with their temporary ids, what each will write) and what became of the others: saved, rejected, opened in record entry by the user, withdrawn or replaced. Call it before proposing again, to correct a waiting proposal (propose_act with `replaces`) rather than send it twice.",
         annotations(read_only_hint = true, open_world_hint = false)
     )]
-    async fn list_proposals(&self) -> Res<Proposals> {
-        let s = self.snapshot().await?;
+    async fn list_proposals(&self, Parameters(p): Parameters<TreeParams>) -> Res<Proposals> {
+        let tree = p.tree.clone();
+        let s = self.snapshot(tree.as_deref()).await?;
         let waiting = s
             .queue
             .waiting
@@ -872,10 +966,11 @@ impl GedrootsMcp {
         annotations(read_only_hint = false, destructive_hint = false, idempotent_hint = true, open_world_hint = false)
     )]
     async fn withdraw(&self, Parameters(p): Parameters<ProposalId>) -> Res<Withdrawn> {
+        let tree = p.tree.clone();
         let (tx, rx) = tokio::sync::oneshot::channel();
-        self.bridge.send(Request::Withdraw(p.id, tx)).await.map_err(|_| "GEDRoots is closing".to_string())?;
+        self.send(tree.as_deref(), Request::Withdraw(p.id, tx)).await.map_err(|_| "GEDRoots is closing".to_string())?;
         let waiting = rx.await.map_err(|_| "GEDRoots is closing".to_string())??;
-        let s = self.snapshot().await?;
+        let s = self.snapshot(tree.as_deref()).await?;
         self.answer(&s, Withdrawn { waiting })
     }
 
@@ -890,21 +985,22 @@ impl GedrootsMcp {
         )
     )]
     async fn propose_change(&self, Parameters(p): Parameters<ChangeParams>) -> Res<ChangeProposed> {
+        let tree = p.tree.clone();
         let req = change::to_request(&p)?;
         let (tx, rx) = tokio::sync::oneshot::channel();
-        self.bridge
-            .send(Request::ProposeChange(Box::new(req), tx))
+        self.send(tree.as_deref(), Request::ProposeChange(Box::new(req), tx))
             .await
             .map_err(|_| "GEDRoots is closing".to_string())?;
         let (waiting, new_issues) = rx.await.map_err(|_| "GEDRoots is closing".to_string())??;
-        let s = self.snapshot().await?;
+        let s = self.snapshot(tree.as_deref()).await?;
         self.answer(&s, ChangeProposed { status: "waiting for review".into(), waiting, new_issues })
     }
 }
 
 /// Instructions given to the agent on connection.
 const INSTRUCTIONS: &str = "GEDRoots is a genealogy app. These tools read the GEDCOM 7 family tree open in \
-the app (its active window). They never change its data: `propose_act` and `propose_change` only add \
+the app. Each window shows one tree: the tools work on the window in front, or on the tree given as \
+`tree` (`list_trees` lists the open trees; use it when the user names a tree). They never change its data: `propose_act` and `propose_change` only add \
 a proposal to the app's review page, where the user compares it with the tree before saving it. Only \
 the research log (`plan_research`, `log_search`: what you plan and search, even in vain) is written \
 at once. \
@@ -959,7 +1055,7 @@ impl ServerHandler for GedrootsMcp {
         if request.uri != CONTEXT_URI {
             return Err(rmcp::ErrorData::resource_not_found(format!("no resource {}", request.uri), None));
         }
-        let s = self.snapshot().await.map_err(|e| rmcp::ErrorData::internal_error(e, None))?;
+        let s = self.snapshot(None).await.map_err(|e| rmcp::ErrorData::internal_error(e, None))?;
         let json = serde_json::to_string_pretty(&s.ged.file_context(5, current_year()))
             .map_err(|e| rmcp::ErrorData::internal_error(e.to_string(), None))?;
         let mut text = rmcp::model::ResourceContents::text(json, CONTEXT_URI);
@@ -997,7 +1093,7 @@ async fn check_token(
 
 /// Serves the MCP protocol on `127.0.0.1:<port>/mcp` until cancelled.
 pub async fn serve(
-    bridge: async_channel::Sender<Request>,
+    bridge: async_channel::Sender<Ask>,
     token: String,
     port: u16,
     cancel: CancellationToken,
@@ -1062,22 +1158,38 @@ mod tests {
 
     #[test]
     fn serves_read_only_tools_with_token() {
-        let (tx, rx) = async_channel::unbounded::<Request>();
+        let (tx, rx) = async_channel::unbounded::<Ask>();
         // Fake app loop: one document, changed only by the research log edits.
         std::thread::spawn(move || {
             let mut ged = gedcom::Gedcom::parse(FILE).unwrap();
-            while let Ok(req) = rx.recv_blocking() {
-                match req {
+            while let Ok(ask) = rx.recv_blocking() {
+                match ask.request {
                     Request::Snapshot(reply) => {
-                        let _ = reply.send(Some(Snapshot { path: None, ged: ged.clone(), queue: Default::default() }));
+                        let _ = reply.send(Some(Snapshot {
+                            key: String::new(),
+                            path: None,
+                            ged: ged.clone(),
+                            queue: Default::default(),
+                        }));
                     }
                     Request::Quality(reply) => {
                         let issues = gedcom::quality::run(&ged);
-                        let _ = reply
-                            .send(Some((Snapshot { path: None, ged: ged.clone(), queue: Default::default() }, issues)));
+                        let _ = reply.send(Some((
+                            Snapshot { key: String::new(), path: None, ged: ged.clone(), queue: Default::default() },
+                            issues,
+                        )));
                     }
                     Request::Edit(edit, reply) => {
                         let _ = reply.send((edit.apply)(&mut ged));
+                    }
+                    Request::Trees(reply) => {
+                        let _ = reply.send(vec![super::super::Tree {
+                            name: "Marchand".into(),
+                            file: Some("Marchand.ged".into()),
+                            id: None,
+                            people: ged.count(RecordKind::Individual),
+                            in_front: true,
+                        }]);
                     }
                     _ => break,
                 }
@@ -1107,7 +1219,7 @@ mod tests {
         let (_, _, list) =
             post(port, "secret", Some(&sid), serde_json::json!({"jsonrpc":"2.0","id":2,"method":"tools/list"}));
         let tools = list["result"]["tools"].as_array().expect("tools");
-        assert_eq!(tools.len(), 15);
+        assert_eq!(tools.len(), 16);
         // The proposals only queue a proposal; the research tools write the research log only.
         let mut writers: Vec<String> = tools
             .iter()
@@ -1126,6 +1238,15 @@ mod tests {
         let sheet = &call["result"]["structuredContent"];
         assert_eq!(sheet["person"]["name"], "Jean MARCHAND", "{call}");
         assert_eq!(sheet["events"][0]["place"], "Rennes");
+        let (_, _, call) = post(
+            port,
+            "secret",
+            Some(&sid),
+            serde_json::json!({"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"list_trees","arguments":{}}}),
+        );
+        let trees = &call["result"]["structuredContent"]["trees"];
+        assert_eq!(trees[0]["name"], "Marchand", "{call}");
+        assert_eq!(trees[0]["in_front"], true);
         // Data Quality: the place of the birth has no coordinates.
         let (_, _, call) = post(
             port,

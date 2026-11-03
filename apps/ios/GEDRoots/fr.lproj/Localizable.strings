@@ -14,7 +14,6 @@
 "People" = "Individus";
 "More" = "Plus";
 "Sync Now" = "Synchroniser";
-"Forget This Computer" = "Oublier cet ordinateur";
 "Syncing…" = "Synchronisation…";
 "Updated %@" = "Mis à jour %@";
 "Events" = "Événements";
@@ -61,3 +60,13 @@
 "Image Not Received" = "Image non reçue";
 "Close" = "Fermer";
 "Show in Tree" = "Voir dans l’arbre";
+"Add a Tree…" = "Ajouter un arbre…";
+"Add a Tree" = "Ajouter un arbre";
+"Manage Trees…" = "Gérer les arbres…";
+"Trees" = "Arbres";
+"%lld people" = "%lld individus";
+"Removed From Your Computer" = "Retiré de l’ordinateur";
+"Shown" = "Affiché";
+"Remove" = "Retirer";
+"Remove This Tree" = "Retirer cet arbre";
+"Cancel" = "Annuler";
