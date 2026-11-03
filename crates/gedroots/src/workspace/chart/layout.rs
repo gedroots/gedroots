@@ -9,7 +9,8 @@
 use gedcom::{Gedcom, Relation};
 use std::collections::HashSet;
 
-pub const CARD_W: f32 = 184.;
+/// Wide enough for a usual “SURNAME Given” next to the portrait.
+pub const CARD_W: f32 = 200.;
 pub const CARD_H: f32 = 48.;
 /// Vertical gap between two boxes of the same column.
 pub const GAP: f32 = 10.;

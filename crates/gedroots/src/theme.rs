@@ -237,7 +237,8 @@ const FONTS: [&[u8]; 4] = [
     include_bytes!("../assets/fonts/Inter-Bold.ttf"),
 ];
 
-/// Tabular figures: dates and counts stay aligned in columns.
+/// Tabular figures: dates and counts stay aligned in columns. Only on figures: Inter's `tnum` also
+/// widens spaces, hyphens and punctuation, so running text would read “Saint - Lô”.
 pub fn tabular_nums() -> FontFeatures {
     FontFeatures(Arc::new(vec![("tnum".into(), 1)]))
 }

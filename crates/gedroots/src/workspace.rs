@@ -1395,8 +1395,28 @@ fn group_thousands(n: usize) -> String {
     out
 }
 
+/// Small figures (dates, years, counts), with tabular figures so they line up in columns.
 fn mono(s: impl Into<SharedString>) -> Div {
-    div().font_family("monospace").text_xs().text_color(theme::muted()).child(s.into())
+    div()
+        .font_family("monospace")
+        .font_features(theme::tabular_nums())
+        .text_xs()
+        .text_color(theme::muted())
+        .child(s.into())
+}
+
+/// Date column of a timeline row. A long date (French Republican calendar with its Gregorian
+/// equivalent) wraps within half the row instead of crushing the label.
+fn event_date(date: impl Into<SharedString>) -> Div {
+    div()
+        .flex_shrink(1.)
+        .max_w(relative(0.5))
+        .pt(px(2.))
+        .text_right()
+        .text_xs()
+        .text_color(theme::muted())
+        .font_features(theme::tabular_nums())
+        .child(date.into())
 }
 
 fn dot(color: Hsla) -> Div {
@@ -1426,13 +1446,16 @@ fn event_row(
             h_flex()
                 .justify_between()
                 .gap_2()
+                .items_start()
                 .child(
                     h_flex()
+                        .flex_1()
                         .gap_2()
                         .items_center()
                         .min_w_0()
                         .child(
                             div()
+                                .min_w_0()
                                 .font_weight(FontWeight::MEDIUM)
                                 .when(attended, |d| d.italic())
                                 .overflow_hidden()
@@ -1442,7 +1465,7 @@ fn event_row(
                         )
                         .when(unsourced, |d| d.child(dot(theme::muted()))),
                 )
-                .child(div().flex_none().text_xs().text_color(theme::muted()).child(date)),
+                .child(event_date(date)),
         )
         .when(!sub.is_empty() || media > 0, |d| {
             d.child(
@@ -2651,25 +2674,25 @@ impl Workspace {
     /// Discreet row of a relative's event; a click opens that relative.
     fn render_relative_event(&self, n: usize, r: &timeline::Entry, cx: &mut Context<Self>) -> AnyElement {
         let target = r.related.clone();
-        h_flex()
+        // Same layout as the person's own events: label and date, then the age on a second line.
+        v_flex()
             .id(("rel-ev", n))
-            .justify_between()
-            .gap_2()
+            .gap_0p5()
             .px_2()
             .py_1()
             .rounded(theme::RADIUS_SM)
-            .text_sm()
             .text_color(theme::muted())
             .cursor_pointer()
             .hover(|d| d.bg(theme::hover()))
-            .child(div().min_w_0().child(r.label.clone()))
             .child(
                 h_flex()
+                    .justify_between()
+                    .items_start()
                     .gap_2()
-                    .flex_none()
-                    .when_some(r.age.clone(), |d, a| d.child(div().text_xs().child(a)))
-                    .child(mono(r.date.as_ref().map(|d| d.display()).unwrap_or_default())),
+                    .child(div().flex_1().min_w_0().child(r.label.clone()))
+                    .child(event_date(r.date.as_ref().map(|d| d.display()).unwrap_or_default())),
             )
+            .when_some(r.age.clone(), |d, a| d.child(div().text_xs().font_features(theme::tabular_nums()).child(a)))
             .on_click(cx.listener(move |this, _, w, cx| {
                 if let Some(x) = target.clone() {
                     this.goto(x, w, cx)
@@ -3111,7 +3134,6 @@ impl Render for Workspace {
         v_flex()
             .size_full()
             .relative()
-            .font_features(theme::tabular_nums())
             .track_focus(&self.focus)
             .key_context("Workspace")
             .map(|d| self.bind_actions(d, window, cx))
