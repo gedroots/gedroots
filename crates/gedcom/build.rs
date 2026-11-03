@@ -1,9 +1,9 @@
-//! Embeds the country packs (`countries/*.yml`, see `src/countries.rs`) in the library.
+//! Embeds the Atlas (`atlas/*.yml`, see `src/atlas.rs`) in the library.
 
 use std::path::PathBuf;
 
 fn main() {
-    let dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("countries");
+    let dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("atlas");
     println!("cargo:rerun-if-changed={}", dir.display());
     let mut files: Vec<PathBuf> = std::fs::read_dir(&dir)
         .unwrap_or_else(|e| panic!("{}: {e}", dir.display()))
@@ -18,6 +18,6 @@ fn main() {
         out.push_str(&format!("    ({name:?}, include_str!({:?})),\n", f.display().to_string()));
     }
     out.push(']');
-    let target = PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("countries.rs");
+    let target = PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("atlas.rs");
     std::fs::write(target, out).unwrap();
 }

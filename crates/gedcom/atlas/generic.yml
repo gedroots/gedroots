@@ -1,8 +1,8 @@
-# Rules for countries without a pack, and for periods a pack does not cover.
+# Rules for countries without a file, and for periods a country's file does not cover.
 format: 1
 code: generic
 name: Other countries
-# Countries without a pack: a place naming one of them is not in the file's main country.
+# Countries without a file: a place naming one of them is not in the file's main country.
 names: [Canada, Luxembourg, Portugal, Polska, Pologne, Poland, Österreich, Autriche, Austria,
   Россия, Russie, Russia, Ireland, Irlande, Danmark, Danemark, Denmark, Sverige, Suède, Sweden,
   Norge, Norvège, Norway, Maroc, Morocco, Tunisie, Tunisia, Argentina, Argentine, Brasil, Brésil, Brazil]

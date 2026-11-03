@@ -21,7 +21,7 @@
 //! translates them from their stable identifiers ([`RecordType::id`]).
 
 use crate::analysis::span::Span;
-use crate::countries::{self, Pack, Sex};
+use crate::atlas::{self, Country, Sex};
 use crate::document::{Gedcom, RecordKind};
 use crate::model::{Individual, event_label, sort_key};
 use crate::research::PersonRef;
@@ -417,7 +417,7 @@ struct Context<'g> {
     /// Registers cited, by place key and event tag, to rank those of the same kind first.
     register_tags: HashMap<(String, String), BTreeMap<String, usize>>,
     /// Country of places that name none: the most frequent one of the file.
-    default_country: &'static Pack,
+    default_country: &'static Country,
     /// Index of the municipality in the place format, and the format's length.
     town: Option<(usize, usize)>,
 }
@@ -435,7 +435,7 @@ impl<'g> Context<'g> {
             candidates: HashMap::new(),
             towns: Default::default(),
             register_tags: HashMap::new(),
-            default_country: countries::generic(),
+            default_country: atlas::generic(),
             town: None,
         };
         let form = g.place_form();
@@ -449,7 +449,7 @@ impl<'g> Context<'g> {
 
     fn read(&mut self) {
         let g = self.g;
-        let mut countries: HashMap<&'static str, (&'static Pack, usize)> = HashMap::new();
+        let mut countries: HashMap<&'static str, (&'static Country, usize)> = HashMap::new();
         let name = |x: &str| g.individual(x).map(|i| i.display_name()).unwrap_or_default();
         for r in g.records_of(RecordKind::Individual).chain(g.records_of(RecordKind::Family)) {
             let Some(owner) = r.xref.as_deref() else { continue };
@@ -464,7 +464,7 @@ impl<'g> Context<'g> {
             };
             for ev in r.children.iter().filter(|e| event_label(&e.tag).is_some()) {
                 let place = ev.path_val(&["PLAC"]).unwrap_or("").to_string();
-                if let Some(c) = countries::in_place(&place) {
+                if let Some(c) = atlas::in_place(&place) {
                     countries.entry(c.code.as_str()).or_insert((c, 0)).1 += 1;
                 }
                 let years = years_of(ev.path_val(&["DATE"]).unwrap_or(""));
@@ -533,7 +533,7 @@ impl<'g> Context<'g> {
         self.default_country = countries
             .into_values()
             .max_by_key(|(c, n)| (*n, std::cmp::Reverse(c.code.as_str())))
-            .map_or(countries::generic(), |(c, _)| c);
+            .map_or(atlas::generic(), |(c, _)| c);
     }
 
     fn cite(&mut self, source: &str, place: &str, tag: &str, years: Option<(i32, i32)>) {
@@ -635,8 +635,8 @@ impl<'g> Context<'g> {
         place_key(place, self.town)
     }
 
-    fn country(&self, place: &str) -> &'static Pack {
-        countries::in_place(place).unwrap_or(self.default_country)
+    fn country(&self, place: &str) -> &'static Country {
+        atlas::in_place(place).unwrap_or(self.default_country)
     }
 
     /// Registers of `place` already cited, those of the same kind of event first.
@@ -686,25 +686,25 @@ fn dedup_places(ctx: &Context, places: impl IntoIterator<Item = String>) -> Vec<
 type Rule = (RecordType, String, Option<Years>, Vec<i32>, Option<i32>);
 
 /// Kinds of records for a goal, in a country and a period, best first: those of the country's
-/// pack, or the generic ones when the pack kept none for the period (records still closed to the
+/// file in the Atlas, or the generic ones when it kept none for the period (records still closed to the
 /// public do not count as none).
-fn rules(pack: &'static Pack, goal: Goal, years: Option<Years>, male: bool, this_year: i32) -> Vec<Rule> {
+fn rules(country: &'static Country, goal: Goal, years: Option<Years>, male: bool, this_year: i32) -> Vec<Rule> {
     let y = years.unwrap_or(Years { from: i32::MIN / 2, to: i32::MAX / 2 });
-    let covered = pack
+    let covered = country
         .records
         .iter()
         .any(|r| r.goals.contains(&goal) && y.overlaps(r.from.unwrap_or(i32::MIN), r.until.unwrap_or(i32::MAX)));
-    match covered || pack.is_generic() {
-        true => pack_rules(pack, goal, years, male, this_year),
-        false => pack_rules(countries::generic(), goal, years, male, this_year),
+    match covered || country.is_generic() {
+        true => country_rules(country, goal, years, male, this_year),
+        false => country_rules(atlas::generic(), goal, years, male, this_year),
     }
 }
 
-fn pack_rules(pack: &Pack, goal: Goal, years: Option<Years>, male: bool, this_year: i32) -> Vec<Rule> {
+fn country_rules(country: &Country, goal: Goal, years: Option<Years>, male: bool, this_year: i32) -> Vec<Rule> {
     let mut out = Vec::new();
     let y = years.unwrap_or(Years { from: i32::MIN / 2, to: i32::MAX / 2 });
     let known = years.is_some();
-    for r in pack.records.iter().filter(|r| r.goals.contains(&goal)) {
+    for r in country.records.iter().filter(|r| r.goals.contains(&goal)) {
         if r.sex.is_some_and(|s| (s == Sex::Male) != male) {
             continue;
         }
@@ -745,7 +745,7 @@ fn pack_rules(pack: &Pack, goal: Goal, years: Option<Years>, male: bool, this_ye
 }
 
 /// “Civil registration (état civil): births”.
-fn label(r: &countries::Record, goal: Goal) -> String {
+fn label(r: &atlas::Record, goal: Goal) -> String {
     let what = match (r.kind, goal) {
         (RecordType::CivilRegistration | RecordType::RegistrationIndex, Goal::Birth) => "births".to_string(),
         (RecordType::CivilRegistration | RecordType::RegistrationIndex, Goal::Marriage) => "marriages".to_string(),
@@ -1120,17 +1120,17 @@ impl Gedcom {
             .filter_map(|(s, male)| s.and_then(|s| self.individual(s)).map(|s| (s, male)))
             .collect();
         // Country of the marriage, otherwise of a spouse's birth.
-        let pack = fam
+        let country = fam
             .events()
             .iter()
             .filter_map(|e| e.place().map(str::to_string))
             .chain(spouses.iter().filter_map(|(s, _)| s.birth().and_then(|b| b.place().map(str::to_string))))
-            .find_map(|p| countries::in_place(&p))
+            .find_map(|p| atlas::in_place(&p))
             .unwrap_or(ctx.default_country);
         let births: Vec<(i32, i32)> = spouses
             .iter()
             .filter_map(|(s, male)| self.birth_years(ctx, s).0.map(|y| (y.from, *male)))
-            .map(|(b, male)| (b, b + pack.marriage_age(b + 15, male)))
+            .map(|(b, male)| (b, b + country.marriage_age(b + 15, male)))
             .collect();
         let first_child = fam
             .children()
@@ -1446,8 +1446,8 @@ mod tests {
     }
 
     #[test]
-    fn country_packs_close_recent_records_and_set_marriage_ages() {
-        let be = countries::by_code("BE").unwrap();
+    fn the_atlas_closes_recent_records_and_set_marriage_ages() {
+        let be = atlas::by_code("BE").unwrap();
         // Belgian births are public after 100 years: those after 1926 are given on request.
         let r = rules(be, Goal::Birth, Some(Years::new(1900, 1950)), true, 2026);
         let civil = r.iter().find(|r| r.0 == RecordType::CivilRegistration).unwrap();
@@ -1458,12 +1458,12 @@ mod tests {
         let r = rules(be, Goal::Death, Some(Years::new(1880, 1900)), true, 2026);
         assert!(r.iter().any(|r| r.0 == RecordType::PopulationRegisters));
         // Census years stop at the access delay (British census: 100 years).
-        let gb = countries::by_code("GB").unwrap();
+        let gb = atlas::by_code("GB").unwrap();
         let r = rules(gb, Goal::Death, Some(Years::new(1900, 1940)), true, 2026);
         let census = r.iter().find(|r| r.0 == RecordType::Census).unwrap();
         assert_eq!(census.3, vec![1901, 1911, 1921]);
-        // A pack without a rule for the period falls back to the generic rules.
-        let dz = countries::by_code("DZ").unwrap();
+        // A country without a rule for the period falls back to the generic rules.
+        let dz = atlas::by_code("DZ").unwrap();
         let r = rules(dz, Goal::Birth, Some(Years::new(1700, 1720)), true, 2026);
         assert!(r.iter().any(|r| r.0 == RecordType::ChurchRegisters));
 

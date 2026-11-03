@@ -91,9 +91,9 @@ its record is cited. A baptism counts as a birth, a burial as a death.
 - **Places**: the last places where the person was seen for a death, the bride's places for a
   marriage, the parents' marriage and siblings' births for a birth, the birth place for parents. A
   locality counts with its municipality (place format).
-- **Where to look**: kinds of records by country and period, from the [country packs](country-packs.md)
-  (country named in the place, otherwise the file's most frequent country; the generic pack for
-  countries without one and periods a pack does not cover). Records still closed to the public
+- **Where to look**: kinds of records by country and period, from the [Atlas](atlas.md)
+  (country named in the place, otherwise the file's most frequent country; the generic rules for
+  countries without a file and periods a file does not cover). Records still closed to the public
   keep their years and give `public_until`: later ones are given on request to the people
   concerned and their descendants. The legal age at marriage of the country bounds a marriage.
   Civil and church registers and their indexes list the registers of the same town the

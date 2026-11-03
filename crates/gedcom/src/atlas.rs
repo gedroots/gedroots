@@ -1,7 +1,7 @@
-//! Country packs: what genealogy records each country kept and from when, who may read them, and
-//! the legal age at marriage. One YAML file per country in `countries/` (format documented in
-//! `docs/country-packs.md`), embedded at build time; `generic` covers the other countries and
-//! the periods that a pack does not cover.
+//! The Atlas: what genealogy records each country kept and from when, who may read them, and the
+//! legal age at marriage. One YAML file per country in `atlas/` (format documented in
+//! `docs/atlas.md`), embedded at build time; `generic` covers the other countries and the periods
+//! that a country's file does not cover.
 
 use crate::leads::{Goal, RecordType};
 use crate::model::sort_key;
@@ -12,13 +12,13 @@ use std::sync::LazyLock;
 /// Version of the format that this library reads.
 pub const FORMAT: u32 = 1;
 
-/// Code of the pack used for countries without one.
+/// Code of the rules used for countries without a file.
 pub const GENERIC: &str = "generic";
 
 /// The rules of a country.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct Pack {
+pub struct Country {
     pub format: u32,
     /// ISO 3166-1 alpha-2 code, or `generic`.
     pub code: String,
@@ -106,14 +106,14 @@ impl PublicAfter {
     }
 }
 
-impl Pack {
+impl Country {
     pub fn is_generic(&self) -> bool {
         self.code == GENERIC
     }
 
-    /// Minimum age at marriage in `year`, otherwise that of the generic pack.
+    /// Minimum age at marriage in `year`, otherwise that of the generic rules.
     pub fn marriage_age(&self, year: i32, male: bool) -> i32 {
-        let find = |p: &Pack| {
+        let find = |p: &Country| {
             p.marriage_age
                 .iter()
                 .find(|a| a.from.is_none_or(|f| f <= year) && a.until.is_none_or(|u| year < u))
@@ -124,46 +124,44 @@ impl Pack {
     }
 }
 
-static SOURCES: &[(&str, &str)] = include!(concat!(env!("OUT_DIR"), "/countries.rs"));
+static SOURCES: &[(&str, &str)] = include!(concat!(env!("OUT_DIR"), "/atlas.rs"));
 
-static PACKS: LazyLock<Vec<Pack>> = LazyLock::new(|| {
+static COUNTRIES: LazyLock<Vec<Country>> = LazyLock::new(|| {
     SOURCES
         .iter()
-        .map(|(file, text)| {
-            serde_saphyr::from_str::<Pack>(text).unwrap_or_else(|e| panic!("countries/{file}.yml: {e}"))
-        })
+        .map(|(file, text)| serde_saphyr::from_str::<Country>(text).unwrap_or_else(|e| panic!("atlas/{file}.yml: {e}")))
         .collect()
 });
 
-/// Names of the countries (normalized by [`sort_key`]) and their pack.
+/// Names of the countries (normalized by [`sort_key`]) and their country.
 static NAMES: LazyLock<Vec<(String, usize)>> = LazyLock::new(|| {
-    PACKS.iter().enumerate().flat_map(|(i, p)| p.names.iter().map(move |n| (sort_key(n), i))).collect()
+    COUNTRIES.iter().enumerate().flat_map(|(i, p)| p.names.iter().map(move |n| (sort_key(n), i))).collect()
 });
 
-/// Every pack, the generic one included.
-pub fn packs() -> &'static [Pack] {
-    &PACKS
+/// Every country of the Atlas, the generic one included.
+pub fn countries() -> &'static [Country] {
+    &COUNTRIES
 }
 
-/// The pack of the countries without one.
-pub fn generic() -> &'static Pack {
-    PACKS.iter().find(|p| p.is_generic()).expect("countries/generic.yml")
+/// The rules of the countries without a file.
+pub fn generic() -> &'static Country {
+    COUNTRIES.iter().find(|p| p.is_generic()).expect("atlas/generic.yml")
 }
 
-/// Pack of a country code (`FR`).
-pub fn by_code(code: &str) -> Option<&'static Pack> {
-    PACKS.iter().find(|p| p.code.eq_ignore_ascii_case(code))
+/// Country of a country code (`FR`).
+pub fn by_code(code: &str) -> Option<&'static Country> {
+    COUNTRIES.iter().find(|p| p.code.eq_ignore_ascii_case(code))
 }
 
-/// Pack of the country named in a place (“Agneaux, Manche, France”, “Agneaux (Manche, France)”):
-/// the generic pack for a country without one, `None` when no country is named.
-pub fn in_place(place: &str) -> Option<&'static Pack> {
+/// Country of the country named in a place (“Agneaux, Manche, France”, “Agneaux (Manche, France)”):
+/// the generic rules for a country without a file, `None` when no country is named.
+pub fn in_place(place: &str) -> Option<&'static Country> {
     place
         .split([',', '(', ')'])
         .map(|s| sort_key(s.trim()))
         .filter(|s| !s.is_empty())
         .rev()
-        .find_map(|s| NAMES.iter().find(|(n, _)| *n == s).map(|(_, i)| &PACKS[*i]))
+        .find_map(|s| NAMES.iter().find(|(n, _)| *n == s).map(|(_, i)| &COUNTRIES[*i]))
 }
 
 #[cfg(test)]
@@ -171,7 +169,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn every_pack_is_valid() {
+    fn every_country_is_valid() {
         let mut codes = std::collections::HashSet::new();
         for (file, _) in SOURCES {
             let p = by_code(file).unwrap_or_else(|| panic!("{file}.yml: code differs from the file name"));

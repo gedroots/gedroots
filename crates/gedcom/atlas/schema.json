@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/gedroots/gedroots/blob/main/crates/gedcom/countries/schema.json",
-  "title": "Country pack",
+  "$id": "https://github.com/gedroots/gedroots/blob/main/crates/gedcom/atlas/schema.json",
+  "title": "GEDRoots Atlas: a country",
   "description": "What genealogy records a country kept, from when to when, who may read them, and the legal age at marriage. Format 1.",
   "type": "object",
   "required": ["format", "code", "name"],
@@ -11,7 +11,7 @@
     "code": {
       "type": "string",
       "pattern": "^([A-Z]{2}|generic)$",
-      "description": "ISO 3166-1 alpha-2 code, or `generic` for the countries without a pack. Also the file name."
+      "description": "ISO 3166-1 alpha-2 code, or `generic` for the countries without a file. Also the file name."
     },
     "name": { "type": "string", "description": "English name." },
     "names": {
