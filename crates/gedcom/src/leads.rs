@@ -507,9 +507,14 @@ impl<'g> Context<'g> {
                     *countries.entry(c).or_default() += 1;
                 }
                 let years = years_of(ev.path_val(&["DATE"]).unwrap_or(""));
-                // Registers cited for this place.
+                // Registers cited for this place, by the events its civil or church registers
+                // record (a military register or a census cited by another event is not one).
                 if !place.is_empty() {
                     self.towns.insert(self.key(&place));
+                }
+                let recorded =
+                    [Goal::Birth, Goal::Marriage, Goal::Death].iter().any(|g| g.tags().contains(&ev.tag.as_str()));
+                if !place.is_empty() && recorded {
                     for s in ev.children_with("SOUR").filter_map(|s| s.pointer()) {
                         self.cite(s, &place, &ev.tag, years);
                     }
@@ -1547,7 +1552,7 @@ mod tests {
         let g = Gedcom::parse(
             "0 HEAD\n1 GEDC\n2 VERS 7.0\n1 _GR_ROOT @I1@\n1 PLAC\n2 FORM Lieudit, Commune, Département, Pays\n\
 0 @I1@ INDI\n1 NAME Jean /OHL/\n1 SEX M\n1 BIRT\n2 DATE 1880\n2 PLAC , Troyes, Aube, France\n2 SOUR @S1@\n\
-1 RESI\n2 DATE 1905\n2 PLAC Les Noës, Troyes, Aube, France\n2 SOUR @S2@\n2 SOUR @S3@\n2 SOUR @S4@\n\
+1 CHR\n2 DATE 1905\n2 PLAC Les Noës, Troyes, Aube, France\n2 SOUR @S2@\n2 SOUR @S3@\n2 SOUR @S4@\n\
 0 @S1@ SOUR\n1 TITL Troyes - Naissances\n1 REPO @R1@\n2 CALN 4E 387\n\
 0 @S2@ SOUR\n1 TITL Troyes -Naissances\n1 REPO @R1@\n2 CALN 4E387\n\
 0 @S3@ SOUR\n1 TITL Fichier des personnes décédées\n\
@@ -1593,8 +1598,8 @@ mod tests {
             "0 HEAD\n1 GEDC\n2 VERS 7.0\n1 _GR_ROOT @I1@\n\
 0 @I1@ INDI\n1 NAME Michel /OHL/\n1 SEX M\n1 BIRT\n2 DATE 1870\n2 PLAC St Étienne, Loire, France\n2 SOUR @S1@\n\
 1 MARR\n2 DATE 1896\n2 PLAC St Étienne, Loire, France\n2 SOUR @S2@\n\
-1 RESI\n2 DATE 1900\n2 PLAC St Étienne, Loire, France\n2 SOUR @S3@\n2 SOUR @S4@\n2 SOUR @S5@\n\
-1 EVEN\n2 DATE 1901\n2 PLAC St Étienne, Loire, France\n2 SOUR @S4@\n2 SOUR @S6@\n\
+1 CHR\n2 DATE 1900\n2 PLAC St Étienne, Loire, France\n2 SOUR @S3@\n2 SOUR @S4@\n2 SOUR @S5@\n\
+1 BAPM\n2 DATE 1901\n2 PLAC St Étienne, Loire, France\n2 SOUR @S4@\n2 SOUR @S6@\n\
 0 @S1@ SOUR\n1 TITL Saint-Etienne, Naissances (1870)\n1 REPO @R1@\n2 CALN 2 E 80\n\
 0 @S2@ SOUR\n1 TITL Acte de mariage de Michel OHL\n1 REPO @R1@\n2 CALN 2 E 81\n\
 0 @S3@ SOUR\n1 TITL Acte de naissance de Jean OHL\n1 REPO @R1@\n2 CALN 3 E 1\n\
