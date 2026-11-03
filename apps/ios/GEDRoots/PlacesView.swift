@@ -70,22 +70,23 @@ struct PlaceSheet: View {
     let model: TreeModel
     let pin: PlacePin
     @State private var openEvent: EventRef?
+    @State private var events: [PlaceEvent] = []
 
     var body: some View {
         NavigationStack {
             List {
-                ForEach(model.tree?.placeEvents(name: pin.name) ?? [], id: \.event.id) { e in
+                ForEach(events, id: \.event.id) { e in
                     Button { openEvent = e.event } label: {
                         HStack(alignment: .firstTextBaseline, spacing: 12) {
-                            Text(e.year).font(.footnote).foregroundStyle(.secondary).monospacedDigit()
+                            Text(e.year).font(.footnote).foregroundStyle(Color.secondary).monospacedDigit()
                                 .frame(width: 40, alignment: .leading)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(e.title)
                                 let names = e.people.map(\.name).joined(separator: " & ")
-                                if !names.isEmpty { Text(names).font(.footnote).foregroundStyle(.secondary) }
+                                if !names.isEmpty { Text(names).font(.footnote).foregroundStyle(Color.secondary) }
                             }
                         }
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(Color.primary)
                     }
                 }
             }
@@ -95,5 +96,8 @@ struct PlaceSheet: View {
                 EventSheet(model: model, ref: ref).presentationDetents([.medium, .large])
             }
         }
+        .task(id: "\(pin.name)#\(model.revision)") { events = model.tree?.placeEvents(name: pin.name) ?? [] }
+        // Opaque: the map behind is too busy for text over glass.
+        .presentationBackground(Color(UIColor.systemGroupedBackground))
     }
 }

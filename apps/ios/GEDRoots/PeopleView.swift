@@ -48,7 +48,7 @@ struct PeopleView: View {
             .navigationDestination(for: String.self) { id in
                 PersonView(model: model, id: id)
             }
-            .searchable(text: $query, prompt: Text("Name, place:saint-lô, born:1850-1900"))
+            .searchable(text: $query, prompt: Text("Name, born:1850-1900"))
             .searchScopes($scope, activation: .onSearchPresentation) {
                 Text("All").tag(Scope.all)
                 Text("Ancestors").tag(Scope.ancestors)

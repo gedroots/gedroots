@@ -5,10 +5,7 @@ struct MediaView: View {
     let model: TreeModel
     @State private var kind = MediaKind.all
     @State private var viewing: MediaRow?
-
-    private var items: [MediaRow] {
-        (model.tree?.media(kind: kind) ?? []).filter(\.isImage)
-    }
+    @State private var items: [MediaRow] = []
 
     var body: some View {
         NavigationStack {
@@ -46,6 +43,7 @@ struct MediaView: View {
             .fullScreenCover(item: $viewing) { m in ImageViewer(model: model, media: m) }
         }
         .tint(Theme.accent)
+        .task(id: "\(kind)#\(model.revision)") { items = (model.tree?.media(kind: kind) ?? []).filter(\.isImage) }
     }
 }
 
@@ -60,12 +58,16 @@ struct ImageViewer: View {
     @State private var lastScale: CGFloat = 1
     @State private var offset: CGSize = .zero
     @State private var lastOffset: CGSize = .zero
+    /// Decoded once: scans are large, and zooming redraws the view on every frame.
+    @State private var image: UIImage?
+    @State private var linked: [MediaLink] = []
+    @State private var loaded = false
 
     var body: some View {
         NavigationStack {
             ZStack {
                 Theme.viewer.ignoresSafeArea()
-                if let path = media.path, let image = UIImage(contentsOfFile: path) {
+                if let image {
                     Image(uiImage: image)
                         .resizable().scaledToFit()
                         .scaleEffect(scale)
@@ -80,7 +82,7 @@ struct ImageViewer: View {
                             }
                         }
                         .accessibilityLabel(media.title)
-                } else {
+                } else if loaded {
                     ContentUnavailableView("Image Not Received", systemImage: "photo")
                         .foregroundStyle(.white)
                 }
@@ -102,6 +104,12 @@ struct ImageViewer: View {
             }
         }
         .preferredColorScheme(.dark)
+        .task {
+            linked = model.tree?.mediaLinks(id: media.id) ?? []
+            let path = media.path
+            image = await Task.detached { path.flatMap(UIImage.init(contentsOfFile:)) }.value
+            loaded = true
+        }
     }
 
     private var zoom: some Gesture {
@@ -124,7 +132,7 @@ struct ImageViewer: View {
 
     /// Records the image is linked to.
     @ViewBuilder private var links: some View {
-        let links = model.tree?.mediaLinks(id: media.id) ?? []
+        let links = linked
         if !links.isEmpty {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {

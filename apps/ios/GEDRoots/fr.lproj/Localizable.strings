@@ -23,7 +23,7 @@
 "Not Found" = "Introuvable";
 "All" = "Tous";
 "Ancestors" = "Ascendants";
-"Name, place:saint-lô, born:1850-1900" = "Nom, place:saint-lô, born:1850-1900";
+"Name, born:1850-1900" = "Nom, born:1850-1900";
 "Relatives’ Events" = "Événements des proches";
 "Union" = "Union";
 "Married %@" = "Mariage : %@";

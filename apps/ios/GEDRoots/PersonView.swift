@@ -10,9 +10,18 @@ struct PersonView: View {
     @AppStorage("relativesEvents") private var relativesEvents = true
     @State private var openEvent: EventRef?
     @State private var viewing: MediaRow?
+    @State private var detail: PersonDetail?
+    @State private var loaded = false
 
     var body: some View {
-        if let p = model.tree?.person(id: id) {
+        content.task(id: "\(id)#\(model.revision)") {
+            detail = model.tree?.person(id: id)
+            loaded = true
+        }
+    }
+
+    @ViewBuilder private var content: some View {
+        if let p = detail {
             List {
                 Section { header(p) }
                     .listRowBackground(Color.clear)
@@ -66,7 +75,7 @@ struct PersonView: View {
                     .presentationDetents([.medium, .large])
             }
             .fullScreenCover(item: $viewing) { m in ImageViewer(model: model, media: m) }
-        } else {
+        } else if loaded {
             ContentUnavailableView("Not Found", systemImage: "person.slash")
         }
     }
@@ -112,17 +121,19 @@ struct TimelineLabel: View {
     let row: TimelineRow
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Text(row.year).font(.footnote).foregroundStyle(.secondary).monospacedDigit()
+            Text(row.year).font(.footnote).foregroundStyle(Color.secondary).monospacedDigit()
                 .frame(width: 40, alignment: .leading)
             VStack(alignment: .leading, spacing: 2) {
-                Text(row.label).foregroundStyle(row.kind == .relative ? .secondary : .primary)
+                Text(row.label).foregroundStyle(row.kind == .relative ? Color.secondary : Color.primary)
                 let detail = [row.date, row.place].filter { !$0.isEmpty }.joined(separator: " · ")
                 if !detail.isEmpty {
-                    Text(detail).font(.footnote).foregroundStyle(.secondary).monospacedDigit()
+                    Text(detail).font(.footnote).foregroundStyle(Color.secondary).monospacedDigit()
                 }
             }
         }
-        .foregroundStyle(.primary)
+        // Buttons tint their label: concrete colours keep the row readable in both appearances.
+        .foregroundStyle(Color.primary)
+        .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
     }
 }
 
@@ -182,6 +193,8 @@ struct MediaStrip: View {
                 }
             }
         }
+        // Aligned with the list's content and section headers.
+        .contentMargins(.horizontal, 20, for: .scrollContent)
     }
 }
 

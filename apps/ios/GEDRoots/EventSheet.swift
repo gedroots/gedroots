@@ -7,10 +7,12 @@ struct EventSheet: View {
     let model: TreeModel
     let ref: EventRef
     @Environment(\.dismiss) private var dismiss
+    @State private var detail: EventDetail?
+    @State private var loaded = false
 
     var body: some View {
         NavigationStack {
-            if let e = model.tree?.event(event: ref) {
+            if let e = detail {
                 List {
                     Section {
                         if !e.date.isEmpty {
@@ -50,6 +52,8 @@ struct EventSheet: View {
                         Section("Note") { Text(note) }
                     }
                 }
+                .listSectionSpacing(.compact)
+                .contentMargins(.top, 8, for: .scrollContent)
                 .navigationTitle(e.title)
                 .navigationBarTitleDisplayMode(.inline)
                 .navigationDestination(for: String.self) { id in PersonView(model: model, id: id) }
@@ -58,11 +62,15 @@ struct EventSheet: View {
                         Button("Done") { dismiss() }
                     }
                 }
-            } else {
+            } else if loaded {
                 ContentUnavailableView("Not Found", systemImage: "calendar.badge.exclamationmark")
             }
         }
         .tint(Theme.accent)
+        .task(id: "\(ref.id)#\(model.revision)") {
+            detail = model.tree?.event(event: ref)
+            loaded = true
+        }
     }
 
     private func people(_ rows: [PersonRow]) -> some View {
@@ -89,8 +97,10 @@ struct PlaceRow: View {
                 Map(initialPosition: .region(MKCoordinateRegion(
                     center: pin, span: MKCoordinateSpan(latitudeDelta: 0.2, longitudeDelta: 0.2)))
                 ) {
-                    Marker(place.short, coordinate: pin).tint(Theme.accent)
+                    // The map names the town already: the pin goes without a title.
+                    Marker(place.short, coordinate: pin).tint(Theme.accent).annotationTitles(.hidden)
                 }
+                .mapStyle(.standard(pointsOfInterest: .excludingAll))
                 .frame(width: 72, height: 52)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
                 .allowsHitTesting(false)

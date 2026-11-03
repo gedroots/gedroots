@@ -12,6 +12,8 @@ final class TreeModel {
     var people: [PersonRow] = []
     var places: [PlacePin] = []
     var sources: [SourceRow] = []
+    /// Changes each time a tree is opened: views key their cached view models on it.
+    var revision = 0
     var pairing = false
     var syncing = false
     var lastSync: Date? = UserDefaults.standard.object(forKey: "lastSync") as? Date
@@ -87,6 +89,7 @@ final class TreeModel {
         people = tree?.individuals() ?? []
         places = tree?.places() ?? []
         sources = tree?.sources() ?? []
+        revision += 1
     }
 }
 
