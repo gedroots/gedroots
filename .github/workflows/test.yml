@@ -3,17 +3,10 @@ name: Test
 # Tools and commands come from mise.toml (and mise.lock): the workflow runs the same task as a
 # local machine (`mise run ci`). The installers are built by the Release workflow.
 
-# Pull requests are tested before they merge, so main is not tested again on every merge. It only
-# runs when the crates or the toolchain change: that run saves the cache pull requests restore
-# (a pull request can only read caches saved on main). Weekly, so the cache is never evicted.
+# Pull requests are tested before they merge, so main is never tested again after a merge. The
+# weekly run on main saves the cache that pull requests restore (a pull request can only read
+# caches saved on main) and keeps it from being evicted; it can also be run by hand.
 on:
-  push:
-    branches: [main]
-    paths:
-      - Cargo.lock
-      - mise.lock
-      - mise.toml
-      - .github/workflows/test.yml
   pull_request:
   schedule:
     - cron: "0 4 * * 1"
