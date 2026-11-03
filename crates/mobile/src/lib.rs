@@ -270,6 +270,31 @@ pub struct FamilyView {
     pub unions: Vec<UnionRow>,
 }
 
+/// A place of the file that has coordinates, for the map.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct PlacePin {
+    /// Full name, as in the file: the key for [`Tree::place_events`].
+    pub name: String,
+    pub short: String,
+    pub latitude: f64,
+    pub longitude: f64,
+    /// Events that took place there.
+    pub events: u32,
+    /// Did the root person or one of their ancestors live an event there?
+    pub ancestors: bool,
+}
+
+/// An event at a place, for the place's sheet.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct PlaceEvent {
+    pub title: String,
+    pub date: String,
+    pub year: String,
+    /// The individual, or the spouses of a union.
+    pub people: Vec<PersonRow>,
+    pub event: EventRef,
+}
+
 /// A received tree, read-only.
 #[derive(uniffi::Object)]
 pub struct Tree {
@@ -347,6 +372,21 @@ impl Tree {
         file.map(|f| self.dir.join(gedcom::gedzip::unescape(f.trim())))
             .filter(|p| p.is_file())
             .map(|p| p.display().to_string())
+    }
+
+    /// Every event of individuals and families, with its record and position.
+    fn all_events(&self) -> impl Iterator<Item = (&str, usize, gedcom::Event<'_>)> {
+        self.ged
+            .records_of(RecordKind::Individual)
+            .chain(self.ged.records_of(RecordKind::Family))
+            .filter_map(|r| r.xref.as_deref().map(|x| (x, r)))
+            .flat_map(|(x, r)| {
+                r.children
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, n)| gedcom::event_label(&n.tag).is_some())
+                    .map(move |(i, n)| (x, i, gedcom::Event { node: n }))
+            })
     }
 
     fn unions(&self, id: &str) -> Vec<UnionRow> {
@@ -476,6 +516,51 @@ impl Tree {
             more_ancestors: up[8..16].iter().any(Option::is_some),
             unions: self.unions(&id),
         })
+    }
+
+    /// Places that have coordinates, for the map.
+    pub fn places(&self) -> Vec<PlacePin> {
+        let mut counts: HashMap<String, (u32, bool)> = HashMap::new();
+        for (owner, _, e) in self.all_events() {
+            if let Some(p) = e.place() {
+                let c = counts.entry(p.to_string()).or_default();
+                c.0 += 1;
+                c.1 |= self.ged.event_principals(owner).iter().any(|x| self.sosa.contains_key(x));
+            }
+        }
+        self.ged
+            .places()
+            .into_iter()
+            .filter_map(|p| {
+                let latitude = p.latitude.as_deref().and_then(gedcom::geo::parse_latitude)?;
+                let longitude = p.longitude.as_deref().and_then(gedcom::geo::parse_longitude)?;
+                let (events, ancestors) = counts.get(&p.name).copied().unwrap_or_default();
+                Some(PlacePin { short: p.short(), name: p.name, latitude, longitude, events, ancestors })
+            })
+            .collect()
+    }
+
+    /// Events at the place `name` (its full name), sorted by date.
+    pub fn place_events(&self, name: String) -> Vec<PlaceEvent> {
+        let mut out: Vec<((i32, u8, u8), PlaceEvent)> = self
+            .all_events()
+            .filter(|(_, _, e)| e.place() == Some(name.as_str()))
+            .filter_map(|(owner, index, e)| {
+                let date = e.date();
+                Some((
+                    date.as_ref().map(|d| d.sort_key()).unwrap_or((i32::MAX, 0, 0)),
+                    PlaceEvent {
+                        title: self.ged.event_title(owner, index)?,
+                        year: date.as_ref().and_then(|d| d.year()).map(|y| y.to_string()).unwrap_or_default(),
+                        date: date.map(|d| d.display()).unwrap_or_default(),
+                        people: self.ged.event_principals(owner).iter().filter_map(|x| self.row_of(x)).collect(),
+                        event: EventRef { owner: owner.to_string(), index: index as u32 },
+                    },
+                ))
+            })
+            .collect();
+        out.sort_by_key(|(k, _)| *k);
+        out.into_iter().map(|(_, e)| e).collect()
     }
 
     /// An event, opened from a timeline row.
@@ -661,6 +746,18 @@ mod tests {
         assert!(f.unions.is_empty());
         let louis = t.family("I2".into()).unwrap();
         assert_eq!(louis.unions[0].children[0].id, "I1");
+    }
+
+    #[test]
+    fn places_with_coordinates_and_their_events() {
+        let t = tree();
+        let pins = t.places();
+        assert_eq!(pins.len(), 1, "only Saint-Lô has coordinates");
+        assert_eq!((pins[0].events, pins[0].ancestors), (2, true));
+        let events = t.place_events(pins[0].name.clone());
+        assert_eq!(events.iter().map(|e| e.year.as_str()).collect::<Vec<_>>(), ["1868", "1902"]);
+        assert_eq!(events[0].people[0].id, "I2");
+        assert!(t.event(events[1].event.clone()).is_some());
     }
 
     #[test]

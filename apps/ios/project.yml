@@ -31,6 +31,7 @@ targets:
         UILaunchScreen: {}
         NSCameraUsageDescription: "Scan the pairing code shown by GEDRoots on your computer."
         NSLocalNetworkUsageDescription: "Receive your tree directly from GEDRoots on your computer."
+        NSLocationWhenInUseUsageDescription: "Show where you are among the places of your tree."
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
     settings:
       base:

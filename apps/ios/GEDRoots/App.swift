@@ -20,6 +20,8 @@ struct GEDRootsApp: App {
                             .tabItem { Label("Tree", systemImage: "point.3.connected.trianglepath.dotted") }
                         PeopleView(model: model)
                             .tabItem { Label("People", systemImage: "person.2") }
+                        PlacesView(model: model)
+                            .tabItem { Label("Places", systemImage: "mappin.and.ellipse") }
                     }
                     .tint(Theme.accent)
                 }

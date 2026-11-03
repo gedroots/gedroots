@@ -10,6 +10,7 @@ final class TreeModel {
     var desktop: String? = UserDefaults.standard.string(forKey: "desktop")
     var tree: Tree?
     var people: [PersonRow] = []
+    var places: [PlacePin] = []
     var pairing = false
     var syncing = false
     var lastSync: Date? = UserDefaults.standard.object(forKey: "lastSync") as? Date
@@ -83,6 +84,7 @@ final class TreeModel {
         guard FileManager.default.fileExists(atPath: dir + "/gedcom.ged") else { return }
         tree = try? Tree.open(treeDir: dir)
         people = tree?.individuals() ?? []
+        places = tree?.places() ?? []
     }
 }
 
