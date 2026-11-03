@@ -47,40 +47,26 @@ struct MediaView: View {
     }
 }
 
-/// Full-screen image on the dark viewer background (design.md › Large images): pinch to zoom,
-/// double tap to switch between the fitted image and twice its size, drag once zoomed; the records
-/// it is linked to below.
+/// Full-screen image on the dark viewer background (design.md › Large images), zoomed natively:
+/// pinch, double tap, pan. The people identified on it are framed with their names, and the
+/// records it is linked to are listed below; a tap opens them.
 struct ImageViewer: View {
     let model: TreeModel
     let media: MediaRow
     @Environment(\.dismiss) private var dismiss
-    @State private var scale: CGFloat = 1
-    @State private var lastScale: CGFloat = 1
-    @State private var offset: CGSize = .zero
-    @State private var lastOffset: CGSize = .zero
-    /// Decoded once: scans are large, and zooming redraws the view on every frame.
+    /// Decoded once, off the main thread: scans are large.
     @State private var image: UIImage?
+    @State private var faces: [FaceBox] = []
     @State private var linked: [MediaLink] = []
     @State private var loaded = false
+    @State private var stack = NavigationPath()
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $stack) {
             ZStack {
                 Theme.viewer.ignoresSafeArea()
                 if let image {
-                    Image(uiImage: image)
-                        .resizable().scaledToFit()
-                        .scaleEffect(scale)
-                        .offset(offset)
-                        .gesture(zoom.simultaneously(with: pan))
-                        .onTapGesture(count: 2) {
-                            withAnimation(.snappy(duration: 0.2)) {
-                                scale = scale > 1 ? 1 : 2
-                                lastScale = scale
-                                offset = .zero
-                                lastOffset = .zero
-                            }
-                        }
+                    ZoomableImage(image: image, faces: faces, open: { stack.append($0) })
                         .accessibilityLabel(media.title)
                 } else if loaded {
                     ContentUnavailableView("Image Not Received", systemImage: "photo")
@@ -88,9 +74,11 @@ struct ImageViewer: View {
                 }
             }
             .safeAreaInset(edge: .bottom) { links }
+            .environment(\.colorScheme, .dark)
             .navigationTitle(media.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(Theme.viewer, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -102,45 +90,58 @@ struct ImageViewer: View {
                     }
                 }
             }
+            .navigationDestination(for: String.self) { id in PersonView(model: model, id: id) }
+            .navigationDestination(for: SourceLink.self) { link in SourceView(model: model, id: link.id) }
         }
-        .preferredColorScheme(.dark)
-        .task {
-            linked = model.tree?.mediaLinks(id: media.id) ?? []
-            let path = media.path
-            image = await Task.detached { path.flatMap(UIImage.init(contentsOfFile:)) }.value
+        .tint(Theme.accent)
+        .task { await load() }
+    }
+
+    private func load() async {
+        let links = model.tree?.mediaLinks(id: media.id) ?? []
+        linked = links
+        guard let path = media.path else {
             loaded = true
+            return
         }
-    }
-
-    private var zoom: some Gesture {
-        MagnifyGesture()
-            .onChanged { scale = max(1, min(8, lastScale * $0.magnification)) }
-            .onEnded { _ in
-                lastScale = scale
-                if scale == 1 { offset = .zero; lastOffset = .zero }
+        let decoded = await Task.detached { () -> (UIImage, [FaceBox])? in
+            guard let source = ImageFile.source(path), let size = ImageFile.size(source),
+                  let cg = ImageFile.decode(source, side: 4096)
+            else { return nil }
+            // The areas are in pixels of the file; the decoded image may be smaller.
+            let k = CGFloat(cg.width) / size.width
+            let faces = links.compactMap { l -> FaceBox? in
+                guard let id = l.person, let area = l.crop?.rect(in: size) else { return nil }
+                return FaceBox(id: id, name: l.title, rect: CGRect(x: area.minX * k, y: area.minY * k,
+                                                                    width: area.width * k, height: area.height * k))
             }
-    }
-
-    private var pan: some Gesture {
-        DragGesture()
-            .onChanged { v in
-                guard scale > 1 else { return }
-                offset = CGSize(width: lastOffset.width + v.translation.width, height: lastOffset.height + v.translation.height)
-            }
-            .onEnded { _ in lastOffset = offset }
+            return (UIImage(cgImage: cg), faces)
+        }.value
+        image = decoded?.0
+        faces = decoded?.1 ?? []
+        loaded = true
     }
 
     /// Records the image is linked to.
     @ViewBuilder private var links: some View {
-        let links = linked
-        if !links.isEmpty {
+        if !linked.isEmpty {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    ForEach(Array(links.enumerated()), id: \.offset) { _, l in
-                        Text(l.title).font(.subheadline)
-                            .padding(.horizontal, 14).frame(height: 36)
-                            .background(.black.opacity(0.72), in: Capsule())
-                            .overlay(Capsule().stroke(Color(UIColor(rgb: 0x3D3D3D))))
+                    ForEach(Array(linked.enumerated()), id: \.offset) { _, l in
+                        Button {
+                            if let id = l.person {
+                                stack.append(id)
+                            } else if let id = l.source {
+                                stack.append(SourceLink(id: id))
+                            }
+                        } label: {
+                            Text(l.title).font(.subheadline).foregroundStyle(.white)
+                                .padding(.horizontal, 14).frame(height: 36)
+                                .background(.black.opacity(0.72), in: Capsule())
+                                .overlay(Capsule().stroke(Color(UIColor(rgb: 0x3D3D3D))))
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(l.person == nil && l.source == nil)
                     }
                 }
                 .padding(.horizontal, 16)

@@ -190,6 +190,22 @@ pub struct SourceRow {
     pub detail: String,
 }
 
+/// Area of an image a link is about (`CROP`), in pixels of the image as displayed (EXIF
+/// orientation applied). Without a width or height, the area extends to the edge.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Record)]
+pub struct ImageCrop {
+    pub left: u32,
+    pub top: u32,
+    pub width: Option<u32>,
+    pub height: Option<u32>,
+}
+
+impl From<gedcom::Crop> for ImageCrop {
+    fn from(c: gedcom::Crop) -> Self {
+        Self { left: c.left, top: c.top, width: c.width, height: c.height }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct MediaRow {
     pub id: String,
@@ -197,6 +213,8 @@ pub struct MediaRow {
     /// Full path of the file on the device, when it was received.
     pub path: Option<String>,
     pub is_image: bool,
+    /// Area the record shows (a face in a group photo), for its thumbnail.
+    pub crop: Option<ImageCrop>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -217,6 +235,8 @@ pub struct PersonDetail {
     pub notes: Vec<String>,
     /// Full path of the portrait image, if any.
     pub portrait: Option<String>,
+    /// Area of the portrait image that shows the person.
+    pub portrait_crop: Option<ImageCrop>,
 }
 
 /// Person present at an event, with their role (“Witness”, “Father of the bride”).
@@ -261,6 +281,7 @@ pub struct EventDetail {
 pub struct FamilyView {
     pub person: PersonRow,
     pub portrait: Option<String>,
+    pub portrait_crop: Option<ImageCrop>,
     /// Father, mother (each may be unknown).
     pub parents: Vec<Option<PersonRow>>,
     /// Father's father, father's mother, mother's father, mother's mother.
@@ -330,6 +351,8 @@ pub struct MediaLink {
     pub person: Option<String>,
     /// Set when the record is a source.
     pub source: Option<String>,
+    /// Where the person is on the image, when they were identified on it.
+    pub crop: Option<ImageCrop>,
 }
 
 /// A place's jurisdictions without the postal and INSEE codes (“Troyes, Aube, Grand Est,
@@ -414,7 +437,8 @@ impl Tree {
         Some(SourceRow { id: xref.to_string(), title: s.title(), detail })
     }
 
-    fn media_rows<S: AsRef<str>>(&self, xrefs: &[S]) -> Vec<MediaRow> {
+    /// Media rows, each with the crop of `owner`'s link to it.
+    fn media_rows<S: AsRef<str>>(&self, xrefs: &[S], owner: Option<&str>) -> Vec<MediaRow> {
         let mut out: Vec<MediaRow> = Vec::new();
         for x in xrefs {
             let Some(m) = self.ged.get(x.as_ref()).filter(|n| n.tag == "OBJE").map(Media::new) else { continue };
@@ -426,6 +450,7 @@ impl Tree {
                 title: m.title(),
                 path: self.file_path(m.file()),
                 is_image: m.is_image(),
+                crop: owner.and_then(|o| self.ged.link_crop(o, m.xref())).map(ImageCrop::from),
             });
         }
         out
@@ -571,6 +596,7 @@ impl Tree {
             media_xrefs.insert(0, x);
         }
         let portrait = portrait_media.and_then(|m| self.file_path(m.file()));
+        let portrait_crop = portrait_media.and_then(|m| self.ged.link_crop(&id, m.xref())).map(ImageCrop::from);
         Some(PersonDetail {
             row: self.row(&ind),
             sex: ind.sex_label().into_owned(),
@@ -581,9 +607,10 @@ impl Tree {
             parents,
             unions,
             sources: ind.cited_sources().iter().filter_map(|s| self.source_row(s)).collect(),
-            media: self.media_rows(&media_xrefs),
+            media: self.media_rows(&media_xrefs, Some(&id)),
             notes: ind.notes(),
             portrait,
+            portrait_crop,
         })
     }
 
@@ -595,6 +622,7 @@ impl Tree {
         Some(FamilyView {
             person: self.row(&ind),
             portrait: self.ged.portrait(&id).and_then(|m| self.file_path(m.file())),
+            portrait_crop: self.ged.portrait(&id).and_then(|m| self.ged.link_crop(&id, m.xref())).map(ImageCrop::from),
             parents: (2..4).map(at).collect(),
             grandparents: (4..8).map(at).collect(),
             more_ancestors: up[8..16].iter().any(Option::is_some),
@@ -675,7 +703,7 @@ impl Tree {
             author: s.author(),
             publication: s.publication(),
             url: s.url().map(str::to_string),
-            media: self.media_rows(&s.media_xrefs()),
+            media: self.media_rows(&s.media_xrefs(), Some(&id)),
             acts: acts.into_iter().map(|(page, _, events)| SourceAct { page, events }).collect(),
         })
     }
@@ -692,11 +720,16 @@ impl Tree {
             })
             .filter_map(|r| r.xref.as_deref())
             .collect();
-        self.media_rows(&xrefs)
+        self.media_rows(&xrefs, None)
     }
 
     /// Records a media is linked to, for the viewer.
     pub fn media_links(&self, id: String) -> Vec<MediaLink> {
+        // Areas on the first page only: the viewer shows the media's first file.
+        let links = self.ged.media_links(&id);
+        let crop_of = |owner: &str| {
+            links.iter().find(|l| l.owner == owner && l.page == 1 && l.crop.is_some()).and_then(|l| l.crop)
+        };
         self.ged
             .referrers(&id)
             .into_iter()
@@ -706,6 +739,7 @@ impl Tree {
                     title: self.ged.record_label(x),
                     person: (r.tag == "INDI").then(|| x.to_string()),
                     source: (r.tag == "SOUR").then(|| x.to_string()),
+                    crop: (r.tag == "INDI").then(|| crop_of(x)).flatten().map(ImageCrop::from),
                 })
             })
             .collect()
@@ -754,7 +788,7 @@ impl Tree {
             principals: self.ged.event_principals(&event.owner).iter().filter_map(|x| self.row_of(x)).collect(),
             participants,
             citations,
-            media: self.media_rows(&e.media_xrefs()),
+            media: self.media_rows(&e.media_xrefs(), None),
             note: node.child("NOTE").map(|n| n.text()).filter(|t| !t.trim().is_empty()),
         })
     }
@@ -785,6 +819,11 @@ mod tests {
 4 LONG W1.0906
 1 OCCU Cultivateur
 1 OBJE @M2@
+2 CROP
+3 TOP 10
+3 LEFT 20
+3 WIDTH 30
+3 HEIGHT 40
 1 FAMS @F1@
 1 FAMC @F2@
 0 @I3@ INDI
@@ -938,6 +977,10 @@ mod tests {
         assert_eq!(ids(MediaKind::All).len(), 2);
         let links = t.media_links("M2".into());
         assert_eq!(links[0].person.as_deref(), Some("I2"));
+        let face = ImageCrop { left: 20, top: 10, width: Some(30), height: Some(40) };
+        assert_eq!(links[0].crop, Some(face));
+        assert_eq!(t.person("I2".into()).unwrap().media[0].crop, Some(face));
+        assert_eq!(t.media_links("M1".into())[0].crop, None);
         assert_eq!(t.media_links("M1".into())[0].source.as_deref(), Some("S1"));
     }
 

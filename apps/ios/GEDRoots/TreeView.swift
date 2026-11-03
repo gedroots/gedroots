@@ -64,7 +64,7 @@ struct FamilyChart: View {
             }
             Button { open(family.person.id) } label: {
                 HStack(spacing: 12) {
-                    Portrait(path: family.portrait, name: family.person.name, size: 56)
+                    Portrait(path: family.portrait, crop: family.portraitCrop, name: family.person.name, size: 56)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(family.person.name).font(.subheadline).fontWeight(.semibold)
                         detail(family.person)

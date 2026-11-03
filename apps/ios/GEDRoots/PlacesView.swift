@@ -1,3 +1,4 @@
+import CoreLocation
 import MapKit
 import SwiftUI
 
@@ -68,6 +69,7 @@ struct PlacesMap: UIViewRepresentable {
         map.showsCompass = false
         map.register(PlaceMarker.self, forAnnotationViewWithReuseIdentifier: MKMapViewDefaultAnnotationViewReuseIdentifier)
         map.register(GroupMarker.self, forAnnotationViewWithReuseIdentifier: MKMapViewDefaultClusterAnnotationViewReuseIdentifier)
+        context.coordinator.attach(map)
         let locate = MKUserTrackingButton(mapView: map)
         locate.translatesAutoresizingMaskIntoConstraints = false
         locate.backgroundColor = .systemBackground
@@ -99,9 +101,47 @@ struct PlacesMap: UIViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
 
-    final class Coordinator: NSObject, MKMapViewDelegate {
+    final class Coordinator: NSObject, MKMapViewDelegate, CLLocationManagerDelegate {
         var parent: PlacesMap
+        /// Asks for the permission the first time the location button is tapped: the map alone
+        /// never asks, and the button would wait for a location forever.
+        private let location = CLLocationManager()
+        private weak var map: MKMapView?
+
         init(parent: PlacesMap) { self.parent = parent }
+
+        func attach(_ map: MKMapView) {
+            self.map = map
+            location.delegate = self
+            map.showsUserLocation = Self.allowed(location.authorizationStatus)
+        }
+
+        private static func allowed(_ status: CLAuthorizationStatus) -> Bool {
+            status == .authorizedWhenInUse || status == .authorizedAlways
+        }
+
+        func mapView(_ map: MKMapView, didChange mode: MKUserTrackingMode, animated: Bool) {
+            guard mode != .none else { return }
+            switch location.authorizationStatus {
+            case .notDetermined: location.requestWhenInUseAuthorization()
+            case .denied, .restricted:
+                // Nothing to follow: the button goes back to rest instead of spinning.
+                map.setUserTrackingMode(.none, animated: false)
+                if let settings = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(settings)
+                }
+            default: map.showsUserLocation = true
+            }
+        }
+
+        func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+            guard let map else { return }
+            if Self.allowed(manager.authorizationStatus) {
+                map.showsUserLocation = true
+            } else if manager.authorizationStatus != .notDetermined {
+                map.setUserTrackingMode(.none, animated: false)
+            }
+        }
 
         func mapView(_ map: MKMapView, didSelect annotation: MKAnnotation) {
             if let group = annotation as? MKClusterAnnotation {
