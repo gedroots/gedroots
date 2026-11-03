@@ -37,6 +37,8 @@ jobs:
       - uses: jdx/mise-action@v5
         with:
           version: 2026.10.25
+          # Saved by main only, like the build outputs below.
+          cache_save: ${{ github.ref == 'refs/heads/main' }}
       # Downloaded crates and build outputs: they follow Cargo.lock. Only main saves them: a
       # pull request's copy could only be read by that pull request, and those copies filled the
       # repository's 10 GB, evicting main's cache.
