@@ -26,7 +26,7 @@ struct SourcesView: View {
             }
             .navigationTitle("Sources")
             .navigationDestination(for: SourceLink.self) { link in SourceView(model: model, id: link.id) }
-            .navigationDestination(for: String.self) { id in PersonView(model: model, id: id) }
+            .navigationDestination(for: PersonLink.self) { link in PersonView(model: model, id: link.id) }
             .refreshable { await model.syncIfPaired() }
             .toolbar { ToolbarItem(placement: .topBarTrailing) { MoreMenu(model: model) } }
         }
@@ -37,6 +37,15 @@ struct SourcesView: View {
 /// Navigation value of a source (people navigate with their bare identifier).
 struct SourceLink: Hashable {
     let id: String
+}
+
+/// A person pushed on a navigation stack. Each push is its own value: the same person twice on a
+/// stack (father → son → father) makes SwiftUI bounce between the two records.
+struct PersonLink: Hashable {
+    let id: String
+    private let push = UUID()
+
+    init(id: String) { self.id = id }
 }
 
 /// A source: title, repository and call number, web link, images, then the acts read in it, by

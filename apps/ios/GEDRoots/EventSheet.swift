@@ -27,7 +27,7 @@ struct EventSheet: View {
                     if !e.participants.isEmpty {
                         Section("Present") {
                             ForEach(e.participants, id: \.person.id) { p in
-                                NavigationLink(value: p.person.id) {
+                                NavigationLink(value: PersonLink(id: p.person.id)) {
                                     LabeledContent { Text(p.role) } label: { Text(p.person.name) }
                                 }
                             }
@@ -57,7 +57,7 @@ struct EventSheet: View {
                 .contentMargins(.top, 8, for: .scrollContent)
                 .navigationTitle(e.title)
                 .navigationBarTitleDisplayMode(.inline)
-                .navigationDestination(for: String.self) { id in PersonView(model: model, id: id) }
+                .navigationDestination(for: PersonLink.self) { link in PersonView(model: model, id: link.id) }
                 .toolbar {
                     ToolbarItem(placement: .topBarTrailing) {
                         Button("Done") { dismiss() }
@@ -78,7 +78,7 @@ struct EventSheet: View {
 
     private func people(_ rows: [PersonRow]) -> some View {
         ForEach(rows) { p in
-            NavigationLink(value: p.id) { PersonLabel(person: p) }
+            NavigationLink(value: PersonLink(id: p.id)) { PersonLabel(person: p) }
         }
     }
 }

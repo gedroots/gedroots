@@ -15,7 +15,7 @@ struct TreeView: View {
             Group {
                 if let f = family {
                     ScrollView {
-                        FamilyChart(family: f, center: center, open: { path.append($0) })
+                        FamilyChart(family: f, center: center, open: { path.append(PersonLink(id: $0)) })
                             .padding(16)
                     }
                     .refreshable { await model.syncIfPaired() }
@@ -29,7 +29,7 @@ struct TreeView: View {
             }
             .navigationTitle("Tree")
             .navigationBarTitleDisplayMode(.inline)
-            .navigationDestination(for: String.self) { id in PersonView(model: model, id: id) }
+            .navigationDestination(for: PersonLink.self) { link in PersonView(model: model, id: link.id) }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Root Person", systemImage: "house") { withAnimation { model.treeFocus = nil } }

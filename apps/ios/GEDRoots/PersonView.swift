@@ -127,7 +127,7 @@ struct PersonView: View {
 
     private func links(_ people: [PersonRow]) -> some View {
         ForEach(people) { person in
-            NavigationLink(value: person.id) { PersonLabel(person: person) }
+            NavigationLink(value: PersonLink(id: person.id)) { PersonLabel(person: person) }
                 .personMenu(model: model, id: person.id)
         }
     }

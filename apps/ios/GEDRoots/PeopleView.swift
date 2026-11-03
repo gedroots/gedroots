@@ -37,7 +37,7 @@ struct PeopleView: View {
                 ForEach(sections, id: \.0) { letter, people in
                     Section(letter) {
                         ForEach(people) { person in
-                            NavigationLink(value: person.id) { PersonLabel(person: person) }
+                            NavigationLink(value: PersonLink(id: person.id)) { PersonLabel(person: person) }
                                 .personMenu(model: model, id: person.id)
                         }
                     }
@@ -49,8 +49,8 @@ struct PeopleView: View {
             }
             .sectionIndex()
             .navigationTitle("People")
-            .navigationDestination(for: String.self) { id in
-                PersonView(model: model, id: id)
+            .navigationDestination(for: PersonLink.self) { link in
+                PersonView(model: model, id: link.id)
             }
             .overlay {
                 if model.tree != nil, results.isEmpty, !query.isEmpty { ContentUnavailableView.search }
@@ -74,7 +74,7 @@ struct PeopleView: View {
     private func openRequested() {
         guard model.tab == .people, let id = model.personToOpen else { return }
         model.personToOpen = nil
-        path = NavigationPath([id])
+        path = NavigationPath([PersonLink(id: id)])
     }
 }
 

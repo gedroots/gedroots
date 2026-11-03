@@ -78,7 +78,7 @@ struct ImageViewer: View {
             ZStack {
                 Theme.viewer.ignoresSafeArea()
                 if let image {
-                    ZoomableImage(image: image, faces: faces, open: { stack.append($0) })
+                    ZoomableImage(image: image, faces: faces, open: { stack.append(PersonLink(id: $0)) })
                         .accessibilityLabel(media.title)
                 } else if loaded {
                     ContentUnavailableView("Image Not Received", systemImage: "photo")
@@ -102,7 +102,7 @@ struct ImageViewer: View {
                     }
                 }
             }
-            .navigationDestination(for: String.self) { id in PersonView(model: model, id: id) }
+            .navigationDestination(for: PersonLink.self) { link in PersonView(model: model, id: link.id) }
             .navigationDestination(for: SourceLink.self) { link in SourceView(model: model, id: link.id) }
         }
         .tint(Theme.accent)
@@ -142,7 +142,7 @@ struct ImageViewer: View {
                     ForEach(Array(linked.enumerated()), id: \.offset) { _, l in
                         Button {
                             if let id = l.person {
-                                stack.append(id)
+                                stack.append(PersonLink(id: id))
                             } else if let id = l.source {
                                 stack.append(SourceLink(id: id))
                             }
