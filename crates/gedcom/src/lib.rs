@@ -10,7 +10,7 @@
 //! - [`gazetteer`]: creating places (splitting by format, localities, `EXID`);
 //! - [`search`]: search and filters on individuals;
 //! - [`relations`]: adding/linking/removing relatives, places and media;
-//! - [`research`]: records and search for AI agents (read only, living people hidden);
+//! - [`research`]: records and search for AI agents (read only);
 //! - [`atlas`]: the Atlas, country by country (which records were kept, access delays, ages);
 //! - [`leads`]: records to find (period, places, where to look); [`research_log`]: what was searched (`_GR_TASK`);
 //! - [`events`]: editing and deleting events;

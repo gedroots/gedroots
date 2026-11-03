@@ -17,7 +17,7 @@
 //!   detailed for France, generic elsewhere), each with the registers of the same place the file
 //!   already cites, so that the research starts from the archive the file already uses.
 //!
-//! Living people never get a lead. Labels are in English: they are read by agents; the interface
+//! Labels are in English: they are read by agents; the interface
 //! translates them from their stable identifiers ([`RecordType::id`]).
 
 use crate::analysis::span::Span;
@@ -722,7 +722,7 @@ impl<'g> Context<'g> {
     }
 
     fn person(&self, x: &str) -> PersonRef {
-        self.g.person_ref(x, self.this_year)
+        self.g.person_ref(x)
     }
 
     fn seen(&self, x: &str) -> &[Seen] {
@@ -874,8 +874,7 @@ fn label(r: &atlas::Record, goal: Goal) -> String {
 
 impl Gedcom {
     /// Leads of the people matching `focus` (search syntax: `sosa:1-63`, `place:troyes
-    /// born:<1850`…; empty: [`DEFAULT_FOCUS`]), sorted by Sosa number then name. Living people are
-    /// left out.
+    /// born:<1850`…; empty: [`DEFAULT_FOCUS`]), sorted by Sosa number then name.
     pub fn research_leads(&self, focus: &str, this_year: i32) -> Vec<Lead> {
         let focus = if focus.trim().is_empty() { DEFAULT_FOCUS } else { focus };
         let ctx = Context::new(self, this_year);
@@ -947,9 +946,6 @@ impl Gedcom {
     fn person_leads(&self, ctx: &Context, x: &str, families_done: &mut std::collections::HashSet<String>) -> Vec<Lead> {
         let mut out = Vec::new();
         let Some(ind) = self.individual(x) else { return out };
-        if self.is_living(x, ctx.this_year) {
-            return out;
-        }
         let sosa = ctx.sosa.get(x).copied();
         let events = ind.events();
         let pick = |tags: &[&str]| {
@@ -998,9 +994,6 @@ impl Gedcom {
             }
             let Some(fam) = self.family(f) else { continue };
             let spouse = [fam.husband(), fam.wife()].into_iter().flatten().find(|s| *s != x);
-            if spouse.is_some_and(|s| self.is_living(s, ctx.this_year)) {
-                continue;
-            }
             let fev = fam.events();
             let marr: Vec<_> = fev.iter().filter(|e| e.tag() == "MARR").collect();
             let found = marr.iter().find(|e| e.is_sourced()).or(marr.first()).copied();
@@ -1315,17 +1308,17 @@ impl Gedcom {
 }
 
 /// A lead whose record is already cited (so no longer computed), to show its research log.
-pub fn closed_lead(g: &Gedcom, xref: &str, goal: Goal, family: Option<&str>, this_year: i32) -> Lead {
+pub fn closed_lead(g: &Gedcom, xref: &str, goal: Goal, family: Option<&str>) -> Lead {
     let spouse = family
         .and_then(|f| g.family(f))
         .and_then(|fam| [fam.husband(), fam.wife()].into_iter().flatten().find(|s| *s != xref).map(str::to_string));
     Lead {
-        person: g.person_ref(xref, this_year),
+        person: g.person_ref(xref),
         goal,
         kind: LeadKind::Unsourced,
         sosa: g.sosa_numbers().get(xref).filter(|n| n.branch.is_empty()).map(|n| n.sosa),
         family_id: family.map(str::to_string),
-        spouse: spouse.map(|s| g.person_ref(&s, this_year)),
+        spouse: spouse.map(|s| g.person_ref(&s)),
         date: String::new(),
         place: String::new(),
         years: None,
