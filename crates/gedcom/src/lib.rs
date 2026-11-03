@@ -77,6 +77,7 @@ pub mod schema;
 pub mod search;
 pub mod settings;
 pub mod starter;
+pub mod versions;
 pub mod weblink;
 pub mod websearch;
 

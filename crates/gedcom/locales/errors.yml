@@ -132,6 +132,9 @@ error.web_no_pages:
 error.woman_not_father:
   en: "%{name} is a woman: she cannot be the father"
   fr: "%{name} est une femme : elle ne peut pas être le père"
+error.version_incomplete:
+  en: "This version is incomplete: %{count} records were not found in its history folder."
+  fr: "Cette version est incomplète : %{count} fiches sont introuvables dans son dossier d’historique."
 error.xref_used:
   en: "the identifier %{xref} is already used"
   fr: "l'identifiant %{xref} est déjà utilisé"
