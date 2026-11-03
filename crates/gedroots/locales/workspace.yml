@@ -15,6 +15,12 @@ ws.open_failed:
 ws.open_prompt:
   en: Open a GEDCOM File
   fr: Ouvrir un fichier GEDCOM
+ws.outside_kept:
+  en: "The file was changed outside GEDRoots. Your changes are kept; the other copy is in the version history."
+  fr: "Le fichier a été modifié hors de GEDRoots. Vos modifications sont gardées ; l’autre copie est dans l’historique des versions."
+ws.outside_reloaded:
+  en: "The file was changed outside GEDRoots and has been reloaded."
+  fr: "Le fichier a été modifié hors de GEDRoots et a été rechargé."
 ws.saved:
   en: "Saved to %{path}"
   fr: "Enregistré dans %{path}"
