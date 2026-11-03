@@ -26,6 +26,8 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          submodules: true
       - name: Rust toolchain in the mise folder
         run: echo "MISE_RUSTUP_HOME=$HOME/.local/share/mise/rustup" >> "$GITHUB_ENV"
       - uses: jdx/mise-action@v5
