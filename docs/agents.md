@@ -153,3 +153,10 @@ Fixes of the same kind are grouped into one To Review item, applied together. Th
 values in the tree and the proposed ones, the reason, the evidence and the GEDCOM diff; saving it
 is one undo step. Hiding keeps the reason as a `NOTE` under `_GR_IGNORE`, and a possible duplicate
 is hidden with `_GR_DISTINCT`. Filiations (parents, unions) cannot be changed this way.
+
+A possible duplicate can also be merged (`merge`). Its issue lists, under `merge`, the person
+kept, the person merged into it and the facts that contradict each other (`conflicts`: `NAME`,
+`BIRT`…). The agent gives, in `choices`, whose value to keep for each of them; a merge without a
+choice for every conflict, for two people the engine rules out (close relatives, lives too far
+apart), or without a reason, is refused. In To Review, **Compare and Merge…** opens the merge
+window with the agent's choices already ticked: the user checks them and merges there.
