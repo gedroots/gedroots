@@ -332,6 +332,13 @@ pub struct MediaLink {
     pub source: Option<String>,
 }
 
+/// A place's jurisdictions without the postal and INSEE codes (“Troyes, Aube, Grand Est,
+/// France”), as the line under its short name.
+fn place_without_codes(name: &str) -> String {
+    let is_code = |s: &&str| s.chars().all(|c| c.is_ascii_digit() || c == ' ');
+    name.split(',').map(str::trim).filter(|s| !s.is_empty() && !is_code(s)).collect::<Vec<_>>().join(", ")
+}
+
 /// Sort key of a date ([`gedcom::Date::sort_key`]).
 type SortKey = (i32, u8, u8);
 
@@ -343,6 +350,8 @@ pub struct Tree {
     sosa: HashMap<String, u64>,
     /// Media attached to a source record: scans of documents.
     source_media: std::collections::HashSet<String>,
+    /// Coordinates of the places that have some, by full name.
+    coords: HashMap<String, (f64, f64)>,
 }
 
 impl Tree {
@@ -353,7 +362,16 @@ impl Tree {
             .records_of(RecordKind::Source)
             .flat_map(|r| Source::new(r).media_xrefs().into_iter().map(str::to_string))
             .collect();
-        Self { ged, dir, sosa, source_media }
+        let coords = ged
+            .places()
+            .into_iter()
+            .filter_map(|p| {
+                let lat = p.latitude.as_deref().and_then(gedcom::geo::parse_latitude)?;
+                let lon = p.longitude.as_deref().and_then(gedcom::geo::parse_longitude)?;
+                Some((p.name, (lat, lon)))
+            })
+            .collect();
+        Self { ged, dir, sosa, source_media, coords }
     }
 
     fn row(&self, i: &gedcom::Individual) -> PersonRow {
@@ -598,8 +616,7 @@ impl Tree {
             .places()
             .into_iter()
             .filter_map(|p| {
-                let latitude = p.latitude.as_deref().and_then(gedcom::geo::parse_latitude)?;
-                let longitude = p.longitude.as_deref().and_then(gedcom::geo::parse_longitude)?;
+                let (latitude, longitude) = *self.coords.get(&p.name)?;
                 let (events, ancestors) = counts.get(&p.name).copied().unwrap_or_default();
                 Some(PlacePin { short: p.short(), name: p.name, latitude, longitude, events, ancestors })
             })
@@ -701,13 +718,12 @@ impl Tree {
         let e = gedcom::Event { node };
         let title = self.ged.event_title(&event.owner, index)?;
         let place = e.place().filter(|p| !p.trim().is_empty()).map(|name| {
-            let known = self.ged.places().into_iter().find(|p| p.name == name);
-            let coord = |v: Option<String>, parse: fn(&str) -> Option<f64>| v.as_deref().and_then(parse);
+            let coords = self.coords.get(name);
             PlaceRef {
-                name: gedcom::place_label(name),
+                name: place_without_codes(name),
                 short: gedcom::short_place(name),
-                latitude: known.as_ref().and_then(|p| coord(p.latitude.clone(), gedcom::geo::parse_latitude)),
-                longitude: known.as_ref().and_then(|p| coord(p.longitude.clone(), gedcom::geo::parse_longitude)),
+                latitude: coords.map(|c| c.0),
+                longitude: coords.map(|c| c.1),
             }
         });
         let participants = self
@@ -815,6 +831,14 @@ mod tests {
 
     fn tree() -> Tree {
         Tree::from_gedcom(Gedcom::parse(GED).unwrap(), std::env::temp_dir())
+    }
+
+    #[test]
+    fn places_lose_their_codes_and_titles_their_french_spacing() {
+        assert_eq!(place_without_codes("Troyes, 10000, Aube, Grand Est, France"), "Troyes, Aube, Grand Est, France");
+        assert_eq!(place_without_codes("Paris XII, 75112, Paris,, France"), "Paris XII, Paris, France");
+        // English titles use English typography, whatever the file's language.
+        assert_eq!(tree().ged.event_title("I2", 3).as_deref(), Some("Occupation: Cultivateur"));
     }
 
     #[test]
