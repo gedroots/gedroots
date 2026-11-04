@@ -58,7 +58,8 @@ fn change(g: &Gedcom, code: &str, action: Action, reason: &str) -> QualityChange
 #[test]
 fn an_edit_that_fixes_the_date_is_accepted_and_applied() {
     let g = ged();
-    let edit = Edit::SetEvent { record: "I1".into(), index: 3, date: Some("12 MAR 1869".into()), place: None };
+    let edit =
+        Edit::SetEvent { record: "I1".into(), index: 3, value: None, date: Some("12 MAR 1869".into()), place: None };
     let c = change(&g, "death_before_birth", Action::Edit(vec![edit]), "The act says 1869");
     assert!(c.check(&g, &rerun).unwrap().is_empty());
     let rows = c.rows(&g);
@@ -79,11 +80,11 @@ fn changes_that_do_not_fit_the_issue_are_refused() {
     let c = change(&g, "death_before_birth", Action::Edit(vec![sex]), "x");
     assert!(c.check(&g, &rerun).unwrap_err().contains("not allowed"));
     // Still before the birth.
-    let edit = Edit::SetEvent { record: "I1".into(), index: 3, date: Some("1770".into()), place: None };
+    let edit = Edit::SetEvent { record: "I1".into(), index: 3, value: None, date: Some("1770".into()), place: None };
     let c = change(&g, "death_before_birth", Action::Edit(vec![edit]), "x");
     assert!(c.check(&g, &rerun).unwrap_err().contains("still reports"));
     // Another person's record.
-    let edit = Edit::SetEvent { record: "I2".into(), index: 3, date: Some("1700".into()), place: None };
+    let edit = Edit::SetEvent { record: "I2".into(), index: 3, value: None, date: Some("1700".into()), place: None };
     let c = change(&g, "death_before_birth", Action::Edit(vec![edit]), "x");
     assert!(c.check(&g, &rerun).unwrap_err().contains("not one of the records"));
     // No automatic fix, no reason.
@@ -189,4 +190,45 @@ fn a_correction_without_an_issue_renames_a_person() {
     );
     let hide = QualityChange { action: Action::Hide, ..correction(vec![], evidence) };
     assert!(hide.check(&g, &rerun).unwrap_err().contains("only `edit`"));
+}
+
+#[test]
+fn a_correction_changes_and_adds_occupations() {
+    let g = Gedcom::parse(
+        "0 HEAD\n1 GEDC\n2 VERS 7.0\n0 @I1@ INDI\n1 NAME Jean /GUYOT/\n1 OCCU cultivateur\n2 DATE 1850\n0 TRLR\n",
+    )
+    .unwrap();
+    let evidence = Evidence { quote: "Jean Guyot, tisserand".into(), ..Default::default() };
+    let correction = |edits: Vec<Edit>| QualityChange {
+        issue: None,
+        issue_id: None,
+        action: Action::Edit(edits),
+        reason: "The 1852 census says weaver".into(),
+        evidence: evidence.clone(),
+    };
+    let set =
+        Edit::SetEvent { record: "I1".into(), index: 1, value: Some("tisserand".into()), date: None, place: None };
+    let add = Edit::AddEvent {
+        record: "I1".into(),
+        tag: "occu".into(),
+        value: "tisserand".into(),
+        date: "1852".into(),
+        place: String::new(),
+    };
+    let c = correction(vec![set, add]);
+    c.check(&g, &rerun).unwrap();
+    let rows = c.rows(&g);
+    assert!(rows[0].current.contains("cultivateur") && rows[0].proposed.contains("tisserand"), "{rows:?}");
+    let mut g2 = g.clone();
+    c.apply(&mut g2).unwrap();
+    let occu: Vec<_> = g2.get("I1").unwrap().children_with("OCCU").map(|n| n.val().to_string()).collect();
+    assert_eq!(occu, ["tisserand", "tisserand"]);
+    let bad = Edit::AddEvent {
+        record: "I1".into(),
+        tag: "XYZ".into(),
+        value: String::new(),
+        date: String::new(),
+        place: String::new(),
+    };
+    assert!(correction(vec![bad]).check(&g, &rerun).unwrap_err().contains("XYZ"));
 }

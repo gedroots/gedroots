@@ -27,12 +27,22 @@ use std::collections::HashMap;
 /// A typed edit of the records an issue is about.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Edit {
-    /// New date and/or place of an event (position `index` in the record).
+    /// New value (an occupation, a residence's description, a custom event's type), date and/or
+    /// place of an event (position `index` in the record).
     SetEvent {
         record: String,
         index: usize,
+        value: Option<String>,
         date: Option<String>,
         place: Option<String>,
+    },
+    /// A new event or attribute of a person or family (`OCCU` with its value, `RESI`, `BIRT`…).
+    AddEvent {
+        record: String,
+        tag: String,
+        value: String,
+        date: String,
+        place: String,
     },
     DeleteEvent {
         record: String,
@@ -89,6 +99,7 @@ impl Edit {
     pub fn name(&self) -> &'static str {
         match self {
             Edit::SetEvent { .. } => "set_event",
+            Edit::AddEvent { .. } => "add_event",
             Edit::DeleteEvent { .. } => "delete_event",
             Edit::SetSex { .. } => "set_sex",
             Edit::SetCoordinates { .. } => "set_coordinates",
@@ -104,9 +115,10 @@ impl Edit {
     /// The record the edit changes, when it names one.
     fn record(&self) -> Option<&str> {
         match self {
-            Edit::SetEvent { record, .. } | Edit::DeleteEvent { record, .. } | Edit::CiteSource { record, .. } => {
-                Some(record)
-            }
+            Edit::SetEvent { record, .. }
+            | Edit::AddEvent { record, .. }
+            | Edit::DeleteEvent { record, .. }
+            | Edit::CiteSource { record, .. } => Some(record),
             Edit::SetSex { person, .. } | Edit::SetName { person, .. } | Edit::AddName { person, .. } => Some(person),
             _ => None,
         }
@@ -167,7 +179,7 @@ pub struct ChangeRow {
 
 /// Edits a correction without an issue may make: those that name their record.
 pub const CORRECTIONS: &[&str] =
-    &["set_name", "add_name", "set_event", "delete_event", "set_sex", "cite_source", "set_coordinates"];
+    &["set_name", "add_name", "set_event", "add_event", "delete_event", "set_sex", "cite_source", "set_coordinates"];
 
 /// Edits each kind of issue allows. Changing a filiation (own ancestor) or a person's links stays
 /// with the user.
@@ -293,6 +305,9 @@ impl QualityChange {
             Edit::CiteSource { source, .. } if g.get(source).is_none_or(|n| n.tag != "SOUR") => Err(format!(
                 "no source {source} in the tree: cite an existing one (`search_sources`), or propose the act with `propose_act`"
             )),
+            Edit::AddEvent { tag, .. } if crate::model::event_label(&tag.trim().to_uppercase()).is_none() => {
+                Err(format!("`{tag}` is not an event or attribute GEDCOM knows (`OCCU`, `RESI`, `BIRT`…)"))
+            }
             Edit::SetName { person, index, given, surname } => {
                 let r = g.get(person).filter(|n| n.tag == "INDI").ok_or_else(|| format!("no person {person}"))?;
                 let names = r.children_with("NAME").count();
@@ -480,20 +495,29 @@ impl QualityChange {
     fn apply_edit(&self, g: &mut Gedcom, e: &Edit) -> Result<(), String> {
         let outdated = || -> String { t!("change.outdated").into() };
         match e {
-            Edit::SetEvent { record, index, date, place } => {
+            Edit::SetEvent { record, index, value, date, place } => {
                 let mut ev = g.read_event(record, *index).ok_or_else(|| format!("no event {index} in {record}"))?;
+                if let Some(v) = value {
+                    ev.detail = v.trim().to_string();
+                }
                 if let Some(d) = date {
-                    let parsed = Date::parse(d);
-                    if !d.trim().is_empty() && parsed.year().is_none() {
-                        return Err(format!("`{d}` is not a GEDCOM date (e.g. `12 MAR 1869`, `ABT 1850`)"));
-                    }
-                    ev.date = if d.trim().is_empty() { String::new() } else { parsed.to_gedcom() };
+                    ev.date = gedcom_date(d)?;
                     ev.date_phrase.clear();
                 }
                 if let Some(p) = place {
                     ev.place = g.known_place(p);
                 }
                 g.update_event(record, *index, &ev)
+            }
+            Edit::AddEvent { record, tag, value, date, place } => {
+                let ev = crate::NewEvent {
+                    tag: tag.trim().to_uppercase(),
+                    detail: value.trim().to_string(),
+                    date: gedcom_date(date)?,
+                    place: if place.trim().is_empty() { String::new() } else { g.known_place(place) },
+                    ..Default::default()
+                };
+                g.add_event(record, &ev)
             }
             Edit::DeleteEvent { record, index } => g.delete_event(record, *index).map(|_| ()),
             Edit::SetSex { person, sex } => {
@@ -696,24 +720,28 @@ impl QualityChange {
             Action::Edit(edits) => edits
                 .iter()
                 .map(|e| match e {
-                    Edit::SetEvent { record, index, date, place } => {
+                    Edit::SetEvent { record, index, value, date, place } => {
                         let label = g.event_title(record, *index).unwrap_or_default();
                         let ev = g.read_event(record, *index).unwrap_or_default();
-                        let show = |d: &str, p: &str| {
-                            let d = if d.trim().is_empty() { String::new() } else { Date::parse(d).display() };
-                            [d, crate::short_place(p)]
-                                .into_iter()
-                                .filter(|s| !s.is_empty())
-                                .collect::<Vec<_>>()
-                                .join(", ")
-                        };
+                        let new_value = value.as_deref().map(str::trim).unwrap_or(&ev.detail).to_string();
                         let new_date = date.as_deref().map(|d| Date::parse(d).to_gedcom()).unwrap_or(ev.date.clone());
                         let new_place = place.as_deref().map(|p| g.known_place(p)).unwrap_or(ev.place.clone());
                         row(
                             label,
-                            or_dash(show(&ev.date, &ev.place)),
-                            or_dash(show(&new_date, &new_place)),
+                            or_dash(event_text(&ev.detail, &ev.date, &ev.place)),
+                            or_dash(event_text(&new_value, &new_date, &new_place)),
                             Change::Differs,
+                        )
+                    }
+                    Edit::AddEvent { tag, value, date, place, .. } => {
+                        let label = crate::model::event_label(&tag.trim().to_uppercase())
+                            .map(|l| l.to_string())
+                            .unwrap_or_else(|| tag.clone());
+                        row(
+                            label,
+                            "—".into(),
+                            or_dash(event_text(value, &Date::parse(date).to_gedcom(), place)),
+                            Change::Added,
                         )
                     }
                     Edit::DeleteEvent { record, index } => {
@@ -826,6 +854,28 @@ impl QualityChange {
         }
         Ok(out)
     }
+}
+
+/// A GEDCOM date as typed by the agent, checked; empty stays empty.
+fn gedcom_date(d: &str) -> Result<String, String> {
+    if d.trim().is_empty() {
+        return Ok(String::new());
+    }
+    let parsed = Date::parse(d);
+    if parsed.year().is_none() {
+        return Err(format!("`{d}` is not a GEDCOM date (e.g. `12 MAR 1869`, `ABT 1850`)"));
+    }
+    Ok(parsed.to_gedcom())
+}
+
+/// “tisserand, 3 mars 1850, Agneaux”: an event's value, date and place, as displayed.
+fn event_text(value: &str, date: &str, place: &str) -> String {
+    let d = if date.trim().is_empty() { String::new() } else { Date::parse(date).display() };
+    [value.trim().to_string(), d, crate::short_place(place)]
+        .into_iter()
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// “Given SURNAME”, as the tree shows a name.
