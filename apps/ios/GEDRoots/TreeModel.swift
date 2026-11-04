@@ -141,6 +141,12 @@ final class TreeModel {
         }
     }
 
+    /// Add a Tree…: a fresh pairing, without the shown tree's last error.
+    func startAdding() {
+        error = nil
+        adding = true
+    }
+
     /// Shows another tree.
     func select(_ id: String) {
         guard trees.contains(where: { $0.id == id }) else { return }

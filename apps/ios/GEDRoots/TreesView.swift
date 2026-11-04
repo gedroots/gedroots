@@ -23,7 +23,7 @@ struct TreeCommands: View {
     let model: TreeModel
 
     var body: some View {
-        Button("Add a Tree…", systemImage: "qrcode.viewfinder") { model.adding = true }
+        Button("Add a Tree…", systemImage: "qrcode.viewfinder") { model.startAdding() }
         Button("Manage Trees…", systemImage: "list.bullet") { model.managing = true }
     }
 }
@@ -78,7 +78,7 @@ struct ManageTreesView: View {
                 Section {
                     Button("Add a Tree…", systemImage: "qrcode.viewfinder") {
                         dismiss()
-                        model.adding = true
+                        model.startAdding()
                     }
                 }
             }
