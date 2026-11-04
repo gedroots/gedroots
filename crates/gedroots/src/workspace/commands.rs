@@ -166,9 +166,6 @@ impl Workspace {
         // Individuals and places: the record is the right panel, not a tab.
         let d =
             d.when(!self.view.has_panel(), |d| on!(d, cx, ShowForm, |this, w, cx| this.show_tab(CenterTab::Form, cx)));
-        let d = on!(d, cx, ShowUnreferencedFiles, |this, w, cx| {
-            this.open_quality(gedcom::quality::Category::Files, w, cx)
-        });
 
         d.when(self.history.can_back(), |d| on!(d, cx, GoBack, |this, w, cx| this.go_back(w, cx)))
             .when(self.history.can_forward(), |d| on!(d, cx, GoForward, |this, w, cx| this.go_forward(w, cx)))

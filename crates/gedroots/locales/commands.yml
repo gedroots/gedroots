@@ -325,9 +325,6 @@ cmd:
   tag_person:
     en: Tag a Person in the Photo
     fr: Identifier une personne sur la photo
-  unreferenced_files:
-    en: Files to Attach
-    fr: Fichiers à rattacher
   # View
   back:
     en: Back

@@ -181,12 +181,6 @@ impl Workspace {
         );
     }
 
-    /// Opens the Quality page on a category (Media › Files to Attach).
-    pub(super) fn open_quality(&mut self, cat: Category, window: &mut Window, cx: &mut Context<Self>) {
-        self.open_location(View::Quality, Some(cat.id().to_string()), window, cx);
-        cx.notify();
-    }
-
     pub(super) fn toggle_ignored_issues(&mut self, cx: &mut Context<Self>) {
         self.quality.show_ignored = !self.quality.show_ignored;
         self.build_rows(cx);

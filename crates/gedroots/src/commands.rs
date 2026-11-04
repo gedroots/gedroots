@@ -85,7 +85,6 @@ actions!(
         NewMedia,
         AttachMediaTo,
         TagPerson,
-        ShowUnreferencedFiles,
         AddPages,
         PreviousPage,
         NextPage,
@@ -595,7 +594,6 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
             a(label::merge_selected_media(), MergeSelectedMedia),
             Sep,
             a(t!("cmd.rename_media_files"), RenameMediaFiles),
-            a(t!("cmd.unreferenced_files"), ShowUnreferencedFiles),
         ],
     ));
     menus.push((
@@ -634,15 +632,6 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
             Sub(
                 t!("menu.filter_list").into(),
                 vec![
-                    a(t!("cmd.filter_men"), FilterMen),
-                    a(t!("cmd.filter_women"), FilterWomen),
-                    a(t!("cmd.filter_ancestors"), FilterAncestors),
-                    a(t!("cmd.filter_unsourced"), FilterUnsourced),
-                    a(t!("cmd.filter_no_parents"), FilterNoParents),
-                    a(t!("cmd.filter_no_date"), FilterNoDate),
-                    a(t!("cmd.filter_no_marriage"), FilterNoMarriage),
-                    a(t!("cmd.filter_with_media"), FilterWithMedia),
-                    Sep,
                     a(t!("cmd.flagged_only"), ToggleFlagged),
                     a(t!("cmd.ignored_issues"), ToggleIgnoredIssues),
                     a(label::clear_search(), ClearSearch),
@@ -755,7 +744,26 @@ fn palette_only() -> Vec<(SharedString, Vec<Item>)> {
                 a(label::add_pages(), AddPages),
             ],
         ),
-        (t!("menu.view").into(), vec![a(label::save_search(), SaveSearch)]),
+        (
+            t!("menu.view").into(),
+            vec![
+                a(label::save_search(), SaveSearch),
+                // The search field suggests these criteria, with their number of results.
+                Sub(
+                    t!("menu.filter_list").into(),
+                    vec![
+                        a(t!("cmd.filter_men"), FilterMen),
+                        a(t!("cmd.filter_women"), FilterWomen),
+                        a(t!("cmd.filter_ancestors"), FilterAncestors),
+                        a(t!("cmd.filter_unsourced"), FilterUnsourced),
+                        a(t!("cmd.filter_no_parents"), FilterNoParents),
+                        a(t!("cmd.filter_no_date"), FilterNoDate),
+                        a(t!("cmd.filter_no_marriage"), FilterNoMarriage),
+                        a(t!("cmd.filter_with_media"), FilterWithMedia),
+                    ],
+                ),
+            ],
+        ),
         (
             t!("menu.go").into(),
             vec![
