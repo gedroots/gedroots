@@ -494,6 +494,19 @@ pages are computed from the tree each time, so the book follows the changes. See
   - `_GR_GENS <n>`: generations, from 2 to 12; absent: 8;
   - `_GR_SIZE <size>`: page size, `170X240` (17 × 24 cm, a printed book), `A4` or `LETTER`;
     absent: `170X240`.
+  - `_GR_CHAP <n>`: what an AI agent wrote for chapter *n* (the generation, 1 = the person),
+    saved from To Review. Its substructures, in the order the book shows them:
+    - the chapter's introduction, as blocks;
+    - `_GR_INDI @<INDI>@`: a person's narrative, as blocks, in place of the sentences GEDRoots
+      writes from the facts.
+
+    A block is one of:
+    - `_GR_TEXT <text>` (with `CONT`): facts told as a narrative; `{I12}` stands for a person,
+      shown by name;
+    - `_GR_CTXT <title>`: historical context, with `_GR_TEXT` and one `_GR_CITE <source>` or more
+      (author and title), each with an optional `_GR_URL <url>`;
+    - `_GR_HYPO <text>` (with `CONT`): what the records do not say, with one `_GR_BASE <clue>` or
+      more.
 
 ```
 0 HEAD
@@ -508,6 +521,14 @@ pages are computed from the tree each time, so the book follows the changes. See
 1 _GR_LINE ANCESTORS
 1 _GR_GENS 8
 1 _GR_SIZE 170X240
+1 _GR_CHAP 3
+2 _GR_CTXT The phylloxera crisis
+3 _GR_TEXT From 1863, an aphid destroyed the vineyards of France…
+3 _GR_CITE Gilbert Garrier, Le Phylloxéra, une guerre de trente ans
+2 _GR_INDI @I6@
+3 _GR_TEXT {I6} is born in 1864 in Troyes, the son of a winegrower…
+3 _GR_HYPO He left the vines for the railway when the phylloxera reached the Aube.
+4 _GR_BASE occupation changes between 1888 and 1895
 ```
 
 Deleting the person leaves the book without a subject: it stays in the list, empty, until it is

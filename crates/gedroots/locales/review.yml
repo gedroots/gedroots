@@ -196,3 +196,45 @@ review:
   outdated:
     en: The tree changed since this change was proposed
     fr: L'arbre a changé depuis que cette correction a été proposée
+  # Chapters of a family book written by an agent (crates/gedroots/src/workspace/review_book.rs).
+  chapter_received:
+    one:
+      en: "An AI agent wrote a chapter of a book: it is waiting in To Review"
+      fr: "Un agent IA a écrit un chapitre d'un livre : il attend dans À relire"
+    other:
+      en: "An AI agent wrote a chapter of a book: %{n} proposals are waiting in To Review"
+      fr: "Un agent IA a écrit un chapitre d'un livre : %{n} propositions attendent dans À relire"
+  chapter_saved:
+    en: "Chapter saved in the book: %{title}"
+    fr: "Chapitre enregistré dans le livre : %{title}"
+  chapter_meta:
+    en: "%{book} · %{blocks}"
+    fr: "%{book} · %{blocks}"
+  blocks:
+    one:
+      en: 1 block
+      fr: 1 bloc
+    other:
+      en: "%{n} blocks"
+      fr: "%{n} blocs"
+  intro:
+    en: Introduction
+    fr: Introduction
+  context:
+    en: Context
+    fr: Contexte
+  hypothesis:
+    en: Hypothesis
+    fr: Hypothèse
+  basis:
+    en: "Based on: %{list}"
+    fr: "Indices : %{list}"
+  levels_note:
+    en: Untick the context and hypotheses to leave out of the book.
+    fr: Décochez le contexte et les hypothèses à laisser hors du livre.
+  save_chapter:
+    en: Save to Book
+    fr: Enregistrer dans le livre
+  book_gone:
+    en: The book of this chapter was deleted
+    fr: Le livre de ce chapitre a été supprimé

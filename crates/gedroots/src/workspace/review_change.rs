@@ -72,7 +72,9 @@ impl Workspace {
 
     /// Proposals waiting: acts and changes.
     pub(super) fn review_count(&self) -> usize {
-        self.review.items.len() + self.review.changes.iter().map(|g| g.items.len()).sum::<usize>()
+        self.review.items.len()
+            + self.review.changes.iter().map(|g| g.items.len()).sum::<usize>()
+            + self.review.chapters.len()
     }
 
     /// Is a change waiting for this issue?
@@ -145,7 +147,7 @@ impl Workspace {
 
     pub(super) fn take_change(&mut self, i: usize) -> ChangeGroup {
         let group = self.review.changes.remove(i);
-        let total = self.review.items.len() + self.review.changes.len();
+        let total = self.review.total();
         self.review.sel = self.review.sel.min(total.saturating_sub(1));
         if total == 0 {
             self.review.open = false;

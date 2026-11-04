@@ -250,6 +250,18 @@ book.occupations:
 book.index:
   en: Index of names
   fr: Index des noms
+book.context:
+  en: Context
+  fr: Contexte
+book.hypothesis:
+  en: Hypothesis
+  fr: Hypothèse
+book.basis:
+  en: "Based on:"
+  fr: "Indices :"
+book.levels:
+  en: The shaded boxes give the historical context, with their sources. The passages marked “Hypothesis” suggest what the records do not say, with the clues they rest on.
+  fr: Les encadrés teintés donnent le contexte historique, avec leurs sources. Les passages marqués « Hypothèse » proposent ce que les actes ne disent pas, avec les indices sur lesquels ils reposent.
 book.index_note:
   en: Numbers refer to pages
   fr: Les nombres renvoient aux pages

@@ -72,6 +72,7 @@
   #show outline.entry.where(level: 1): it => block(above: 4.5mm, text(size: 11pt, it))
   #outline(title: none, depth: 1, indent: 0mm)
   #v(1fr)
+  #if data.levels { block(width: 80%, small(L.levels)); v(4mm) }
   #line(length: 30mm, stroke: 0.5pt + rule)
   #v(2mm)
   #small(data.colophon)
@@ -109,6 +110,31 @@
   #v(4mm)
   #image("lifespans.svg", width: 100%)
 ]
+
+// --- What an agent wrote: text, context (with sources), hypotheses (with their clues) ------
+#let ochre = rgb("#C9A35B")
+#let written(blocks) = for b in blocks {
+  if b.kind == "text" {
+    for p in b.paragraphs [#par(p)]
+  } else if b.kind == "context" {
+    block(width: 100%, fill: paper2, inset: (x: 4mm, y: 3mm), stroke: (left: 2pt + ochre), above: 4mm, below: 4mm, breakable: true)[
+      #kicker(L.context)
+      #v(0.5mm)
+      #text(weight: 600, b.title)
+      #v(0.5mm)
+      #for p in b.paragraphs [#par(p)]
+      #small[#b.notes.join("\n")]
+    ]
+  } else {
+    block(width: 100%, inset: (left: 4mm, y: 1mm), stroke: (left: (paint: violet, thickness: 1pt, dash: "dashed")), above: 4mm, below: 4mm, breakable: true)[
+      #text(font: sans, size: 7pt, weight: 600, fill: violet, tracking: 0.12em, upper(L.hypothesis))
+      #v(0.5mm)
+      #set text(style: "italic")
+      #for p in b.paragraphs [#par(p)]
+      #small[#L.basis #b.notes.join(" · ")]
+    ]
+  }
+}
 
 // --- Records, one chapter per generation -------------------------------------------------
 #let strip(points) = {
@@ -151,6 +177,7 @@
   #grid(columns: (1fr, 34mm), column-gutter: 5mm,
     [
       #for p in s.paragraphs [#par(p)]
+      #written(s.blocks)
     ],
     [
       #if s.portrait != none { image(s.portrait, width: 100%); v(3mm) }
@@ -167,11 +194,13 @@
   #text(weight: 600, size: 10.5pt, s.name) #h(1mm) #text(font: sans, size: 7pt, fill: muted)[#s.number · #s.years]
   #v(-1mm)
   #s.paragraphs.join(" ")
+  #written(s.blocks)
 ]
 
 #for (i, ch) in data.chapters.enumerate() [
   = #ch.title
   #text(size: 10.5pt, style: "italic", fill: muted, ch.subtitle)
+  #if ch.intro.len() > 0 { v(4mm); written(ch.intro) }
   #for s in ch.full { full-sheet(s) }
   #for s in ch.short { short-sheet(s) }
   #if ch.rows.len() > 0 {

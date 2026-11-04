@@ -12,6 +12,7 @@ const FIND_RECORD: &str = include_str!("prompts/find_record.md");
 const READ_RECORD: &str = include_str!("prompts/read_record.md");
 const RESEARCH_SESSION: &str = include_str!("prompts/research_session.md");
 const REVIEW_QUALITY: &str = include_str!("prompts/review_quality.md");
+const WRITE_BOOK: &str = include_str!("prompts/write_book.md");
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct FindArgs {
@@ -45,6 +46,14 @@ pub struct QualityArgs {
     pub category: Option<String>,
     /// Person whose issues to settle (name), or nothing for the whole tree.
     pub person: Option<String>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct BookArgs {
+    /// Book to write (its title), or nothing for the tree's first book.
+    pub book: Option<String>,
+    /// Chapter to start with (generation number), or nothing for the first one.
+    pub chapter: Option<String>,
 }
 
 fn text(template: &str, target: String) -> Vec<PromptMessage> {
@@ -111,5 +120,21 @@ impl GedrootsMcp {
         .collect::<Vec<_>>()
         .join("\n");
         text(REVIEW_QUALITY, target)
+    }
+
+    #[prompt(
+        name = "write_book",
+        description = "Write the narratives, historical context and hypotheses of a family book of the tree open in GEDRoots, chapter by chapter, for review."
+    )]
+    async fn write_book(&self, Parameters(a): Parameters<BookArgs>) -> Vec<PromptMessage> {
+        let target = [
+            some(&a.book).map(|b| format!("Book: {b}.")),
+            some(&a.chapter).map(|c| format!("Start with chapter {c}.")),
+        ]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>()
+        .join("\n");
+        text(WRITE_BOOK, target)
     }
 }

@@ -2,6 +2,7 @@
 //! record for each person written from the facts, and an index.
 //!
 //! - [`spec`]: what a book is made of, stored in the `.ged` (`_GR_BOOK`);
+//! - [`writing`]: what an AI agent wrote in it (narratives, context, hypotheses);
 //! - [`content`]: the people, their records and the charts, computed from the tree;
 //! - [`prose`]: the simple sentences written from the facts;
 //! - [`charts`]: the charts, as SVG;
@@ -14,10 +15,12 @@ pub mod content;
 pub mod prose;
 pub mod render;
 pub mod spec;
+pub mod writing;
 
 pub use content::default_title;
 pub use render::Typeset;
 pub use spec::{BookSpec, Line, PageSize};
+pub use writing::{Block, Cite, Writing};
 
 use gedcom::document::Gedcom;
 use std::path::Path;
@@ -65,6 +68,42 @@ mod tests {
             let (w, h, px) = book.page_bgra(0, 100).expect("cover");
             assert_eq!(px.len(), (w * h * 4) as usize);
         }
+    }
+
+    #[test]
+    fn typesets_what_the_agent_wrote() {
+        let g = Gedcom::parse(TREE).expect("valid tree");
+        let mut spec = BookSpec::new("I1", "");
+        spec.chapters.insert(
+            2,
+            Writing {
+                intro: vec![Block::Context {
+                    title: "Champagne".into(),
+                    text: "Vineyards everywhere.".into(),
+                    sources: vec![Cite { title: "A book".into(), url: String::new() }],
+                }],
+                people: vec![(
+                    "I3".into(),
+                    vec![
+                        Block::Text("{I3} comes from Normandy.".into()),
+                        Block::Hypothesis { text: "She came to work.".into(), basis: vec!["born far away".into()] },
+                    ],
+                )],
+            },
+        );
+        let (data, _) = content::build(&g, &spec, "test.ged", None, (2026, String::new())).expect("data");
+        assert!(data.levels);
+        let ch = &data.chapters[1];
+        assert_eq!(ch.intro[0].kind, "context");
+        // Few facts, but written about: a short record instead of a line, the narrative instead of the sentences.
+        let marie = ch.short.iter().find(|s| s.key == "p-I3").expect("short record");
+        assert_eq!(marie.paragraphs, Vec::<String>::new());
+        assert_eq!(marie.blocks[0].paragraphs, vec!["Marie PRÉVOST comes from Normandy."]);
+        assert!(compose(&g, &spec, "test.ged", None, (2026, 11, 4)).is_ok());
+
+        let outline = content::outline(&g, &spec).expect("outline");
+        assert_eq!(outline.len(), 2);
+        assert_eq!(outline[1].people.iter().map(|p| p.xref.as_str()).collect::<Vec<_>>(), ["I2", "I3"]);
     }
 
     #[test]

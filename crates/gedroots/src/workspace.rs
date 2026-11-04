@@ -50,6 +50,7 @@ mod relatives;
 mod report;
 mod research;
 mod review;
+mod review_book;
 mod review_change;
 mod saved;
 mod settings;
