@@ -23,7 +23,6 @@ use crate::place_merge::{PlacePlan, RowKind as PlaceRow};
 use crate::proposal::{Change, DiffLine, line_diff};
 use crate::quality::{self, Category, issue_ids};
 use crate::relations::Relation;
-use rust_i18n::t;
 use std::collections::HashMap;
 
 /// A typed edit of the records an issue is about.

@@ -1,7 +1,7 @@
 //! Books (Create on the Books page): a PDF typeset from the tree by the `gedroots-book` crate,
 //! stored in the `.ged` as a `_GR_BOOK` record (who it starts from, which line, how many
 //! generations, the page size, for a printer or not). The Books page lists them and shows the
-//! selected one page by page, typeset in the background; File › Export…, on that page, writes it as
+//! selected one page by page, typeset in the background; its Export… button writes it as
 //! PDF: in volumes when it is longer than 500 pages, with each volume's cover for a printer.
 
 use super::relatives::PickPurpose;
@@ -399,7 +399,7 @@ impl Workspace {
     // Export
     // ------------------------------------------------------------------
 
-    /// File › Export… on the Books page: the selected book, as PDF.
+    /// The book's Export… button: the selected book, as PDF.
     pub(super) fn export_book(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(doc) = &self.doc else { return };
         let Some(spec) = self.selected_book() else { return };
@@ -542,20 +542,32 @@ impl Workspace {
             (None, Some(p), false) => crate::tn!("books.pages", p.book.page_count()).into(),
             (None, None, false) => SharedString::default(),
         };
-        let header = v_flex()
+        let header = h_flex()
             .px_6()
             .pt_4()
             .pb_3()
-            .gap_0p5()
+            .gap_4()
+            .items_center()
             .border_b_1()
             .border_color(theme::border())
             .bg(theme::bg())
-            .child(div().text_xl().font_weight(FontWeight::SEMIBOLD).child(self.book_title(&spec)))
-            .child(div().text_sm().text_color(theme::muted()).child(format!(
-                "{} · {} · {status}",
-                book_meta(g, &spec),
-                size_label(spec.size)
-            )));
+            .child(
+                v_flex()
+                    .flex_1()
+                    .min_w_0()
+                    .gap_0p5()
+                    .child(div().text_xl().font_weight(FontWeight::SEMIBOLD).child(self.book_title(&spec)))
+                    .child(div().text_sm().text_color(theme::muted()).child(format!(
+                        "{} · {} · {status}",
+                        book_meta(g, &spec),
+                        size_label(spec.size)
+                    ))),
+            )
+            .child(
+                Button::new("book-export")
+                    .label(t!("books.export"))
+                    .on_click(cx.listener(|this, _, w, cx| this.export_book(w, cx))),
+            );
         let body: AnyElement = match preview {
             Some(p) => self.render_pages(p, cx),
             None => div().flex_1().into_any_element(),

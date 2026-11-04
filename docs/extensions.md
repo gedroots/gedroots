@@ -502,7 +502,8 @@ Legacy and RootsMagic keep their to-do items in `_TODO`; GEDRoots does not read 
 
 A family book (Create on the Books page): a PDF typeset from the tree, with its charts, a record for each
 person written from the facts, and an index. A book longer than 500 pages is exported in volumes,
-cut between chapters. Only what the book is made of is stored; its
+cut between chapters. It is written in the tree's language (`HEAD.LANG`) when GEDRoots is
+translated into it, otherwise in the interface's. Only what the book is made of is stored; its
 pages are computed from the tree each time, so the book follows the changes. See
 `crates/book`.
 

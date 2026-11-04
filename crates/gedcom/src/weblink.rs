@@ -78,21 +78,21 @@ pub fn host(url: &str) -> &str {
 pub fn normalize_url(input: &str) -> Result<String, String> {
     let s = input.trim();
     if s.is_empty() {
-        return Err(rust_i18n::t!("error.web.empty").into());
+        return Err(t!("error.web.empty").into());
     }
     if s.chars().any(char::is_whitespace) {
-        return Err(rust_i18n::t!("error.web.space").into());
+        return Err(t!("error.web.space").into());
     }
     let url = if is_web_url(s) {
         s.to_string()
     } else if s.contains("://") {
-        return Err(rust_i18n::t!("error.web.scheme").into());
+        return Err(t!("error.web.scheme").into());
     } else {
         format!("https://{s}")
     };
     let h = host(&url);
     if h.is_empty() || !h.contains('.') && !h.starts_with("localhost") {
-        return Err(rust_i18n::t!("error.web.invalid").into());
+        return Err(t!("error.web.invalid").into());
     }
     Ok(url)
 }
@@ -169,21 +169,21 @@ impl Gedcom {
     /// Adds a web link: multimedia link (`OBJE`), or `WWW` for a repository.
     pub fn add_web_link(&mut self, record: &str, url: &str, title: &str) -> Result<(), String> {
         let url = normalize_url(url)?;
-        let tag = self.get(record).ok_or_else(|| rust_i18n::t!("error.record_not_found"))?.tag.clone();
+        let tag = self.get(record).ok_or_else(|| t!("error.record_not_found"))?.tag.clone();
         if tag == "REPO" {
             let n = self.get_mut(record).unwrap();
             if n.children_with("WWW").any(|w| w.val() == url) {
                 return Ok(());
             }
             if n.children_with("WWW").count() >= 3 {
-                return Err(rust_i18n::t!("error.web.repository_max").into());
+                return Err(t!("error.web.repository_max").into());
             }
             n.insert_child(Node::with_value("WWW", url));
             n.touch();
             return Ok(());
         }
         if !accepts_media(&tag) {
-            return Err(rust_i18n::t!("error.web.not_allowed").into());
+            return Err(t!("error.web.not_allowed").into());
         }
         let media = self.web_media_for(&url, title);
         let p = format!("@{media}@");
@@ -200,10 +200,7 @@ impl Gedcom {
         let url = normalize_url(url)?;
         match kind {
             WebLinkKind::Media(m) => {
-                let node = self
-                    .get_mut(m)
-                    .filter(|n| n.tag == "OBJE")
-                    .ok_or_else(|| rust_i18n::t!("error.media_not_found"))?;
+                let node = self.get_mut(m).filter(|n| n.tag == "OBJE").ok_or_else(|| t!("error.media_not_found"))?;
                 let f = node.ensure_child("FILE");
                 f.value = Some(url);
                 f.set_child_val("FORM", WEB_FORM);
@@ -212,13 +209,13 @@ impl Gedcom {
                 Ok(())
             }
             WebLinkKind::Www(i) => {
-                let n = self.get_mut(record).ok_or_else(|| rust_i18n::t!("error.record_not_found"))?;
+                let n = self.get_mut(record).ok_or_else(|| t!("error.record_not_found"))?;
                 let w = n
                     .children
                     .iter_mut()
                     .filter(|c| c.tag == "WWW")
                     .nth(*i)
-                    .ok_or_else(|| rust_i18n::t!("error.address_not_found"))?;
+                    .ok_or_else(|| t!("error.address_not_found"))?;
                 w.value = Some(url);
                 n.touch();
                 Ok(())

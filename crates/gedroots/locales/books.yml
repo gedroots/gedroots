@@ -97,6 +97,9 @@ books.typesetting:
 books.untitled_tree:
   en: an untitled tree
   fr: un arbre sans titre
+books.export:
+  en: Export…
+  fr: Exporter…
 books.export_title:
   en: Export Book
   fr: Exporter le livre

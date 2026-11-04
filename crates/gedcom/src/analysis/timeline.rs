@@ -36,9 +36,9 @@ pub struct Entry {
 macro_rules! pick {
     ($sex:expr, $key:literal, $name:expr) => {
         match $sex {
-            "M" => rust_i18n::t!(concat!($key, ".m"), name = $name),
-            "F" => rust_i18n::t!(concat!($key, ".f"), name = $name),
-            _ => rust_i18n::t!(concat!($key, ".u"), name = $name),
+            "M" => t!(concat!($key, ".m"), name = $name),
+            "F" => t!(concat!($key, ".f"), name = $name),
+            _ => t!(concat!($key, ".u"), name = $name),
         }
         .into_owned()
     };
@@ -86,7 +86,7 @@ pub fn timeline(g: &Gedcom, xref: &str) -> Vec<Entry> {
 
     for e in me.events() {
         let label = match e.value().filter(|v| !v.trim().is_empty() && *v != "Y") {
-            Some(v) => rust_i18n::t!("timeline.value", label = e.label(), value = v).into_owned(),
+            Some(v) => t!("timeline.value", label = e.label(), value = v).into_owned(),
             None => e.label(),
         };
         add(EntryKind::Own, label, xref, e.node, None);
@@ -137,7 +137,7 @@ pub fn timeline(g: &Gedcom, xref: &str) -> Vec<Entry> {
         let spouse = [fam.husband(), fam.wife()].into_iter().flatten().find(|x| *x != xref);
         for e in fam.events() {
             let label = match spouse {
-                Some(s) => rust_i18n::t!("timeline.with", event = e.label(), name = name(s)).into_owned(),
+                Some(s) => t!("timeline.with", event = e.label(), name = name(s)).into_owned(),
                 None => e.label(),
             };
             add(EntryKind::Family, label, f, e.node, spouse.map(str::to_string));

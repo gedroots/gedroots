@@ -307,7 +307,6 @@ impl std::fmt::Display for Reason {
 impl Reason {
     /// In the interface's language: « Naissance de son enfant Yvonne OHL en 1903 ».
     pub fn label(&self) -> String {
-        use rust_i18n::t;
         let lang = crate::i18n::language();
         let text = match self {
             Reason::Dated(goal, y) => match goal {

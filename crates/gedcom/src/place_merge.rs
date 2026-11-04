@@ -27,7 +27,6 @@ use crate::merge::Side;
 use crate::model::{Place, sort_key};
 use crate::node::Node;
 use crate::quality::{abbreviates, place_parts};
-use rust_i18n::t;
 use std::collections::HashMap;
 
 /// Coordinates closer than this (km) back a pair of similar names.
@@ -96,7 +95,7 @@ fn word_prefix(short: &[String], long: &[String]) -> bool {
 /// Distance in words, with a comma as decimal separator in French.
 fn km_text(d: f64) -> String {
     let s = format!("{d:.1}");
-    if rust_i18n::locale().starts_with("fr") { s.replace('.', ",") } else { s }
+    if crate::i18n::language().starts_with("fr") { s.replace('.', ",") } else { s }
 }
 
 impl Gedcom {

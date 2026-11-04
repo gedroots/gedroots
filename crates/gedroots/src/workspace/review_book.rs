@@ -63,7 +63,7 @@ impl Workspace {
         let spec = gedroots_book::spec::book(g, &item.req.book);
         let chapter = spec
             .as_ref()
-            .and_then(|s| gedroots_book::content::outline(g, s).ok())
+            .and_then(|s| gedroots_book::outline(g, s).ok())
             .and_then(|o| o.into_iter().find(|c| c.generation == item.req.generation))
             .map(|c| c.title)
             .unwrap_or_else(|| item.req.generation.to_string());

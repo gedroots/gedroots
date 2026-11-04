@@ -56,7 +56,7 @@ pub fn parse_nodes(input: &str) -> Result<(Vec<Node>, TextFormat), ParseError> {
         if level > stack.len() {
             return Err(ParseError {
                 line: line_no,
-                message: rust_i18n::t!("error.parse.unexpected_level", level = level, max = stack.len()).into(),
+                message: t!("error.parse.unexpected_level", level = level, max = stack.len()).into(),
             });
         }
         while stack.len() > level {
@@ -80,19 +80,18 @@ fn attach(stack: &mut [Node], roots: &mut Vec<Node>, node: Node) {
 
 fn parse_line(line: &str) -> Result<(usize, Node), String> {
     let (level_s, rest) =
-        line.split_once(' ').ok_or_else(|| rust_i18n::t!("error.parse.incomplete_line", line = line).into_owned())?;
-    let level: usize =
-        level_s.parse().map_err(|_| rust_i18n::t!("error.parse.invalid_level", level = level_s).into_owned())?;
+        line.split_once(' ').ok_or_else(|| t!("error.parse.incomplete_line", line = line).into_owned())?;
+    let level: usize = level_s.parse().map_err(|_| t!("error.parse.invalid_level", level = level_s).into_owned())?;
     if level_s.len() > 1 && level_s.starts_with('0') {
-        return Err(rust_i18n::t!("error.parse.invalid_level", level = level_s).into());
+        return Err(t!("error.parse.invalid_level", level = level_s).into());
     }
 
     let mut rest = rest;
     let mut xref = None;
     if rest.starts_with('@') {
-        let (x, r) = rest.split_once(' ').ok_or_else(|| rust_i18n::t!("error.parse.xref_without_tag"))?;
+        let (x, r) = rest.split_once(' ').ok_or_else(|| t!("error.parse.xref_without_tag"))?;
         if x.len() < 3 || !x.ends_with('@') {
-            return Err(rust_i18n::t!("error.parse.invalid_xref", xref = x).into());
+            return Err(t!("error.parse.invalid_xref", xref = x).into());
         }
         xref = Some(x[1..x.len() - 1].to_string());
         rest = r;
@@ -102,7 +101,7 @@ fn parse_line(line: &str) -> Result<(usize, Node), String> {
         None => (rest, None),
     };
     if tag.is_empty() || !tag.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
-        return Err(rust_i18n::t!("error.parse.invalid_tag", tag = tag).into());
+        return Err(t!("error.parse.invalid_tag", tag = tag).into());
     }
     Ok((level, Node { xref, tag: tag.to_string(), value, children: Vec::new() }))
 }
@@ -143,7 +142,7 @@ pub fn node_from_string(text: &str) -> Result<Node, ParseError> {
     let (mut nodes, _) = parse_nodes(text)?;
     match nodes.len() {
         1 => Ok(nodes.remove(0)),
-        0 => Err(ParseError { line: 1, message: rust_i18n::t!("error.parse.no_record").into() }),
-        _ => Err(ParseError { line: 1, message: rust_i18n::t!("error.parse.one_record").into() }),
+        0 => Err(ParseError { line: 1, message: t!("error.parse.no_record").into() }),
+        _ => Err(ParseError { line: 1, message: t!("error.parse.one_record").into() }),
     }
 }

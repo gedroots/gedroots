@@ -242,7 +242,7 @@ impl Gedcom {
             return vec![GalleryGroup { title: String::new(), subtitle: String::new(), host: Some(host), items }];
         }
         let mut groups = vec![GalleryGroup {
-            title: rust_i18n::t!("media_links.whole_register").into(),
+            title: t!("media_links.whole_register").into(),
             subtitle: String::new(),
             host: Some(host.clone()),
             items: self.loose_source_media(source).into_iter().map(|m| (m, host.clone())).collect(),
@@ -272,9 +272,9 @@ impl Gedcom {
             .collect();
         let mut groups = vec![GalleryGroup {
             title: if n.tag == "INDI" {
-                rust_i18n::t!("media_links.portraits").into()
+                t!("media_links.portraits").into()
             } else {
-                rust_i18n::t!("media_links.union_photos").into()
+                t!("media_links.union_photos").into()
             },
             subtitle: String::new(),
             host: Some(host),
@@ -365,10 +365,8 @@ impl Gedcom {
                 let Some(n) = self.get(x) else { return Vec::new() };
                 match n.tag.as_str() {
                     "SOUR" if self.is_register(x) => {
-                        let mut out = vec![(
-                            rust_i18n::t!("media_links.whole_register").into_owned(),
-                            MediaHost::Record(x.clone()),
-                        )];
+                        let mut out =
+                            vec![(t!("media_links.whole_register").into_owned(), MediaHost::Record(x.clone()))];
                         for act in self.acts(x) {
                             let key = act.original.clone().unwrap_or_default();
                             out.push((act.title(), MediaHost::Act { source: x.clone(), key }));
@@ -412,7 +410,7 @@ impl Gedcom {
     /// Links a media where `host` says (without duplicates).
     pub fn link_media(&mut self, host: &MediaHost, media: &str) -> Result<(), String> {
         if self.get(media).is_none_or(|m| m.tag != "OBJE") {
-            return Err(rust_i18n::t!("error.media_not_found").into());
+            return Err(t!("error.media_not_found").into());
         }
         match host {
             MediaHost::Record(x) => self.attach_media(x, media),
@@ -445,7 +443,7 @@ impl Gedcom {
                     }
                 }
                 if !found {
-                    return Err(rust_i18n::t!("error.act_not_found").into());
+                    return Err(t!("error.act_not_found").into());
                 }
                 // As in record entry: the source holds the image too.
                 self.attach_media(source, media)

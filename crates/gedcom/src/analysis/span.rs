@@ -6,7 +6,6 @@
 
 use crate::date::calendar::UNIX_EPOCH_RD;
 use crate::date::{Date, SimpleDate};
-use rust_i18n::t;
 
 /// Margin applied to “about”, “estimated” and “calculated” dates.
 pub const FUZZ_YEARS: i64 = 5;

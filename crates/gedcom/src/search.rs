@@ -31,7 +31,6 @@ use std::collections::HashSet;
 
 use crate::document::Gedcom;
 use crate::model::{Individual, sort_key};
-use rust_i18n::t;
 
 /// Range of years (bounds included).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

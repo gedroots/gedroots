@@ -23,7 +23,6 @@ use crate::document::{Gedcom, RecordKind};
 use crate::model::{Individual, event_label, sort_key};
 use crate::node::Node;
 use crate::phonetic;
-use rust_i18n::t;
 use std::collections::{BTreeSet, HashMap};
 
 /// “Not a duplicate”: pointer from an individual to another individual that is a different person.

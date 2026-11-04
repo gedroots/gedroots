@@ -73,14 +73,7 @@ impl Workspace {
         let d = on!(d, cx, ConnectAgent, |this, w, cx| this.open_agent_dialog(cx));
         let d = on!(d, cx, MobileDevices, |this, w, cx| this.open_mobile_dialog(w, cx));
         let d = if sample { d } else { on!(d, cx, SaveFileAs, |this, w, cx| this.save_file_as(w, cx)) };
-        // On the Books page, File › Export… exports the book shown, as PDF.
-        let d = on!(d, cx, ExportFile, |this, w, cx| {
-            if this.view == View::Books && this.selected.is_some() {
-                this.export_book(w, cx)
-            } else {
-                this.export(w, cx)
-            }
-        });
+        let d = on!(d, cx, ExportFile, |this, w, cx| this.export(w, cx));
         let d = d.when(self.has_version_history(), |d| {
             let d = on!(d, cx, SaveVersion, |this, w, cx| this.open_save_version(w, cx));
             on!(d, cx, BrowseVersions, |this, w, cx| this.open_version_history(w, cx))

@@ -16,7 +16,6 @@
 use crate::document::{Gedcom, RecordKind};
 use crate::model::{Individual, sort_key};
 use crate::schema::{self, Card, Payload, StructDef};
-use rust_i18n::t;
 use std::borrow::Cow;
 use std::ops::Range;
 

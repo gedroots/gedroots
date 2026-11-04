@@ -8,7 +8,6 @@ use super::span::{Age, Span};
 use crate::document::{Gedcom, RecordKind};
 use crate::model::{Individual, event_label};
 use crate::node::Node;
-use rust_i18n::t;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 

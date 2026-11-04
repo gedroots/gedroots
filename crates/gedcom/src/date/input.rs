@@ -12,7 +12,6 @@
 
 use super::{Calendar, Date, SimpleDate};
 use crate::model::sort_key;
-use rust_i18n::t;
 
 /// Result of an input: a GEDCOM date and/or a phrase.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]

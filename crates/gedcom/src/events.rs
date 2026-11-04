@@ -67,14 +67,14 @@ impl Gedcom {
     /// Links a media to an event (`2 OBJE @M1@`). No effect if it already is.
     pub fn attach_media_to_event(&mut self, owner: &str, index: usize, media: &str) -> Result<(), String> {
         if self.get(media).is_none_or(|m| m.tag != "OBJE") {
-            return Err(rust_i18n::t!("error.media_not_found").into());
+            return Err(t!("error.media_not_found").into());
         }
         let p = format!("@{}@", media.trim_matches('@'));
         let e = self
             .get_mut(owner)
             .and_then(|n| n.children.get_mut(index))
             .filter(|c| event_label(&c.tag).is_some())
-            .ok_or_else(|| rust_i18n::t!("error.event_not_found"))?;
+            .ok_or_else(|| t!("error.event_not_found"))?;
         if e.children.iter().any(|c| c.tag == "OBJE" && c.val() == p) {
             return Ok(());
         }
@@ -103,7 +103,7 @@ impl Gedcom {
             .get_mut(owner)
             .and_then(|n| n.children.get_mut(index))
             .filter(|c| event_label(&c.tag).is_some())
-            .ok_or_else(|| rust_i18n::t!("error.event_not_found"))?;
+            .ok_or_else(|| t!("error.event_not_found"))?;
         let before = e.children.len();
         e.children.retain(|c| !(c.tag == "OBJE" && c.val() == p));
         if e.children.len() == before {
@@ -166,10 +166,10 @@ impl Gedcom {
     pub fn update_event(&mut self, owner: &str, index: usize, ev: &NewEvent) -> Result<(), String> {
         let detail = ev.detail.trim();
         if ev.tag == "EVEN" && detail.is_empty() {
-            return Err(rust_i18n::t!("error.event_type_needed").into());
+            return Err(t!("error.event_type_needed").into());
         }
         if event_label(&ev.tag).is_none() {
-            return Err(rust_i18n::t!("error.unknown_event_type").into());
+            return Err(t!("error.unknown_event_type").into());
         }
         let place = ev.place.trim();
         // Place already known elsewhere: reuse its coordinates.
@@ -178,13 +178,13 @@ impl Gedcom {
         if let Some(s) = source
             && self.get(s).is_none()
         {
-            return Err(rust_i18n::t!("error.source_not_found").into());
+            return Err(t!("error.source_not_found").into());
         }
         let node = self
             .get_mut(owner)
             .and_then(|n| n.children.get_mut(index))
             .filter(|c| event_label(&c.tag).is_some())
-            .ok_or_else(|| rust_i18n::t!("error.event_not_found"))?;
+            .ok_or_else(|| t!("error.event_not_found"))?;
 
         // Type and detail.
         let old_in_value = detail_in_value(&node.tag);
@@ -273,8 +273,8 @@ impl Gedcom {
 
     /// Deletes an event and returns its label.
     pub fn delete_event(&mut self, owner: &str, index: usize) -> Result<String, String> {
-        let title = self.event_title(owner, index).ok_or_else(|| rust_i18n::t!("error.event_not_found"))?;
-        let r = self.get_mut(owner).ok_or_else(|| rust_i18n::t!("error.record_not_found"))?;
+        let title = self.event_title(owner, index).ok_or_else(|| t!("error.event_not_found"))?;
+        let r = self.get_mut(owner).ok_or_else(|| t!("error.record_not_found"))?;
         r.children.remove(index);
         r.touch();
         Ok(title)

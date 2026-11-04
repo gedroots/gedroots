@@ -76,9 +76,9 @@ fn sex_of(g: &Gedcom, x: &str) -> Sex {
 macro_rules! word {
     ($lang:expr, $s:expr, $m:literal, $f:literal, $u:literal) => {
         match $s {
-            Sex::M => rust_i18n::t!($m, locale = $lang),
-            Sex::F => rust_i18n::t!($f, locale = $lang),
-            Sex::U => rust_i18n::t!($u, locale = $lang),
+            Sex::M => t!($m, locale = $lang),
+            Sex::F => t!($f, locale = $lang),
+            Sex::U => t!($u, locale = $lang),
         }
         .into_owned()
     };
@@ -86,12 +86,12 @@ macro_rules! word {
 
 /// “arrière-” / “great-”, repeated.
 fn great(lang: &str, n: u32) -> String {
-    rust_i18n::t!("kin.great", locale = lang).repeat(n as usize)
+    t!("kin.great", locale = lang).repeat(n as usize)
 }
 
 /// “demi-” / “half-”.
 fn half_prefix(lang: &str, half: bool) -> String {
-    if half { rust_i18n::t!("kin.half", locale = lang).into_owned() } else { String::new() }
+    if half { t!("kin.half", locale = lang).into_owned() } else { String::new() }
 }
 
 /// Ancestor `n` generations up: father, grandmother, great-grandfather…
@@ -99,7 +99,7 @@ fn ancestor_name(lang: &str, n: u32, s: Sex) -> String {
     match n {
         1 => word!(lang, s, "kin.father", "kin.mother", "kin.parent"),
         2..=5 => great(lang, n - 2) + &word!(lang, s, "kin.grandfather", "kin.grandmother", "kin.grandparent"),
-        _ => rust_i18n::t!("kin.ancestor_n", n = n, locale = lang).into_owned(),
+        _ => t!("kin.ancestor_n", n = n, locale = lang).into_owned(),
     }
 }
 
@@ -119,7 +119,7 @@ fn cousin_fr(lang: &str, n: u32, s: Sex) -> String {
         3 => word!(lang, s, "kin.fr.second_cousin.m", "kin.fr.second_cousin.f", "kin.fr.second_cousin.u"),
         _ => {
             word!(lang, s, "kin.cousin", "kin.cousin_f", "kin.cousin_u")
-                + &rust_i18n::t!("kin.fr.canonical_degree", n = n, locale = lang)
+                + &t!("kin.fr.canonical_degree", n = n, locale = lang)
         }
     }
 }
@@ -128,12 +128,12 @@ fn cousin_fr(lang: &str, n: u32, s: Sex) -> String {
 fn cousin_en(lang: &str, a: u32, b: u32, s: Sex, half: bool) -> String {
     let degree = a.min(b) - 1;
     let ordinal = match degree {
-        1 => rust_i18n::t!("kin.en.first", locale = lang),
-        2 => rust_i18n::t!("kin.en.second", locale = lang),
-        3 => rust_i18n::t!("kin.en.third", locale = lang),
-        4 => rust_i18n::t!("kin.en.fourth", locale = lang),
-        5 => rust_i18n::t!("kin.en.fifth", locale = lang),
-        n => rust_i18n::t!("kin.en.nth", n = n, locale = lang),
+        1 => t!("kin.en.first", locale = lang),
+        2 => t!("kin.en.second", locale = lang),
+        3 => t!("kin.en.third", locale = lang),
+        4 => t!("kin.en.fourth", locale = lang),
+        5 => t!("kin.en.fifth", locale = lang),
+        n => t!("kin.en.nth", n = n, locale = lang),
     };
     let mut out = format!(
         "{}{ordinal} {}",
@@ -142,9 +142,9 @@ fn cousin_en(lang: &str, a: u32, b: u32, s: Sex, half: bool) -> String {
     );
     match a.abs_diff(b) {
         0 => {}
-        1 => out += &rust_i18n::t!("kin.en.once_removed", locale = lang),
-        2 => out += &rust_i18n::t!("kin.en.twice_removed", locale = lang),
-        k => out += &rust_i18n::t!("kin.en.times_removed", n = k, locale = lang),
+        1 => out += &t!("kin.en.once_removed", locale = lang),
+        2 => out += &t!("kin.en.twice_removed", locale = lang),
+        k => out += &t!("kin.en.times_removed", n = k, locale = lang),
     }
     out
 }
@@ -157,7 +157,7 @@ fn blood_label(a: u32, b: u32, s: Sex, half: bool) -> String {
 fn blood_label_in(lang: &str, a: u32, b: u32, s: Sex, half: bool) -> String {
     let demi = half_prefix(lang, half);
     match (a, b) {
-        (0, 0) => rust_i18n::t!("kin.same_person", locale = lang).into_owned(),
+        (0, 0) => t!("kin.same_person", locale = lang).into_owned(),
         (0, b) => descendant_name(lang, b, s),
         (a, 0) => ancestor_name(lang, a, s),
         (1, 1) => demi + &word!(lang, s, "kin.brother", "kin.sister", "kin.sibling"),
@@ -175,14 +175,14 @@ fn blood_label_in(lang: &str, a: u32, b: u32, s: Sex, half: bool) -> String {
         (3, 2) => word!(lang, s, "kin.fr.breton_uncle.m", "kin.fr.breton_uncle.f", "kin.fr.breton_uncle.u"),
         (2, 3) => word!(lang, s, "kin.fr.breton_nephew.m", "kin.fr.breton_nephew.f", "kin.fr.breton_nephew.u"),
         (a, b) if a == b => demi + &cousin_fr(lang, a, s),
-        (a, b) if a > b => rust_i18n::t!(
+        (a, b) if a > b => t!(
             "kin.fr.of_a",
             who = demi + &cousin_fr(lang, b, s),
             whom = ancestor_name(lang, a - b, Sex::U),
             locale = lang
         )
         .into_owned(),
-        (a, b) => rust_i18n::t!(
+        (a, b) => t!(
             "kin.fr.of_a",
             who = descendant_name(lang, b - a, s),
             whom = demi + &cousin_fr(lang, a, Sex::U),
@@ -263,7 +263,7 @@ pub fn relationship(g: &Gedcom, a: &str, b: &str) -> Option<Kinship> {
             let label = match (da, db) {
                 (1, 0) => word!(lang, sb, "kin.father_in_law", "kin.mother_in_law", "kin.parent_in_law"),
                 (1, 1) => word!(lang, sb, "kin.brother_in_law", "kin.sister_in_law", "kin.sibling_in_law"),
-                _ => rust_i18n::t!("kin.of_spouse", who = k.label, locale = lang).into_owned(),
+                _ => t!("kin.of_spouse", who = k.label, locale = lang).into_owned(),
             };
             let mut path = vec![a.to_string()];
             path.extend(k.path);
@@ -277,7 +277,7 @@ pub fn relationship(g: &Gedcom, a: &str, b: &str) -> Option<Kinship> {
                 (0, 1) => word!(lang, sb, "kin.son_in_law", "kin.daughter_in_law", "kin.child_in_law"),
                 (1, 1) => word!(lang, sb, "kin.brother_in_law", "kin.sister_in_law", "kin.sibling_in_law"),
                 (1, 0) => word!(lang, sb, "kin.stepfather", "kin.stepmother", "kin.stepparent"),
-                _ => rust_i18n::t!(
+                _ => t!(
                     "kin.spouse_of",
                     who = word!(lang, sb, "kin.spouse_m", "kin.spouse_f", "kin.spouse_u"),
                     whom = k.label,

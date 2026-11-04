@@ -17,7 +17,6 @@ use crate::node::Node;
 use crate::relations::mime_for;
 use crate::schema::{self, Payload, StructDef};
 use crate::weblink::is_web_url;
-use rust_i18n::t;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet, VecDeque};
 

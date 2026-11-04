@@ -6,7 +6,6 @@ use gedcom::analysis::span::{Age, Span};
 use gedcom::date::Date;
 use gedcom::document::Gedcom;
 use gedcom::model::{Event, Individual, short_place};
-use rust_i18n::t;
 
 const MONTHS: [&str; 12] = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
 

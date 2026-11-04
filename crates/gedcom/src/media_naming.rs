@@ -111,8 +111,8 @@ pub fn media_type_labels(types: &[String]) -> String {
     let mut out: Vec<String> = Vec::new();
     for t in types {
         let l = match t.as_str() {
-            "INDI" => rust_i18n::t!("media_naming.portrait").into_owned(),
-            "FAM" => rust_i18n::t!("media_naming.family").into_owned(),
+            "INDI" => t!("media_naming.portrait").into_owned(),
+            "FAM" => t!("media_naming.family").into_owned(),
             _ => event_label(t).map(|l| l.to_lowercase()).unwrap_or_else(|| crate::model::event_type_label(t)),
         };
         if !out.contains(&l) {

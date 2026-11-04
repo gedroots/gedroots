@@ -4,7 +4,7 @@
 //! user leaves out the context and hypotheses they do not want, then saves it into the book.
 
 use gedcom::Gedcom;
-use gedroots_book::content::{self, Record};
+use gedroots_book::content::Record;
 use gedroots_book::{Block, BookSpec, Cite, Line, Writing};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -42,7 +42,7 @@ pub struct SourceRef {
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct BlockParams {
     pub kind: Kind,
-    /// The text, in the tree's language. Paragraphs separated by a line break. Name people by id
+    /// The text, in the book's language. Paragraphs separated by a line break. Name people by id
     /// in braces (`{I12}`): the book shows their name.
     pub text: String,
     /// Context: its title ("The phylloxera crisis").
@@ -140,7 +140,7 @@ fn params(b: &Block) -> BlockParams {
 pub fn to_request(p: &ProposeChapterParams, g: &Gedcom) -> Result<ChapterRequest, String> {
     let id = clean(&p.book);
     let spec = gedroots_book::spec::book(g, &id).ok_or_else(|| format!("no book `{id}`: call read_book"))?;
-    let outline = content::outline(g, &spec)?;
+    let outline = gedroots_book::outline(g, &spec)?;
     let chapter = outline
         .iter()
         .find(|c| c.generation == p.generation)
@@ -177,6 +177,8 @@ pub struct BookSummary {
     /// ancestors or descendants.
     pub line: String,
     pub generations: u32,
+    /// Language the book is written in, and the one to write in (BCP 47, `fr`).
+    pub language: String,
 }
 
 #[derive(Debug, Serialize, JsonSchema)]
@@ -236,6 +238,7 @@ fn summary(g: &Gedcom, spec: &BookSpec) -> BookSummary {
         }
         .into(),
         generations: spec.generations,
+        language: gedroots_book::language(g),
     }
 }
 
@@ -250,7 +253,7 @@ pub fn read(g: &Gedcom, book: Option<&str>) -> Result<Books, String> {
     };
     let spec =
         gedroots_book::spec::book(g, &id).ok_or_else(|| format!("no book `{id}`: call read_book without `book`"))?;
-    let chapters = content::outline(g, &spec)?
+    let chapters = gedroots_book::outline(g, &spec)?
         .into_iter()
         .map(|c| {
             let w = spec.chapters.get(&c.generation);

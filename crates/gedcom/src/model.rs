@@ -6,7 +6,6 @@
 use crate::date::Date;
 use crate::document::Gedcom;
 use crate::node::Node;
-use rust_i18n::t;
 use std::borrow::Cow;
 
 /// Tags of individual and family events and attributes, in display order.
