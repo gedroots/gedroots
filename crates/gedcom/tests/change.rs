@@ -65,6 +65,7 @@ fn an_edit_that_fixes_the_date_is_accepted_and_applied() {
         date: Some("12 MAR 1869".into()),
         place: None,
         address: None,
+        cause: None,
     };
     let c = change(&g, "death_before_birth", Action::Edit(vec![edit]), "The act says 1869");
     assert!(c.check(&g, &rerun).unwrap().is_empty());
@@ -93,6 +94,7 @@ fn changes_that_do_not_fit_the_issue_are_refused() {
         date: Some("1770".into()),
         place: None,
         address: None,
+        cause: None,
     };
     let c = change(&g, "death_before_birth", Action::Edit(vec![edit]), "x");
     assert!(c.check(&g, &rerun).unwrap_err().contains("still reports"));
@@ -104,6 +106,7 @@ fn changes_that_do_not_fit_the_issue_are_refused() {
         date: Some("1700".into()),
         place: None,
         address: None,
+        cause: None,
     };
     let c = change(&g, "death_before_birth", Action::Edit(vec![edit]), "x");
     assert!(c.check(&g, &rerun).unwrap_err().contains("not one of the records"));
@@ -239,6 +242,7 @@ fn a_correction_changes_and_adds_occupations() {
         date: None,
         place: None,
         address: None,
+        cause: None,
     };
     let add = Edit::AddEvent {
         record: "I1".into(),
@@ -288,6 +292,7 @@ fn a_correction_moves_an_address_and_renames_a_place() {
         date: None,
         place: None,
         address: Some("4 rue Haute".into()),
+        cause: None,
     };
     let rename = Edit::RenamePlace { place: "Agneau".into(), name: "Agneaux".into() };
     let c = correction(vec![address, rename]);
@@ -358,4 +363,198 @@ fn a_correction_sets_the_repository_of_a_source() {
         bad(Edit::SetRepository { source: "S1".into(), repository: None, new: None, call_number: None })
             .contains("needs")
     );
+}
+
+const FAMILY: &str = "0 HEAD
+1 GEDC
+2 VERS 7.0
+0 @I1@ INDI
+1 NAME Jean /GUYOT/
+1 SEX M
+1 FAMS @F1@
+0 @I2@ INDI
+1 NAME Marie /LEROUX/
+1 SEX F
+1 FAMS @F1@
+0 @I3@ INDI
+1 NAME Pierre /GUYOT/
+1 SEX M
+1 BIRT
+2 DATE 1820
+1 DEAT
+2 DATE 1880
+1 FAMC @F1@
+0 @I4@ INDI
+1 NAME Louis /MARTIN/
+1 SEX M
+0 @I5@ INDI
+1 NAME Anne /MARTIN/
+1 SEX F
+0 @F1@ FAM
+1 HUSB @I1@
+1 WIFE @I2@
+1 CHIL @I3@
+1 MARR
+2 DATE 1817
+0 @M1@ OBJE
+1 FILE images/acte.jpg
+2 FORM image/jpeg
+0 TRLR
+";
+
+fn correction(edits: Vec<Edit>) -> QualityChange {
+    QualityChange {
+        issue: None,
+        issue_id: None,
+        action: Action::Edit(edits),
+        reason: "The register says so".into(),
+        evidence: Evidence { quote: "fils de Louis Martin".into(), ..Default::default() },
+    }
+}
+
+#[test]
+fn a_correction_moves_a_child_to_the_right_father() {
+    use gedcom::relations::Relation;
+    let g = Gedcom::parse(FAMILY).unwrap();
+    let unlink = Edit::UnlinkRelative { person: "I3".into(), relation: Relation::Father, other: "I1".into() };
+    let link = Edit::LinkRelative { person: "I3".into(), relation: Relation::Father, other: "I4".into() };
+    let c = correction(vec![unlink.clone(), link]);
+    c.check(&g, &rerun).unwrap();
+    let rows = c.rows(&g);
+    assert_eq!(rows[0].proposed, "Deleted");
+    assert_eq!(rows[1].proposed, "Louis MARTIN");
+    let mut g2 = g.clone();
+    c.apply(&mut g2).unwrap();
+    let (father, mother) = g2.parents("I3");
+    assert_eq!(father.map(|f| f.xref().to_string()).as_deref(), Some("I4"));
+    // The mother stays, in a family of her own with Louis; her marriage with Jean stays too.
+    assert_eq!(mother.map(|m| m.xref().to_string()).as_deref(), Some("I2"));
+    let f1 = g2.family("F1").unwrap();
+    assert_eq!((f1.husband(), f1.wife(), f1.children().len()), (Some("I1"), Some("I2"), 0));
+    // A link that does not exist is refused.
+    let wrong = Edit::UnlinkRelative { person: "I3".into(), relation: Relation::Father, other: "I5".into() };
+    assert!(correction(vec![wrong]).check(&g, &rerun).unwrap_err().contains("not the father"));
+}
+
+#[test]
+fn a_correction_sets_an_adoption() {
+    let g = Gedcom::parse(FAMILY).unwrap();
+    let c = correction(vec![Edit::SetPedigree {
+        person: "I3".into(),
+        parent: Some("I2".into()),
+        pedigree: "adopted".into(),
+    }]);
+    let mut g2 = g.clone();
+    c.apply(&mut g2).unwrap();
+    assert!(gedcom::parse::node_to_string(g2.get("I3").unwrap()).contains("1 FAMC @F1@\n2 PEDI ADOPTED"));
+    assert_eq!(g2.person_sheet("I3").unwrap().pedigree.as_deref(), Some("ADOPTED"));
+    let bad = correction(vec![Edit::SetPedigree { person: "I3".into(), parent: None, pedigree: "STEP".into() }]);
+    assert!(bad.check(&g, &rerun).unwrap_err().contains("ADOPTED"));
+}
+
+#[test]
+fn a_correction_adds_and_changes_notes() {
+    let g = Gedcom::parse(FAMILY).unwrap();
+    let add = Edit::AddNote { record: "I3".into(), event: Some(3), text: "Two acts disagree on the date".into() };
+    let person = Edit::AddNote { record: "I3".into(), event: None, text: "Called Pierrot".into() };
+    let mut g2 = g.clone();
+    correction(vec![add, person]).apply(&mut g2).unwrap();
+    let sheet = g2.person_sheet("I3").unwrap();
+    assert_eq!(sheet.events.iter().find(|e| e.tag == "DEAT").unwrap().notes, ["Two acts disagree on the date"]);
+    assert_eq!(sheet.notes, ["Called Pierrot"]);
+    let set = Edit::SetNote { record: "I3".into(), event: Some(3), note: 0, text: "Acts agree: 1880".into() };
+    let remove = Edit::SetNote { record: "I3".into(), event: None, note: 0, text: String::new() };
+    let mut g3 = g2.clone();
+    correction(vec![set, remove]).apply(&mut g3).unwrap();
+    let sheet = g3.person_sheet("I3").unwrap();
+    assert_eq!(sheet.events.iter().find(|e| e.tag == "DEAT").unwrap().notes, ["Acts agree: 1880"]);
+    assert!(sheet.notes.is_empty());
+    let missing = Edit::SetNote { record: "I3".into(), event: None, note: 3, text: "x".into() };
+    assert!(correction(vec![missing]).check(&g2, &rerun).unwrap_err().contains("note(s)"));
+}
+
+#[test]
+fn a_correction_sets_ages_causes_and_witnesses() {
+    let g = Gedcom::parse(FAMILY).unwrap();
+    let edits = vec![
+        Edit::SetEvent {
+            record: "I3".into(),
+            index: 3,
+            value: None,
+            date: None,
+            place: None,
+            address: None,
+            cause: Some("fièvre".into()),
+        },
+        Edit::SetAge { record: "I3".into(), index: 3, spouse: None, age: "60 ans".into() },
+        Edit::SetAge { record: "F1".into(), index: 3, spouse: Some("I2".into()), age: "19y".into() },
+        Edit::AddAssociate {
+            record: "F1".into(),
+            index: 3,
+            person: "I4".into(),
+            role: "witn".into(),
+            phrase: "cousin of the bride".into(),
+        },
+    ];
+    let c = correction(edits);
+    c.check(&g, &rerun).unwrap();
+    let rows = c.rows(&g);
+    assert!(rows[0].proposed.contains("fièvre"), "{:?}", rows[0]);
+    assert_eq!(rows[1].proposed, "60y");
+    assert!(rows[3].proposed.starts_with("Louis MARTIN ("), "{:?}", rows[3]);
+    let mut g2 = g.clone();
+    c.apply(&mut g2).unwrap();
+    let text = |x: &str| gedcom::parse::node_to_string(g2.get(x).unwrap());
+    assert!(text("I3").contains("1 DEAT\n2 DATE 1880\n2 CAUS fièvre\n2 AGE 60y"), "{}", text("I3"));
+    assert!(
+        text("F1")
+            .contains("1 MARR\n2 DATE 1817\n2 WIFE\n3 AGE 19y\n2 ASSO @I4@\n3 ROLE WITN\n4 PHRASE cousin of the bride"),
+        "{}",
+        text("F1")
+    );
+    let sheet = g2.person_sheet("I1").unwrap();
+    let marr = &sheet.unions[0].events[0];
+    assert_eq!((marr.wife_age.as_str(), marr.associates[0].role.as_str()), ("19y", "WITN"));
+    // Removed again.
+    let mut g3 = g2.clone();
+    correction(vec![
+        Edit::RemoveAssociate { record: "F1".into(), index: 3, person: "I4".into() },
+        Edit::SetAge { record: "F1".into(), index: 3, spouse: Some("I2".into()), age: String::new() },
+    ])
+    .apply(&mut g3)
+    .unwrap();
+    let f1 = gedcom::parse::node_to_string(g3.get("F1").unwrap());
+    assert!(f1.contains("1 MARR\n2 DATE 1817\n") && !f1.contains("ASSO") && !f1.contains("WIFE\n"), "{f1}");
+    // A family event needs to know whose age it is, and `OTHER` needs its phrase.
+    let age = Edit::SetAge { record: "F1".into(), index: 3, spouse: None, age: "19y".into() };
+    assert!(correction(vec![age]).check(&g, &rerun).unwrap_err().contains("spouse"));
+    let other = Edit::AddAssociate {
+        record: "F1".into(),
+        index: 3,
+        person: "I4".into(),
+        role: "OTHER".into(),
+        phrase: String::new(),
+    };
+    assert!(correction(vec![other]).check(&g, &rerun).unwrap_err().contains("phrase"));
+}
+
+#[test]
+fn a_correction_attaches_and_detaches_media() {
+    let g = Gedcom::parse(FAMILY).unwrap();
+    let existing = Edit::AttachMedia { record: "I3".into(), event: Some(2), media: Some("M1".into()), file: None };
+    let new =
+        Edit::AttachMedia { record: "I3".into(), event: None, media: None, file: Some("images/portrait.jpg".into()) };
+    let mut g2 = g.clone();
+    correction(vec![existing, new]).apply(&mut g2).unwrap();
+    let sheet = g2.person_sheet("I3").unwrap();
+    assert_eq!(sheet.events[0].media[0].id, "M1");
+    assert_eq!(sheet.media[0].files, ["images/portrait.jpg"]);
+    let detach = Edit::DetachMedia { record: "I3".into(), event: Some(2), media: "M1".into() };
+    let mut g3 = g2.clone();
+    correction(vec![detach.clone()]).apply(&mut g3).unwrap();
+    assert!(g3.person_sheet("I3").unwrap().events[0].media.is_empty());
+    assert!(correction(vec![detach]).check(&g3, &rerun).unwrap_err().contains("not linked"));
+    let both =
+        Edit::AttachMedia { record: "I3".into(), event: None, media: Some("M1".into()), file: Some("a.jpg".into()) };
+    assert!(correction(vec![both]).check(&g, &rerun).unwrap_err().contains("not both"));
 }

@@ -69,7 +69,8 @@ How to work:
    waiting, propose it again with `replaces` (its id), or withdraw it with `withdraw_proposal`.
    If the proposal is already saved, or the act shows the tree is wrong (a given name misread, a
    name the act spells otherwise, a wrong date), propose the correction with `propose_change`
-   without `issue` (`set_name`, `add_name` for a variant spelling, `set_event`…), with the reason
+   without `issue` (`set_name`, `add_name` for a variant spelling, `set_event`, `unlink_relative`
+   and `link_relative` for a wrong parent, `add_note` when two acts disagree…), with the reason
    and the evidence: never leave it for the user to fix by hand. `will_write` tells you when a
    person you link is named otherwise in the act.
 9. Every answer of GEDRoots carries `news` when the user saved, rejected or edited one of your

@@ -58,8 +58,36 @@ pub struct EventInfo {
     /// Street address within the place (`ADDR`).
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "String::is_empty"))]
     pub address: String,
+    /// Age of the person at the event (`AGE`: `42y`, `6m`); on a family event, `husband_age` and
+    /// `wife_age`.
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "String::is_empty"))]
+    pub age: String,
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "String::is_empty"))]
+    pub husband_age: String,
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "String::is_empty"))]
+    pub wife_age: String,
+    /// Cause (`CAUS`), of a death for example.
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "String::is_empty"))]
+    pub cause: String,
     pub citations: Vec<Citation>,
     pub media: Vec<MediaRef>,
+    /// People who took part without being its principals: witnesses, godparents…
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Vec::is_empty"))]
+    pub associates: Vec<AssociateRef>,
+    /// The event's notes, in order (`note` in `set_note` counts from 0).
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Vec::is_empty"))]
+    pub notes: Vec<String>,
+}
+
+/// A person associated with an event, and their role.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, schemars::JsonSchema))]
+pub struct AssociateRef {
+    pub person: PersonRef,
+    /// GEDCOM role (`WITN`, `GODP`…) and its phrase.
+    pub role: String,
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "String::is_empty"))]
+    pub phrase: String,
 }
 
 /// A union: spouse, family events and children.
@@ -84,8 +112,16 @@ pub struct PersonSheet {
     pub events: Vec<EventInfo>,
     pub father: Option<PersonRef>,
     pub mother: Option<PersonRef>,
+    /// How the person belongs to their parents' family when it is not by birth (`ADOPTED`,
+    /// `FOSTER`…).
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
+    pub pedigree: Option<String>,
     pub unions: Vec<Union>,
+    /// The person's notes, in order (`note` in `set_note` counts from 0).
     pub notes: Vec<String>,
+    /// Media linked to the person themselves, not to an event.
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Vec::is_empty"))]
+    pub media: Vec<MediaRef>,
 }
 
 /// A record named by a quality issue.
@@ -240,8 +276,27 @@ impl Gedcom {
             date: e.date_raw().unwrap_or("").to_string(),
             place: e.place().unwrap_or("").to_string(),
             address: e.address().unwrap_or_default(),
+            age: e.node.child_val("AGE").unwrap_or("").to_string(),
+            husband_age: e.node.child("HUSB").and_then(|h| h.child_val("AGE")).unwrap_or("").to_string(),
+            wife_age: e.node.child("WIFE").and_then(|h| h.child_val("AGE")).unwrap_or("").to_string(),
+            cause: e.node.child_val("CAUS").unwrap_or("").to_string(),
             citations,
             media: media.iter().filter_map(|m| self.media_ref(m)).collect(),
+            associates: e
+                .node
+                .children_with("ASSO")
+                .filter_map(|a| {
+                    let x = a.pointer()?;
+                    self.individual(x)?;
+                    let role = a.child("ROLE");
+                    Some(AssociateRef {
+                        person: self.person_ref(x),
+                        role: role.map(|r| r.val().to_string()).unwrap_or_default(),
+                        phrase: role.and_then(|r| r.child_val("PHRASE")).unwrap_or("").to_string(),
+                    })
+                })
+                .collect(),
+            notes: e.node.children_with("NOTE").map(|n| n.text()).collect(),
         }
     }
 
@@ -280,8 +335,15 @@ impl Gedcom {
             events: self.events_of(xref).iter().map(|(i, e)| self.event_info(*i, e)).collect(),
             father: father.map(|p| self.person_ref(p.xref())),
             mother: mother.map(|p| self.person_ref(p.xref())),
+            pedigree: ind
+                .node
+                .children_with("FAMC")
+                .find_map(|f| f.child_val("PEDI"))
+                .filter(|p| !p.eq_ignore_ascii_case("BIRTH"))
+                .map(str::to_string),
             unions,
             notes: ind.notes(),
+            media: ind.media_xrefs().into_iter().filter_map(|m| self.media_ref(m)).collect(),
         })
     }
 
