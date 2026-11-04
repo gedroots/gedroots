@@ -2,7 +2,8 @@
 //!
 //! An event is designated by its position among the record's substructures (`index`), which tells
 //! two residences or two occupations apart. Only the fields of the edit window (type, detail, date,
-//! place, first source) are touched: notes, media, age, address, additional sources… stay in place.
+//! place, address, first source, first note) are touched: other notes, media, age, additional
+//! sources… stay in place.
 //!
 //! A person's record shows their events and those of their unions (marriage, divorce…) in a single
 //! timeline: see [`Gedcom::person_events`]. Each event can have its media (`2 OBJE @M1@`, standard
@@ -146,6 +147,7 @@ impl Gedcom {
             date: e.child_val("DATE").unwrap_or("").to_string(),
             date_phrase: e.child("DATE").and_then(|d| d.child_val("PHRASE")).unwrap_or("").to_string(),
             place: e.child_val("PLAC").unwrap_or("").to_string(),
+            address: crate::address::address_of(e).unwrap_or_default(),
             source: e.children_with("SOUR").find_map(|s| s.pointer()).map(str::to_string),
             note: e.child("NOTE").map(|n| n.text()).unwrap_or_default(),
         })
@@ -221,6 +223,9 @@ impl Gedcom {
                 p.children.push(map);
             }
         }
+
+        // Street address: rewritten only if it changed.
+        crate::address::set_address(node, &ev.address);
 
         // First cited source (the others are not touched).
         let first = node.children.iter().position(|c| c.tag == "SOUR" && c.pointer().is_some());

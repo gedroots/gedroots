@@ -391,6 +391,30 @@ fn clean_id(id: &str) -> &str {
     id.trim().trim_matches('@')
 }
 
+/// A person's id in the tree. A temporary id (`new-3`) of a saved proposal becomes the id the
+/// person got; one of a waiting proposal says so, since the person is not in the tree yet.
+fn person_id(s: &Snapshot, id: &str) -> Result<String, String> {
+    let x = clean_id(id);
+    if !super::propose::is_temp(x) {
+        return Ok(x.to_string());
+    }
+    if let Some(real) = s.queue.saved.get(x) {
+        return Ok(real.clone());
+    }
+    match s.queue.waiting.iter().find(|w| w.temps.iter().flatten().any(|t| t == x)) {
+        Some(w) => Err(format!(
+            "{x} is a new person of proposal {}, still waiting for review: they are not in the tree yet. Once the user saves it, `news` gives their id (and {x} keeps working)",
+            w.id
+        )),
+        None => Err(format!("no person with id {x}")),
+    }
+}
+
+/// [`person_id`] of an optional id.
+fn person_opt(s: &Snapshot, id: Option<&str>) -> Result<Option<String>, String> {
+    id.map(|x| person_id(s, x)).transpose()
+}
+
 fn capitalize(s: &str) -> String {
     let mut c = s.chars();
     c.next().map(|f| f.to_uppercase().chain(c).collect()).unwrap_or_default()
@@ -520,13 +544,13 @@ impl GedrootsMcp {
 
     #[tool(
         name = "person_sheet",
-        description = "A person's sheet: events (date, place, cited sources with their reference, media), parents, unions and children, Sosa number.",
+        description = "A person's sheet: events (date, place, street address, cited sources with their reference, media), parents, unions and children, Sosa number.",
         annotations(read_only_hint = true, open_world_hint = false)
     )]
     async fn person(&self, Parameters(p): Parameters<PersonParams>) -> Res<PersonSheet> {
         let tree = p.tree.clone();
         let s = self.snapshot(tree.as_deref()).await?;
-        let id = p.id.trim().trim_matches('@');
+        let id = &person_id(&s, &p.id)?;
         if s.ged.individual(id).is_none() {
             return Err(format!("no person with id {id}"));
         }
@@ -544,10 +568,10 @@ impl GedrootsMcp {
         let s = self.snapshot(tree.as_deref()).await?;
         let year = current_year();
         let focus = p.focus.as_deref().map(str::trim).filter(|f| !f.is_empty()).unwrap_or(gedcom::leads::DEFAULT_FOCUS);
-        let all = match p.person.as_deref().map(clean_id) {
+        let all = match person_opt(&s, p.person.as_deref())? {
             Some(x) => {
-                owner(&s.ged, x, Goal::Birth, None)?;
-                s.ged.leads_of(x, year)
+                owner(&s.ged, &x, Goal::Birth, None)?;
+                s.ged.leads_of(&x, year)
             }
             None => {
                 if focus.contains("sosa") && s.ged.root().is_none() {
@@ -578,7 +602,7 @@ impl GedrootsMcp {
         let tree = p.tree.clone();
         let s = self.snapshot(tree.as_deref()).await?;
         let g = &s.ged;
-        let x = clean_id(&p.person);
+        let x = &person_id(&s, &p.person)?;
         owner(g, x, Goal::Birth, None)?;
         let person = g.person_ref(x);
         let mut log = Vec::new();
@@ -622,9 +646,10 @@ impl GedrootsMcp {
         let mut todo: Vec<(String, Goal, String)> = Vec::new();
         let mut planned = Vec::new();
         for (i, item) in p.items.iter().enumerate() {
-            let x = clean_id(&item.person);
-            let (_, family) = owner(&s.ged, x, item.goal, item.spouse.as_deref().map(clean_id))
-                .map_err(|e| format!("item {i}: {e}"))?;
+            let at = |e: String| format!("item {i}: {e}");
+            let x = &person_id(&s, &item.person).map_err(at)?;
+            let spouse = person_opt(&s, item.spouse.as_deref()).map_err(at)?;
+            let (_, family) = owner(&s.ged, x, item.goal, spouse.as_deref()).map_err(at)?;
             if item.reason.trim().is_empty() {
                 return Err(format!("item {i}: give the reason of this lead"));
             }
@@ -667,8 +692,9 @@ impl GedrootsMcp {
         let tree = p.tree.clone();
         let s = self.snapshot(tree.as_deref()).await?;
         let year = current_year();
-        let x = clean_id(&p.person).to_string();
-        let (own, family) = owner(&s.ged, &x, p.goal, p.spouse.as_deref().map(clean_id))?;
+        let x = person_id(&s, &p.person)?;
+        let spouse = person_opt(&s, p.spouse.as_deref())?;
+        let (own, family) = owner(&s.ged, &x, p.goal, spouse.as_deref())?;
         let searched = p.searched.trim().to_string();
         if searched.is_empty() {
             return Err("say what you searched (register, place, years, names)".into());
@@ -821,7 +847,7 @@ impl GedrootsMcp {
 
     #[tool(
         name = "propose_act",
-        description = "Proposes an act found in the archives (birth, marriage, death…), with its source, people and image. Nothing is written: the proposal waits in GEDRoots' review page, where the user compares it with the tree and saves or rejects it. Each person says who they are: identity link (in the tree, with id), create or mention; call match_people first. Give every other fact the act states about a person in their `facts` (birth date in a baptism, marginal mention of a death, occupations, residences), each with its own date or none; the answer lists everything that will be written, the proposal's id (to correct it, propose it again with `replaces`) and the temporary id of each new person (link it to name the same person in another proposal: never create them twice). It is refused, with the reason, if it does not fit the tree (unknown source or person, a parent other than the tree's, a person to create who resembles someone of the tree, impossible date): fix it and propose again. Give the place as the tree names it, the date in GEDCOM format, the downloaded file (a PDF register needs pdf_page) and the act's page in the archive's viewer (url): both are kept, the image and a web link.",
+        description = "Proposes an act found in the archives (birth, marriage, death…), with its source, people and image. Nothing is written: the proposal waits in GEDRoots' review page, where the user compares it with the tree and saves or rejects it. Each person says who they are: identity link (in the tree, with id), create or mention; call match_people first. Give every other fact the act states about a person in their `facts` (birth date in a baptism, marginal mention of a death, occupations, residences), each with its own date or none; the answer lists everything that will be written, the proposal's id (to correct it, propose it again with `replaces`) and the temporary id of each new person (link it to name the same person in another proposal: never create them twice). It is refused, with the reason, if it does not fit the tree (unknown source or person, a parent other than the tree's, a person to create who resembles someone of the tree, impossible date): fix it and propose again. Give the place as the tree names it (the municipality: a street, number or building goes in `address`, never in the place), the date in GEDCOM format, the downloaded file (a PDF register needs pdf_page) and the act's page in the archive's viewer (url): both are kept, the image and a web link.",
         annotations(
             read_only_hint = false,
             destructive_hint = false,
@@ -967,7 +993,7 @@ impl GedrootsMcp {
 
     #[tool(
         name = "propose_change",
-        description = "Proposes a change for a Data Quality issue (`quality_issues`). Nothing is written: it waits in GEDRoots' review page, where the user saves or rejects it. `fix` applies the Quality page's own fix (issues with `automatic_fix`). `edit` changes the records the issue is about, with the edits the issue lists in `edits` (a date read in the act, the sex of a spouse, a place's coordinates, a citation of an existing source…). `hide` keeps the issue as right, for instance a marriage really celebrated very young, and saves the reason with it. For a `possible_duplicate`: `merge` when the two records are the same person (read both with `read_record` first; `choices` says, for each fact of the issue's `merge.conflicts`, whose value is right), `hide` when they are two people. The user reviews a merge in GEDRoots' merge window. Give `reason` (what you read) and, when you can, `evidence`. Never hide an issue only to clear the list. It is refused, with the reason, if the edit is not one the issue allows, touches another record, or does not make the issue go away: GEDRoots applies it to a copy first. The answer lists the issues the change would create.",
+        description = "Proposes a change for a Data Quality issue (`quality_issues`), or a correction you read in a document. Nothing is written: it waits in GEDRoots' review page, where the user saves or rejects it. `fix` applies the Quality page's own fix (issues with `automatic_fix`). `edit` changes the records the issue is about, with the edits the issue lists in `edits` (a date read in the act, the sex of a spouse, a place's coordinates, a citation of an existing source…). `hide` keeps the issue as right, for instance a marriage really celebrated very young, and saves the reason with it. For a `possible_duplicate`: `merge` when the two records are the same person (read both with `read_record` first; `choices` says, for each fact of the issue's `merge.conflicts`, whose value is right), `hide` when they are two people. The user reviews a merge in GEDRoots' merge window. Give `reason` (what you read) and, when you can, `evidence`. Never hide an issue only to clear the list. It is refused, with the reason, if the edit is not one the issue allows, touches another record, or does not make the issue go away: GEDRoots applies it to a copy first. The answer lists the issues the change would create. Without `issue`, it is a correction of any record: a given name or surname misread in an earlier proposal or wrong in the tree (`set_name`; `add_name` keeps a variant spelling as another name), a date or place (`set_event`), a sex, a citation; `edit` only, with `reason` and `evidence` (the source, the viewer page or a quote of the document).",
         annotations(
             read_only_hint = false,
             destructive_hint = false,
@@ -1009,7 +1035,9 @@ Every answer carries `news` when the user saved, rejected or edited a proposal s
 a saved proposal gives the ids its new people now have in the tree, to link from then on. \
 The prompts `research_session`, `find_record` and `read_record` give the full method. To improve the data, `quality_issues` lists \
 the tree's Data Quality issues and `propose_change` fixes, edits or hides one; the prompt \
-`review_quality` gives the method.";
+`review_quality` gives the method. A mistake in the tree that no issue reports (a given name you \
+misread in a proposal the user has saved, a name the act spells otherwise, a wrong date) is \
+corrected with `propose_change` without `issue`: never leave it for the user to fix by hand.";
 
 /// The file's context, also offered as a resource for clients that let the user attach one.
 const CONTEXT_URI: &str = "gedroots://file/context";

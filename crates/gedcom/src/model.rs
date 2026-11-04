@@ -124,6 +124,11 @@ impl<'a> Event<'a> {
         self.node.child_val("PLAC")
     }
 
+    /// Street address within the place (`ADDR`), on one line.
+    pub fn address(&self) -> Option<String> {
+        crate::address::address_of(self.node)
+    }
+
     pub fn source_xrefs(&self) -> Vec<&str> {
         self.node.children_with("SOUR").filter_map(|s| s.pointer()).collect()
     }

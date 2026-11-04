@@ -54,8 +54,12 @@ pub struct FactParams {
     /// Date in GEDCOM 7 format. Leave empty when the act does not date the fact (an occupation
     /// from a photo caption): never give the act's date by default.
     pub date: Option<String>,
-    /// Place, as named in the tree when it exists there (the residence for RESI).
+    /// Place, as named in the tree when it exists there (the residence for RESI): the
+    /// municipality and its jurisdictions, never a street.
     pub place: Option<String>,
+    /// Street address within the place, as written ("43, rue de la République", "Hôtel-Dieu"):
+    /// number, street, building, hamlet of a town. Kept apart from the place.
+    pub address: Option<String>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -82,6 +86,8 @@ pub struct PersonParams {
     /// Age as written in the record.
     pub age: Option<String>,
     pub occupation: Option<String>,
+    /// Place of residence at the act's date (municipality, as named in the tree). With a street
+    /// address, give a RESI fact instead, dated with the act, with its place and `address`.
     pub residence: Option<String>,
     pub birthplace: Option<String>,
     /// Relationship as written ("son", "neighbour"…).
@@ -111,8 +117,11 @@ pub struct ProposeParams {
     pub date: Option<String>,
     /// Date the act was written, when it differs from the event (e.g. a burial registered later).
     pub record_date: Option<String>,
-    /// Place of the event, as named in the tree when it exists there.
+    /// Place of the event, as named in the tree when it exists there: the municipality and its
+    /// jurisdictions, never a street.
     pub place: Option<String>,
+    /// Street address of the event within the place, as written ("12, rue Mercière", "Hôtel-Dieu").
+    pub address: Option<String>,
     pub source: SourceParams,
     /// Reference of the act in its source: act number, page, image ("act 27, image 45").
     pub page: Option<String>,
@@ -496,6 +505,7 @@ pub fn to_proposal(p: &ProposeParams) -> Result<Proposal, String> {
     act.event_type = opt(&p.event_type).to_string();
     act.record_date = opt(&p.record_date).to_string();
     act.place = opt(&p.place).to_string();
+    act.address = opt(&p.address).to_string();
     act.page = opt(&p.page).to_string();
     act.transcription = opt(&p.transcription).to_string();
     act.participants = Vec::new();
@@ -522,6 +532,7 @@ pub fn to_proposal(p: &ProposeParams) -> Result<Proposal, String> {
                 value: opt(&f.value).to_string(),
                 date: opt(&f.date).to_string(),
                 place: opt(&f.place).to_string(),
+                address: opt(&f.address).to_string(),
             });
         }
         let id = person.id.as_deref().map(clean_id).filter(|x| !x.is_empty());
@@ -578,6 +589,7 @@ pub fn effects(proposal: &Proposal, ged: &Gedcom) -> Vec<String> {
             let what = match &r.field {
                 Field::Date => format!("{event} date"),
                 Field::Place => format!("{event} place"),
+                Field::Address => format!("{event} address"),
                 Field::Person { role, .. } => role.clone(),
                 Field::Fact { person, fact, name, .. } => {
                     let tag = &proposal.act.participants[*person].facts[*fact].tag;
@@ -590,9 +602,34 @@ pub fn effects(proposal: &Proposal, ged: &Gedcom) -> Vec<String> {
             } else {
                 format!(" (tree: {})", r.current)
             };
-            format!("{} {what}{value}{tree}", verb(r.change))
+            let renamed = match &r.field {
+                Field::Person { index, .. } => other_name(&proposal.act.participants[*index], ged),
+                _ => None,
+            };
+            let renamed = renamed
+                .map(|(act, x)| {
+                    format!(
+                        "; the act names them {act}: their name in the tree stays as it is, correct it with propose_change (no issue, set_name or add_name on {x})"
+                    )
+                })
+                .unwrap_or_default();
+            format!("{} {what}{value}{tree}{renamed}", verb(r.change))
         })
         .collect()
+}
+
+/// The name the act gives a linked person, when none of their names in the tree matches it, and
+/// their id: linking does not rename them.
+fn other_name(p: &Participant, ged: &Gedcom) -> Option<(String, String)> {
+    let PersonChoice::Link(x) = &p.choice else { return None };
+    let ind = ged.individual(x)?;
+    let (given, surname) = (gedcom::sort_key(p.get(PersonField::Given)), gedcom::sort_key(p.get(PersonField::Surname)));
+    if given.is_empty() && surname.is_empty() {
+        return None;
+    }
+    let same = |a: &str, b: &str| a.is_empty() || a == gedcom::sort_key(b);
+    let known = ind.names().iter().any(|n| same(&given, &n.given) && same(&surname, &n.surname));
+    (!known).then(|| (p.display_name(), x.clone()))
 }
 
 /// Are the records already attached to the file's sources images rather than PDFs?
@@ -864,6 +901,26 @@ mod tests {
             "people": [{"role": "witness", "identity": "mention", "given": "Joseph", "facts": [{"event": "OCCU", "value": "smith"}]}]}))
         .unwrap();
         assert!(to_proposal(&p).unwrap_err().contains("mentioned"));
+    }
+
+    #[test]
+    fn a_linked_person_named_otherwise_is_pointed_out() {
+        let ged = gedcom::Gedcom::parse(
+            "0 HEAD\n1 GEDC\n2 VERS 7.0\n0 @I1@ INDI\n1 NAME Lorenz /Hörmann/\n1 SEX M\n0 TRLR\n",
+        )
+        .unwrap();
+        let act = |given: &str| {
+            let p: ProposeParams = serde_json::from_value(serde_json::json!({"event": "MARR", "source": {},
+                "people": [{"role": "principal", "identity": "link", "id": "I1", "given": given, "surname": "HÖRMANN"}]}))
+            .unwrap();
+            let mut prop = to_proposal(&p).unwrap();
+            prop.complete(&ged);
+            super::effects(&prop, &ged)
+        };
+        let lines = act("Johann");
+        assert!(lines.iter().any(|l| l.contains("names them Johann") && l.contains("set_name")), "{lines:?}");
+        // Same name, other case: nothing to say.
+        assert!(act("lorenz").iter().all(|l| !l.contains("set_name")));
     }
 
     #[test]

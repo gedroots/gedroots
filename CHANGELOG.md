@@ -1,5 +1,18 @@
 # Changelog
 
+## [2026.11.4](https://github.com/gedroots/gedroots/releases/tag/v2026.11.4) - 2026-11-04
+
+### 🔄 Changed
+
+- Do not test main again after a merge by @antoninguyot in [#127](https://github.com/gedroots/gedroots/pull/127)
+- Only main and releases save caches by @antoninguyot in [#128](https://github.com/gedroots/gedroots/pull/128)
+- Read-only iOS app: pairing, tree, people, places, sources and media by @antoninguyot in [#112](https://github.com/gedroots/gedroots/pull/112)
+- Research page: the records to find, where to look and the log by @antoninguyot in [#130](https://github.com/gedroots/gedroots/pull/130)
+- Remove every living-person protection by @antoninguyot in [#131](https://github.com/gedroots/gedroots/pull/131)
+- Street addresses of events (ADDR), apart from the place by @antoninguyot in [#136](https://github.com/gedroots/gedroots/pull/136)
+- Let agents correct the tree without a Quality issue by @antoninguyot in [#135](https://github.com/gedroots/gedroots/pull/135)
+- Open a new relative on their fields; Cancel removes them by @antoninguyot in [#134](https://github.com/gedroots/gedroots/pull/134)
+
 ## [2026.11.3](https://github.com/gedroots/gedroots/releases/tag/v2026.11.3) - 2026-11-03
 
 ### 🔄 Changed

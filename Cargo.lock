@@ -2555,7 +2555,7 @@ dependencies = [
 
 [[package]]
 name = "gedroots"
-version = "2026.11.3"
+version = "2026.11.4"
 dependencies = [
  "ashpd",
  "async-channel",
