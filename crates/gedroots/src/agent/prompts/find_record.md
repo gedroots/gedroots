@@ -8,7 +8,9 @@ How to work:
    person is given above; otherwise pick the closest ancestor, lowest Sosa number): each lead gives
    the estimated years, the places to search first, where to look and the searches already made,
    never to repeat. Call `person_sheet` on the person: dates, places, parents, spouses and sources
-   already cited. Work out the names to look for, with their spelling variants.
+   already cited. Work out the names to look for, with their spelling variants. A woman is in the tree under her
+   maiden name, but acts after her marriage (her children's, her death) may name her by her
+   husband's: search both.
 2. Find the archive holding the registers: for France, the archives départementales of the
    département of the place (civil registers from 1792, parish registers before; decennial
    tables, from 1793, give the date of an act in a town). Elsewhere, the regional or national

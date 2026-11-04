@@ -89,6 +89,9 @@ review:
   similar:
     en: "Resembles %{names}"
     fr: "Ressemble à %{names}"
+  close:
+    en: "The tree writes %{values}"
+    fr: "L'arbre écrit %{values}"
   mention:
     en: "+ Mention"
     fr: "+ Mentionner"

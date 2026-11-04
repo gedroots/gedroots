@@ -204,7 +204,7 @@ impl MediaContext {
 }
 
 /// Without accents, spaces or apostrophes: “EL KAIM” → “ELKAIM”, “Médioni” → “Medioni”.
-fn simplify(v: &str) -> String {
+pub(crate) fn simplify(v: &str) -> String {
     let mut out = String::new();
     for c in v.chars() {
         let plain = match c {

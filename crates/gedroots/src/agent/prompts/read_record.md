@@ -5,14 +5,23 @@ Read a downloaded act and propose it to my family tree open in GEDRoots.
 How to work:
 
 1. Open the file and read the act itself (for a PDF register, find the page of the act). Write a
-   faithful transcription: keep the spelling of names and places as written, mark doubtful
-   readings with [?] and illegible words with [...]. Never fill in what you cannot read.
+   faithful transcription: keep the act's language and the spelling of names and places as
+   written, mark doubtful readings with [?] and illegible words with [...]. Never fill in what you
+   cannot read. Only the transcription stays as written: everything else you propose (occupations,
+   residences, event types, notes) is written in the tree's language (`language` in
+   `file_context`) the way the tree already writes it. When the person or the file already has an
+   occupation that means the same (`person_sheet`, the occupations of `file_context`), reuse its
+   exact wording instead of the act's spelling or a new translation.
 2. From the act, note: the event (an event without its own GEDCOM tag, such as military service,
    is `EVEN` with its `event_type`) and its date (a French Republican date stays in that calendar,
    in GEDCOM 7 form such as `FRENCH_R 30 GERM 4`; otherwise `14 MAR 1912`), the place, the
    reference (act number, page or image), and every person with their role in the act (principal,
    father, mother, spouse, witness, godfather, godmother, declarant, officiator…), age,
-   occupation, residence and birthplace when written. Inventory every fact the document gives,
+   occupation, residence and birthplace when written. A woman is recorded under her
+   maiden (birth) name, as genealogists do: when the act calls her by her husband's name
+   (« veuve DUPONT », « épouse MARTIN », « Frau Müller »), her surname is her maiden name if
+   the act or the tree gives it; the married name stays in the transcription and is never a
+   reason to create another person. Inventory every fact the document gives,
    not only its main event: birth, baptism, marriage, death, occupations, residences, parents,
    marginal mentions. For each, decide: proposed, already in the tree, kept in the transcription
    only (say why: uncertain reading, contradiction…), or blocked. Something certain must never
@@ -34,7 +43,9 @@ How to work:
 6. Call `propose_act` with that `identity` for each person (and `not` for the candidates you
    checked and found to be someone else), and every other certain fact in that person's `facts`
    (birth date in a baptism, marginal mention, earlier residence…), each with its own date or
-   none. Check the `will_write` list of the answer against your inventory. Give the place as
+   none. Check the `will_write` list of the answer against your inventory: when it says the tree
+   writes a close occupation another way, and it is the same one, propose again with `replaces`
+   and the tree's wording. Give the place as
    the tree names it, the transcription, and both the downloaded file (`file`, with `pdf_page`
    for a PDF) and the act's page in the archive's viewer (`url`, its permanent link such as an
    ark when the viewer offers one): GEDRoots keeps the image and a web link, so the user can see

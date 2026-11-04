@@ -80,6 +80,7 @@ pub struct PersonParams {
     #[serde(default)]
     pub not: Vec<String>,
     pub given: Option<String>,
+    /// Birth surname: a woman's maiden name, even when the act names her by her husband's.
     pub surname: Option<String>,
     /// M or F.
     pub sex: Option<String>,
@@ -450,6 +451,7 @@ pub struct MatchPersonParams {
     /// others (the father of a linked child…).
     pub id: Option<String>,
     pub given: Option<String>,
+    /// Birth surname: a woman's maiden name, even when the act names her by her husband's.
     pub surname: Option<String>,
     /// M or F.
     pub sex: Option<String>,
@@ -607,7 +609,16 @@ pub fn effects(proposal: &Proposal, ged: &Gedcom) -> Vec<String> {
                     )
                 })
                 .unwrap_or_default();
-            format!("{} {what}{value}{tree}{renamed}", verb(r.change))
+            let close = if r.close.is_empty() {
+                String::new()
+            } else {
+                let quoted: Vec<String> = r.close.iter().map(|c| format!("\"{c}\"")).collect();
+                format!(
+                    "; the tree writes a close one as {}: if it is the same, propose again with `replaces` and that wording",
+                    quoted.join(" or ")
+                )
+            };
+            format!("{} {what}{value}{tree}{renamed}{close}", verb(r.change))
         })
         .collect()
 }

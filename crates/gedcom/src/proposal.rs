@@ -98,6 +98,9 @@ pub struct Row {
     pub change: Change,
     /// Person created: individuals of the tree they resemble (“Marie DURAND (1770–1840)”).
     pub similar: Vec<String>,
+    /// Fact with a value (an occupation): how the tree already writes a close one, the person's
+    /// first, then the file's (“Employé de la Compagnie des chemins de fer”).
+    pub close: Vec<String>,
 }
 
 /// Link of the attachment chain: already exists, or will be created.
@@ -166,6 +169,18 @@ impl Proposal {
         }
         // Everything that will be written is shown in the review, deduced facts included.
         act.make_facts_explicit(ged);
+        // A value the tree already has, written another way, takes the tree's form.
+        for p in &mut act.participants {
+            let linked = match &p.choice {
+                PersonChoice::Link(x) => ged.get(x),
+                _ => None,
+            };
+            for f in p.facts.iter_mut().filter(|f| f.has_value()) {
+                if let Some(v) = ged.written_as(linked, &f.tag, &f.value) {
+                    f.value = v;
+                }
+            }
+        }
     }
 
     /// Creates the source if it is new and returns the record pointing to it (to pick it up in
@@ -339,6 +354,7 @@ impl Proposal {
                 current: cur_date,
                 proposed: act.date.trim().to_string(),
                 similar: Vec::new(),
+                close: Vec::new(),
             });
         }
         if !act.place.trim().is_empty() || !cur_place.is_empty() {
@@ -349,6 +365,7 @@ impl Proposal {
                 current: cur_place,
                 proposed: act.place.trim().to_string(),
                 similar: Vec::new(),
+                close: Vec::new(),
             });
         }
         if !act.address.trim().is_empty() || !cur_address.is_empty() {
@@ -358,6 +375,7 @@ impl Proposal {
                 current: cur_address,
                 proposed: act.address.trim().to_string(),
                 similar: Vec::new(),
+                close: Vec::new(),
             });
         }
         for (i, p) in act.participants.iter().enumerate() {
@@ -392,6 +410,7 @@ impl Proposal {
                 proposed,
                 change,
                 similar: similar.unwrap_or_default(),
+                close: Vec::new(),
             });
         }
         for (i, p) in act.participants.iter().enumerate() {
@@ -403,11 +422,16 @@ impl Proposal {
                 _ => None,
             };
             for (k, f) in p.facts.iter().enumerate().filter(|(_, f)| !f.is_blank()) {
-                // In the tree: the person's fact of the same kind.
+                // In the tree: the person's fact of the same kind. An occupation, a residence…
+                // can be attested again at another date: only the one of the same date compares.
+                let kind = |c: &&Node| c.tag == f.tag && c.child_val("TYPE").unwrap_or("") == f.event_type.trim();
                 let same = linked.and_then(|n| {
-                    n.children
-                        .iter()
-                        .find(|c| c.tag == f.tag && c.child_val("TYPE").unwrap_or("") == f.event_type.trim())
+                    if crate::act::is_unique_event(&f.tag) {
+                        return n.children.iter().find(kind);
+                    }
+                    let dated: Vec<&Node> =
+                        n.children.iter().filter(kind).filter(|c| same_date(c.child_val("DATE"), &f.date)).collect();
+                    dated.iter().find(|c| f.has_value() && loose(c.val()) == loose(&f.value)).or(dated.first()).copied()
                 });
                 let current = same.map(|c| crate::act::Fact {
                     tag: c.tag.clone(),
@@ -438,6 +462,11 @@ impl Proposal {
                     proposed: f.summary(),
                     change,
                     similar: Vec::new(),
+                    close: if f.has_value() && change != Change::Same {
+                        ged.close_wordings(linked, &f.tag, &f.value)
+                    } else {
+                        Vec::new()
+                    },
                 });
             }
         }
@@ -523,11 +552,69 @@ fn norm(s: &str) -> String {
     s.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase()
 }
 
+/// The text without case, accents, spaces or punctuation: “Staatseisenbahn-Gesellschaft” and
+/// “Staatseisenbahngesellschaft” are the same words.
+pub(crate) fn loose(s: &str) -> String {
+    crate::media_naming::simplify(s).chars().filter(|c| c.is_alphanumeric()).flat_map(char::to_lowercase).collect()
+}
+
+/// Two wordings of the same thing, not written alike: a typo, a gender, a word more or less
+/// (two thirds of the significant words shared). Different words (“Cultivateur”, “Propriétaire
+/// cultivateur”) are not.
+pub(crate) fn close_wording(a: &str, b: &str) -> bool {
+    let (la, lb) = (loose(a), loose(b));
+    if la.is_empty() || lb.is_empty() || la == lb {
+        return false;
+    }
+    if edit_distance(&la, &lb) <= (la.chars().count().max(lb.chars().count()) / 10).max(1) {
+        return true;
+    }
+    let words = |s: &str| -> Vec<String> {
+        s.split(|c: char| !c.is_alphanumeric()).map(loose).filter(|w| w.chars().count() > 3).collect()
+    };
+    let (wa, wb) = (words(a), words(b));
+    if wa.is_empty() || wb.is_empty() {
+        return false;
+    }
+    let same = |t: &str, u: &str| {
+        t == u
+            || t.chars().count().min(u.chars().count()) >= 5
+                && (t.contains(u) || u.contains(t) || edit_distance(t, u) <= 1)
+    };
+    let found = |x: &[String], y: &[String]| x.iter().filter(|t| y.iter().any(|u| same(t, u))).count();
+    let shared = found(&wa, &wb).min(found(&wb, &wa));
+    shared * 3 >= 2 * wa.len().max(wb.len())
+}
+
+fn edit_distance(a: &str, b: &str) -> usize {
+    let b: Vec<char> = b.chars().collect();
+    let mut row: Vec<usize> = (0..=b.len()).collect();
+    for (i, x) in a.chars().enumerate() {
+        let mut prev = row[0];
+        row[0] = i + 1;
+        for (j, y) in b.iter().enumerate() {
+            let cur = row[j + 1];
+            row[j + 1] = (prev + usize::from(x != *y)).min(row[j] + 1).min(cur + 1);
+            prev = cur;
+        }
+    }
+    row[b.len()]
+}
+
+/// Dates of the same day, written alike or not; or both missing.
+fn same_date(current: Option<&str>, proposed: &str) -> bool {
+    let (c, p) = (current.unwrap_or("").trim(), proposed.trim());
+    if c.is_empty() || p.is_empty() {
+        return c.is_empty() && p.is_empty();
+    }
+    date_change(c, p) == Change::Same
+}
+
 pub(crate) fn text_change(current: &str, proposed: &str) -> Change {
     let (c, p) = (norm(current), norm(proposed));
     if c.is_empty() {
         Change::Added
-    } else if p.is_empty() || c == p {
+    } else if p.is_empty() || c == p || loose(&c) == loose(&p) {
         Change::Same
     } else if p.starts_with(&c) || c.starts_with(&p) {
         Change::Refined
@@ -571,6 +658,60 @@ impl crate::Date {
 }
 
 impl Gedcom {
+    /// How the tree already writes `value` as a `tag` (an occupation…), when it is the same text with
+    /// another case, accents, spaces or punctuation: the person's own form first, then the file's
+    /// most frequent. `None` when the tree writes it this way already, or not at all.
+    fn written_as(&self, person: Option<&Node>, tag: &str, value: &str) -> Option<String> {
+        let key = loose(value);
+        if key.is_empty() {
+            return None;
+        }
+        let matching = |n: &Node| -> Vec<String> {
+            n.children_with(tag).map(|c| c.val().trim()).filter(|v| loose(v) == key).map(str::to_string).collect()
+        };
+        let mut found = person.map(matching).and_then(|v| v.into_iter().next());
+        if found.is_none() {
+            let mut counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+            for r in self.records_of(RecordKind::Individual) {
+                for v in matching(r) {
+                    *counts.entry(v).or_default() += 1;
+                }
+            }
+            found = counts.into_iter().max_by(|a, b| a.1.cmp(&b.1).then_with(|| b.0.cmp(&a.0))).map(|(v, _)| v);
+        }
+        found.filter(|v| v != value.trim())
+    }
+
+    /// Values of `tag` the tree writes close to `value` but not the same (“Employé des chemins de
+    /// fer” and “Employé de la Compagnie des chemins de fer”, “Insitituteur” and “Instituteur”):
+    /// the person's, or else the file's most frequent, at most three.
+    pub fn close_wordings(&self, person: Option<&Node>, tag: &str, value: &str) -> Vec<String> {
+        let mut out: Vec<String> = Vec::new();
+        let mut counts: Vec<(String, usize)> = Vec::new();
+        let add = |n: &Node, counts: &mut Vec<(String, usize)>| {
+            for c in n.children_with(tag) {
+                let v = c.val().trim();
+                if close_wording(v, value) {
+                    match counts.iter_mut().find(|(w, _)| w == v) {
+                        Some((_, k)) => *k += 1,
+                        None => counts.push((v.to_string(), 1)),
+                    }
+                }
+            }
+        };
+        if let Some(p) = person {
+            add(p, &mut counts);
+        }
+        if counts.is_empty() {
+            for r in self.records_of(RecordKind::Individual) {
+                add(r, &mut counts);
+            }
+            counts.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+        }
+        out.extend(counts.into_iter().take(3).map(|(v, _)| v));
+        out
+    }
+
     /// Place of the file designated by `typed`: its full label, or its municipality if there is
     /// only one with this name. Otherwise, the input as is.
     pub fn known_place(&self, typed: &str) -> String {
@@ -672,6 +813,76 @@ mod tests {
             call_number: "10 NUM 35238".into(),
             ..Default::default()
         })
+    }
+
+    #[test]
+    fn occupation_written_otherwise_or_at_another_date_is_a_new_attestation() {
+        let mut g = ged();
+        let i3 = g.get_mut("I3").unwrap();
+        i3.insert_child(
+            Node::with_value("OCCU", "Beamter der Staatseisenbahn-Gesellschaft")
+                .push(Node::with_value("DATE", "24 FEB 1908")),
+        );
+        i3.insert_child(Node::with_value("OCCU", "Tisserand").push(Node::with_value("DATE", "4 APR 1802")));
+        let occupations = |p: &Proposal| {
+            let mut g2 = g.clone();
+            p.apply(&mut g2).unwrap();
+            g2.get("I3")
+                .unwrap()
+                .children_with("OCCU")
+                .map(|o| format!("{}, {}", o.val(), o.child_val("DATE").unwrap_or("")))
+                .collect::<Vec<_>>()
+        };
+        let row = |p: &Proposal| {
+            p.compare(&g).into_iter().find(|r| matches!(r.field, Field::Fact { .. })).map(|r| r.change).unwrap()
+        };
+
+        // Same words as the tree's, another spelling and date: the tree's form, a new dated fact.
+        let mut p = birth(SourceChoice::Existing("S1".into()));
+        p.act.participants[1].set(PersonField::Occupation, "Beamter der Staatseisenbahngesellschaft");
+        p.act.date = "5 APR 1875".into();
+        p.complete(&g);
+        let f = &p.act.participants[1].facts[0];
+        assert_eq!(f.value, "Beamter der Staatseisenbahn-Gesellschaft");
+        assert_eq!(row(&p), Change::Added);
+        assert!(occupations(&p).contains(&"Beamter der Staatseisenbahn-Gesellschaft, 5 APR 1875".to_string()));
+
+        // Same date and words: already in the tree, only cited.
+        let mut p = birth(SourceChoice::Existing("S1".into()));
+        p.act.participants[1].set(PersonField::Occupation, "tisserand");
+        p.complete(&g);
+        assert_eq!(row(&p), Change::Same);
+        assert_eq!(occupations(&p).len(), 2);
+
+        // Another occupation the same day contradicts it.
+        let mut p = birth(SourceChoice::Existing("S1".into()));
+        p.act.participants[1].set(PersonField::Occupation, "Laboureur");
+        p.complete(&g);
+        assert_eq!(row(&p), Change::Differs);
+    }
+
+    #[test]
+    fn close_wordings_are_a_typo_a_gender_or_a_word_more() {
+        assert!(close_wording("Employé des chemins de fer", "Employé de la Compagnie des chemins de fer"));
+        assert!(close_wording("Insitituteur", "Instituteur"));
+        assert!(close_wording("Journalier", "Journalière"));
+        assert!(!close_wording("Cultivateur", "Propriétaire cultivateur"));
+        assert!(!close_wording("Garde forestier", "Garde champêtre"));
+        assert!(!close_wording("Tisserand", "tisserand"));
+        let mut g = ged();
+        g.get_mut("I3").unwrap().insert_child(Node::with_value("OCCU", "Employé de la Compagnie des chemins de fer"));
+        let mut p = birth(SourceChoice::Existing("S1".into()));
+        p.act.participants[1].set(PersonField::Occupation, "Employé des chemins de fer");
+        p.complete(&g);
+        let row = p.compare(&g).into_iter().find(|r| matches!(r.field, Field::Fact { .. })).unwrap();
+        assert_eq!(row.close, vec!["Employé de la Compagnie des chemins de fer".to_string()]);
+    }
+
+    #[test]
+    fn text_compares_without_punctuation_or_accents() {
+        assert_eq!(text_change("Staatseisenbahn-Gesellschaft", "Staatseisenbahngesellschaft"), Change::Same);
+        assert_eq!(text_change("Propriétaire", "proprietaire"), Change::Same);
+        assert_eq!(text_change("Tisserand", "Laboureur"), Change::Differs);
     }
 
     #[test]
