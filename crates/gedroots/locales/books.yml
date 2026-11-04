@@ -4,6 +4,9 @@ _version: 2
 books.view:
   en: Books
   fr: Livres
+books.empty:
+  en: No Books
+  fr: Aucun livre
 books.none:
   en: No book selected
   fr: Aucun livre sélectionné

@@ -2156,8 +2156,8 @@ impl Workspace {
             .child(arrow(false))
     }
 
-    /// Sidebar: the four zones, named, with their count, then a secondary group (repositories and
-    /// notes when the file has some, quality, statistics), like Mail's or Finder's sections. It
+    /// Sidebar: the four zones, named, with their count, then a secondary group (repositories,
+    /// notes, research, quality, statistics, books), always shown, like Mail's or Finder's sections. It
     /// launches no action; the commands are in the menus.
     fn render_sidebar(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let doc = self.doc.as_ref();
@@ -2177,6 +2177,8 @@ impl Workspace {
                 View::Books => self.book_count(),
                 v => d.ged.count(v.kind()?),
             })
+            // An empty page shows no counter, unless it is a search with no result.
+            .filter(|&n| n > 0 || (v == self.view && filtered))
         };
         let zone = |v: View, n: Option<usize>, cx: &mut Context<Self>| {
             let active = v == self.view;
@@ -2200,15 +2202,8 @@ impl Workspace {
                 .on_click(cx.listener(move |this, _, w, cx| this.show_view(v, w, cx)))
         };
         let primary: Vec<_> = View::SIDEBAR.into_iter().map(|v| zone(v, count(v), cx)).collect();
-        // Repositories and notes only when the file has some (or one is open).
-        let secondary: Vec<_> = View::SECONDARY
-            .into_iter()
-            .map(|v| (v, count(v)))
-            .filter(|&(v, n)| {
-                v == self.view || !matches!(v, View::Repositories | View::Notes | View::Books) || n.unwrap_or(0) > 0
-            })
-            .map(|(v, n)| zone(v, n, cx))
-            .collect();
+        // Every page always shows, even empty: its page is where the first one is created.
+        let secondary: Vec<_> = View::SECONDARY.into_iter().map(|v| zone(v, count(v), cx)).collect();
         v_flex()
             .id("sidebar")
             .relative()
@@ -4101,7 +4096,7 @@ impl Render for Workspace {
                 .items_stretch()
                 .when(self.sidebar && !self.compact.sidebar, |d| d.child(self.render_sidebar(cx)))
                 .when(self.view == View::Research, |d| d.child(self.render_research_list(cx)))
-                .when(self.view == View::Books, |d| d.child(self.render_books_list(cx)))
+                .when(self.view == View::Books && !self.rows.is_empty(), |d| d.child(self.render_books_list(cx)))
                 .when(!matches!(self.view, View::Stats | View::Research | View::Books), |d| {
                     d.child(self.render_list(cx))
                 })
