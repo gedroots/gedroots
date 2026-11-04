@@ -1,5 +1,5 @@
 _version: 2
-# Updates (crates/gedroots/src/updates.rs), shown on the right of the top bar.
+# Updates (crates/gedroots/src/updates.rs), shown in the status bar.
 
 updates:
   checking:

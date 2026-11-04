@@ -51,10 +51,17 @@ A proposal without this research is not ready to show.
   selection, brand symbol. Never a violet background or large violet area, no gradients.
 - **Data first**: the screen serves genealogy, not the interface. No decorative chrome, no
   cards inside cards, no shadows except for what floats (menus, popovers, modals).
-- **Commands in the menus**: no toolbar. Each command exists once in the menu bar (the
-  `commands.rs` model), so also in the `⌘⇧P` palette and, when it acts on an item, in that
-  item's context menu with the same label. The only visible buttons are the small "+" in
-  section headers (Events, Family, Members…) and the dashed slots of the tree.
+- **One place per command**: a command is either a visible control (the top bar's Create
+  button, a "+" in a section header, a dashed slot of the tree, a link of the sidebar, a button
+  of a page) or an item of the menu bar, never both (`menus_have_every_command_once`). Every
+  command is in the `⌘⇧P` palette with its shortcut: those of the menus through the menu model,
+  the others through `palette_only()` in `commands.rs`. When a command acts on an item, it is also
+  in that item's context menu with the same label. No toolbar: the only button of the top bar
+  is Create.
+- **Create**: on the right of the top bar, a small primary "+" button named after what the page
+  lists ("New Source", "New Book"), `⌘N`, like Notes, Contacts or Gramps' contextual Add. It is
+  hidden where nothing is created (Places, Research, Quality, Statistics). A new window is
+  `⌥⌘N`, like Mail.
 - **No explanatory text**: one title per element; format examples go in the field
   placeholder; empty sections are hidden.
 - **Progressive disclosure**: technical fields are inferred, not shown (e.g. a media's
@@ -70,7 +77,8 @@ A proposal without this research is not ready to show.
   asked for what cannot be undone (a file overwritten on disk…).
 - **A single bar at the top**: on macOS the title bar is merged with the app's bar (traffic
   lights on the left, window dragging). The file name appears only once, centred, followed by
-  "•" while it is unsaved. No status bar: messages show on the right of the top bar.
+  "•" while it is unsaved. Messages show in a thin status bar at the bottom (24 px), which
+  stays when empty so the layout does not jump.
 - **Tooltips** on every button without a label, with the shortcut when there is one.
 - **Never colour alone**: lineages, states and selections also have a shape (dot, outline,
   icon, text). Colours stay readable for colour-blind users.
@@ -199,8 +207,8 @@ Rules shared by the three guidelines, to apply everywhere.
   links, links, then "Used by".
 - Sidebar: the four areas (Individuals, Sources, Places, Media), then a secondary group under
   a separator, like Mail's or Finder's sections: Repositories and Notes when the file has some,
-  Research and Quality (with their counts) and Statistics. The Go menu lists the same places
-  (`⌘1`–`⌘9`).
+  Research and Quality (with their counts) and Statistics. `⌘1`–`⌘9` go to the same places
+  (palette only: the sidebar shows them).
 - **Narrow window**: below 1200 px the sidebar folds away, below 1100 px the details panel does
   too (like libadwaita's breakpoints or Mail's columns); the list and the centre never shrink
   under their content. View › Show or Hide Sidebar (`⌃⌘S`) or Details Panel (`⌥⌘I`) then shows
@@ -224,8 +232,9 @@ Rules shared by the three guidelines, to apply everywhere.
   menu opens, the bar drawn in the window (Linux, Windows) is refreshed after each frame. Only
   context menus show just what applies. An empty submenu is hidden (e.g. Open Recent).
 - Menus: 3 to 12 items, grouped by separators, submenus one level deep (checked by the
-  `menus_stay_short` test). Navigation lives in the Go menu (history, then the places of the
-  file), like Finder.
+  `menus_stay_short` test). The GEDRoots menu comes first on every platform: About, updates,
+  what belongs to the app rather than to a tree (Connect an AI Agent…, Mobile Devices…), File
+  Settings, Quit. Navigation has no menu: the sidebar and the top bar's arrows do it.
 - Context menu: right click (and `⇧F10` / Menu key outside macOS), same labels as the menu
   bar; it acts on the clicked item without changing the selection.
 - Shortcuts: only for frequent commands; reuse the platform's before inventing new ones (see
@@ -244,7 +253,7 @@ Rules shared by the three guidelines, to apply everywhere.
 
 ### Feedback and states
 
-- A short message on the right of the top bar after an action ("3 media attached"), in
+- A short message in the status bar after an action ("3 media attached"), in
   `danger()` for an error. An error says what happened and what to do, without jargon.
 - Beyond about one second: a progress indicator; beyond a few seconds: numbered, cancellable
   progress. Never freeze the window.
@@ -310,7 +319,8 @@ As of 2 November 2026, to be resolved over the PRs:
 ## Before shipping an interface
 
 - [ ] "Before any mockup" research done and summarised in the PR.
-- [ ] Commands added to the menu model (hence the palette), same labels on right click.
+- [ ] Each command in exactly one place: a visible control (then in `palette_only()`) or the
+  menu model; same labels on right click.
 - [ ] No hardcoded colour, font or radius: `theme.rs` tokens only.
 - [ ] Screenshots in light and dark, with a real file (a copy) and long or empty data.
 - [ ] Keyboard-only walkthrough; visible focus; tooltips on icons.
