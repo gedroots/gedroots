@@ -69,6 +69,9 @@ ws.id_copied:
 ws.created:
   en: "%{kind} created"
   fr: "%{kind} créé(e)"
+ws.creation_cancelled:
+  en: Creation cancelled
+  fr: Création annulée
 ws.deleted:
   en: "“%{label}” deleted (Undo to go back)"
   fr: "« %{label} » supprimé (Annuler pour revenir en arrière)"
