@@ -34,17 +34,25 @@ else
 	gh api -X POST "repos/$repo/git/refs" -f ref="refs/heads/$branch" -f sha="$base" > /dev/null
 fi
 files=(crates/gedroots/Cargo.toml Cargo.lock CHANGELOG.md)
-additions=$(for f in "${files[@]}"; do jq -n --arg path "$f" --arg contents "$(base64 -w0 "$f")" '{path: $path, contents: $contents}'; done | jq -s .)
+# Contents go through files, never arguments: Cargo.lock in base64 is too long for the command line.
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+for f in "${files[@]}"; do
+	base64 -w0 "$f" > "$tmp/contents"
+	jq -n --arg path "$f" --rawfile contents "$tmp/contents" '{path: $path, contents: $contents}' > "$tmp/$(basename "$f").json"
+done
+jq -s . "$tmp"/*.json > "$tmp/additions"
 jq -n --arg repo "$repo" --arg branch "$branch" --arg head "$base" --arg message "chore: release $version" \
-	--argjson additions "$additions" '{
+	--slurpfile additions "$tmp/additions" '{
 		query: "mutation($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { oid } } }",
 		variables: {input: {
 			branch: {repositoryNameWithOwner: $repo, branchName: $branch},
 			expectedHeadOid: $head,
 			message: {headline: $message},
-			fileChanges: {additions: $additions}
+			fileChanges: {additions: $additions[0]}
 		}}
-	}' | gh api graphql --input - --jq .data.createCommitOnBranch.commit.oid
+	}' > "$tmp/request"
+gh api graphql --input "$tmp/request" --jq .data.createCommitOnBranch.commit.oid
 git checkout -- "${files[@]}" 2> /dev/null || true
 
 title="chore: release $version"
