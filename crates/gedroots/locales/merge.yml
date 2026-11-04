@@ -56,3 +56,44 @@ merge:
   not_duplicate:
     en: Not a Duplicate
     fr: Pas un doublon
+  # Merge Two Places window (workspace/place_merging.rs).
+  places_title:
+    en: Merge Two Places
+    fr: Fusionner deux lieux
+  no_place_left:
+    en: No possible duplicate place left
+    fr: Plus aucun lieu en double possible
+  no_place_duplicate:
+    en: "No possible duplicate of %{name}"
+    fr: "Aucun doublon possible de %{name}"
+  places_merged:
+    en: "%{a} and %{b} merged"
+    fr: "%{a} et %{b} fusionnés"
+  place_uses:
+    en: "%{uses} · %{records}"
+    fr: "%{uses} · %{records}"
+  records:
+    one:
+      en: "%{n} record"
+      fr: "%{n} fiche"
+    other:
+      en: "%{n} records"
+      fr: "%{n} fiches"
+  same_levels:
+    en: "%{levels}: same (%{values})"
+    fr: "%{levels} : identiques (%{values})"
+  coordinates:
+    en: Coordinates
+    fr: Coordonnées
+  apart:
+    en: "%{km} km apart"
+    fr: "à %{km} km"
+  localities:
+    en: Localities
+    fr: Lieux-dits
+  result:
+    en: "Result:"
+    fr: "Résultat :"
+  decimal:
+    en: "."
+    fr: ","

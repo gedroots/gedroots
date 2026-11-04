@@ -121,7 +121,7 @@ pub fn code_label(code: &str) -> Cow<'static, str> {
         "unattached_file" => t!("check.code.unattached_file"),
         "missing_coords" => t!("check.code.missing_coords"),
         "bad_coords" => t!("check.code.bad_coords"),
-        "place_variant" => t!("check.code.place_variant"),
+        "possible_duplicate_place" => t!("check.code.possible_duplicate_place"),
         "place_hierarchy" => t!("check.code.place_hierarchy"),
         "role_sex_mismatch" => t!("check.code.role_sex_mismatch"),
         "outside_source_period" => t!("check.code.outside_source_period"),

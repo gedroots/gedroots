@@ -284,12 +284,13 @@ with the right code.
 | `unattached_file` | File in the `.ged` folder that no media points to (cannot be hidden: it has no record) |
 | `missing_coords` | Place without coordinates (`PLAC.MAP`) |
 | `bad_coords` | Unreadable or incomplete coordinates |
-| `place_variant` | Same place written differently (case, accents, "St"/"Saint", codes), or a shortened form of exactly one other place |
+| `possible_duplicate_place` | Two places that may be the same: written differently (case, accents, "St"/"Saint", codes), a shortened form of exactly one other place, or a name that starts the other one ("Leudon" / "Leudon-en-Brie") under the same higher level with the same code or coordinates less than 2 km apart. Compared in the **Merge Two Places** window; hidden with `_GR_DISTINCT` in the header |
 | `place_hierarchy` | The same division attached to two higher divisions ("Loire" in "Rhône-Alpes" and in "Auvergne-Rhône-Alpes"); "Harmonize" keeps the most frequent |
 | `possible_duplicate` | Two individuals that may be the same person; hidden with `_GR_DISTINCT` on the pair, not `_GR_IGNORE` |
 
 File and place issues cannot be hidden: they concern no record where `_GR_IGNORE` could be
-written.
+written. Possible duplicate places are the exception: **Not a Duplicate** writes the pair in the
+header (see [`_GR_DISTINCT`](#_gr_distinct)).
 
 The GEDCOM 7 schema check only applies to version 7 files; extension tags (`_XXX`) are never
 reported.
@@ -316,6 +317,25 @@ cannot propose to merge them.
 
 Merging two individuals carries the marks of the merged-away one over to the kept one. If the
 other individual is deleted, the line goes with it, like any pointer to a deleted record.
+
+The same tag marks two **places** that look alike but are different (an old municipality and
+the one it merged into, for instance). A GEDCOM place is not a record, so the mark goes in the
+header:
+
+- **Under**: `HEAD`, at level 1. One line per place, with one `PLAC` per place known to be
+  another one.
+- **Value**: the full place name, as in the `PLAC` tags of the file.
+- **Substructures**: `PLAC <the other place>`, one or more. GEDRoots reads each pair in both
+  directions.
+
+```
+0 HEAD
+1 _GR_DISTINCT , Fontaine-Denis, 51120, Marne, Grand Est, France
+2 PLAC , Fontaine-Denis-Nuisy, 51120, Marne, Grand Est, France
+```
+
+Renaming or merging a place updates its marks; a pair that becomes a single place loses its
+mark.
 
 ## Source and media types (no extension)
 

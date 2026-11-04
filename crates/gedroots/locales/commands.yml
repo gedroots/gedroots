@@ -15,6 +15,9 @@ menu:
   research:
     en: Research
     fr: Recherche
+  place:
+    en: Place
+    fr: Lieu
   source:
     en: Source
     fr: Source
@@ -254,6 +257,19 @@ cmd:
   find_duplicates:
     en: Find Duplicates
     fr: Rechercher ses doublons
+  # Place
+  locate_place:
+    en: Locate…
+    fr: Localiser…
+  place_on_map:
+    en: Place on Map
+    fr: Placer sur la carte
+  merge_with_place:
+    en: Merge with Another Place…
+    fr: Fusionner avec un autre lieu…
+  find_duplicate_places:
+    en: Find Duplicate Places
+    fr: Rechercher les lieux en double
   # Source
   enter_act:
     en: Enter Record…

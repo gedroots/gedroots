@@ -620,6 +620,9 @@ impl Gedcom {
                 }
             });
         }
+        if old != new.trim() {
+            self.rename_in_distinct(&[(old, new.trim())]);
+        }
         count
     }
 

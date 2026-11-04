@@ -79,6 +79,11 @@ actions!(
         NewRepository,
         NewNote,
         EnterRecord,
+        // Place
+        LocatePlace,
+        PlaceOnMap,
+        MergeWithPlace,
+        FindDuplicatePlaces,
         // Media
         NewMedia,
         AttachMediaTo,
@@ -615,6 +620,17 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
             indi.push(Sub(label::search_web(), items.collect()));
         }
     }
+    // Places are not records: their commands apply to the place shown on the Places page.
+    menus.push((
+        t!("menu.place").into(),
+        vec![
+            a(t!("cmd.locate_place"), LocatePlace),
+            a(t!("cmd.place_on_map"), PlaceOnMap),
+            Sep,
+            a(t!("cmd.merge_with_place"), MergeWithPlace),
+            a(t!("cmd.find_duplicate_places"), FindDuplicatePlaces),
+        ],
+    ));
     // Agents propose records: connecting one and reviewing what it proposed go together.
     menus.push((
         t!("menu.source").into(),

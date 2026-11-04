@@ -1,0 +1,23 @@
+_version: 2
+# Possible duplicate places and merging them (crates/gedcom/src/place_merge.rs).
+place_merge.clue_spelling:
+  en: "Same name, written differently"
+  fr: "Même nom, écrit autrement"
+place_merge.clue_shortened:
+  en: "Shortened form"
+  fr: "Forme abrégée"
+place_merge.clue_prefix:
+  en: "“%{a}” starts “%{b}”"
+  fr: "« %{a} » commence « %{b} »"
+place_merge.clue_same_code:
+  en: "Same code (%{code})"
+  fr: "Même code (%{code})"
+place_merge.clue_same_point:
+  en: "Same coordinates"
+  fr: "Mêmes coordonnées"
+place_merge.clue_near:
+  en: "%{km} km apart"
+  fr: "À %{km} km"
+place_merge.level:
+  en: "Level %{n}"
+  fr: "Niveau %{n}"

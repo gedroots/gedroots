@@ -93,6 +93,9 @@ impl Workspace {
         if issue.code == "possible_duplicate" {
             return self.merge_from_quality(&issue, cx);
         }
+        if issue.code == "possible_duplicate_place" {
+            return self.place_merge_from_quality(&issue, cx);
+        }
         let Some(fix) = quality::fix_of(issue.code) else { return };
         let msg = t!("quality.labelled", label = fix.label, message = issue.message).to_string();
         self.quality_edit(|g| g.fix_issue(&issue), msg, window, cx);
@@ -165,6 +168,14 @@ impl Workspace {
         let label = check::code_label(issue.code);
         let msg =
             if ignore { t!("quality.hidden", label = label) } else { t!("quality.shown", label = label) }.to_string();
+        // A pair of places: “not a duplicate” in the header.
+        if let ("possible_duplicate_place", [a, b]) = (issue.code, &issue.related[..]) {
+            let (a, b) = (a.clone(), b.clone());
+            let f = move |g: &mut Gedcom| {
+                if ignore { g.mark_places_distinct(&a, &b) } else { g.unmark_places_distinct(&a, &b) }
+            };
+            return self.quality_edit(f, msg, window, cx);
+        }
         let (x, code) = (issue.xref.clone(), issue.code);
         // A pair of people is hidden as “not a duplicate” (`_GR_DISTINCT`), not per record.
         let other = issue.related.first().cloned().filter(|_| code == "possible_duplicate");
@@ -366,6 +377,8 @@ impl Workspace {
                                             let _ = open.update(cx, |this, cx| {
                                                 if x.code == "possible_duplicate" {
                                                     this.merge_from_quality(&x, cx)
+                                                } else if x.code == "possible_duplicate_place" {
+                                                    this.place_merge_from_quality(&x, cx)
                                                 } else {
                                                     this.open_issue(&x, w, cx)
                                                 }
@@ -409,7 +422,7 @@ impl Workspace {
                 None => menu,
             };
             let ignored = issue.ignored;
-            if !record {
+            if !record && issue.code != "possible_duplicate_place" {
                 return menu;
             }
             menu.separator().item(menus::act(
