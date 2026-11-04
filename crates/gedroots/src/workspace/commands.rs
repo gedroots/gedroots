@@ -480,10 +480,11 @@ impl Workspace {
             cx.notify();
             return;
         }
-        // Only the commands that apply now (checked from the workspace).
+        // Only the commands that apply now (checked from the workspace), plus those of the
+        // application (About, Release Notes, Quit…), which apply everywhere.
         let items = crate::commands::palette_entries()
             .into_iter()
-            .filter(|e| window.is_action_available(e.action.as_ref(), cx))
+            .filter(|e| window.is_action_available(e.action.as_ref(), cx) || crate::is_global_action(e.action.as_ref()))
             .map(|e| {
                 // Keywords without accents: “pere” finds “Père”.
                 let words: Vec<String> = e.path.split(" › ").map(fold_accents).collect();

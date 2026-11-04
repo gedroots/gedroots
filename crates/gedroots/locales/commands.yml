@@ -450,6 +450,9 @@ cmd:
     en: Delete Search
     fr: Supprimer la recherche
   # Help
+  about:
+    en: About GEDRoots
+    fr: À propos de GEDRoots
   all_commands:
     en: All Commands…
     fr: Toutes les commandes…
