@@ -58,8 +58,14 @@ fn change(g: &Gedcom, code: &str, action: Action, reason: &str) -> QualityChange
 #[test]
 fn an_edit_that_fixes_the_date_is_accepted_and_applied() {
     let g = ged();
-    let edit =
-        Edit::SetEvent { record: "I1".into(), index: 3, value: None, date: Some("12 MAR 1869".into()), place: None };
+    let edit = Edit::SetEvent {
+        record: "I1".into(),
+        index: 3,
+        value: None,
+        date: Some("12 MAR 1869".into()),
+        place: None,
+        address: None,
+    };
     let c = change(&g, "death_before_birth", Action::Edit(vec![edit]), "The act says 1869");
     assert!(c.check(&g, &rerun).unwrap().is_empty());
     let rows = c.rows(&g);
@@ -80,11 +86,25 @@ fn changes_that_do_not_fit_the_issue_are_refused() {
     let c = change(&g, "death_before_birth", Action::Edit(vec![sex]), "x");
     assert!(c.check(&g, &rerun).unwrap_err().contains("not allowed"));
     // Still before the birth.
-    let edit = Edit::SetEvent { record: "I1".into(), index: 3, value: None, date: Some("1770".into()), place: None };
+    let edit = Edit::SetEvent {
+        record: "I1".into(),
+        index: 3,
+        value: None,
+        date: Some("1770".into()),
+        place: None,
+        address: None,
+    };
     let c = change(&g, "death_before_birth", Action::Edit(vec![edit]), "x");
     assert!(c.check(&g, &rerun).unwrap_err().contains("still reports"));
     // Another person's record.
-    let edit = Edit::SetEvent { record: "I2".into(), index: 3, value: None, date: Some("1700".into()), place: None };
+    let edit = Edit::SetEvent {
+        record: "I2".into(),
+        index: 3,
+        value: None,
+        date: Some("1700".into()),
+        place: None,
+        address: None,
+    };
     let c = change(&g, "death_before_birth", Action::Edit(vec![edit]), "x");
     assert!(c.check(&g, &rerun).unwrap_err().contains("not one of the records"));
     // No automatic fix, no reason.
@@ -206,14 +226,21 @@ fn a_correction_changes_and_adds_occupations() {
         reason: "The 1852 census says weaver".into(),
         evidence: evidence.clone(),
     };
-    let set =
-        Edit::SetEvent { record: "I1".into(), index: 1, value: Some("tisserand".into()), date: None, place: None };
+    let set = Edit::SetEvent {
+        record: "I1".into(),
+        index: 1,
+        value: Some("tisserand".into()),
+        date: None,
+        place: None,
+        address: None,
+    };
     let add = Edit::AddEvent {
         record: "I1".into(),
         tag: "occu".into(),
         value: "tisserand".into(),
         date: "1852".into(),
         place: String::new(),
+        address: String::new(),
     };
     let c = correction(vec![set, add]);
     c.check(&g, &rerun).unwrap();
@@ -229,6 +256,43 @@ fn a_correction_changes_and_adds_occupations() {
         value: String::new(),
         date: String::new(),
         place: String::new(),
+        address: String::new(),
     };
     assert!(correction(vec![bad]).check(&g, &rerun).unwrap_err().contains("XYZ"));
+}
+
+#[test]
+fn a_correction_moves_an_address_and_renames_a_place() {
+    let g = Gedcom::parse(
+        "0 HEAD\n1 GEDC\n2 VERS 7.0\n0 @I1@ INDI\n1 NAME Jean /GUYOT/\n1 RESI\n2 DATE 1872\n\
+         2 PLAC Agneau\n3 MAP\n4 LATI N49.1\n4 LONG W1.1\n1 DEAT\n2 PLAC Agneau\n0 TRLR\n",
+    )
+    .unwrap();
+    let correction = |edits: Vec<Edit>| QualityChange {
+        issue: None,
+        issue_id: None,
+        action: Action::Edit(edits),
+        reason: "The census gives the street; the commune is Agneaux".into(),
+        evidence: Evidence { quote: "rue Haute".into(), ..Default::default() },
+    };
+    let address = Edit::SetEvent {
+        record: "I1".into(),
+        index: 1,
+        value: None,
+        date: None,
+        place: None,
+        address: Some("4 rue Haute".into()),
+    };
+    let rename = Edit::RenamePlace { place: "Agneau".into(), name: "Agneaux".into() };
+    let c = correction(vec![address, rename]);
+    c.check(&g, &rerun).unwrap();
+    assert!(c.rows(&g)[0].proposed.contains("4 rue Haute"), "{:?}", c.rows(&g));
+    let mut g2 = g.clone();
+    c.apply(&mut g2).unwrap();
+    let text = gedcom::node_to_string(g2.get("I1").unwrap());
+    assert!(text.contains("ADDR 4 rue Haute") && !text.contains("PLAC Agneau\n"), "{text}");
+    assert_eq!(text.matches("PLAC Agneaux").count(), 2, "{text}");
+    assert!(text.contains("LATI N49.1"), "{text}");
+    let unknown = Edit::RenamePlace { place: "Nowhere".into(), name: "X".into() };
+    assert!(correction(vec![unknown]).check(&g, &rerun).unwrap_err().contains("Nowhere"));
 }
