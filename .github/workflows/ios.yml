@@ -33,7 +33,12 @@ jobs:
       - uses: jdx/mise-action@v5
         with:
           version: 2026.10.25
-      - uses: actions/cache@v6
+          cache_save: ${{ github.ref == 'refs/heads/main' }}
+      # Saved by main only: a pull request's copy could only be read by that pull request, and
+      # would take room from the caches every pull request shares.
+      - name: Restore the crates and build outputs
+        id: cache
+        uses: actions/cache/restore@v6
         with:
           path: |
             ~/.cargo/registry/index
@@ -45,3 +50,13 @@ jobs:
       - name: XcodeGen
         run: brew install xcodegen
       - run: mise run ios:build
+      - name: Save the crates and build outputs
+        if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: ${{ steps.cache.outputs.cache-primary-key }}
