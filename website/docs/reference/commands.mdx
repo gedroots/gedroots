@@ -1,28 +1,36 @@
 ---
 title: All commands
-description: Every command of the GEDRoots menu bar, menu by menu, with what it does.
+description: Every command of the GEDRoots menu bar, menu by menu, with what it does, and the commands of the window's controls.
 ---
 
-Every command is in the menu bar, and in the command palette (<kbd>⌘⇧P</kbd> / <kbd>Ctrl+Shift+P</kbd>). Commands that act on a single record also appear when you right-click it. Shortcuts are listed in [Keyboard shortcuts](/reference/shortcuts).
+The menu bar holds the commands that no button of the window does. A command with a visible control, such as the **Create** button of the top bar, a **+** next to a section or an item of the sidebar, isn't repeated in the menus. Every command, both kinds, is in the command palette (<kbd>⌘⇧P</kbd> / <kbd>Ctrl+Shift+P</kbd>), and commands that act on a single record also appear when you right-click it. Shortcuts are listed in [Keyboard shortcuts](/reference/shortcuts).
 
-On macOS, **File Settings…** and **Quit GEDRoots** are in the **GEDRoots** menu. On Windows and Linux, they are at the bottom of the **File** menu.
+## GEDRoots
+
+| Command | Does |
+| --- | --- |
+| **About GEDRoots** | Shows the version, the license and the links to the website. |
+| **Check for Updates**, **Automatic Updates** | Looks for a new version now, or turns the check at launch on or off. Once an update is downloaded, the command becomes **Restart to Update**. |
+| **Connect an AI Agent…** | Turns the local MCP server on or off and shows how to connect each agent. |
+| **Mobile Devices…** | Shares the saved tree, media included, with your phones and tablets, directly and end-to-end encrypted, while the file is open. Pairs a new device with a single-use QR code and removes a paired one. |
+| **File Settings…** | Author, root person, place format, event types, media, search sites. |
+| **Quit** | Saves and quits. |
 
 ## File
 
 | Command | Does |
 | --- | --- |
+| **New Window** | Opens a window on the welcome screen, to create or open another tree. |
 | **New Tree…** | Opens the **New Tree** window: you, your parents and your grandparents, entered in one go. |
 | **Open…** | Opens a `.ged` file as it is. |
 | **Open Recent** | The files you opened recently. **Clear Menu** empties the list. |
 | **Import GEDCOM…** | Opens a `.ged` or GEDZIP file from other software as a new, unsaved tree, asks for the root person and offers to convert its non-standard parts to GEDCOM 7. See [Bring in a tree](/workflows/import). |
+| **Close Window** | Closes the window and its tree, after saving it. |
 | **Save**, **Save As…** | Writes the tree. A `.ged.bak` copy of the previous version is kept. |
 | **Save Version…** | Saves the tree and keeps this version under a name you give it, until you delete it. See [Bring back an earlier version](/workflows/versions). |
 | **Revert To › Last Opened** | Brings the tree back to how it was when you opened it. |
 | **Revert To › Browse All Versions…** | Lists the versions of the tree by day, with the records each one added, changed and removed. **Restore This Version** brings one back, **Undo This Change** undoes only the changes of one version, **Save a Copy…** writes it to a separate file. |
 | **Export…** | Saves a copy in another format, chosen in the save dialog's **Format** list: GEDZIP (the tree and its media files in a `.gdz` archive), GEDCOM 5.5.1 (for software that doesn't read GEDCOM 7) or GEDCOM 5.5.1 for Geneanet (then opens Geneanet's import page). See [Share your tree](/workflows/share). |
-| **Mobile Devices…** | Shares the saved tree, media included, with your phones and tablets, directly and end-to-end encrypted, while the file is open. Pairs a new device with a single-use QR code and removes a paired one. |
-| **Connect an AI Agent…** | Turns the local MCP server on or off and shows how to connect each agent. |
-| **File Settings…** | Author, root person, place format, event types, media, search sites. |
 
 ## Edit
 
@@ -30,11 +38,8 @@ On macOS, **File Settings…** and **Quit GEDRoots** are in the **GEDRoots** men
 | --- | --- |
 | **Undo**, **Redo** | Undoes or redoes a change to the tree, up to 50 steps. |
 | **Cut**, **Copy**, **Paste**, **Select All** | In text fields. |
-| **Media…** | Opens the media window of the selected record. |
-| **Add Web Link…** | Adds a link to a web page to the selected record. |
 | **Record History…** | Lists the changes made to the selected record, field by field, with what it was before and after. **Restore This State** brings the record back as it was after a change. |
-| **Copy Name** | Copies the record's name. |
-| **Copy ID** | Copies the record's GEDCOM identifier, such as `@I12@`. |
+| **Copy Special › Copy Name**, **Copy ID** | Copies the record's name, or its GEDCOM identifier, such as `@I12@`. |
 | **Delete…** | Deletes the selected record, after confirmation. |
 | **Find** | Moves to the search field of the list. |
 
@@ -42,52 +47,37 @@ On macOS, **File Settings…** and **Quit GEDRoots** are in the **GEDRoots** men
 
 | Command | Does |
 | --- | --- |
-| **New Person** | Creates a person with no links. |
-| **Add Relative › Father, Mother, Spouse, Child, Sibling** | Creates the relative and links them to the selected person. |
-| **Link Existing Person › Father…, Mother…, Spouse…, Child…, Sibling…** | Links a person already in the tree. |
-| **Add Event…** | Adds an event to the person or one of their unions. |
 | **Go to Root Person** | Opens the root person. |
 | **Relationship With…** | Names the relationship between the selected person and another one. |
 | **Find Ancestors**, **Find Descendants** | Searches the person's ancestors or descendants in the list. |
+| **Merge With…** | Merges the selected person with another one, choosing the value to keep for each fact that differs. |
+| **Find Duplicates** | Lists the people who could be the same as the selected one, in the merge window. |
+| **Research › Ignore Lead**, **Resume Lead** | Takes the lead selected on the Research page out of the list, or brings it back. |
 | **Search On** | Opens the person's search on a website. Present when the file has search sites. |
-
-## Source
-
-| Command | Does |
-| --- | --- |
-| **Enter Record…** | Opens the record editor in the selected source, or asks which source. |
-| **GEDCOM Preview** | In the record editor, shows or hides what saving will write. |
-| **Review Agent Proposals** | Opens the To Review page. |
-| **Save Proposal to Tree**, **Reject Proposal** | Act on the proposal shown in To Review. |
-| **New Source**, **New Repository**, **New Note** | Create a record of that kind. |
 
 ## Media
 
 | Command | Does |
 | --- | --- |
-| **New Media** | Creates a media record. |
 | **Attach This Media To…** | Links the selected media to a person, a family, a source or an event. |
+| **Tag a Person in the Photo** | Draws a frame around a face and links it to a person. |
 | **Pages › Previous Page, Next Page** | Turn the pages of a multi-page media. |
-| **Pages › Add Pages…** | Adds files as new pages. |
 | **Pages › Move Page Left, Move Page Right** | Reorder the current page. |
 | **Pages › Split Page into New Media** | Turns the current page into a media of its own. |
 | **Pages › Remove Page from Media** | Takes the page out of the media; its file stays on disk. |
 | **Merge with Another Media…** | Adds the pages of another media to this one. |
 | **Merge Selected Media** | Merges the media selected in the list, in order. |
 | **Rename Using Template…** | Moves and renames the media's files according to File Settings › Media. |
-| **Tag a Person in the Photo** | Draws a frame around a face and links it to a person. |
 | **Files to Attach** | Lists the files of the `.ged` folder that no media uses. |
 
 ## View
 
 | Command | Does |
 | --- | --- |
-| **Back**, **Forward** | Move through the records you opened. |
-| **People**, **Sources**, **Places**, **Media**, **Repositories**, **Notes** | Show a list. |
-| **Data Quality**, **Statistics** | Show a page. |
 | **Tree**, **Details**, **Raw GEDCOM** | Switch the view of the selected record. |
-| **Show or Hide Sidebar** | Toggles the sidebar. |
-| **Relatives' Events** | Mixes the births and deaths of close relatives into a person's timeline. |
+| **Show or Hide Sidebar**, **Show or Hide Details Panel** | Toggle the sidebar and the details panel. |
+| **GEDCOM Preview** | In the record editor and To Review, shows or hides what saving will write. |
+| **Zoom › Zoom In, Zoom Out, Zoom to Fit, Actual Size** | Zoom a large image. |
 | **Tree › Free Tree**, **Fan Chart** | Choose the chart. |
 | **Tree › Center Tree on Person** | Centers the free tree on the selected person. |
 | **Tree › More Generations**, **Fewer Generations** | Change the depth of the fan chart. |
@@ -95,7 +85,14 @@ On macOS, **File Settings…** and **Quit GEDRoots** are in the **GEDRoots** men
 | **Filter List › Flagged Items Only** | Shows only the items with a warning, such as media without a file. |
 | **Filter List › Ignored Issues** | Shows the Data Quality issues you've hidden. |
 | **Filter List › Clear Search** | Empties the search field. |
-| **Save Search**, **Rename Search**, **Delete Search** | Manage the saved searches of the sidebar. |
+| **Rename Search**, **Delete Search** | Manage the saved search of the sidebar that is shown. |
+
+## Window
+
+| Command | Does |
+| --- | --- |
+| **Minimize**, **Zoom** (macOS) or **Maximize** | Act on the window. |
+| **Bring All to Front** (macOS) | Brings every GEDRoots window to the front. On Windows and Linux, the menu lists the open trees instead. |
 
 ## Help
 
@@ -104,3 +101,23 @@ On macOS, **File Settings…** and **Quit GEDRoots** are in the **GEDRoots** men
 | **All Commands…** | Opens the command palette. |
 | **Take the Tour** | Offers three short chapters, one bubble at a time: the essentials of the window, entering a record from its source, and reviewing what an AI agent proposes. The last two run in the sample tree. It also opens by itself the first time a tree opens on a computer. |
 | **Open Sample Tree** | Opens a small fictional family in a window of its own, to try things out. It starts from scratch each time and can't be saved. |
+| **Release Notes** | Shows what changed in your version. |
+| **Report an Issue…** | Opens a new GitHub issue with your description and, if you keep it, context that holds nothing from your tree. |
+
+## Commands of the window's controls
+
+These commands are in the palette, with their shortcut, but not in the menus: a control of the window does them.
+
+| Command | Control |
+| --- | --- |
+| **Create** (<kbd>⌘N</kbd> / <kbd>Ctrl+N</kbd>) | The top bar's button: creates what the page lists, such as a person, a source (with its first record), a media, a repository, a note or a book. |
+| **Edit Record** (<kbd>⌘L</kbd> / <kbd>Ctrl+L</kbd>) | The pencil next to the record's name. |
+| **Add Web Link…** | **+** next to **Web Links**. |
+| **Add Relative**, **Link to Existing Person**, **Add Event…**, **Add to Name** | **+** next to **Family**, **Events** and the name, in a person's details. |
+| **Relatives' Events** | The people icon next to **+** in a person's timeline. |
+| **Enter Record…** (<kbd>⌘E</kbd> / <kbd>Ctrl+E</kbd>) | **+** next to **Records** on a source. |
+| **Review Agent Proposals**, **Save Proposal to Tree**, **Reject Proposal** | **To Review** in the sidebar, and its buttons. |
+| **Record Media…** (<kbd>⌘⇧M</kbd> / <kbd>Ctrl+Shift+M</kbd>), **Add Pages…** | The record's context menu, and dropping files on a media. |
+| **Save Search** | **+** next to **Searches** in the sidebar. |
+| **Back**, **Forward** | The arrows of the top bar. |
+| **People**, **Sources**, **Places**, **Media**, **Repositories**, **Notes**, **Research**, **Data Quality**, **Statistics**, **Books** | The sidebar. |

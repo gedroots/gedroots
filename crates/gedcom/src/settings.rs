@@ -1,4 +1,4 @@
-//! File settings (File › File Settings… menu): what describes the database itself, stored in the
+//! File settings (GEDRoots › File Settings… menu): what describes the database itself, stored in the
 //! `HEAD` header in standard GEDCOM 7.
 //!
 //! - author: `HEAD.SUBM` → `SUBM` record (`NAME`, `EMAIL`);

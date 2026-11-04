@@ -1,5 +1,5 @@
 _version: 2
-# Source › Connecter un agent IA… (crates/gedroots/src/workspace/agent.rs)
+# GEDRoots › Connect an AI Agent… (crates/gedroots/src/workspace/agent.rs)
 agent:
   planned:
     one:

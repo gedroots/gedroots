@@ -1,6 +1,6 @@
 //! Mobile devices: the open tree, shared one way with the user's phones and tablets.
 //!
-//! When sharing is on for a file (File › Mobile Devices…), the app serves its last saved version,
+//! When sharing is on for a file (GEDRoots › Mobile Devices…), the app serves its last saved version,
 //! media included, to the devices paired with it, peer to peer (`gedroots-sync`, over iroh): the
 //! GEDRoots app on the device fetches what changed whenever it can reach the computer, directly or
 //! through a relay, end-to-end encrypted. Every save publishes a new version.

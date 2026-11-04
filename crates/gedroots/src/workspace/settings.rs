@@ -1,10 +1,10 @@
-//! File settings (File › File Settings…), in five pages:
+//! File settings (GEDRoots › File Settings…), in five pages:
 //! - General: author, copyright, description, language and root individual (see
 //!   `gedcom::settings`);
 //! - Places: place format (`HEAD.PLAC.FORM`), with rewriting of places;
 //! - Events: custom event types (`EVEN` + `TYPE`), with their displayed label;
 //! - Media: media folder, subfolders by type and name templates (`gedcom::media_naming`);
-//! - Search: sites of Individual › Search On, with their URL template (`gedcom::websearch`).
+//! - Search: sites of Person › Search On, with their URL template (`gedcom::websearch`).
 //!
 //! Everything is stored in the .ged and can be undone like any change.
 

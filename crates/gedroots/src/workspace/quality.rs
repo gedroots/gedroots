@@ -181,7 +181,7 @@ impl Workspace {
         );
     }
 
-    /// Opens the Quality page on a category (Go › Files to Attach).
+    /// Opens the Quality page on a category (Media › Files to Attach).
     pub(super) fn open_quality(&mut self, cat: Category, window: &mut Window, cx: &mut Context<Self>) {
         self.open_location(View::Quality, Some(cat.id().to_string()), window, cx);
         cx.notify();

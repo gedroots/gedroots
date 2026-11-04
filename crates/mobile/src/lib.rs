@@ -1,5 +1,5 @@
 //! Rust core of the read-only mobile app, exposed to Swift (and later Kotlin) with UniFFI. The app
-//! pairs with the desktop (File › Mobile Devices… › Add a Device), syncs the tree into its own
+//! pairs with the desktop (GEDRoots › Mobile Devices… › Add a Device), syncs the tree into its own
 //! folder, then reads it: view models ready to display (people, records, events), computed here so
 //! that the Swift (and later Kotlin) side only draws them.
 
