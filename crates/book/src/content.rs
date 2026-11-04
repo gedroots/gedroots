@@ -5,6 +5,7 @@
 use crate::charts::{self, FanCell, Life, MapPoint};
 use crate::prose;
 use crate::spec::{BookSpec, Line};
+use crate::writing::{Block, Writing};
 use gedcom::document::Gedcom;
 use gedcom::model::{Individual, sort_key};
 use rust_i18n::t;
@@ -42,6 +43,18 @@ pub struct Data {
     pub occupations: Vec<(String, usize)>,
     pub chapters: Vec<Chapter>,
     pub index: Vec<IndexGroup>,
+    /// Context or hypotheses in the book: the contents page says how to read them.
+    pub levels: bool,
+}
+
+/// A block an agent wrote: text, context or hypothesis.
+#[derive(Serialize)]
+pub struct BlockData {
+    pub kind: &'static str,
+    pub title: String,
+    pub paragraphs: Vec<String>,
+    /// The sources of a context, the clues of a hypothesis.
+    pub notes: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -62,6 +75,7 @@ pub struct MapInfo {
 pub struct Chapter {
     pub title: String,
     pub subtitle: String,
+    pub intro: Vec<BlockData>,
     pub full: Vec<Sheet>,
     pub short: Vec<Sheet>,
     pub rows: Vec<Row>,
@@ -76,6 +90,8 @@ pub struct Sheet {
     pub subtitle: String,
     pub strip: Vec<StripPoint>,
     pub paragraphs: Vec<String>,
+    /// The agent's narrative, after the paragraphs (which it replaces when it has text).
+    pub blocks: Vec<BlockData>,
     pub family: Vec<FamilyLine>,
     pub sources: Vec<String>,
     pub portrait: Option<String>,
@@ -276,7 +292,7 @@ fn years(ind: &Individual) -> String {
 }
 
 fn labels() -> BTreeMap<&'static str, String> {
-    let keys: [(&str, std::borrow::Cow<str>); 22] = [
+    let keys: [(&str, std::borrow::Cow<str>); 26] = [
         ("contents", t!("book.contents")),
         ("origins", t!("book.origins")),
         ("origins_sub", t!("book.origins_sub")),
@@ -299,6 +315,10 @@ fn labels() -> BTreeMap<&'static str, String> {
         ("chapter", t!("book.chapter", n = "")),
         ("page", t!("book.see_page", n = "")),
         ("spouse", t!("book.spouse")),
+        ("context", t!("book.context")),
+        ("hypothesis", t!("book.hypothesis")),
+        ("basis", t!("book.basis")),
+        ("levels", t!("book.levels")),
     ];
     keys.into_iter().map(|(k, v)| (k, v.trim().to_string())).collect()
 }
@@ -499,20 +519,24 @@ pub fn build(
     }
 
     // Chapters, one per generation.
+    let name_of = |x: &str| g.individual(x).map(|i| i.display_name());
     let generations = members.iter().map(|m| m.generation).max().unwrap_or(1);
     for n in 1..=generations {
         let here: Vec<&Member> = members.iter().filter(|m| m.generation == n).collect();
         if here.is_empty() {
             continue;
         }
+        let writing = spec.chapters.get(&n);
         let mut ch = Chapter {
             title: generation_title(spec.line, n),
             subtitle: format!("{} · {}", t!("book.generation", n = n), people_count(here.len())),
+            intro: writing.map(|w| blocks(&w.intro, &name_of)).unwrap_or_default(),
             ..Default::default()
         };
         for m in here {
             let Some(ind) = g.individual(&m.xref) else { continue };
-            let count = facts(g, &ind);
+            let written = writing.and_then(|w| w.person(&m.xref));
+            let record = record_of(facts(g, &ind), n, written.is_some());
             let mut number = match spec.line {
                 Line::Ancestors => t!("book.sosa", n = &m.number).into_owned(),
                 Line::Descendants => m.number.clone(),
@@ -521,7 +545,7 @@ pub fn build(
                 let also: Vec<String> = m.also.iter().map(|s| s.to_string()).collect();
                 number = format!("{number} ({})", t!("book.also_sosa", n = also.join(", ")));
             }
-            if count < SHORT_FACTS && n > 1 {
+            if record == Record::Line {
                 let ev = |e: Option<gedcom::model::Event>| {
                     e.map(|e| {
                         let d = e.date().map(|d| d.display()).unwrap_or_default();
@@ -539,12 +563,20 @@ pub fn build(
                 });
                 continue;
             }
-            let full = count >= FULL_FACTS || n == 1;
-            let sheet = sheet(g, &ind, number, full, &in_book, media_dir, &mut assets);
+            let full = record == Record::Full;
+            let mut sheet = sheet(g, &ind, number, full, &in_book, media_dir, &mut assets);
+            if let Some(written) = written {
+                // The agent's narrative tells the facts: the engine's sentences would repeat them.
+                if written.iter().any(|b| matches!(b, Block::Text(_))) {
+                    sheet.paragraphs.clear();
+                }
+                sheet.blocks = blocks(written, &name_of);
+            }
             if full { ch.full.push(sheet) } else { ch.short.push(sheet) }
         }
         data.chapters.push(ch);
     }
+    data.levels = spec.chapters.values().flat_map(Writing::blocks).any(Block::optional);
 
     // Figures.
     if spec.line == Line::Ancestors {
@@ -622,6 +654,111 @@ pub fn build(
     )
     .into_owned();
     Ok((data, assets))
+}
+
+/// How a person appears in the book.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Record {
+    /// A complete record: life strip, narrative, family, sources.
+    Full,
+    /// A short paragraph.
+    Short,
+    /// A line in the generation's table.
+    Line,
+}
+
+/// The record a person gets from what the tree knows of them: the book's person always a
+/// complete one, someone the agent wrote about at least a short one.
+fn record_of(facts: usize, generation: u32, written: bool) -> Record {
+    if facts >= FULL_FACTS || generation == 1 {
+        Record::Full
+    } else if facts >= SHORT_FACTS || written {
+        Record::Short
+    } else {
+        Record::Line
+    }
+}
+
+/// The agent's blocks, with the people's names in place of their ids.
+fn blocks(blocks: &[Block], name: &impl Fn(&str) -> Option<String>) -> Vec<BlockData> {
+    let paragraphs = |t: &str| -> Vec<String> {
+        crate::writing::expand(t, name).split('\n').map(str::trim).filter(|p| !p.is_empty()).map(String::from).collect()
+    };
+    blocks
+        .iter()
+        .map(|b| match b {
+            Block::Text(t) => {
+                BlockData { kind: "text", title: String::new(), paragraphs: paragraphs(t), notes: vec![] }
+            }
+            Block::Context { title, text, sources } => BlockData {
+                kind: "context",
+                title: title.clone(),
+                paragraphs: paragraphs(text),
+                notes: sources
+                    .iter()
+                    .map(|s| if s.url.is_empty() { s.title.clone() } else { format!("{} — {}", s.title, s.url) })
+                    .collect(),
+            },
+            Block::Hypothesis { text, basis } => BlockData {
+                kind: "hypothesis",
+                title: String::new(),
+                paragraphs: paragraphs(text),
+                notes: basis.clone(),
+            },
+        })
+        .collect()
+}
+
+/// A person of a chapter, for the agent.
+#[derive(Debug, Clone)]
+pub struct OutlinePerson {
+    pub xref: String,
+    pub name: String,
+    pub years: String,
+    /// Sosa or d'Aboville number.
+    pub number: String,
+    pub record: Record,
+    /// Facts the tree knows (dated or placed events, marriages).
+    pub facts: usize,
+}
+
+/// A chapter of a book: a generation and its people, in the book's order.
+#[derive(Debug, Clone)]
+pub struct OutlineChapter {
+    pub generation: u32,
+    pub title: String,
+    pub people: Vec<OutlinePerson>,
+}
+
+/// The chapters of a book and who is in each, as the book shows them.
+pub fn outline(g: &Gedcom, spec: &BookSpec) -> Result<Vec<OutlineChapter>, String> {
+    g.individual(&spec.subject).ok_or_else(|| t!("book.no_subject").into_owned())?;
+    let members = match spec.line {
+        Line::Ancestors => ancestors(g, &spec.subject, spec.generations),
+        Line::Descendants => descendants(g, &spec.subject, spec.generations),
+    };
+    let mut out: Vec<OutlineChapter> = Vec::new();
+    for m in &members {
+        let Some(ind) = g.individual(&m.xref) else { continue };
+        if out.last().is_none_or(|c| c.generation != m.generation) {
+            out.push(OutlineChapter {
+                generation: m.generation,
+                title: generation_title(spec.line, m.generation),
+                people: Vec::new(),
+            });
+        }
+        let facts = facts(g, &ind);
+        let written = spec.chapters.get(&m.generation).is_some_and(|w| w.person(&m.xref).is_some());
+        out.last_mut().expect("pushed above").people.push(OutlinePerson {
+            xref: m.xref.clone(),
+            name: ind.display_name(),
+            years: ind.years(),
+            number: m.number.clone(),
+            record: record_of(facts, m.generation, written),
+            facts,
+        });
+    }
+    Ok(out)
 }
 
 fn upper_first(s: &str) -> String {

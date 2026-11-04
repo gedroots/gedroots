@@ -1,12 +1,17 @@
 //! Typesets the default book of a tree: `cargo run -p gedroots-book --example book -- tree.ged
-//! out.pdf [ancestors|descendants] [generations] [pages-folder]`. The pages folder, when given,
-//! receives a PNG of each page.
+//! out.pdf [ancestors|descendants|stored] [generations] [pages-folder]`. `stored`: the tree's first
+//! book, as saved in the file, with what an agent wrote. The pages folder, when given, receives a
+//! PNG of each page.
 
 use gedroots_book::{BookSpec, Line};
 use std::path::Path;
 
 fn main() -> Result<(), String> {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    // The book is written in the language of the system, like the app.
+    if std::env::var("LANG").is_ok_and(|l| l.starts_with("fr")) {
+        rust_i18n::set_locale("fr");
+    }
     let [ged, out, rest @ ..] = args.as_slice() else {
         return Err("usage: book tree.ged out.pdf [ancestors|descendants] [generations] [pages-folder]".into());
     };
@@ -14,8 +19,12 @@ fn main() -> Result<(), String> {
     let g = gedcom::document::Gedcom::parse(&text).map_err(|e| format!("{e:?}"))?;
     let root = g.root().ok_or("the tree has no root person")?;
     let mut spec = BookSpec::new(&root, "");
-    if rest.first().map(String::as_str) == Some("descendants") {
-        spec.line = Line::Descendants;
+    match rest.first().map(String::as_str) {
+        Some("descendants") => spec.line = Line::Descendants,
+        Some("stored") => {
+            spec = gedroots_book::spec::books(&g).into_iter().next().ok_or("the tree has no book")?;
+        }
+        _ => {}
     }
     if let Some(n) = rest.get(1).and_then(|n| n.parse().ok()) {
         spec.generations = n;

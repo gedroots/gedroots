@@ -18,6 +18,7 @@ actions!(
         // File
         NewWindow,
         NewFile,
+        Create,
         OpenFile,
         ClearRecent,
         ImportFile,
@@ -254,7 +255,9 @@ const WS: Option<&str> = Some("Workspace");
 pub fn bind_keys(cx: &mut App) {
     cx.bind_keys([
         // Like any document-based app: a new window, on the welcome screen (create or open a tree).
-        KeyBinding::new(shortcut!("n"), NewWindow, None),
+        // ⌘N creates what the page lists (Create button); a new window is ⌥⌘N, like Mail.
+        KeyBinding::new(shortcut!("n"), Create, WS),
+        KeyBinding::new(shortcut!("alt-n"), NewWindow, None),
         KeyBinding::new(shortcut!("w"), CloseWindow, WS),
         KeyBinding::new(shortcut!("m"), MinimizeWindow, WS),
         KeyBinding::new(shortcut!("o"), OpenFile, None),
@@ -264,7 +267,6 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new(shortcut!("z"), Undo, WS),
         // Redo: ⌘⇧Z (macOS), Ctrl+Y (Windows), Ctrl+Shift+Z (Linux).
         KeyBinding::new(if cfg!(target_os = "windows") { "ctrl-y" } else { shortcut!("shift-z") }, Redo, WS),
-        KeyBinding::new(shortcut!("shift-n"), NewIndividual, WS),
         KeyBinding::new(shortcut!("f"), FocusSearch, WS),
         KeyBinding::new(shortcut!("e"), EnterRecord, WS),
         // Like Contacts: ⌘L edits the record, and saves it when pressed again.
@@ -475,34 +477,42 @@ fn model() -> Vec<(SharedString, Vec<Item>)> {
 }
 
 /// The menu model, with the given recent files and search sites.
+///
+/// The menus only hold what no visible control does: a command with a button, a “+”, a link of
+/// the sidebar or the top bar's Create button is left out of them, and kept in the palette with
+/// its shortcut (see [`palette_only`]).
 fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedString, Vec<Item>)> {
     use Item::{Separator as Sep, Sub};
     let mac = cfg!(target_os = "macos");
     let mut menus = Vec::new();
-    // Updates: in the application menu on macOS (like Sparkle apps), in Help elsewhere (like
-    // Windows apps, Zed, VS Code). Once an update is downloaded, the command restarts on it.
-    let updates = || {
-        let check = if matches!(crate::updates::state(), crate::updates::State::Ready { .. }) {
-            t!("cmd.restart_to_update")
-        } else {
-            t!("cmd.check_for_updates")
-        };
+    // Updates. Once an update is downloaded, the command restarts on it.
+    let check = if matches!(crate::updates::state(), crate::updates::State::Ready { .. }) {
+        t!("cmd.restart_to_update")
+    } else {
+        t!("cmd.check_for_updates")
+    };
+    // The application menu, on every platform: what belongs to the app rather than to a tree
+    // (updates, AI agents, mobile devices), then the settings and Quit, like macOS apps.
+    menus.push((
+        "GEDRoots".into(),
         vec![
+            a(t!("cmd.about"), About),
+            Sep,
             a(check, CheckForUpdates),
             Item::Check(
                 t!("cmd.automatic_updates").into(),
                 Box::new(ToggleAutomaticUpdates),
                 crate::updates::load().automatic,
             ),
-        ]
-    };
-    if mac {
-        // On macOS, settings go where they usually are: the application menu, ⌘,.
-        let mut app = vec![a(t!("cmd.about"), About), Sep];
-        app.extend(updates());
-        app.extend([Sep, a(t!("cmd.file_settings"), OpenFileSettings), Sep, a(t!("cmd.quit_app"), Quit)]);
-        menus.push(("GEDRoots".into(), app));
-    }
+            Sep,
+            a(t!("cmd.connect_agent"), ConnectAgent),
+            a(t!("cmd.mobile_devices"), MobileDevices),
+            Sep,
+            a(t!("cmd.file_settings"), OpenFileSettings),
+            Sep,
+            a(if mac { t!("cmd.quit_app") } else { t!("cmd.quit") }, Quit),
+        ],
+    ));
     let mut file =
         vec![a(t!("cmd.new_window"), NewWindow), a(t!("cmd.new_file"), NewFile), a(t!("cmd.open"), OpenFile)];
     // Submenu hidden until a file has been opened.
@@ -527,12 +537,7 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
         ),
         Sep,
         a(t!("cmd.export"), ExportFile),
-        Sep,
-        a(t!("cmd.mobile_devices"), MobileDevices),
     ]);
-    if !mac {
-        file.extend([Sep, a(t!("cmd.file_settings"), OpenFileSettings), Sep, a(t!("cmd.quit"), Quit)]);
-    }
     menus.push((t!("menu.file").into(), file));
     menus.push((
         t!("menu.edit").into(),
@@ -545,117 +550,48 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
             Item::Os(t!("cmd.paste").into(), Box::new(input::Paste), OsAction::Paste),
             Item::Os(t!("cmd.select_all").into(), Box::new(input::SelectAll), OsAction::SelectAll),
             Sep,
-            a(t!("cmd.edit_record"), EditRecord),
             a(label::record_history(), RecordHistory),
-            a(t!("cmd.add_web_link"), AddWebLink),
-            Sep,
-            // Rarely used: one level down, so that Edit stays within 12 items.
+            // Rarely used: one level down.
             Sub(t!("menu.copy_special").into(), vec![a(label::copy_name(), CopyName), a(label::copy_id(), CopyId)]),
             a(label::delete(), DeleteRecord),
             Sep,
             a(t!("cmd.find"), FocusSearch),
         ],
     ));
-    menus.push((
-        t!("menu.person").into(),
-        vec![
-            a(label::new_individual(), NewIndividual),
-            Sep,
-            Sub(
-                label::add_relative(),
-                vec![
-                    a(label::father(), AddFather),
-                    a(label::mother(), AddMother),
-                    a(label::spouse(), AddSpouse),
-                    a(label::child(), AddChild),
-                    a(label::sibling(), AddSibling),
-                ],
-            ),
-            Sub(
-                label::link_person(),
-                vec![
-                    a(label::father_link(), LinkFather),
-                    a(label::mother_link(), LinkMother),
-                    a(label::spouse_link(), LinkSpouse),
-                    a(label::child_link(), LinkChild),
-                    a(label::sibling_link(), LinkSibling),
-                ],
-            ),
-            a(label::add_event(), AddEvent),
-            Sub(
-                t!("cmd.add_to_name").into(),
-                vec![
-                    a(t!("cmd.other_name"), AddOtherName),
-                    Sep,
-                    a(t!("cmd.nickname"), AddNickname),
-                    a(t!("cmd.name_title"), AddNameTitle),
-                    a(t!("cmd.name_particle"), AddNameParticle),
-                    a(t!("cmd.name_suffix"), AddNameSuffix),
-                ],
-            ),
-            Sep,
-            a(t!("cmd.kinship_with"), KinshipWith),
-            a(t!("cmd.search_ancestors"), SearchAncestors),
-            a(t!("cmd.search_descendants"), SearchDescendants),
-            Sep,
-            a(t!("cmd.merge_with_person"), MergeWithPerson),
-            a(t!("cmd.find_duplicates"), FindDuplicates),
-            Sep,
-            Sub(
-                t!("menu.research").into(),
-                vec![
-                    a(label::note_search(), NoteSearch),
-                    Sep,
-                    a(label::ignore_lead(), IgnoreLead),
-                    a(label::resume_lead(), ResumeLead),
-                    a(label::copy_agent_request(), CopyAgentRequest),
-                ],
-            ),
-        ],
-    ));
+    let mut person = vec![
+        a(label::go_to_root(), GoToRoot),
+        Sep,
+        a(t!("cmd.kinship_with"), KinshipWith),
+        a(t!("cmd.search_ancestors"), SearchAncestors),
+        a(t!("cmd.search_descendants"), SearchDescendants),
+        Sep,
+        a(t!("cmd.merge_with_person"), MergeWithPerson),
+        a(t!("cmd.find_duplicates"), FindDuplicates),
+        Sep,
+        Sub(t!("menu.research").into(), vec![a(label::ignore_lead(), IgnoreLead), a(label::resume_lead(), ResumeLead)]),
+    ];
     // Search sites of the file; submenu hidden if there are none.
     if !sites.is_empty() {
         let items =
             sites.iter().enumerate().map(|(index, name)| Item::Recent(name.clone(), Box::new(SearchWeb { index })));
-        if let Some((_, indi)) = menus.last_mut() {
-            indi.push(Sub(label::search_web(), items.collect()));
-        }
+        person.push(Sub(label::search_web(), items.collect()));
     }
+    menus.push((t!("menu.person").into(), person));
     // Places are not records: their commands apply to the place shown on the Places page.
     menus.push((
         t!("menu.place").into(),
         vec![
             a(t!("cmd.locate_place"), LocatePlace),
-            a(t!("cmd.place_on_map"), PlaceOnMap),
             Sep,
             a(t!("cmd.merge_with_place"), MergeWithPlace),
             a(t!("cmd.find_duplicate_places"), FindDuplicatePlaces),
         ],
     ));
-    // Agents propose records: connecting one and reviewing what it proposed go together.
-    menus.push((
-        t!("menu.source").into(),
-        vec![
-            a(label::enter_act(), EnterRecord),
-            a(t!("cmd.record_preview"), ToggleRecordPreview),
-            Sep,
-            a(t!("cmd.review_proposals"), ReviewProposals),
-            a(t!("cmd.accept_proposal"), AcceptProposal),
-            a(t!("cmd.reject_proposal"), RejectProposal),
-            a(t!("cmd.connect_agent"), ConnectAgent),
-            Sep,
-            a(label::new_source(), NewSource),
-            a(label::new_repository(), NewRepository),
-            a(label::new_note(), NewNote),
-            a(t!("cmd.new_book"), NewBook),
-        ],
-    ));
     menus.push((
         t!("menu.media").into(),
         vec![
-            a(label::new_media(), NewMedia),
             a(label::attach_media_to(), AttachMediaTo),
-            a(label::media_gallery(), MediaGallery),
+            a(label::tag_person(), TagPerson),
             Sep,
             Sub(
                 t!("menu.pages").into(),
@@ -663,7 +599,6 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
                     a(t!("cmd.previous_page"), PreviousPage),
                     a(t!("cmd.next_page"), NextPage),
                     Sep,
-                    a(label::add_pages(), AddPages),
                     a(t!("cmd.move_page_left"), MovePageLeft),
                     a(t!("cmd.move_page_right"), MovePageRight),
                     Sep,
@@ -673,10 +608,9 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
             ),
             a(label::merge_with_media(), MergeWithMedia),
             a(label::merge_selected_media(), MergeSelectedMedia),
+            Sep,
             a(t!("cmd.rename_media_files"), RenameMediaFiles),
             a(t!("cmd.unreferenced_files"), ShowUnreferencedFiles),
-            Sep,
-            a(label::tag_person(), TagPerson),
         ],
     ));
     menus.push((
@@ -688,7 +622,7 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
             Sep,
             a(t!("cmd.toggle_sidebar"), ToggleSidebar),
             a(t!("cmd.toggle_inspector"), ToggleInspector),
-            a(t!("cmd.relative_events"), ToggleRelativeEvents),
+            a(t!("cmd.record_preview"), ToggleRecordPreview),
             Sep,
             Sub(
                 t!("menu.zoom").into(),
@@ -730,30 +664,8 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
                 ],
             ),
             Sep,
-            a(label::save_search(), SaveSearch),
             a(label::rename_search(), RenameSearch),
             a(label::delete_search(), DeleteSearch),
-        ],
-    ));
-    // Like Finder's Go menu: history, then the places of the file.
-    menus.push((
-        t!("menu.go").into(),
-        vec![
-            a(t!("cmd.back"), GoBack),
-            a(t!("cmd.forward"), GoForward),
-            Sep,
-            a(t!("cmd.individuals"), ShowIndividuals),
-            a(t!("cmd.sources"), ShowSources),
-            a(t!("cmd.places"), ShowPlaces),
-            a(t!("cmd.media_list"), ShowMedia),
-            a(t!("cmd.repositories"), ShowRepositories),
-            a(t!("cmd.notes"), ShowNotes),
-            Sep,
-            a(t!("cmd.research"), ShowResearch),
-            a(t!("cmd.quality"), ShowQuality),
-            a(t!("cmd.stats"), ShowStats),
-            Sep,
-            a(label::go_to_root(), GoToRoot),
         ],
     ));
     // One window per tree. macOS fills this menu with the windows and their tabs by itself.
@@ -773,22 +685,110 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
         }
     }
     menus.push((t!("menu.window").into(), window));
-    let mut help = vec![
-        a(t!("cmd.all_commands"), CommandPalette),
-        a(t!("cmd.take_tour"), TakeTour),
-        a(t!("cmd.open_sample"), OpenSampleTree),
-        Sep,
-        a(t!("cmd.release_notes"), ReleaseNotes),
-        a(t!("cmd.report_issue"), ReportIssue),
-    ];
-    if !mac {
-        help.push(Sep);
-        help.extend(updates());
-        // Like Windows and GNOME apps: About comes last in Help.
-        help.extend([Sep, a(t!("cmd.about"), About)]);
-    }
-    menus.push((t!("menu.help").into(), help));
+    menus.push((
+        t!("menu.help").into(),
+        vec![
+            a(t!("cmd.all_commands"), CommandPalette),
+            a(t!("cmd.take_tour"), TakeTour),
+            a(t!("cmd.open_sample"), OpenSampleTree),
+            Sep,
+            a(t!("cmd.release_notes"), ReleaseNotes),
+            a(t!("cmd.report_issue"), ReportIssue),
+        ],
+    ));
     menus
+}
+
+/// Commands left out of the menus because a visible control does them (a button, a “+”, the
+/// sidebar, the top bar's arrows or Create button). The palette still lists them, with their
+/// shortcut, grouped as before.
+fn palette_only() -> Vec<(SharedString, Vec<Item>)> {
+    use Item::Sub;
+    vec![
+        (t!("menu.file").into(), vec![a(t!("cmd.create"), Create)]),
+        (t!("menu.edit").into(), vec![a(t!("cmd.edit_record"), EditRecord), a(t!("cmd.add_web_link"), AddWebLink)]),
+        (
+            t!("menu.person").into(),
+            vec![
+                a(label::new_individual(), NewIndividual),
+                Sub(
+                    label::add_relative(),
+                    vec![
+                        a(label::father(), AddFather),
+                        a(label::mother(), AddMother),
+                        a(label::spouse(), AddSpouse),
+                        a(label::child(), AddChild),
+                        a(label::sibling(), AddSibling),
+                    ],
+                ),
+                Sub(
+                    label::link_person(),
+                    vec![
+                        a(label::father_link(), LinkFather),
+                        a(label::mother_link(), LinkMother),
+                        a(label::spouse_link(), LinkSpouse),
+                        a(label::child_link(), LinkChild),
+                        a(label::sibling_link(), LinkSibling),
+                    ],
+                ),
+                a(label::add_event(), AddEvent),
+                Sub(
+                    t!("cmd.add_to_name").into(),
+                    vec![
+                        a(t!("cmd.other_name"), AddOtherName),
+                        a(t!("cmd.nickname"), AddNickname),
+                        a(t!("cmd.name_title"), AddNameTitle),
+                        a(t!("cmd.name_particle"), AddNameParticle),
+                        a(t!("cmd.name_suffix"), AddNameSuffix),
+                    ],
+                ),
+                a(t!("cmd.relative_events"), ToggleRelativeEvents),
+                Sub(
+                    t!("menu.research").into(),
+                    vec![a(label::note_search(), NoteSearch), a(label::copy_agent_request(), CopyAgentRequest)],
+                ),
+            ],
+        ),
+        (
+            t!("menu.source").into(),
+            vec![
+                a(label::enter_act(), EnterRecord),
+                a(label::new_source(), NewSource),
+                a(label::new_repository(), NewRepository),
+                a(label::new_note(), NewNote),
+                a(t!("cmd.new_book"), NewBook),
+                a(t!("cmd.review_proposals"), ReviewProposals),
+                a(t!("cmd.accept_proposal"), AcceptProposal),
+                a(t!("cmd.reject_proposal"), RejectProposal),
+            ],
+        ),
+        (
+            t!("menu.media").into(),
+            vec![
+                a(label::new_media(), NewMedia),
+                a(label::media_gallery(), MediaGallery),
+                a(label::add_pages(), AddPages),
+            ],
+        ),
+        (t!("menu.place").into(), vec![a(t!("cmd.place_on_map"), PlaceOnMap)]),
+        (t!("menu.view").into(), vec![a(label::save_search(), SaveSearch)]),
+        (
+            t!("menu.go").into(),
+            vec![
+                a(t!("cmd.back"), GoBack),
+                a(t!("cmd.forward"), GoForward),
+                a(t!("cmd.individuals"), ShowIndividuals),
+                a(t!("cmd.sources"), ShowSources),
+                a(t!("cmd.places"), ShowPlaces),
+                a(t!("cmd.media_list"), ShowMedia),
+                a(t!("cmd.repositories"), ShowRepositories),
+                a(t!("cmd.notes"), ShowNotes),
+                a(t!("cmd.research"), ShowResearch),
+                a(t!("cmd.quality"), ShowQuality),
+                a(t!("cmd.stats"), ShowStats),
+            ],
+        ),
+    ]
 }
 
 fn to_menu_items(items: Vec<Item>) -> Vec<MenuItem> {
@@ -855,7 +855,7 @@ pub fn palette_entries() -> Vec<PaletteEntry> {
         }
     }
     let mut out = Vec::new();
-    for (menu, items) in model() {
+    for (menu, items) in model().into_iter().chain(palette_only()) {
         walk(&menu, items, &mut out);
     }
     out
@@ -889,7 +889,8 @@ mod tests {
         let mut seen = Vec::new();
         let recents = [PathBuf::from("/a/Martin.ged"), PathBuf::from("/b/Martin.ged")];
         let sites = ["Geneanet".to_string(), "FamilySearch".to_string()];
-        for (menu, items) in model_with(&recents, &sites) {
+        // A command is either in the menus or in the palette only, never both.
+        for (menu, items) in model_with(&recents, &sites).into_iter().chain(super::palette_only()) {
             walk(&menu, items, &mut seen);
         }
     }

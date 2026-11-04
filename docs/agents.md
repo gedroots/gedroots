@@ -29,7 +29,7 @@ in the machine's settings. The commands and blocks are built in `crates/gedroots
 The tools return structured JSON (`outputSchema`). GEDRoots shows one tree per window: every
 tool takes an optional `tree` (a name, file name or id, as `list_trees` gives them) and otherwise
 works on the tree of the window in front. A proposal goes to the To Review page of its own tree.
-All are read-only (`readOnlyHint`) except `propose_act`, `propose_change` and
+All are read-only (`readOnlyHint`) except `propose_act`, `propose_change`, `propose_chapter` and
 `withdraw_proposal`, which write nothing either: they only add or take back a proposal to review;
 and `plan_research` and `log_search`, which write only the research log (see below), never the
 tree's data.
@@ -53,6 +53,8 @@ tree's data.
 | `list_proposals` | Proposals waiting for review (id, `kind`, people with their ids, what each will write), and what became of the others: saved, rejected, edited in record entry, withdrawn, replaced |
 | `withdraw_proposal` | Takes back a waiting proposal |
 | `propose_change` | Adds a change for one Data Quality issue to the To Review page: the page's own fix (`fix`), edits among those the issue allows (`edit`), merging a possible duplicate (`merge`), or hiding a correct issue (`hide`), with the reason and the evidence. Without an issue, it proposes a correction read in a document (a name, a date, a sex, a citation). The answer lists the issues the change would create |
+| `read_book` | The tree's family books, or the chapters of one: each chapter is a generation, with its people (id, name, years, number, how much of a record the book gives them, facts known) and what the agent already wrote |
+| `propose_chapter` | Adds what the agent wrote for one chapter of a book to the To Review page: an introduction and people's narratives, in `text` blocks (people cited as `{I12}`, checked to be in the tree), `context` blocks (with their sources) and `hypothesis` blocks (with their basis). A new proposal for the same chapter takes the place of the waiting one. In To Review, context and hypotheses can be unticked; only the ticked ones are saved into the book |
 
 Ids (`I12`, `F3`…) are only for passing between tools; the server's instructions ask the agent
 not to show them.
@@ -72,6 +74,7 @@ Code they appear as slash commands once the server is connected.
 | `find_record` | `person`, `event` (both optional) | Picks a lead with `research_leads`, finds the right archive and register, searches it in the browser at a human pace, downloads the act and goes on with `read_record` |
 | `read_record` | `file`, `person` (both optional) | Transcribes the act, checks it against the person's sheet, identifies each person with `match_people`, picks or describes the source with `search_sources`, then calls `propose_act` and fixes it if refused |
 | `review_quality` | `category`, `person` (both optional) | Goes through the Data Quality issues with `quality_issues`, checks each one against the sheets and sources, then proposes a fix, an edit or hiding it with `propose_change` |
+| `write_book` | `book`, `chapter` (both optional) | Reads the book with `read_book`, then chapter by chapter reads the people's sheets, searches the historical context in reliable sources, and proposes the narratives, context and hypotheses with `propose_chapter` |
 
 ```text
 /mcp__gedroots__research_session sosa:1-15

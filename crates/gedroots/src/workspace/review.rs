@@ -110,6 +110,8 @@ pub(super) struct Review {
     pub(super) items: Vec<Item>,
     /// Changes for Data Quality issues, listed after the acts.
     pub(super) changes: Vec<super::review_change::ChangeGroup>,
+    /// Chapters of books written by an agent, listed last.
+    pub(super) chapters: Vec<super::review_book::ChapterItem>,
     /// Page displayed instead of the lists.
     pub(super) open: bool,
     pub(super) sel: usize,
@@ -128,7 +130,12 @@ pub(super) struct Review {
 
 impl Review {
     pub(super) fn is_empty(&self) -> bool {
-        self.items.is_empty() && self.changes.is_empty()
+        self.total() == 0
+    }
+
+    /// Rows of the list: acts, changes, chapters.
+    pub(super) fn total(&self) -> usize {
+        self.items.len() + self.changes.len() + self.chapters.len()
     }
 }
 
@@ -310,7 +317,7 @@ impl Workspace {
         let sel = self.review.sel;
         self.review.sel = i;
         self.review_take(Outcome::Withdrawn);
-        let total = self.review.items.len() + self.review.changes.len();
+        let total = self.review.total();
         self.review.sel = if i < sel { sel - 1 } else { sel.min(total.saturating_sub(1)) };
         self.set_status(t!("review.withdrawn"), false);
         cx.notify();
@@ -362,7 +369,7 @@ impl Workspace {
         if !item.demo {
             self.review.decided.push(decision(item.id.clone(), outcome));
         }
-        let total = self.review.items.len() + self.review.changes.len();
+        let total = self.review.total();
         self.review.sel = self.review.sel.min(total.saturating_sub(1));
         if total == 0 {
             self.review.open = false;
@@ -376,6 +383,10 @@ impl Workspace {
         }
         if let Some(i) = self.selected_change() {
             self.reject_change(i, cx);
+            return;
+        }
+        if let Some(i) = self.selected_chapter() {
+            self.reject_chapter(i, cx);
             return;
         }
         if self.review_take(Outcome::Rejected).is_some() {
@@ -399,6 +410,10 @@ impl Workspace {
         }
         if let Some(i) = self.selected_change() {
             self.accept_change(i, window, cx);
+            return;
+        }
+        if let Some(i) = self.selected_chapter() {
+            self.accept_chapter(i, window, cx);
             return;
         }
         let Some(item) = self.review.items.get(self.review.sel) else { return };
@@ -570,7 +585,17 @@ impl Workspace {
                     .when(!meta.is_empty(), |d| d.child(div().text_xs().text_color(theme::muted()).child(meta)))
                     .on_click(cx.listener(move |this, _, _, cx| this.review_select(i, cx)))
             }))
-            .children(self.review.changes.iter().enumerate().map(|(i, group)| self.render_change_row(i, group, g, cx)));
+            .children(self.review.changes.iter().enumerate().map(|(i, group)| self.render_change_row(i, group, g, cx)))
+            .children(self.review.chapters.iter().enumerate().map(|(i, item)| self.render_chapter_row(i, item, g, cx)));
+        if let Some(i) = self.selected_chapter() {
+            return h_flex()
+                .flex_1()
+                .min_w_0()
+                .items_stretch()
+                .child(list)
+                .child(self.render_chapter_detail(i, &self.review.chapters[i], g, cx))
+                .into_any_element();
+        }
         if let Some(i) = self.selected_change() {
             return h_flex()
                 .flex_1()

@@ -179,6 +179,7 @@ impl Workspace {
         };
         let d = on!(d, cx, ShowStats, |this, w, cx| this.show_view(View::Stats, w, cx));
         let d = d.when(has_doc, |d| on!(d, cx, NewBook, |this, w, cx| this.new_book(w, cx)));
+        let d = d.when(self.create_label().is_some(), |d| on!(d, cx, Create, |this, w, cx| this.create_here(w, cx)));
         let d = d.when(self.view == View::Books && sel.is_some(), |d| {
             on!(d, cx, EditRecord, |this, w, cx| this.edit_book(w, cx))
         });
@@ -415,6 +416,36 @@ impl Workspace {
         self.show_view(view, window, cx);
         self.create_record(window, cx);
         cx.notify();
+    }
+
+    /// Label of the top bar's Create button on this page; `None` where nothing is created
+    /// (places are created from a place field, the pages list nothing to create).
+    pub(super) fn create_label(&self) -> Option<SharedString> {
+        self.doc.as_ref()?;
+        Some(match self.view {
+            View::Individuals => label::new_individual(),
+            View::Sources => label::new_source(),
+            View::Media => label::new_media(),
+            View::Repositories => label::new_repository(),
+            View::Notes => label::new_note(),
+            View::Books => t!("cmd.new_book").trim_end_matches('…').to_string().into(),
+            View::Places | View::Research | View::Quality | View::Stats => return None,
+        })
+    }
+
+    /// Create (`⌘N`, the top bar's button): creates what the page lists.
+    pub(super) fn create_here(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        match self.view {
+            View::Sources => {
+                self.create_in(View::Sources, window, cx);
+                if let Some(s) = self.selected.clone() {
+                    self.open_act(s, None, window, cx);
+                }
+            }
+            View::Books => self.new_book(window, cx),
+            v @ (View::Individuals | View::Media | View::Repositories | View::Notes) => self.create_in(v, window, cx),
+            View::Places | View::Research | View::Quality | View::Stats => {}
+        }
     }
 
     /// Switches lists, leaving record entry if needed.

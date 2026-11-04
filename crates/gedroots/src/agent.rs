@@ -15,6 +15,7 @@
 //! The setting and the token belong to the machine: they live in the platform's configuration
 //! folder, never in the `.ged`.
 
+pub mod book;
 pub mod change;
 pub mod clients;
 mod prompts;
@@ -45,6 +46,9 @@ pub enum Request {
     ProposeChange(Box<change::ChangeRequest>, tokio::sync::oneshot::Sender<Result<(usize, Vec<String>), String>>),
     /// Record proposal: added to the window's “To Review” page, or refused.
     Propose(Box<propose::Pending>, tokio::sync::oneshot::Sender<Result<propose::Queued, String>>),
+    /// What the agent wrote for a chapter of a book: added to “To Review”, with the number of
+    /// proposals waiting.
+    ProposeChapter(Box<book::ChapterRequest>, tokio::sync::oneshot::Sender<Result<usize, String>>),
     /// The agent withdraws a waiting proposal: the number still waiting, or why it cannot.
     Withdraw(String, tokio::sync::oneshot::Sender<Result<usize, String>>),
     /// Change to the research log (plan, searches), never to the tree's data: applied at once,
@@ -197,6 +201,10 @@ pub fn install(cx: &mut App) {
                 }
                 Request::Propose(pending, reply) => {
                     let res = cx.update(|cx| workspace(tree, cx)?.update(cx, |ws, cx| ws.add_proposal(*pending, cx)));
+                    let _ = reply.send(res);
+                }
+                Request::ProposeChapter(req, reply) => {
+                    let res = cx.update(|cx| workspace(tree, cx)?.update(cx, |ws, cx| ws.add_chapter(*req, cx)));
                     let _ = reply.send(res);
                 }
                 Request::Edit(edit, reply) => {

@@ -32,8 +32,9 @@ The details (which apps, what to hand in) are in [design.md › Before any mocku
 - **Generic features.** Nothing is tailored to a particular file: data fixes go through the
   import wizard (`crates/gedcom/src/import.rs`, pluggable checks).
 - **Cross-platform** (macOS, Windows, Linux): prefer solutions that work everywhere.
-- **Commands**: every command lives in the menu model (`crates/gedroots/src/commands.rs`) and
-  therefore in the `⌘⇧P` palette; no toolbar (see `design.md`).
+- **Commands**: each command has one place, a visible control or the menu bar, never both, and
+  all of them are in the `⌘⇧P` palette (`crates/gedroots/src/commands.rs`: menu model and
+  `palette_only()`). The only button of the top bar is Create (`⌘N`); see `design.md`.
 - **Translated interface text**: the app is written in English and translated into French. No
   displayed text is hardcoded: a key in `crates/*/locales/*.yml` with `en` and `fr`, read with
   `t!("…")` (see [`docs/localization.md`](docs/localization.md)). Search keywords
