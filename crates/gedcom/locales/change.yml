@@ -30,6 +30,9 @@ change.other_name:
 change.place:
   en: "Place"
   fr: "Lieu"
+change.coordinates:
+  en: "Coordinates"
+  fr: "Coordonnées"
 change.repository:
   en: "Repository"
   fr: "Dépôt"

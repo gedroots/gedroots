@@ -146,3 +146,70 @@ fn coordinates_far_apart_are_a_choice() {
     assert_eq!(r, "Exton Park, Rutland");
     assert_eq!(g.places()[0].latitude.as_deref(), Some("N52.69"));
 }
+
+fn agent_change(g: &Gedcom, a: &str, action: gedcom::change::Action) -> gedcom::change::QualityChange {
+    let issues = quality::run(g);
+    let ids = quality::issue_ids(&issues);
+    let n = issues
+        .iter()
+        .position(|i| i.code == "possible_duplicate_place" && i.related.first().map(String::as_str) == Some(a))
+        .expect("the pair is suggested");
+    gedcom::change::QualityChange {
+        issue: Some(issues[n].clone()),
+        issue_id: Some(ids[n].clone()),
+        action,
+        reason: "The parish took the name of the hill in 1850".into(),
+        evidence: Default::default(),
+    }
+}
+
+#[test]
+fn an_agent_merge_of_places_needs_a_choice_for_each_level_that_differs() {
+    use gedcom::change::Action;
+    let mut g = Gedcom::parse(FILE).unwrap();
+    let a = ", Oakham, 11000, Rutland, East, England";
+    let b = ", Oakham-on-Hill, 11000, Rutland, East Midlands, England";
+    let rerun = |g: &Gedcom| quality::run(g);
+    let merge = |choices: &[(&str, &str)]| {
+        Action::Merge(choices.iter().map(|(f, w)| (f.to_uppercase(), w.to_string())).collect())
+    };
+    // The agent sees what it has to choose.
+    let issues = quality::run(&g);
+    let report = g.quality_report(&issues, &Default::default(), 0, 100).unwrap();
+    let info = report.issues.iter().find_map(|i| i.merge.clone().filter(|m| m.keep == a)).unwrap();
+    assert_eq!(info.conflicts.iter().map(|c| c.fact.as_str()).collect::<Vec<_>>(), ["Town", "Region"]);
+    assert!(report.issues.iter().any(|i| i.code == "possible_duplicate_place" && i.can_hide && !i.automatic_fix));
+
+    let err = agent_change(&g, a, merge(&[("Town", a)])).check(&g, &rerun).unwrap_err();
+    assert!(err.contains("Region"), "{err}");
+    let err = agent_change(&g, a, merge(&[("Town", a), ("Region", a), ("Country", a)])).check(&g, &rerun).unwrap_err();
+    assert!(err.contains("does not differ"), "{err}");
+    assert!(agent_change(&g, a, merge(&[("Town", a), ("Region", "Elsewhere")])).check(&g, &rerun).is_err());
+    assert!(agent_change(&g, a, Action::Fix).check(&g, &rerun).is_err());
+
+    // The agent's keys come upper-cased: “RÉGION” is “Région”.
+    let ok = agent_change(&g, a, merge(&[("town", a), ("REGION", b)]));
+    ok.check(&g, &rerun).unwrap();
+    let rows = ok.rows(&g);
+    assert!(rows.iter().any(|r| r.label == "Region" && r.proposed == "East Midlands"));
+    ok.apply(&mut g).unwrap();
+    assert!(g.places().iter().any(|p| p.name == ", Oakham, 11000, Rutland, East Midlands, England" && p.uses == 2));
+}
+
+#[test]
+fn an_agent_can_say_two_places_are_different() {
+    use gedcom::change::Action;
+    let mut g = Gedcom::parse(FILE).unwrap();
+    let a = ", Exton, 33000, Rutland, East, England";
+    let hide = agent_change(&g, a, Action::Hide);
+    assert!(hide.title(&g).ends_with("Exton (Rutland)"));
+    hide.check(&g, &|g: &Gedcom| quality::run(g)).unwrap();
+    hide.apply(&mut g).unwrap();
+    assert_eq!(g.distinct_places().len(), 1);
+}
+
+#[test]
+fn level_keys_ignore_case_with_accents() {
+    let c = gedcom::place_merge::PlaceConflict { fact: "Région".into(), a: "a".into(), b: "b".into() };
+    assert!(c.is("RÉGION") && c.is(" région ") && !c.is("Region"));
+}

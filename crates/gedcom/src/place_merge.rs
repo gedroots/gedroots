@@ -480,7 +480,51 @@ pub struct PlacePlan {
     pub conflicts: usize,
 }
 
+/// A choice to make between two places: the level (its label, or `MAP` for the coordinates) and
+/// the value of each place.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlaceConflict {
+    pub fact: String,
+    pub a: String,
+    pub b: String,
+}
+
+impl PlaceConflict {
+    /// Is it the level named `fact`, whatever its case (“RÉGION” for “Région”)?
+    pub fn is(&self, fact: &str) -> bool {
+        self.fact.to_lowercase() == fact.trim().to_lowercase()
+    }
+}
+
+/// Key of the coordinates among the choices of a place merge.
+pub const COORDINATES: &str = "MAP";
+
 impl PlacePlan {
+    /// The choices to make, in order: the levels that differ, then the coordinates.
+    pub fn choices(&self) -> Vec<PlaceConflict> {
+        let mut out: Vec<(usize, PlaceConflict)> = self
+            .rows
+            .iter()
+            .filter_map(|r| match r.kind {
+                RowKind::Conflict(c) => {
+                    Some((c, PlaceConflict { fact: r.label.clone(), a: r.a.clone(), b: r.b.clone() }))
+                }
+                _ => None,
+            })
+            .collect();
+        if let Coords::Conflict(c, _) = self.coords {
+            let text = |side| self.coords_text(side).unwrap_or_default();
+            out.push((c, PlaceConflict { fact: COORDINATES.into(), a: text(Side::Keep), b: text(Side::Other) }));
+        }
+        out.sort_by_key(|(c, _)| *c);
+        out.into_iter().map(|(_, c)| c).collect()
+    }
+
+    /// The merged name once every choice is made.
+    pub fn merged_name(&self, choices: &[Side]) -> String {
+        self.result(choices)
+    }
+
     /// The merged name; a conflict not chosen yet (`None`) shows `missing`.
     pub fn preview_with(&self, choices: &[Option<Side>], missing: &str) -> String {
         self.rows

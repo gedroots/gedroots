@@ -20,6 +20,11 @@ How to work:
      with its `osm`;
    - the tree is right (a marriage really celebrated very young, a very long life confirmed by
      both acts): `action: "hide"`, with the reason it is right;
+   - a possible duplicate, two people or two places: compare them (two people: both
+     `person_sheet`; two places: their levels in `merge.conflicts` and the events held there).
+     The same: `action: "merge"`, with in `choices` the side (`merge.keep` or `merge.other`)
+     whose value is right for each fact or level of `merge.conflicts`. Two different ones (two
+     neighbouring villages with close names): `action: "hide"`, with the reason;
    - you cannot tell: leave it, and list it for the user at the end.
 4. An event without a source can only cite a source already in the tree (`search_sources`). If
    the record has to be found in the archives first, use the `find_record` prompt instead.
