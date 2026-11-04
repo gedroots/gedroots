@@ -31,12 +31,13 @@ pub struct ChangeParams {
 /// One edit. `kind` says which, and which fields it needs:
 /// `set_event` (record, event, value, date, place and/or address), `add_event` (record, tag,
 /// value, date, place, address), `rename_place` (place, new_place), `delete_event` (record, event),
-/// `set_sex` (record, sex), `set_coordinates` (place, latitude, longitude),
+/// `set_sex` (record, sex), `set_coordinates` (place, latitude, longitude, osm),
+/// `set_repository` (record: a source; repository_id or repository, call_number),
 /// `set_media_file` (file), `cite_source` (record, event, source, page),
 /// `set_value` (value), `delete_structure` (nothing: the structure the issue designates),
 /// `set_name` (record, given and/or surname, name), `add_name` (record, given and/or surname,
 /// name_type). Without an issue: set_name, add_name, set_event, add_event, delete_event, set_sex,
-/// cite_source, set_coordinates, rename_place.
+/// cite_source, set_coordinates, rename_place, set_repository.
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct EditParams {
     pub kind: String,
@@ -57,6 +58,14 @@ pub struct EditParams {
     /// Decimal degrees.
     pub latitude: Option<f64>,
     pub longitude: Option<f64>,
+    /// For `set_coordinates`: the `osm` of the `locate_place` candidate (`relation/415228`).
+    pub osm: Option<String>,
+    /// For `set_repository`: an existing repository (`search_sources`).
+    pub repository_id: Option<String>,
+    /// For `set_repository`, when the tree has no repository for that archive: the one to create.
+    pub repository: Option<super::propose::RepositoryParams>,
+    /// For `set_repository`: the call number of the register at the repository (`CALN`).
+    pub call_number: Option<String>,
     /// Path of the media file, relative to the tree's folder.
     pub file: Option<String>,
     /// Existing source id (`search_sources`).
@@ -154,6 +163,20 @@ fn edit(p: &EditParams) -> Result<Edit, String> {
             place: need(p.place.clone(), k, "place")?,
             latitude: need(p.latitude, k, "latitude")?,
             longitude: need(p.longitude, k, "longitude")?,
+            exid: match p.osm.as_deref().map(str::trim).filter(|o| !o.is_empty()) {
+                Some(osm) => Some(super::propose::osm_exid(osm)?),
+                None => None,
+            },
+        },
+        "set_repository" => Edit::SetRepository {
+            source: need(id(&p.record), k, "record")?,
+            repository: id(&p.repository_id),
+            new: p.repository.as_ref().map(|r| gedcom::proposal::NewRepository {
+                name: r.name.trim().to_string(),
+                address: r.address.as_deref().unwrap_or_default().trim().to_string(),
+                www: r.website.as_deref().unwrap_or_default().trim().to_string(),
+            }),
+            call_number: p.call_number.clone(),
         },
         "set_media_file" => Edit::SetMediaFile { file: need(p.file.clone(), k, "file")? },
         "cite_source" => Edit::CiteSource {

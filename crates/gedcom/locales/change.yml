@@ -30,3 +30,9 @@ change.other_name:
 change.place:
   en: "Place"
   fr: "Lieu"
+change.repository:
+  en: "Repository"
+  fr: "Dépôt"
+change.new_repository:
+  en: "%{name} (new)"
+  fr: "%{name} (nouveau)"

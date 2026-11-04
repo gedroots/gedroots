@@ -66,6 +66,16 @@ pub enum Edit {
         place: String,
         latitude: f64,
         longitude: f64,
+        /// Identifier in the gazetteer (`EXID` value and `TYPE` URI).
+        exid: Option<(String, String)>,
+    },
+    /// The repository of a source (`REPO`, with its call number `CALN`): an existing one, or one
+    /// to create. A repository of the tree with the same name is used instead of a new one.
+    SetRepository {
+        source: String,
+        repository: Option<String>,
+        new: Option<crate::proposal::NewRepository>,
+        call_number: Option<String>,
     },
     /// New path of the media file the issue designates.
     SetMediaFile {
@@ -112,6 +122,7 @@ impl Edit {
             Edit::DeleteEvent { .. } => "delete_event",
             Edit::SetSex { .. } => "set_sex",
             Edit::SetCoordinates { .. } => "set_coordinates",
+            Edit::SetRepository { .. } => "set_repository",
             Edit::SetMediaFile { .. } => "set_media_file",
             Edit::CiteSource { .. } => "cite_source",
             Edit::SetValue { .. } => "set_value",
@@ -128,6 +139,7 @@ impl Edit {
             | Edit::AddEvent { record, .. }
             | Edit::DeleteEvent { record, .. }
             | Edit::CiteSource { record, .. } => Some(record),
+            Edit::SetRepository { source, .. } => Some(source),
             Edit::SetSex { person, .. } | Edit::SetName { person, .. } | Edit::AddName { person, .. } => Some(person),
             _ => None,
         }
@@ -197,6 +209,7 @@ pub const CORRECTIONS: &[&str] = &[
     "cite_source",
     "set_coordinates",
     "rename_place",
+    "set_repository",
 ];
 
 /// Edits each kind of issue allows. Changing a filiation (own ancestor) or a person's links stays
@@ -323,6 +336,20 @@ impl QualityChange {
             Edit::CiteSource { source, .. } if g.get(source).is_none_or(|n| n.tag != "SOUR") => Err(format!(
                 "no source {source} in the tree: cite an existing one (`search_sources`), or propose the act with `propose_act`"
             )),
+            Edit::SetRepository { source, repository, new, .. } => {
+                if g.get(source).is_none_or(|n| n.tag != "SOUR") {
+                    return Err(format!("{source} is not a source of the tree"));
+                }
+                match (repository, new) {
+                    (Some(r), _) if g.get(r).is_none_or(|n| n.tag != "REPO") => {
+                        Err(format!("no repository {r} in the tree (`search_sources` lists them)"))
+                    }
+                    (Some(_), _) => Ok(()),
+                    (None, Some(n)) if n.name.trim().is_empty() => Err("the new repository needs its `name`".into()),
+                    (None, Some(_)) => Ok(()),
+                    (None, None) => Err("`set_repository` needs `repository_id` or a new `repository`".into()),
+                }
+            }
             Edit::RenamePlace { place, name } => {
                 if name.trim().is_empty() {
                     return Err("`rename_place` needs the new `name`".into());
@@ -565,9 +592,29 @@ impl QualityChange {
                 r.set_child_val("SEX", &sex);
                 Ok(())
             }
-            Edit::SetCoordinates { place, latitude, longitude } => {
-                let n = g.update_place(place, place, &format_latitude(*latitude), &format_longitude(*longitude));
+            Edit::SetCoordinates { place, latitude, longitude, exid } => {
+                let n =
+                    g.locate_place(place, &format_latitude(*latitude), &format_longitude(*longitude), exid.as_ref());
                 if n == 0 { Err(outdated()) } else { Ok(()) }
+            }
+            Edit::SetRepository { source, repository, new, call_number } => {
+                let repo = match (repository, new) {
+                    (Some(r), _) => r.clone(),
+                    (None, Some(new)) => g.create_repository(new)?,
+                    (None, None) => return Err("`set_repository` needs `repository_id` or a new `repository`".into()),
+                };
+                let node = g.get_mut(source).filter(|n| n.tag == "SOUR").ok_or_else(outdated)?;
+                let caln = call_number
+                    .clone()
+                    .or_else(|| node.child("REPO").and_then(|r| r.child_val("CALN")).map(str::to_string))
+                    .unwrap_or_default();
+                node.children.retain(|c| c.tag != "REPO");
+                let mut r = Node::with_value("REPO", format!("@{repo}@"));
+                if !caln.trim().is_empty() {
+                    r = r.push(Node::with_value("CALN", caln.trim()));
+                }
+                node.insert_child(r);
+                Ok(())
             }
             Edit::SetMediaFile { file } => {
                 if file.trim().is_empty() {
@@ -791,7 +838,36 @@ impl QualityChange {
                         let current = g.individual(person).map(|i| i.sex_label().into_owned()).unwrap_or_default();
                         row(g.record_label(person), current, sex_label(sex), Change::Differs)
                     }
-                    Edit::SetCoordinates { place, latitude, longitude } => {
+                    Edit::SetRepository { source, repository, new, call_number } => {
+                        let src = g.get(source).map(crate::model::Source::new);
+                        let name_of = |x: &str| g.get(x).and_then(|n| n.child_val("NAME")).unwrap_or(x).to_string();
+                        let with_caln = |name: String, caln: &str| {
+                            if caln.trim().is_empty() { name } else { format!("{name} · {}", caln.trim()) }
+                        };
+                        let current = src
+                            .and_then(|s| {
+                                Some(with_caln(name_of(s.repository()?), s.call_number().unwrap_or_default()))
+                            })
+                            .unwrap_or_default();
+                        let caln = call_number
+                            .clone()
+                            .or_else(|| src.and_then(|s| s.call_number()).map(str::to_string))
+                            .unwrap_or_default();
+                        let (name, created) = match (repository, new) {
+                            (Some(r), _) => (name_of(r), false),
+                            (None, Some(n)) => match g.repository_named(&n.name) {
+                                Some(r) => (name_of(&r), false),
+                                None => (n.name.trim().to_string(), true),
+                            },
+                            (None, None) => (String::new(), false),
+                        };
+                        let name = if created { t!("change.new_repository", name = name).into_owned() } else { name };
+                        let label =
+                            format!("{} · {}", t!("change.repository"), src.map(|s| s.title()).unwrap_or_default());
+                        let change = if current.is_empty() { Change::Added } else { Change::Differs };
+                        row(label, or_dash(current), with_caln(name, &caln), change)
+                    }
+                    Edit::SetCoordinates { place, latitude, longitude, .. } => {
                         let current = g
                             .places()
                             .into_iter()

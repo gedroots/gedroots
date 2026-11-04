@@ -44,6 +44,7 @@ tree's data.
 | `log_search` | Notes one search, whatever its result (`found`, `nothing`, `partial`): what was searched, years, place, viewer page; `finished` when nothing is left to search |
 | `quality_issues` | The Data Quality page's issues, filtered by category, kind or record and paged (`offset`, `limit`): message, records and places involved, whether the page fixes it in one click, whether it can be hidden, counts per category |
 | `search_sources` | Sources (register, repository, call number, number of acts) and repositories, to cite an existing one |
+| `locate_place` | For one place of an act: the tree's places of that name, the located places of the events of the act's people and their relatives (closest in time first), and the gazetteer's candidates (OpenStreetMap, through Photon, biased towards those places) in the file's place format, each with its distance to the closest of those events |
 | `match_people` | For the people named in an act (role, names, sex, age, act date), the people of the tree who could be them, with the reason and whether the match is likely |
 | `propose_act` | Adds an act to the To Review page: event, date, place, street address, source, reference, transcription, people with their role, downloaded file. Answers its id, what it will write and the temporary id of each new person; with `replaces`, corrects a waiting proposal |
 | `list_proposals` | Proposals waiting for review (id, `kind`, people with their ids, what each will write), and what became of the others: saved, rejected, edited in record entry, withdrawn, replaced |
@@ -128,7 +129,11 @@ people (`crates/gedcom/src/proposal.rs`).
 Before a proposal reaches the review page it must fit the tree. Otherwise it is refused with the
 reason, which the agent reads to fix it:
 
-- the source and repository must exist, or the new source must name its register;
+- the source and repository must exist, or the new source must name its register. A new source
+  may also create its repository (`source.repository`: name, postal address, website) when the
+  tree has none for that archive; a repository of the tree with the same name (case, accents and
+  punctuation aside) is cited instead, so two proposals naming the same new archive create it
+  once. The review page shows it as created in the attachment;
 - a parent other than the one already in the tree is refused (link that person, or mention the
   other one);
 - a person to create must not resemble someone of the tree (same names, or a relative of a linked
@@ -173,6 +178,18 @@ writes everything at once, as a single undo step, and stores the image next to t
 named by File Settings › Media; **Reject** (⌘⌫) drops it; **Edit in Record Entry…** opens it in
 the act editor. Proposals live in memory: they are lost when the app closes.
 
+### Locating new places
+
+A place the tree does not have yet can come with its coordinates (`locations`: the place,
+latitude, longitude and the OpenStreetMap identifier, written as the place's `MAP` and `EXID`).
+The agent first calls `locate_place`, one place at a time (at most one request every 1.1 s,
+never in bulk): homonyms are common, so the answer puts each candidate next to the places where
+the act's people and their relatives lived, closest in time first, and the agent picks the
+candidate that fits the act's jurisdictions and the family's region. Nothing ranks or picks for
+it: the user sees the place and its coordinates in the attachment of To Review. A location is
+refused for a place the proposal does not name, or one the tree has already located (moving it
+is a `propose_change` with `set_coordinates`).
+
 ## Privacy and safety
 
 - **Living people are not set apart.** The agent reads every person the way the app shows them
@@ -211,7 +228,10 @@ name kept), `add_name` (another `NAME`, with its `TYPE`, for a variant spelling)
 (value such as an occupation, date, place and/or street address of an existing event),
 `add_event` (a new event or attribute: `OCCU` with its value, `RESI` with its address…),
 `rename_place` (a place renamed everywhere it is used, its coordinates kept),
-`delete_event`, `set_sex`, `cite_source` or `set_coordinates`, on any record. The reason and
+`delete_event`, `set_sex`, `cite_source`, `set_coordinates` (with the `osm` of the
+`locate_place` candidate, kept as the place's `EXID`) or `set_repository` (the repository and
+call number of a source: an existing repository, or one to create, as in `propose_act`), on any
+record. The reason and
 the evidence (a source of the tree, the viewer page or a quote) are required: the user checks
 them in To Review, where the item is titled **Correction**. When `propose_act` links a person
 the act names otherwise, its `will_write` says so and points to this correction.

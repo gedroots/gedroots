@@ -65,6 +65,7 @@ pub mod geo;
 pub mod import;
 pub mod kinds;
 pub mod leads;
+pub mod locate;
 pub mod media_links;
 pub mod media_naming;
 pub mod merge;

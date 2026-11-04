@@ -161,12 +161,18 @@ fn coordinates_of_a_place() {
     let c = change(
         &g,
         "missing_coords",
-        Action::Edit(vec![Edit::SetCoordinates { place: "Agneaux".into(), latitude: 49.1, longitude: -1.1 }]),
+        Action::Edit(vec![Edit::SetCoordinates {
+            place: "Agneaux".into(),
+            latitude: 49.1,
+            longitude: -1.1,
+            exid: Some(("1234".into(), "https://www.openstreetmap.org/relation/".into())),
+        }]),
         "Agneaux, Manche",
     );
     c.check(&g, &rerun).unwrap();
     assert_eq!(c.rows(&g)[0].proposed, "N49.1, W1.1");
-    let far = Edit::SetCoordinates { place: "Agneaux".into(), latitude: 120.0, longitude: 0.0 };
+    assert!(c.diff(&g).unwrap().iter().any(|(k, l)| *k == '+' && l.contains("EXID 1234")));
+    let far = Edit::SetCoordinates { place: "Agneaux".into(), latitude: 120.0, longitude: 0.0, exid: None };
     let c = QualityChange { action: Action::Edit(vec![far]), ..c };
     assert!(c.check(&g, &rerun).is_err());
 }
@@ -295,4 +301,61 @@ fn a_correction_moves_an_address_and_renames_a_place() {
     assert!(text.contains("LATI N49.1"), "{text}");
     let unknown = Edit::RenamePlace { place: "Nowhere".into(), name: "X".into() };
     assert!(correction(vec![unknown]).check(&g, &rerun).unwrap_err().contains("Nowhere"));
+}
+
+#[test]
+fn a_correction_sets_the_repository_of_a_source() {
+    let g = ged();
+    let correction = |edit: Edit| QualityChange {
+        issue: None,
+        issue_id: None,
+        action: Action::Edit(vec![edit]),
+        reason: "The register is kept by the archives of Manche".into(),
+        evidence: Evidence { url: "https://archives.manche.fr/ark:/1".into(), ..Default::default() },
+    };
+    let new = gedcom::proposal::NewRepository {
+        name: "Archives départementales de la Manche".into(),
+        address: "Saint-Lô".into(),
+        www: "https://archives.manche.fr".into(),
+    };
+    let c = correction(Edit::SetRepository {
+        source: "S1".into(),
+        repository: None,
+        new: Some(new.clone()),
+        call_number: Some("5 Mi 1".into()),
+    });
+    c.check(&g, &rerun).unwrap();
+    let row = &c.rows(&g)[0];
+    assert!(
+        row.proposed.contains("Archives départementales de la Manche") && row.proposed.contains("5 Mi 1"),
+        "{row:?}"
+    );
+    let mut g2 = g.clone();
+    c.apply(&mut g2).unwrap();
+    let x = g2.repository_named("Archives departementales de la Manche").unwrap();
+    let text = g2.to_gedcom_string();
+    assert!(text.contains(&format!("1 REPO @{x}@\n2 CALN 5 Mi 1")), "{text}");
+    assert!(text.contains("1 WWW https://archives.manche.fr"), "{text}");
+    // Then another source to the same repository, by its id: no second repository.
+    let c = correction(Edit::SetRepository {
+        source: "S1".into(),
+        repository: Some(x.clone()),
+        new: None,
+        call_number: None,
+    });
+    c.check(&g2, &rerun).unwrap();
+    // Unknown source or repository, or neither given.
+    let bad = |e: Edit| correction(e).check(&g, &rerun).unwrap_err();
+    assert!(
+        bad(Edit::SetRepository { source: "I1".into(), repository: Some("R9".into()), new: None, call_number: None })
+            .contains("not a source")
+    );
+    assert!(
+        bad(Edit::SetRepository { source: "S1".into(), repository: Some("R9".into()), new: None, call_number: None })
+            .contains("no repository")
+    );
+    assert!(
+        bad(Edit::SetRepository { source: "S1".into(), repository: None, new: None, call_number: None })
+            .contains("needs")
+    );
 }
