@@ -1,0 +1,108 @@
+_version: 2
+# Books page, New Book window and book export (crates/gedroots/src/workspace/books.rs). The texts
+# of the books themselves are in crates/book/locales.
+books.view:
+  en: Books
+  fr: Livres
+books.none:
+  en: No book selected
+  fr: Aucun livre sélectionné
+books.new_title:
+  en: New Book
+  fr: Nouveau livre
+books.settings_title:
+  en: Book Settings
+  fr: Réglages du livre
+books.person:
+  en: Person
+  fr: Personne
+books.line:
+  en: Line
+  fr: Parcours
+books.ancestors:
+  en: Ancestors
+  fr: Ascendance
+books.descendants:
+  en: Descendants
+  fr: Descendance
+books.generations_label:
+  en: Generations
+  fr: Générations
+books.size:
+  en: Size
+  fr: Format
+books.size_book:
+  en: 17 × 24 cm
+  fr: 17 × 24 cm
+books.size_a4:
+  en: A4
+  fr: A4
+books.size_letter:
+  en: US Letter
+  fr: Lettre US
+books.title:
+  en: Title
+  fr: Titre
+books.create:
+  en: Create Book
+  fr: Créer le livre
+books.save:
+  en: Save
+  fr: Enregistrer
+books.created:
+  en: Book created
+  fr: Livre créé
+books.saved:
+  en: Book settings saved
+  fr: Réglages du livre enregistrés
+books.deleted:
+  en: "“%{title}” deleted (Undo to go back)"
+  fr: "« %{title} » supprimé (Annuler pour revenir en arrière)"
+books.choose_person:
+  en: Select a person first, or choose a root person for the tree
+  fr: Sélectionnez d’abord une personne, ou choisissez la personne de référence de l’arbre
+books.no_person:
+  en: person not found
+  fr: personne introuvable
+books.ancestors_of:
+  en: "Ancestors of %{name}"
+  fr: "Ascendance de %{name}"
+books.descendants_of:
+  en: "Descendants of %{name}"
+  fr: "Descendance de %{name}"
+books.generations.one:
+  en: "%{n} generation"
+  fr: "%{n} génération"
+books.generations.other:
+  en: "%{n} generations"
+  fr: "%{n} générations"
+books.pages.one:
+  en: "%{n} page"
+  fr: "%{n} page"
+books.pages.other:
+  en: "%{n} pages"
+  fr: "%{n} pages"
+books.typesetting:
+  en: Typesetting…
+  fr: Mise en page…
+books.untitled_tree:
+  en: an untitled tree
+  fr: un arbre sans titre
+books.export_title:
+  en: Export Book
+  fr: Exporter le livre
+books.pdf:
+  en: PDF
+  fr: PDF
+books.default_file:
+  en: Book
+  fr: Livre
+books.exporting:
+  en: "Exporting “%{file}”…"
+  fr: "Export de « %{file} »…"
+books.exported:
+  en: "Book exported to %{path} (%{pages} pages)"
+  fr: "Livre exporté dans %{path} (%{pages} pages)"
+books.export_failed:
+  en: "The book could not be exported: %{error}"
+  fr: "Le livre n’a pas pu être exporté : %{error}"

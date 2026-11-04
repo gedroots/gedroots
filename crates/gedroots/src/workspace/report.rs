@@ -101,13 +101,14 @@ impl Workspace {
             (self.new_place.is_some(), "new_place"),
             (self.locate.is_some(), "locate_place"),
             (self.kinship.is_some(), "kinship"),
+            (self.books.dialog.is_some(), "book_settings"),
             (self.photo_draw.is_some(), "photo_framing"),
         ]
         .into_iter()
         .filter_map(|(on, name)| on.then_some(name))
         .collect();
         let selected = self.selected.as_ref().and_then(|x| g.get(x)).and_then(|n| RecordKind::from_tag(&n.tag));
-        let pages = matches!(self.view, View::Research | View::Quality | View::Stats);
+        let pages = matches!(self.view, View::Research | View::Quality | View::Stats | View::Books);
         let screen = json!({
             "view": format!("{:?}", self.view),
             "tab": (!pages).then(|| format!("{:?}", self.tab)),

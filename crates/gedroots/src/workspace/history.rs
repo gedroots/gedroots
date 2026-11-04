@@ -99,6 +99,7 @@ impl Workspace {
             View::Places => short_place(&loc.key),
             View::Quality | View::Stats => loc.view.label().to_string(),
             View::Research => self.lead_title(&loc.key).unwrap_or_else(|| loc.view.label().to_string()),
+            View::Books => gedroots_book::spec::book(&doc.ged, &loc.key).map(|b| self.book_title(&b))?,
             _ => doc.ged.record_label(&loc.key),
         })
     }

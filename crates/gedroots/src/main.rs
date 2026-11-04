@@ -87,6 +87,8 @@ gpui_kit::assets::icon_assets!(
         CircleDot,
         CircleSlash,
         CircleMinus,
+        BookMarked,
+        Minus,
     ]
 );
 

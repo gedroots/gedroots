@@ -34,6 +34,8 @@ schemars = "1"
 dirs = "6"
 # Mobile devices: one-way peer-to-peer sync, and the pairing QR code.
 gedroots-sync = { path = "../sync" }
+# Family books: typesetting with Typst, embedded.
+gedroots-book = { path = "../book" }
 qrcode = { version = "0.14", default-features = false }
 tokio-util = "0.7.20"
 hayro = "0.8.0"
