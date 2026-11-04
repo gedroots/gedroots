@@ -26,14 +26,17 @@ in the machine's settings. The commands and blocks are built in `crates/gedroots
 
 ## Tools
 
-The tools return structured JSON (`outputSchema`) and work on the file of the most recently
-active window. All are read-only (`readOnlyHint`) except `propose_act`, `propose_change` and
+The tools return structured JSON (`outputSchema`). GEDRoots shows one tree per window: every
+tool takes an optional `tree` (a name, file name or id, as `list_trees` gives them) and otherwise
+works on the tree of the window in front. A proposal goes to the To Review page of its own tree.
+All are read-only (`readOnlyHint`) except `propose_act`, `propose_change` and
 `withdraw_proposal`, which write nothing either: they only add or take back a proposal to review;
 and `plan_research` and `log_search`, which write only the research log (see below), never the
 tree's data.
 
 | Tool | Returns |
 | --- | --- |
+| `list_trees` | The trees open in GEDRoots, the one in front first: name, file, id, number of people |
 | `file_info` | File name, counts, root person |
 | `file_context` | How the file is written: the description the user wrote (File Settings › General, `HEAD.NOTE`, word for word), language, place format, events, custom event types and occupations in use with their counts, media folders and naming, and the latest sources, people, families, media and repositories changed as raw GEDCOM (`examples`). Also served as the resource `gedroots://file/context` |
 | `search_people` | People matching a search, as in the app's search box |
@@ -46,7 +49,7 @@ tree's data.
 | `search_sources` | Sources (register, repository, call number, number of acts) and repositories, to cite an existing one |
 | `locate_place` | For one place of an act: the tree's places of that name, the located places of the events of the act's people and their relatives (closest in time first), and the gazetteer's candidates (OpenStreetMap, through Photon, biased towards those places) in the file's place format, each with its distance to the closest of those events |
 | `match_people` | For the people named in an act (role, names, sex, age, act date), the people of the tree who could be them, with the reason and whether the match is likely |
-| `propose_act` | Adds an act to the To Review page: event, date, place, street address, source, reference, transcription, people with their role, downloaded file. Answers its id, what it will write and the temporary id of each new person; with `replaces`, corrects a waiting proposal |
+| `propose_act` | Adds an act to the To Review page: event, date, place, street address, source, reference, transcription (plain text, only the act), people with their role, downloaded file, and the agent's remarks for the reviewer (shown, never written). Answers its id, what it will write and the temporary id of each new person; with `replaces`, corrects a waiting proposal |
 | `list_proposals` | Proposals waiting for review (id, `kind`, people with their ids, what each will write), and what became of the others: saved, rejected, edited in record entry, withdrawn, replaced |
 | `withdraw_proposal` | Takes back a waiting proposal |
 | `propose_change` | Adds a change for one Data Quality issue to the To Review page: the page's own fix (`fix`), edits among those the issue allows (`edit`), merging a possible duplicate (`merge`), or hiding a correct issue (`hide`), with the reason and the evidence. Without an issue, it proposes a correction read in a document (a name, a date, a sex, a citation). The answer lists the issues the change would create |
@@ -172,7 +175,7 @@ The **To Review** page (sidebar, or Source › Review Agent Proposals) shows, fo
 the act's image, a comparison of what the tree holds and what is proposed (each person can be
 unchecked), the **Facts** it gives (each one can be unchecked; the occupations, residences and
 estimated births deduced from the act are listed there too, so nothing is written unseen; the
-answer of `propose_act` lists the same lines in `will_write`), the attachment (repository, source, file, web link, event), the transcription and, on demand,
+answer of `propose_act` lists the same lines in `will_write`), the attachment (repository, source, file, web link, event), the agent's remarks, the transcription line by line and, on demand,
 the exact GEDCOM lines that will change, computed on a copy of the file. **Save to Tree** (⌘↩)
 writes everything at once, as a single undo step, and stores the image next to the `.ged`,
 named by File Settings › Media; **Reject** (⌘⌫) drops it; **Edit in Record Entry…** opens it in

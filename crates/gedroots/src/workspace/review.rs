@@ -941,6 +941,7 @@ impl Workspace {
             });
 
         let transcription = p.act.transcription.trim().to_string();
+        let remarks = item.pending.remarks.clone();
         let url = item.pending.proposal.url.trim().to_string();
         let can_save = problem.is_none();
         v_flex()
@@ -972,12 +973,20 @@ impl Workspace {
                         d.child(v_flex().gap_1().child(label_caps(t!("review.facts").into_owned())).child(facts))
                     })
                     .child(v_flex().gap_1().child(label_caps(t!("review.attachment").into_owned())).child(links))
+                    .when(!remarks.is_empty(), |d| {
+                        d.child(
+                            v_flex()
+                                .gap_1()
+                                .child(label_caps(t!("review.remarks").into_owned()))
+                                .child(paragraphs(&remarks)),
+                        )
+                    })
                     .when(!transcription.is_empty(), |d| {
                         d.child(
                             v_flex()
                                 .gap_1()
                                 .child(label_caps(t!("review.transcription").into_owned()))
-                                .child(div().text_sm().italic().child(transcription)),
+                                .child(paragraphs(&transcription)),
                         )
                     })
                     .when(!url.is_empty(), |d| {
@@ -1029,6 +1038,40 @@ impl Workspace {
 
 /// Name the record’s file will get according to File Settings › Media (without a template: its own
 /// name, next to the .ged).
+/// Text written by an agent, as it wrote it: one block per line, an empty line as a paragraph
+/// break. Unusual spaces (no-break, thin, zero-width…) become ordinary ones for display: some
+/// were drawn with no width, gluing words together (“13août1850”); the text itself is kept.
+fn paragraphs(text: &str) -> Div {
+    let mut out = v_flex().gap_2().text_sm();
+    let mut block = v_flex().gap_0p5();
+    let mut lines = 0;
+    for line in text.lines() {
+        let line = display_spaces(line.trim_end());
+        if line.trim().is_empty() {
+            if lines > 0 {
+                out = out.child(block);
+                block = v_flex().gap_0p5();
+                lines = 0;
+            }
+            continue;
+        }
+        block = block.child(div().child(line));
+        lines += 1;
+    }
+    if lines > 0 {
+        out = out.child(block);
+    }
+    out
+}
+
+/// `s` with every space character drawn as an ordinary space and invisible joiners removed.
+fn display_spaces(s: &str) -> String {
+    s.chars()
+        .filter(|c| !matches!(c, '\u{200b}' | '\u{2060}' | '\u{feff}' | '\u{ad}'))
+        .map(|c| if c != ' ' && c != '\t' && c.is_whitespace() { ' ' } else { c })
+        .collect()
+}
+
 fn planned_file(g: &Gedcom, p: &Proposal) -> Option<String> {
     let mut copy = g.clone();
     let res = p.apply(&mut copy).ok()?;
@@ -1057,4 +1100,16 @@ fn copy_out_of_cache(g: &mut Gedcom, base: &std::path::Path, media: &str) -> Res
         copied = true;
     }
     Ok(copied)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::display_spaces;
+
+    #[test]
+    fn unusual_spaces_are_shown_as_spaces() {
+        assert_eq!(display_spaces("13\u{a0}août\u{202f}1850, fiche\u{2009}I27"), "13 août 1850, fiche I27");
+        assert_eq!(display_spaces("Hör\u{ad}mann\u{200b}\u{feff}"), "Hörmann");
+        assert_eq!(display_spaces("a\tb"), "a\tb");
+    }
 }

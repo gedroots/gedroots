@@ -8,6 +8,9 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct ChangeParams {
+    /// Tree to work on, as `list_trees` names it, when several are open (default: the one in
+    /// front in GEDRoots).
+    pub tree: Option<String>,
     /// Issue id, as `quality_issues` gives it. Leave it out for a correction you read in a
     /// document (a given name misread in an earlier proposal, a wrong date): `edit` only, with
     /// `reason` and `evidence`.

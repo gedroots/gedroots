@@ -11,7 +11,9 @@ How to work:
    residences, event types, notes) is written in the tree's language (`language` in
    `file_context`) the way the tree already writes it. When the person or the file already has an
    occupation that means the same (`person_sheet`, the occupations of `file_context`), reuse its
-   exact wording instead of the act's spelling or a new translation.
+   exact wording instead of the act's spelling or a new translation. The transcription is plain
+   text, saved in the tree with the citation: no Markdown, ordinary spaces, a line break between
+   the act's parts (body, marginal mentions, signatures), and only what the act says.
 2. From the act, note: the event (an event without its own GEDCOM tag, such as military service,
    is `EVEN` with its `event_type`) and its date (a French Republican date stays in that calendar,
    in GEDCOM 7 form such as `FRENCH_R 30 GERM 4`; otherwise `14 MAR 1912`), the place, the
@@ -24,8 +26,8 @@ How to work:
    reason to create another person. Inventory every fact the document gives,
    not only its main event: birth, baptism, marriage, death, occupations, residences, parents,
    marginal mentions. For each, decide: proposed, already in the tree, kept in the transcription
-   only (say why: uncertain reading, contradiction…), or blocked. Something certain must never
-   stay only in the transcription without a reason. Do not give every fact the act's date: an
+   only (say why in `remarks`: uncertain reading, contradiction…), or blocked. Something
+   certain must never stay only in the transcription without a reason. Do not give every fact the act's date: an
    occupation or residence may be current, former or undated.
 3. Check that the act is about the person in the tree: call `person_sheet` and compare names,
    dates, places and parents. If it does not match, stop and tell the user why.
@@ -59,7 +61,8 @@ How to work:
    the act and find the original again.
 7. If GEDRoots refuses the proposal, read the reason, fix the proposal and propose it again.
    Nothing is written until the user compares and saves it: tell them it is waiting in GEDRoots'
-   To Review page, and list the facts you left out and why.
+   To Review page, and list the facts you left out and why. Give the same remarks in
+   `remarks` of `propose_act`: the user reads them beside the act while reviewing it.
 8. The answer gives the proposal's id and the temporary id of each new person (`new_people`). A
    person found in another act before the user saved the first one (a father in two baptisms) is
    linked with that temporary id, never created twice. If you find a mistake in a proposal still

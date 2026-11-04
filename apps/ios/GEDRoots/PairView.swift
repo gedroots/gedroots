@@ -5,13 +5,15 @@ import VisionKit
 struct PairView: View {
     let model: TreeModel
     @State private var scanning = false
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
             List {
-                if model.removed {
+                if model.removed, !model.adding, let tree = model.current {
                     Section {
                         Label("This device was removed from your computer.", systemImage: "link.badge.minus")
+                        Button("Remove This Tree", systemImage: "trash", role: .destructive) { model.remove(tree.id) }
                     }
                 }
                 Section {
@@ -34,8 +36,13 @@ struct PairView: View {
                     }
                 }
             }
-            .navigationTitle("Pair With Your Computer")
+            .navigationTitle(model.adding ? "Add a Tree" : "Pair With Your Computer")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                if model.adding {
+                    ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                }
+            }
             .sheet(isPresented: $scanning) {
                 QRScanner { code in
                     scanning = false

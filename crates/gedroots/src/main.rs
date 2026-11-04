@@ -23,9 +23,12 @@ mod save_dialog;
 mod theme;
 mod updates;
 mod viewer;
+mod windows;
 mod workspace;
 
-use commands::{About, CheckForUpdates, Quit, ReleaseNotes, ToggleAutomaticUpdates};
+use commands::{
+    About, ActivateWindowAt, BringAllToFront, CheckForUpdates, NewWindow, Quit, ReleaseNotes, ToggleAutomaticUpdates,
+};
 use gpui_kit::*;
 use std::borrow::Cow;
 use std::path::PathBuf;
@@ -154,6 +157,8 @@ fn main() {
         agent::install(cx);
         mobile::install(cx);
         updates::install(cx);
+        windows::install(cx);
+        cx.on_action(|_: &BringAllToFront, cx| cx.activate(true));
         cx.on_action(|_: &Quit, cx| {
             updates::apply_on_quit();
             cx.quit()
@@ -185,12 +190,21 @@ fn main() {
 pub(crate) fn is_global_action(action: &dyn Action) -> bool {
     let name = action.name();
     name == Quit.name()
+        || name == NewWindow.name()
+        || name == ActivateWindowAt::name_for_type()
+        || name == BringAllToFront.name()
         || name == ReleaseNotes.name()
         || name == About.name()
         || (updates::available() && (name == CheckForUpdates.name() || name == ToggleAutomaticUpdates.name()))
 }
 
-fn open_workspace(path: Option<PathBuf>, cx: &mut App) -> Option<(AnyWindowHandle, WeakEntity<Workspace>)> {
+pub(crate) fn open_workspace(path: Option<PathBuf>, cx: &mut App) -> Option<(AnyWindowHandle, WeakEntity<Workspace>)> {
+    // A tree already open: its window, in front.
+    if let Some(window) = path.as_deref().and_then(|p| windows::showing(p, cx)) {
+        windows::bring_to_front(window, cx);
+        let ws = cx.global::<windows::Registry>().workspace(window)?;
+        return Some((window, ws));
+    }
     let bounds = Bounds::centered(None, size(px(1440.), px(900.)), cx);
     let options = WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(bounds)),
@@ -203,6 +217,8 @@ fn open_workspace(path: Option<PathBuf>, cx: &mut App) -> Option<(AnyWindowHandl
             appears_transparent: cfg!(target_os = "macos"),
             traffic_light_position: cfg!(target_os = "macos").then(|| point(px(14.), px(13.))),
         }),
+        // macOS: the windows can become native tabs (Window › Merge All Windows).
+        tabbing_identifier: Some(windows::TABBING_ID.into()),
         ..Default::default()
     };
     let (window, ws) = gpui_kit::open_window(options, cx, move |window, cx| {
@@ -212,6 +228,7 @@ fn open_workspace(path: Option<PathBuf>, cx: &mut App) -> Option<(AnyWindowHandl
         ws
     })
     .ok()?;
+    windows::register(window, &ws, cx);
     let ws = ws.downgrade();
     cx.global_mut::<updates::Windows>().0.push(ws.clone());
     Some((window, ws))
@@ -233,16 +250,17 @@ pub(crate) fn open_sample_with_tour(chapters: Vec<workspace::tour::Chapter>, cx:
     });
 }
 
-/// Opens a file received from the Finder: in the last window if it has no unsaved changes,
-/// otherwise in a new window.
+/// Opens a file received from the Finder: in the last window while it shows no tree (welcome
+/// screen), otherwise in a window of its own; a tree already open comes to the front.
 fn open_in(
     last: Option<(AnyWindowHandle, WeakEntity<Workspace>)>,
     path: PathBuf,
     cx: &mut App,
 ) -> Option<(AnyWindowHandle, WeakEntity<Workspace>)> {
-    if let Some((window, ws)) = last
+    if windows::showing(&path, cx).is_none()
+        && let Some((window, ws)) = last
         && let Some(ws_entity) = ws.upgrade()
-        && !ws_entity.read(cx).has_unsaved_changes()
+        && ws_entity.read(cx).is_empty()
     {
         let loaded = cx.update_window(window, |_, window, cx| {
             ws_entity.update(cx, |ws, cx| ws.open_path(path.clone(), window, cx));

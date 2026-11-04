@@ -27,8 +27,12 @@ struct TreeView: View {
                     }
                 }
             }
-            .navigationTitle("Tree")
+            .navigationTitle(model.current?.title ?? String(localized: "Tree"))
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarTitleMenu {
+                TreePicker(model: model)
+                TreeCommands(model: model)
+            }
             .navigationDestination(for: PersonLink.self) { link in PersonView(model: model, id: link.id) }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -280,7 +284,7 @@ struct Connectors: View {
     }
 }
 
-/// The “⋯” menu shared by the tabs: sync and the paired computer.
+/// The “⋯” menu shared by the tabs: sync and the trees followed.
 struct MoreMenu: View {
     let model: TreeModel
     var body: some View {
@@ -288,7 +292,8 @@ struct MoreMenu: View {
             Button("Sync Now", systemImage: "arrow.triangle.2.circlepath") {
                 Task { await model.syncIfPaired() }
             }
-            Button("Forget This Computer", systemImage: "link.badge.minus", role: .destructive) { model.unpair() }
+            TreePicker(model: model)
+            Section { TreeCommands(model: model) }
         }
     }
 }

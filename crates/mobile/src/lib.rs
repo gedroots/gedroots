@@ -630,6 +630,16 @@ impl Tree {
         self.ged.root()
     }
 
+    /// Name of the tree on the computer that shares it.
+    pub fn name(&self) -> Option<String> {
+        self.ged.shared_name().map(str::to_string)
+    }
+
+    /// Number of individuals.
+    pub fn people_count(&self) -> u64 {
+        self.ged.count(RecordKind::Individual) as u64
+    }
+
     /// Places matching `query`, by full name (the key of [`PlacePin::name`]).
     pub fn search_places(&self, query: String) -> Vec<String> {
         self.ged.search(gedcom::Scope::Places, &query, None, None).into_iter().collect()

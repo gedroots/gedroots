@@ -137,6 +137,9 @@ review:
   transcription:
     en: Transcription
     fr: Transcription
+  remarks:
+    en: Agent’s remarks
+    fr: Remarques de l’agent
   open_page:
     en: Open the Archive Page
     fr: Ouvrir la page des archives

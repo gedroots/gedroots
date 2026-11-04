@@ -38,7 +38,11 @@ impl Workspace {
             if let Ok(Ok(Some(mut paths))) = rx.await
                 && let Some(p) = paths.pop()
             {
-                let _ = this.update_in(cx, |this, window, cx| this.import_path(p, window, cx));
+                let _ = this.update_in(cx, |this, window, cx| match this.is_empty() {
+                    true => this.import_path(p, window, cx),
+                    // One window per tree: the imported one gets its own.
+                    false => crate::windows::open_then(cx, |ws, window, cx| ws.import_path(p, window, cx)),
+                });
             }
         })
         .detach();

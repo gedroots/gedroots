@@ -558,6 +558,7 @@ impl Workspace {
         let activation_sub = cx.observe_window_activation(window, |this, window, cx| {
             if window.is_window_active() {
                 crate::agent::set_target(cx.entity().downgrade(), cx);
+                crate::windows::set_active(cx.entity_id(), cx);
             } else {
                 // Leaving the window saves its changes at once.
                 this.autosave(cx);
@@ -770,8 +771,31 @@ impl Workspace {
         cx.notify();
     }
 
+    /// File › New Tree…: here while this window is empty, otherwise in a window of its own.
     fn new_file(&mut self, _: &NewFile, window: &mut Window, cx: &mut Context<Self>) {
-        self.open_new_tree(window, cx);
+        match self.is_empty() {
+            true => self.open_new_tree(window, cx),
+            false => crate::windows::open_then(cx, |ws, window, cx| ws.open_new_tree(window, cx)),
+        }
+    }
+
+    /// No tree in this window: the welcome screen.
+    pub fn is_empty(&self) -> bool {
+        self.doc.is_none()
+    }
+
+    /// Shows the tree at `path`: in its window if it is open, here while this window is empty,
+    /// otherwise in a new window.
+    fn open_tree(&mut self, path: PathBuf, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(w) = crate::windows::showing(&path, cx) {
+            return crate::windows::bring_to_front(w, cx);
+        }
+        match self.is_empty() {
+            true => self.load(path, window, cx),
+            false => {
+                crate::windows::open(Some(path), cx);
+            }
+        }
     }
 
     fn open_file(&mut self, _: &OpenFile, window: &mut Window, cx: &mut Context<Self>) {
@@ -785,7 +809,7 @@ impl Workspace {
             if let Ok(Ok(Some(mut paths))) = rx.await
                 && let Some(p) = paths.pop()
             {
-                let _ = this.update_in(cx, |this, window, cx| this.load(p, window, cx));
+                let _ = this.update_in(cx, |this, window, cx| this.open_tree(p, window, cx));
             }
         })
         .detach();
@@ -3892,7 +3916,7 @@ impl Workspace {
                     .child(div().flex_none().child(name))
                     .child(div().flex_1().min_w_0().truncate().text_right().text_color(theme::muted()).child(folder))
                     .tooltip(move |w, cx| Tooltip::new(full.clone()).build(w, cx))
-                    .on_click(cx.listener(move |this, _, w, cx| this.load(path.clone(), w, cx)))
+                    .on_click(cx.listener(move |this, _, w, cx| this.open_tree(path.clone(), w, cx)))
             }),
         ))
     }
@@ -3913,6 +3937,12 @@ impl Render for Workspace {
             None => "GEDRoots".into(),
         };
         if title != self.window_title {
+            // The Window menu lists the trees by name.
+            let (name, path) = match &self.doc {
+                Some(d) => (d.title(), d.own_file().map(std::path::Path::to_path_buf)),
+                None => ("GEDRoots".to_string(), None),
+            };
+            crate::windows::set_shown(cx.entity_id(), &name, path.as_deref(), cx);
             window.set_window_title(&title);
             // macOS: dot in the close button while the file is not saved.
             window.set_window_edited(self.doc.as_ref().is_some_and(Document::unsaved));
