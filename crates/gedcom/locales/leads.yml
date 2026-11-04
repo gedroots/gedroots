@@ -1,0 +1,38 @@
+_version: 2
+# Reasons of a lead's estimated period (crates/gedcom/src/leads.rs).
+leads.reason.birth_dated:
+  en: "Birth dated %{years}"
+  fr: "Naissance datée de %{years}"
+leads.reason.marriage_dated:
+  en: "Marriage dated %{years}"
+  fr: "Mariage daté de %{years}"
+leads.reason.death_dated:
+  en: "Death dated %{years}"
+  fr: "Décès daté de %{years}"
+leads.reason.seen:
+  en: "%{event} in %{year}"
+  fr: "%{event} en %{year}"
+leads.reason.witness:
+  en: "Present at the %{event} of %{whose} in %{year}"
+  fr: "Présent : %{event} de %{whose}, %{year}"
+leads.reason.child_birth:
+  en: "Birth of their child %{name} in %{year}"
+  fr: "Naissance de son enfant %{name} en %{year}"
+leads.reason.parent_born:
+  en: "A parent born in %{year}"
+  fr: "Un parent né en %{year}"
+leads.reason.born:
+  en: "Born %{years}"
+  fr: "Naissance en %{years}"
+leads.reason.remarried:
+  en: "%{name} remarried in %{year}"
+  fr: "Remariage de %{name} en %{year}"
+leads.reason.spouses_born:
+  en: "Spouses born from %{year}"
+  fr: "Époux nés à partir de %{year}"
+leads.reason.first_child:
+  en: "First child %{name} born in %{year}"
+  fr: "Premier enfant %{name} né en %{year}"
+leads.reason.not_found:
+  en: "Not found in %{years}"
+  fr: "Pas trouvé en %{years}"

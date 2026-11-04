@@ -17,8 +17,9 @@ pub enum PickPurpose {
     TagPerson { media: String, page: usize, crop: Crop },
     /// The chosen media is added at the end of `media`, as new pages.
     MergeInto { media: String },
-    /// Source in which to enter a record (or new source, empty choice).
-    ActSource,
+    /// Source in which to enter a record (or new source, empty choice); `prefill`: the event and
+    /// the principal people of the record (a lead of the Research page).
+    ActSource { prefill: Option<(String, Vec<String>)> },
     /// Relationship between `indi` and the chosen person (nothing is changed).
     Kinship { indi: String },
     /// `indi` and the chosen person are compared in the merge window.
@@ -40,7 +41,7 @@ impl PickPurpose {
             PickPurpose::Kinship { indi } => t!("picker.kinship", name = g.record_label(indi)).into_owned(),
             PickPurpose::MergeWith { indi } => t!("picker.merge_with", name = g.record_label(indi)).into_owned(),
             PickPurpose::MergeInto { media } => t!("picker.merge_into", name = g.record_label(media)).into_owned(),
-            PickPurpose::ActSource => t!("picker.act_source").into(),
+            PickPurpose::ActSource { .. } => t!("picker.act_source").into(),
             PickPurpose::ActPerson { .. } => t!("picker.act_person").into(),
             PickPurpose::ActMedia => t!("picker.act_media").into(),
         }
@@ -187,7 +188,7 @@ impl Workspace {
     pub(super) fn open_picker(&mut self, purpose: PickPurpose, window: &mut Window, cx: &mut Context<Self>) {
         let hint = match purpose {
             PickPurpose::MergeInto { .. } | PickPurpose::ActMedia => t!("picker.media_hint"),
-            PickPurpose::ActSource => t!("picker.source_hint"),
+            PickPurpose::ActSource { .. } => t!("picker.source_hint"),
             _ => t!("picker.person_hint"),
         };
         let input = cx.new(|cx| InputState::new(window, cx).placeholder(hint));
@@ -290,7 +291,7 @@ impl Workspace {
             out.truncate(80);
             return out;
         }
-        if let PickPurpose::ActSource = p.purpose {
+        if let PickPurpose::ActSource { .. } = p.purpose {
             // Sources by their title; last, “New Source” (empty choice).
             let words: Vec<String> = text.split_whitespace().map(sort_key).collect();
             let mut found: Vec<(String, String)> = g
@@ -347,7 +348,7 @@ impl Workspace {
     fn pick(&mut self, chosen: String, window: &mut Window, cx: &mut Context<Self>) {
         let Some(p) = self.picker.take() else { return };
         window.focus(&self.focus, cx);
-        if let PickPurpose::ActSource = p.purpose {
+        if let PickPurpose::ActSource { prefill } = p.purpose {
             let source = if chosen.is_empty() {
                 // New source, titled after the search (otherwise automatic title at the first
                 // record).
@@ -363,7 +364,10 @@ impl Workspace {
             } else {
                 chosen
             };
-            self.open_act(source, None, window, cx);
+            match prefill {
+                Some((event, people)) => self.open_new_act(source, &event, &people, window, cx),
+                None => self.open_act(source, None, window, cx),
+            }
             return;
         }
         if let PickPurpose::ActMedia = p.purpose {
@@ -418,7 +422,7 @@ impl Workspace {
                     Ok((crate::tn!("picker.added_to_media", n, who = who).into_owned(), Some(media)))
                 }
                 // Handled before (writes nothing by itself).
-                PickPurpose::ActSource => Ok((String::new(), None)),
+                PickPurpose::ActSource { .. } => Ok((String::new(), None)),
                 PickPurpose::TagPerson { media, page, crop } => {
                     g.tag_person_on(&chosen, &media, page, crop)?;
                     Ok((t!("picker.tagged", who = who).into_owned(), None))
