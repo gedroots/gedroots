@@ -5,7 +5,6 @@
 //! the user kept. Adding one only takes an entry in [`CHECKS`].
 
 use crate::document::Gedcom;
-use rust_i18n::t;
 use std::borrow::Cow;
 
 /// An import check.

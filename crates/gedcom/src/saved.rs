@@ -14,7 +14,6 @@
 use crate::document::Gedcom;
 use crate::node::Node;
 use crate::query::{Scope, chip_label, words};
-use rust_i18n::t;
 
 pub const FIND_TAG: &str = "_GR_FIND";
 const SCOPE_TAG: &str = "_GR_SCOPE";

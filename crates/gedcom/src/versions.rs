@@ -672,7 +672,7 @@ impl Store {
         }
         let missing = wanted.iter().filter(|h| !texts.contains_key(**h)).count();
         if missing > 0 {
-            return Err(rust_i18n::t!("error.version_incomplete", count = missing).into());
+            return Err(t!("error.version_incomplete", count = missing).into());
         }
         Ok(texts)
     }

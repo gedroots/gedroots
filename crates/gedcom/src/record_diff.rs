@@ -8,7 +8,6 @@
 use crate::date::Date;
 use crate::node::Node;
 use crate::schema::{self, StructDef};
-use rust_i18n::t;
 
 /// One field that changed: its label, and its value before and after (`None`: absent).
 #[derive(Debug, Clone, PartialEq, Eq)]

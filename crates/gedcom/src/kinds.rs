@@ -13,7 +13,6 @@ use crate::document::Gedcom;
 use crate::model::sort_key;
 use crate::node::Node;
 use crate::relations::mime_for;
-use rust_i18n::t;
 use std::borrow::Cow;
 
 /// Values of `MEDI` (GEDCOM 7), in the order of the “Medium” list.
@@ -218,7 +217,7 @@ pub fn parse_event_list(text: &str) -> Result<Vec<String>, String> {
         match tag {
             Some(t) if !out.contains(&t) => out.push(t),
             Some(_) => {}
-            None => return Err(rust_i18n::t!("kinds.unknown_event", item = item).into()),
+            None => return Err(t!("kinds.unknown_event", item = item).into()),
         }
     }
     Ok(out)

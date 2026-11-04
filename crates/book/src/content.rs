@@ -8,7 +8,6 @@ use crate::spec::{BookSpec, Line};
 use crate::writing::{Block, Writing};
 use gedcom::document::Gedcom;
 use gedcom::model::{Individual, sort_key};
-use rust_i18n::t;
 use serde::Serialize;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::Path;
@@ -428,7 +427,7 @@ pub fn build(
             Line::Descendants => t!("book.descendants_of", name = subject.display_name()),
         }
         .into_owned(),
-        lang: rust_i18n::locale().to_string(),
+        lang: gedcom::i18n::language().into_owned(),
         width_mm: w,
         height_mm: h,
         labels: labels(),

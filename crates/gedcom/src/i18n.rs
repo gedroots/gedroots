@@ -3,21 +3,67 @@
 //!
 //! The catalogs are in `crates/gedcom/locales/*.yml` (English and French side by side, see
 //! `docs/localization.md`). The language is the one the app chose with `rust_i18n::set_locale`,
-//! shared by every crate; English when nothing chose one, as in tests.
+//! shared by every crate; English when nothing chose one, as in tests. [`with_language`] writes
+//! in another one for a while, on the current thread only: a family book is written in the
+//! tree's language, whatever the interface's.
 
 use std::borrow::Cow;
+use std::cell::RefCell;
 
 /// Languages the library is translated into, source language first.
 pub const LANGUAGES: [&str; 2] = ["en", "fr"];
 
+thread_local! {
+    /// The language [`with_language`] chose on this thread, if any.
+    static SCOPED: RefCell<Option<&'static str>> = const { RefCell::new(None) };
+}
+
 /// The current language, e.g. `"fr"`.
-pub fn language() -> impl std::ops::Deref<Target = str> {
-    rust_i18n::locale()
+pub fn language() -> Cow<'static, str> {
+    match SCOPED.with(|s| *s.borrow()) {
+        Some(l) => Cow::Borrowed(l),
+        None => Cow::Owned(rust_i18n::locale().to_string()),
+    }
+}
+
+/// Runs `f` with the text written in `lang` (one of [`LANGUAGES`]) on this thread.
+pub fn with_language<R>(lang: &'static str, f: impl FnOnce() -> R) -> R {
+    struct Restore(Option<&'static str>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            SCOPED.with(|s| *s.borrow_mut() = self.0);
+        }
+    }
+    let _restore = Restore(SCOPED.with(|s| s.borrow_mut().replace(lang)));
+    f()
+}
+
+/// The translated language a `LANG` value names (BCP 47 `fr-CA`, or a GEDCOM 5.5 name such as
+/// `French`), `None` if the library is not translated into it.
+pub fn translated(lang: &str) -> Option<&'static str> {
+    let lang = lang.trim().to_lowercase();
+    let primary = lang.split(['-', '_']).next().unwrap_or("");
+    let name = match primary {
+        "english" | "anglais" => "en",
+        "french" | "français" | "francais" => "fr",
+        p => p,
+    };
+    LANGUAGES.iter().copied().find(|l| *l == name)
+}
+
+/// A translation in the current language ([`language`]): `rust_i18n::t!` with its locale.
+macro_rules! t {
+    ($key:expr) => {
+        rust_i18n::t!($key, locale = &*$crate::i18n::language())
+    };
+    ($key:expr, $($rest:tt)*) => {
+        rust_i18n::t!($key, locale = &*$crate::i18n::language(), $($rest)*)
+    };
 }
 
 /// Whether `n` takes the singular in the current language: only 1 in English, 0 and 1 in French.
 pub fn is_one(n: usize) -> bool {
-    match &*rust_i18n::locale() {
+    match &*language() {
         "fr" => n <= 1,
         _ => n == 1,
     }
@@ -25,7 +71,7 @@ pub fn is_one(n: usize) -> bool {
 
 /// Text of a key built at run time (`tag.BIRT`…), `None` if the catalog has none.
 pub(crate) fn lookup(key: &str) -> Option<Cow<'static, str>> {
-    lookup_in(key, &rust_i18n::locale())
+    lookup_in(key, &language())
 }
 
 /// Text of a key built at run time, in the given language.
@@ -39,9 +85,9 @@ macro_rules! tn {
     ($key:literal, $n:expr $(, $name:ident = $value:expr)* $(,)?) => {{
         let n: usize = $n;
         if $crate::i18n::is_one(n) {
-            rust_i18n::t!(concat!($key, ".one"), n = n $(, $name = $value)*)
+            t!(concat!($key, ".one"), n = n $(, $name = $value)*)
         } else {
-            rust_i18n::t!(concat!($key, ".other"), n = n $(, $name = $value)*)
+            t!(concat!($key, ".other"), n = n $(, $name = $value)*)
         }
     }};
 }

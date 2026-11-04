@@ -10,6 +10,17 @@
 
 rust_i18n::i18n!("locales", fallback = "en");
 
+/// A translation in the book's language (`gedcom::i18n::language`, which [`in_tree_language`]
+/// sets while a book is written): `rust_i18n::t!` with its locale.
+macro_rules! t {
+    ($key:expr) => {
+        rust_i18n::t!($key, locale = &*gedcom::i18n::language())
+    };
+    ($key:expr, $($rest:tt)*) => {
+        rust_i18n::t!($key, locale = &*gedcom::i18n::language(), $($rest)*)
+    };
+}
+
 pub mod charts;
 pub mod content;
 pub mod prose;
@@ -17,7 +28,7 @@ pub mod render;
 pub mod spec;
 pub mod writing;
 
-pub use content::{Part, default_title};
+pub use content::Part;
 pub use render::Typeset;
 pub use spec::{BookSpec, Line, PageSize};
 pub use writing::{Block, Cite, Writing};
@@ -25,7 +36,31 @@ pub use writing::{Block, Cite, Writing};
 use gedcom::document::Gedcom;
 use std::path::Path;
 
-/// Composes and typesets a whole book, as the app shows it. `file_name`: the tree's file, named in
+/// The language a book of this tree is written in: the tree's (`HEAD.LANG`) when GEDRoots is
+/// translated into it, otherwise the interface's.
+pub fn language(g: &Gedcom) -> String {
+    in_tree_language(g, || gedcom::i18n::language().into_owned())
+}
+
+/// Runs `f` with the text written in the tree's language (see [`language`]), on this thread.
+fn in_tree_language<R>(g: &Gedcom, f: impl FnOnce() -> R) -> R {
+    match g.header.child_val("LANG").and_then(gedcom::i18n::translated) {
+        Some(lang) => gedcom::i18n::with_language(lang, f),
+        None => f(),
+    }
+}
+
+/// The title a book has when the user gave none ("The GUYOT Family"), in the tree's language.
+pub fn default_title(g: &Gedcom, spec: &BookSpec) -> String {
+    in_tree_language(g, || content::default_title(g, spec))
+}
+
+/// The chapters of a book and who is in each, in the tree's language.
+pub fn outline(g: &Gedcom, spec: &BookSpec) -> Result<Vec<content::OutlineChapter>, String> {
+    in_tree_language(g, || content::outline(g, spec))
+}
+
+/// Composes and typesets a whole book, as the app shows it, in the tree's language. `file_name`: the tree's file, named in
 /// the colophon; `media_dir`: folder the media paths are relative to, for the portraits; `today`:
 /// year, month, day.
 pub fn compose(
@@ -35,7 +70,7 @@ pub fn compose(
     media_dir: Option<&Path>,
     today: (i32, u8, u8),
 ) -> Result<Typeset, String> {
-    Ok(Composer { g, spec, file_name, media_dir, today }.part(&Part::whole())?.0)
+    in_tree_language(g, || Ok(Composer { g, spec, file_name, media_dir, today }.part(&Part::whole())?.0))
 }
 
 /// Most pages in a volume: a longer book is cut into volumes between its chapters (printers bind
@@ -69,7 +104,7 @@ pub fn compose_export(
     media_dir: Option<&Path>,
     today: (i32, u8, u8),
 ) -> Result<Vec<Volume>, String> {
-    Composer { g, spec, file_name, media_dir, today }.export(VOLUME_PAGES)
+    in_tree_language(g, || Composer { g, spec, file_name, media_dir, today }.export(VOLUME_PAGES))
 }
 
 impl Composer<'_> {
@@ -220,6 +255,23 @@ mod tests {
 0 @I3@ INDI\n1 NAME Marie /PRÉVOST/\n1 SEX F\n1 BIRT\n2 DATE 1835\n2 PLAC Saint-Lô, Manche, France\n1 FAMS @F1@\n\
 0 @F1@ FAM\n1 HUSB @I2@\n1 WIFE @I3@\n1 CHIL @I1@\n1 MARR\n2 DATE 9 JAN 1860\n2 PLAC Troyes, Aube, France\n\
 0 TRLR\n";
+
+    #[test]
+    fn is_written_in_the_tree_language() {
+        let french = Gedcom::parse(&TREE.replace("2 VERS 7.0\n", "2 VERS 7.0\n1 LANG fr\n")).expect("valid tree");
+        let spec = BookSpec::new("I1", "");
+        assert_eq!(language(&french), "fr");
+        assert_eq!(default_title(&french, &spec), "La famille MARCHAND");
+        let titles =
+            |g: &Gedcom| -> Vec<String> { outline(g, &spec).expect("outline").into_iter().map(|c| c.title).collect() };
+        // The interface's language is left as it was, and used when the tree has none.
+        assert_eq!(&*gedcom::i18n::language(), "en");
+        let english = Gedcom::parse(TREE).expect("valid tree");
+        assert_eq!(default_title(&english, &spec), "The MARCHAND family");
+        assert_ne!(titles(&french), titles(&english));
+        let other = Gedcom::parse(&TREE.replace("2 VERS 7.0\n", "2 VERS 7.0\n1 LANG de\n")).expect("valid tree");
+        assert_eq!(language(&other), "en");
+    }
 
     #[test]
     fn typesets_a_small_tree() {

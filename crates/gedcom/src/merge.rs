@@ -11,7 +11,6 @@ use crate::document::Gedcom;
 use crate::duplicates::DISTINCT_TAG;
 use crate::model::{event_label, event_name, sort_key};
 use crate::node::Node;
-use rust_i18n::t;
 
 /// Facts a person has only once: when both records have one and they contradict, the user
 /// chooses.

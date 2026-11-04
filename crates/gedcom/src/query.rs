@@ -29,7 +29,6 @@ use crate::kinds::{SourceContent, medium, medium_label};
 use crate::model::{Individual, Media, Place, Repository, Source, event_labels_everywhere, sort_key};
 use crate::node::Node;
 use crate::search::{IndividualQuery, Kin, YearRange};
-use rust_i18n::t;
 use std::borrow::Cow;
 
 /// Zone being searched.

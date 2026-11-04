@@ -88,7 +88,7 @@ impl Crop {
     /// Short label, e.g. “200 × 260 px at (340, 120)”.
     pub fn describe(&self) -> String {
         let dim = |v: Option<u32>| v.map(|v| v.to_string()).unwrap_or_else(|| "…".into());
-        rust_i18n::t!("model.crop", w = dim(self.width), h = dim(self.height), x = self.left, y = self.top).into_owned()
+        t!("model.crop", w = dim(self.width), h = dim(self.height), x = self.left, y = self.top).into_owned()
     }
 }
 
@@ -163,11 +163,11 @@ impl Gedcom {
         crop: Option<Crop>,
     ) -> Result<(), String> {
         if self.get(media).is_none_or(|m| m.tag != "OBJE") {
-            return Err(rust_i18n::t!("error.media_not_found").into());
+            return Err(t!("error.media_not_found").into());
         }
         let page = page.max(1);
         let p = ptr(media);
-        let r = self.get_mut(owner).ok_or_else(|| rust_i18n::t!("error.record_not_found"))?;
+        let r = self.get_mut(owner).ok_or_else(|| t!("error.record_not_found"))?;
         let find = |r: &Node| {
             let link = |c: &Node| c.tag == "OBJE" && c.val() == p;
             r.children.iter().position(|c| link(c) && page_of_link(c) == page).or_else(|| {
@@ -222,7 +222,7 @@ impl Gedcom {
     /// Identifies a person in a photo: links the media to the individual with this crop.
     pub fn tag_person(&mut self, indi: &str, media: &str, crop: Crop) -> Result<(), String> {
         if self.get(indi).is_none_or(|n| n.tag != "INDI") {
-            return Err(rust_i18n::t!("error.person_not_found").into());
+            return Err(t!("error.person_not_found").into());
         }
         self.set_link_crop(indi, media, Some(crop))
     }
@@ -230,7 +230,7 @@ impl Gedcom {
     /// Identifies a person on page `page` of a media.
     pub fn tag_person_on(&mut self, indi: &str, media: &str, page: usize, crop: Crop) -> Result<(), String> {
         if self.get(indi).is_none_or(|n| n.tag != "INDI") {
-            return Err(rust_i18n::t!("error.person_not_found").into());
+            return Err(t!("error.person_not_found").into());
         }
         self.set_link_crop_on(indi, media, page, Some(crop))
     }

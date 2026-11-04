@@ -60,13 +60,13 @@ impl RecordKind {
     /// Name of the kind, e.g. “Source”.
     pub fn label(self) -> std::borrow::Cow<'static, str> {
         match self {
-            RecordKind::Individual => rust_i18n::t!("kind.individual"),
-            RecordKind::Family => rust_i18n::t!("kind.family"),
-            RecordKind::Source => rust_i18n::t!("kind.source"),
-            RecordKind::Repository => rust_i18n::t!("kind.repository"),
-            RecordKind::Media => rust_i18n::t!("kind.media"),
-            RecordKind::SharedNote => rust_i18n::t!("kind.shared_note"),
-            RecordKind::Submitter => rust_i18n::t!("kind.submitter"),
+            RecordKind::Individual => t!("kind.individual"),
+            RecordKind::Family => t!("kind.family"),
+            RecordKind::Source => t!("kind.source"),
+            RecordKind::Repository => t!("kind.repository"),
+            RecordKind::Media => t!("kind.media"),
+            RecordKind::SharedNote => t!("kind.shared_note"),
+            RecordKind::Submitter => t!("kind.submitter"),
         }
     }
 }
@@ -104,7 +104,7 @@ impl Gedcom {
                 _ => records.push(Arc::new(n)),
             }
         }
-        let header = header.ok_or(ParseError { line: 1, message: rust_i18n::t!("error.parse.no_header").into() })?;
+        let header = header.ok_or(ParseError { line: 1, message: t!("error.parse.no_header").into() })?;
         let mut g = Gedcom { header, records, format, index: HashMap::new() };
         g.reindex();
         Ok(g)
@@ -201,14 +201,12 @@ impl Gedcom {
                 node.children.push(Node::with_value("NAME", "//"));
                 node.children.push(Node::with_value("SEX", "U"));
             }
-            RecordKind::Source => node.children.push(Node::with_value("TITL", rust_i18n::t!("record.new_source"))),
-            RecordKind::Repository => {
-                node.children.push(Node::with_value("NAME", rust_i18n::t!("record.new_repository")))
-            }
+            RecordKind::Source => node.children.push(Node::with_value("TITL", t!("record.new_source"))),
+            RecordKind::Repository => node.children.push(Node::with_value("NAME", t!("record.new_repository"))),
             RecordKind::Media => {
                 node.children.push(Node::with_value("FILE", "").push(Node::with_value("FORM", "image/jpeg")))
             }
-            RecordKind::SharedNote => node.value = Some(rust_i18n::t!("record.new_note").into()),
+            RecordKind::SharedNote => node.value = Some(t!("record.new_note").into()),
             RecordKind::Submitter => node.children.push(Node::with_value("NAME", "")),
             RecordKind::Family => {}
         }
@@ -225,9 +223,9 @@ impl Gedcom {
     /// identifier are then updated.
     pub fn replace(&mut self, xref: &str, node: Node) -> Result<(), String> {
         let i = *self.index.get(xref).ok_or_else(|| format!("@{xref}@ introuvable"))?;
-        let new_xref = node.xref.clone().ok_or_else(|| rust_i18n::t!("error.keep_xref"))?;
+        let new_xref = node.xref.clone().ok_or_else(|| t!("error.keep_xref"))?;
         if new_xref != xref && self.index.contains_key(&new_xref) {
-            return Err(rust_i18n::t!("error.xref_used", xref = format!("@{new_xref}@")).into());
+            return Err(t!("error.xref_used", xref = format!("@{new_xref}@")).into());
         }
         self.records[i] = Arc::new(node);
         if new_xref != xref {
