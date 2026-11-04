@@ -90,3 +90,27 @@ struct ManageTreesView: View {
         }
     }
 }
+
+/// While the shown tree is first received: what has arrived so far.
+struct ReceivingView: View {
+    let model: TreeModel
+
+    var body: some View {
+        ContentUnavailableView {
+            Label(model.syncing ? "Receiving Your Tree…" : "No Tree Yet", systemImage: "tree")
+        } description: {
+            if let p = model.progress {
+                VStack(spacing: 8) {
+                    ProgressView(value: p.fraction)
+                    Text("\(Int64(p.received).formatted(.byteCount(style: .file))) of \(Int64(p.total).formatted(.byteCount(style: .file)))")
+                        .monospacedDigit()
+                }
+                .frame(maxWidth: 260)
+            } else if model.syncing {
+                ProgressView()
+            } else if let error = model.error {
+                Text(error)
+            }
+        }
+    }
+}

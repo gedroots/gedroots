@@ -39,7 +39,8 @@ final class TreeModel {
     /// Changes each time a tree is opened: views key their cached view models on it.
     var revision = 0
     var pairing = false
-    var syncing = false
+    /// Trees being received, and how much of each has arrived.
+    private(set) var receiving: [String: SyncBytes] = [:]
     var lastReport: SyncReport?
     var error: String?
     var tab = AppTab.tree
@@ -55,6 +56,10 @@ final class TreeModel {
     var managing = false
 
     var current: PairedTree? { trees.first { $0.id == currentID } }
+    /// The shown tree is being received.
+    var syncing: Bool { currentID.map { receiving[$0] != nil } ?? false }
+    /// How much of the shown tree has arrived, once its size is known.
+    var progress: SyncBytes? { currentID.flatMap { receiving[$0] }.flatMap { $0.total > 0 ? $0 : nil } }
     var removed: Bool { current?.removed ?? false }
     var lastSync: Date? { current?.lastSync }
 
@@ -173,11 +178,17 @@ final class TreeModel {
     }
 
     func syncIfPaired() async {
-        guard let paired = current, !paired.removed, !syncing else { return }
-        syncing = true
-        defer { syncing = false }
+        guard let paired = current, !paired.removed, receiving[paired.id] == nil else { return }
+        let id = paired.id
+        receiving[id] = SyncBytes(received: 0, total: 0)
+        defer { receiving[id] = nil }
+        let relay = SyncRelay { [weak self] bytes in
+            Task { @MainActor in
+                if self?.receiving[id] != nil { self?.receiving[id] = bytes }
+            }
+        }
         do {
-            let report = try await sync(dataDir: folder(paired.id).path, desktop: paired.desktop)
+            let report = try await sync(dataDir: folder(paired.id).path, desktop: paired.desktop, progress: relay)
             lastReport = report
             update(paired.id) { $0.lastSync = Date() }
             error = nil
@@ -258,3 +269,29 @@ final class TreeModel {
 }
 
 extension PersonRow: Identifiable {}
+
+/// Bytes of a tree on the device, out of its whole size.
+struct SyncBytes: Equatable {
+    var received: UInt64
+    var total: UInt64
+
+    var fraction: Double { total == 0 ? 0 : Double(received) / Double(total) }
+}
+
+/// Passes the sync's progress on, at most once per thousandth of the tree.
+final class SyncRelay: SyncProgress, @unchecked Sendable {
+    private let report: (SyncBytes) -> Void
+    private let lock = NSLock()
+    private var shown: UInt64 = .max
+
+    init(report: @escaping (SyncBytes) -> Void) { self.report = report }
+
+    func update(received: UInt64, total: UInt64) {
+        let step = total == 0 ? 0 : received * 1000 / total
+        lock.lock()
+        let changed = step != shown
+        shown = step
+        lock.unlock()
+        if changed { report(SyncBytes(received: received, total: total)) }
+    }
+}

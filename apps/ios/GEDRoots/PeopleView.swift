@@ -28,11 +28,7 @@ struct PeopleView: View {
         NavigationStack(path: $path) {
             List {
                 if model.tree == nil {
-                    ContentUnavailableView {
-                        Label(model.syncing ? "Receiving Your Tree…" : "No Tree Yet", systemImage: "tree")
-                    } description: {
-                        if let error = model.error { Text(error) }
-                    }
+                    ReceivingView(model: model)
                 }
                 ForEach(sections, id: \.0) { letter, people in
                     Section(letter) {
@@ -102,6 +98,9 @@ struct SyncFooter: View {
         VStack(alignment: .leading, spacing: 4) {
             if model.syncing {
                 Label("Syncing…", systemImage: "arrow.triangle.2.circlepath")
+                if let p = model.progress, p.received < p.total {
+                    ProgressView(value: p.fraction)
+                }
             } else if let date = model.lastSync {
                 Text("Updated \(date, format: .relative(presentation: .named))")
             }

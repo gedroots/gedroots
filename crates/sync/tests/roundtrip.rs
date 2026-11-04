@@ -55,8 +55,13 @@ async fn pair_sync_edit_revoke() {
 
     let published = server.publish(SHARE, dataset("Jean"), files()).await.unwrap();
     assert_eq!(published.files, 1);
-    let first = device.sync(&desktop).await.unwrap();
+    let seen = std::sync::Mutex::new(Vec::new());
+    let first = device.sync_with(&desktop, |got, total| seen.lock().unwrap().push((got, total))).await.unwrap();
     assert_eq!(first.files, 2);
+    // Progress only grows, and ends with the whole tree.
+    let seen = seen.into_inner().unwrap();
+    assert!(seen.windows(2).all(|w| w[0].0 <= w[1].0), "{seen:?}");
+    assert!(seen.last().is_some_and(|&(got, total)| got == total && total > 0), "{seen:?}");
     assert!(first.downloaded_bytes >= photo.len() as u64, "{first:?}");
     assert_eq!(fs::read(first.tree.join("Photos/a.jpg")).unwrap(), photo);
     assert!(fs::read_to_string(first.tree.join("gedcom.ged")).unwrap().contains("Jean"));

@@ -2862,6 +2862,7 @@ dependencies = [
  "iroh",
  "iroh-blobs",
  "iroh-tickets",
+ "n0-future",
  "tokio",
 ]
 
