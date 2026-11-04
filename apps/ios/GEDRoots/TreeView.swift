@@ -20,11 +20,7 @@ struct TreeView: View {
                     }
                     .refreshable { await model.syncIfPaired() }
                 } else {
-                    ContentUnavailableView {
-                        Label(model.syncing ? "Receiving Your Tree…" : "No Tree Yet", systemImage: "tree")
-                    } description: {
-                        if let error = model.error { Text(error) }
-                    }
+                    ReceivingView(model: model)
                 }
             }
             .navigationTitle(model.current?.title ?? String(localized: "Tree"))

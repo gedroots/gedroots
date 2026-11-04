@@ -75,12 +75,23 @@ pub struct SyncReport {
     pub tree_dir: String,
 }
 
+/// Told how much of the tree has arrived during [`sync`].
+#[uniffi::export(with_foreign)]
+pub trait SyncProgress: Send + Sync {
+    /// `received` bytes of the tree are on the device, out of `total`.
+    fn update(&self, received: u64, total: u64);
+}
+
 /// Downloads what changed on the paired computer (`desktop`, as returned by [`pair`]) into
-/// `data_dir` (the app's own folder).
+/// `data_dir` (the app's own folder), telling `progress` as it arrives.
 #[uniffi::export(async_runtime = "tokio")]
-pub async fn sync(data_dir: String, desktop: String) -> Result<SyncReport, MobileError> {
+pub async fn sync(
+    data_dir: String,
+    desktop: String,
+    progress: Arc<dyn SyncProgress>,
+) -> Result<SyncReport, MobileError> {
     let receiver = Receiver::open(Path::new(&data_dir)).await?;
-    let result = receiver.sync(&desktop).await;
+    let result = receiver.sync_with(&desktop, |received, total| progress.update(received, total)).await;
     receiver.close().await;
     let r = result?;
     Ok(SyncReport {

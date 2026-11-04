@@ -20,6 +20,7 @@ use iroh::endpoint::{Connection, presets};
 use iroh::protocol::{AcceptError, ProtocolHandler, Router};
 use iroh::{Endpoint, EndpointAddr, EndpointId, SecretKey};
 use iroh_blobs::api::blobs::{AddPathOptions, ImportMode};
+use iroh_blobs::api::remote::GetProgressItem;
 use iroh_blobs::format::collection::Collection;
 use iroh_blobs::store::GcConfig;
 use iroh_blobs::store::fs::FsStore;
@@ -478,6 +479,12 @@ impl Receiver {
 
     /// Asks the desktop for its latest version and downloads what is missing.
     pub async fn sync(&self, desktop: &str) -> Result<SyncReport> {
+        self.sync_with(desktop, |_, _| {}).await
+    }
+
+    /// [`Self::sync`], telling `progress` the bytes of the tree already here and its whole size
+    /// as they arrive.
+    pub async fn sync_with(&self, desktop: &str, progress: impl Fn(u64, u64)) -> Result<SyncReport> {
         let addr: EndpointAddr = desktop.parse::<EndpointTicket>().context("desktop address")?.into();
         let start = Instant::now();
         let conn = self.endpoint.connect(addr.clone(), LATEST_ALPN).await?;
@@ -498,7 +505,19 @@ impl Receiver {
         // The list of children first: without it, the store cannot tell which children it already
         // has, and the whole collection would be requested again.
         let list = self.store.remote().fetch(conn.clone(), HashAndFormat::raw(hash)).await?;
-        let stats = self.store.remote().fetch(conn.clone(), HashAndFormat::hash_seq(hash)).await?;
+        let here = self.store.remote().local(HashAndFormat::hash_seq(hash)).await?.local_bytes();
+        progress(here.min(total_bytes), total_bytes);
+        let mut items = self.store.remote().fetch(conn.clone(), HashAndFormat::hash_seq(hash)).stream();
+        let stats = loop {
+            use n0_future::StreamExt;
+            match items.next().await {
+                Some(GetProgressItem::Progress(read)) => progress((here + read).min(total_bytes), total_bytes),
+                Some(GetProgressItem::Done(stats)) => break stats,
+                Some(GetProgressItem::Error(e)) => return Err(e.into()),
+                None => bail!("the download stopped"),
+            }
+        };
+        progress(total_bytes, total_bytes);
         let direct = is_direct(&conn);
         conn.close(0u32.into(), b"");
         self.store.tags().set("latest", HashAndFormat::hash_seq(hash)).await?;
