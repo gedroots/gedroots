@@ -304,6 +304,11 @@ impl Workspace {
     /// Creates the book (or saves its settings) and shows it.
     fn save_book(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(d) = self.books.dialog.take() else { return };
+        // What an agent wrote stays with the book.
+        let chapters = (self.doc.as_ref().zip(d.xref.as_deref()))
+            .and_then(|(doc, x)| gedroots_book::spec::book(&doc.ged, x))
+            .map(|b| b.chapters)
+            .unwrap_or_default();
         let spec = BookSpec {
             xref: d.xref.clone(),
             title: d.title.read(cx).value().trim().to_string(),
@@ -311,6 +316,7 @@ impl Workspace {
             line: d.line,
             generations: d.generations,
             size: d.size,
+            chapters,
         };
         self.checkpoint();
         let Some(doc) = &mut self.doc else { return };

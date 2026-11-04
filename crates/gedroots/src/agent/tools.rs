@@ -2,6 +2,7 @@
 //! `propose_act` and `propose_change`, only add a proposal to review in the app, and `plan_research`
 //! / `log_search` write only the research log (`_GR_TASK`), with an undo point.
 
+use super::book::{self, Books, ProposeChapterParams, ReadBookParams};
 use super::change::{self, ChangeParams, ChangeProposed};
 use super::propose::{self, Decision, Hypothesis, MatchParams, Pending, ProposeParams};
 use super::{Ask, Request, Snapshot};
@@ -1154,6 +1155,35 @@ impl GedrootsMcp {
         let s = self.snapshot(tree.as_deref()).await?;
         self.answer(&s, ChangeProposed { status: "waiting for review".into(), waiting, new_issues })
     }
+
+    #[tool(
+        name = "read_book",
+        description = "The family books of the tree (without `book`), or the chapters of one: each chapter is a generation, with its people (id, name, years, number, how much of a record the book gives them, how many facts the tree knows) and what the book already has from you. Read it before `propose_chapter`. The book's dates, places, charts and index are computed by GEDRoots from the tree: you only write the narrative, the context and the hypotheses.",
+        annotations(read_only_hint = true, open_world_hint = false)
+    )]
+    async fn read_book(&self, Parameters(p): Parameters<ReadBookParams>) -> Res<Books> {
+        let s = self.snapshot(p.tree.as_deref()).await?;
+        let books = book::read(&s.ged, p.book.as_deref())?;
+        self.answer(&s, books)
+    }
+
+    #[tool(
+        name = "propose_chapter",
+        description = "Proposes what you wrote for one chapter of a family book (`read_book`): an introduction (`intro`) and the narratives of some of its people (`people`). Each block is `text` (the facts as a narrative, people named by id in braces, `{I12}`, checked to be in the tree), `context` (history that explains the facts: a war, a migration, a crisis, a law; `title` and at least one of `sources` required: search them, never cite from memory alone) or `hypothesis` (what the records do not say, such as why a family moved; the `basis` it rests on required, with what would check it). Never present a hypothesis as a fact. Nothing is written: the chapter waits in GEDRoots' review page, where the user leaves out the context and hypotheses they do not want, then saves it into the book. A new proposal for the same chapter takes the place of the waiting one. Write in the tree's language. Work one chapter at a time.",
+        annotations(read_only_hint = false, destructive_hint = false, idempotent_hint = true, open_world_hint = false)
+    )]
+    async fn propose_chapter(&self, Parameters(p): Parameters<ProposeChapterParams>) -> Res<ChapterProposed> {
+        let tree = p.tree.clone();
+        let s = self.snapshot(tree.as_deref()).await?;
+        let req = book::to_request(&p, &s.ged)?;
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        self.send(tree.as_deref(), Request::ProposeChapter(Box::new(req), tx))
+            .await
+            .map_err(|_| "GEDRoots is closing".to_string())?;
+        let waiting = rx.await.map_err(|_| "GEDRoots is closing".to_string())??;
+        let s = self.snapshot(tree.as_deref()).await?;
+        self.answer(&s, ChapterProposed { status: "waiting for review".into(), waiting })
+    }
 }
 
 /// Instructions given to the agent on connection.
@@ -1184,10 +1214,21 @@ The prompts `research_session`, `find_record` and `read_record` give the full me
 the tree's Data Quality issues and `propose_change` fixes, edits or hides one; the prompt \
 `review_quality` gives the method. A mistake in the tree that no issue reports (a given name you \
 misread in a proposal the user has saved, a name the act spells otherwise, a wrong date) is \
-corrected with `propose_change` without `issue`: never leave it for the user to fix by hand.";
+corrected with `propose_change` without `issue`: never leave it for the user to fix by hand. \
+Family books (`read_book`) are typeset by GEDRoots from the tree; you write their narratives, \
+historical context and hypotheses with `propose_chapter`, one chapter at a time; the prompt \
+`write_book` gives the method.";
 
 /// The file's context, also offered as a resource for clients that let the user attach one.
 const CONTEXT_URI: &str = "gedroots://file/context";
+
+/// A chapter sent for review.
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct ChapterProposed {
+    pub status: String,
+    /// Proposals waiting for review.
+    pub waiting: usize,
+}
 
 #[tool_handler]
 #[prompt_handler(router = self.prompt_router)]

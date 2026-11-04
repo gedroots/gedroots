@@ -10,8 +10,10 @@
 //! 1 _GR_SIZE 170X240
 //! ```
 
+use crate::writing::{self, Writing};
 use gedcom::document::Gedcom;
 use gedcom::node::Node;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 pub const BOOK_TAG: &str = "_GR_BOOK";
@@ -97,6 +99,8 @@ pub struct BookSpec {
     pub line: Line,
     pub generations: u32,
     pub size: PageSize,
+    /// What an agent wrote, by chapter (generation number, 1 = the person).
+    pub chapters: BTreeMap<u32, Writing>,
 }
 
 impl BookSpec {
@@ -109,6 +113,7 @@ impl BookSpec {
             line: Line::default(),
             generations: DEFAULT_GENERATIONS,
             size: PageSize::default(),
+            chapters: BTreeMap::new(),
         }
     }
 
@@ -124,6 +129,7 @@ impl BookSpec {
                 .unwrap_or(DEFAULT_GENERATIONS)
                 .clamp(MIN_GENERATIONS, MAX_GENERATIONS),
             size: PageSize::from_tag(node.child_val(SIZE_TAG).unwrap_or_default()),
+            chapters: writing::read(node),
         }
     }
 
@@ -133,6 +139,7 @@ impl BookSpec {
         node.set_child_val(LINE_TAG, self.line.tag());
         node.set_child_val(GENERATIONS_TAG, &self.generations.clamp(MIN_GENERATIONS, MAX_GENERATIONS).to_string());
         node.set_child_val(SIZE_TAG, self.size.tag());
+        writing::write(node, &self.chapters);
     }
 }
 
@@ -149,7 +156,7 @@ pub fn book(g: &Gedcom, xref: &str) -> Option<BookSpec> {
 /// Stores a book: a new `_GR_BOOK` record when it has no identifier yet, otherwise its record is
 /// updated. Declares the extension tags and returns the identifier.
 pub fn save(g: &mut Gedcom, spec: &BookSpec) -> String {
-    for tag in TAGS {
+    for tag in TAGS.into_iter().chain(writing::TAGS) {
         g.declare_extension(tag, URI);
     }
     if let Some(x) = spec.xref.as_deref()
@@ -223,6 +230,38 @@ mod tests {
         assert!(delete(&mut g, "BK1"));
         assert!(!delete(&mut g, "I1"));
         assert_eq!(books(&g).len(), 1);
+    }
+
+    #[test]
+    fn keeps_what_the_agent_wrote() {
+        use crate::writing::{Block, Cite, Writing};
+        let mut g = Gedcom::parse(FILE).unwrap();
+        let mut spec = BookSpec::new("I1", "Book");
+        spec.chapters.insert(
+            2,
+            Writing {
+                intro: vec![
+                    Block::Text("First line\nSecond line with {I1}".into()),
+                    Block::Context {
+                        title: "Phylloxera".into(),
+                        text: "The vines died.".into(),
+                        sources: vec![Cite { title: "A history".into(), url: "https://example.org".into() }],
+                    },
+                ],
+                people: vec![(
+                    "I1".into(),
+                    vec![Block::Hypothesis {
+                        text: "He left for the city.".into(),
+                        basis: vec!["born in a village".into()],
+                    }],
+                )],
+            },
+        );
+        save(&mut g, &spec);
+        let text = g.to_gedcom_string();
+        assert!(text.contains("1 _GR_CHAP 2\n2 _GR_TEXT First line\n3 CONT Second line with {I1}\n2 _GR_CTXT Phylloxera\n3 _GR_TEXT The vines died.\n3 _GR_CITE A history\n4 _GR_URL https://example.org\n2 _GR_INDI @I1@\n3 _GR_HYPO He left for the city.\n4 _GR_BASE born in a village\n"), "{text}");
+        let read = &books(&Gedcom::parse(&text).unwrap())[0];
+        assert_eq!(read.chapters, spec.chapters);
     }
 
     #[test]
