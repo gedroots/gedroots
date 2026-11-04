@@ -207,7 +207,10 @@ is hidden with `_GR_DISTINCT`. Filiations (parents, unions) cannot be changed th
 Without `issue`, a change is a correction the agent read in a document: a given name misread
 in a proposal the user already saved, a name the act spells otherwise, a wrong date. It may only
 `edit`, with `set_name` (given name and/or surname of one of the person's names, the rest of the
-name kept), `add_name` (another `NAME`, with its `TYPE`, for a variant spelling), `set_event`,
+name kept), `add_name` (another `NAME`, with its `TYPE`, for a variant spelling), `set_event`
+(value such as an occupation, date, place and/or street address of an existing event),
+`add_event` (a new event or attribute: `OCCU` with its value, `RESI` with its address…),
+`rename_place` (a place renamed everywhere it is used, its coordinates kept),
 `delete_event`, `set_sex`, `cite_source` or `set_coordinates`, on any record. The reason and
 the evidence (a source of the tree, the viewer page or a quote) are required: the user checks
 them in To Review, where the item is titled **Correction**. When `propose_act` links a person

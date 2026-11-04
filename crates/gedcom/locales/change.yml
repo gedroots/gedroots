@@ -27,3 +27,6 @@ change.name:
 change.other_name:
   en: "Other name"
   fr: "Autre nom"
+change.place:
+  en: "Place"
+  fr: "Lieu"

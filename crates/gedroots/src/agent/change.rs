@@ -29,13 +29,14 @@ pub struct ChangeParams {
 }
 
 /// One edit. `kind` says which, and which fields it needs:
-/// `set_event` (record, event, date and/or place), `delete_event` (record, event),
+/// `set_event` (record, event, value, date, place and/or address), `add_event` (record, tag,
+/// value, date, place, address), `rename_place` (place, new_place), `delete_event` (record, event),
 /// `set_sex` (record, sex), `set_coordinates` (place, latitude, longitude),
 /// `set_media_file` (file), `cite_source` (record, event, source, page),
 /// `set_value` (value), `delete_structure` (nothing: the structure the issue designates),
 /// `set_name` (record, given and/or surname, name), `add_name` (record, given and/or surname,
-/// name_type). Without an issue: set_name, add_name, set_event, delete_event, set_sex, cite_source,
-/// set_coordinates.
+/// name_type). Without an issue: set_name, add_name, set_event, add_event, delete_event, set_sex,
+/// cite_source, set_coordinates, rename_place.
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct EditParams {
     pub kind: String,
@@ -45,8 +46,12 @@ pub struct EditParams {
     pub event: Option<usize>,
     /// GEDCOM date (`12 MAR 1869`, `ABT 1850`); empty to remove it.
     pub date: Option<String>,
-    /// Place as the tree names it.
+    /// Place as the tree names it (the municipality and its jurisdictions, never a street).
     pub place: Option<String>,
+    /// Street address within the place (`ADDR`: number, street, building); empty to remove it.
+    pub address: Option<String>,
+    /// For `rename_place`: the place's new name, everywhere it is used, in the file's format.
+    pub new_place: Option<String>,
     /// `M`, `F`, `X` or `U`.
     pub sex: Option<String>,
     /// Decimal degrees.
@@ -58,7 +63,11 @@ pub struct EditParams {
     pub source: Option<String>,
     /// Reference in the source (page, act number, view).
     pub page: Option<String>,
+    /// For `set_event` and `add_event`: the event's value (an occupation, a custom event's type);
+    /// for `set_value`, the structure's new value.
     pub value: Option<String>,
+    /// For `add_event`: GEDCOM tag of the event or attribute (`OCCU`, `RESI`, `BIRT`, `EVEN`…).
+    pub tag: Option<String>,
     /// Given names, as the document writes them.
     pub given: Option<String>,
     pub surname: Option<String>,
@@ -113,16 +122,30 @@ fn edit(p: &EditParams) -> Result<Edit, String> {
     let k = p.kind.trim();
     Ok(match k {
         "set_event" => {
-            if p.date.is_none() && p.place.is_none() {
-                return Err("`set_event` needs `date` and/or `place`".into());
+            if p.value.is_none() && p.date.is_none() && p.place.is_none() && p.address.is_none() {
+                return Err("`set_event` needs `value`, `date`, `place` and/or `address`".into());
             }
             Edit::SetEvent {
                 record: need(id(&p.record), k, "record")?,
                 index: need(p.event, k, "event")?,
+                value: p.value.clone(),
                 date: p.date.clone(),
                 place: p.place.clone(),
+                address: p.address.clone(),
             }
         }
+        "add_event" => Edit::AddEvent {
+            record: need(id(&p.record), k, "record")?,
+            tag: need(p.tag.clone(), k, "tag")?,
+            value: p.value.clone().unwrap_or_default(),
+            date: p.date.clone().unwrap_or_default(),
+            place: p.place.clone().unwrap_or_default(),
+            address: p.address.clone().unwrap_or_default(),
+        },
+        "rename_place" => Edit::RenamePlace {
+            place: need(p.place.clone(), k, "place")?,
+            name: need(p.new_place.clone(), k, "new_place")?,
+        },
         "delete_event" => {
             Edit::DeleteEvent { record: need(id(&p.record), k, "record")?, index: need(p.event, k, "event")? }
         }
@@ -210,8 +233,10 @@ mod tests {
             Action::Edit(vec![Edit::SetEvent {
                 record: "I1".into(),
                 index: 3,
+                value: None,
                 date: Some("12 MAR 1869".into()),
-                place: None
+                place: None,
+                address: None
             }])
         );
         assert_eq!(r.evidence.source.as_deref(), Some("S1"));
