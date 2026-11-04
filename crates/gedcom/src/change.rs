@@ -21,6 +21,7 @@ use crate::node::Node;
 use crate::parse::node_to_string;
 use crate::proposal::{Change, DiffLine, line_diff};
 use crate::quality::{self, Category, issue_ids};
+use crate::relations::Relation;
 use rust_i18n::t;
 use std::collections::HashMap;
 
@@ -37,6 +38,16 @@ pub enum Edit {
         place: Option<String>,
         /// Street address within the place (`ADDR`); empty to remove it.
         address: Option<String>,
+        /// Cause (`CAUS`: of a death, a divorce…); empty to remove it.
+        cause: Option<String>,
+    },
+    /// Age of a person at an event (`AGE`, GEDCOM form `42y`, `6m`, `3d`): on a person's event,
+    /// theirs; on a family event, the age of `spouse` (one of the couple). Empty to remove it.
+    SetAge {
+        record: String,
+        index: usize,
+        spouse: Option<String>,
+        age: String,
     },
     /// A new event or attribute of a person or family (`OCCU` with its value, `RESI`, `BIRT`…).
     AddEvent {
@@ -110,7 +121,77 @@ pub enum Edit {
         surname: String,
         kind: String,
     },
+    /// Links two people of the tree: `other` becomes the `relation` of `person`, in the family
+    /// that already exists (the other parent's, the union) or a new one.
+    LinkRelative {
+        person: String,
+        relation: Relation,
+        other: String,
+    },
+    /// Removes a wrong link: `other` is no longer the `relation` of `person`. The family is
+    /// deleted when it no longer connects anyone; the people stay.
+    UnlinkRelative {
+        person: String,
+        relation: Relation,
+        other: String,
+    },
+    /// How a child belongs to their parents' family (`FAMC.PEDI`: `BIRTH`, `ADOPTED`, `FOSTER`,
+    /// `SEALING`, `OTHER`). `parent`: one of the parents, to pick the family when there are several.
+    SetPedigree {
+        person: String,
+        parent: Option<String>,
+        pedigree: String,
+    },
+    /// A note on a record, or on one of its events (`event`: its position).
+    AddNote {
+        record: String,
+        event: Option<usize>,
+        text: String,
+    },
+    /// New text of a note (`note`: its position among the notes of the record or of the event);
+    /// empty to remove it.
+    SetNote {
+        record: String,
+        event: Option<usize>,
+        note: usize,
+        text: String,
+    },
+    /// A person who took part in an event without being its principal (`ASSO` / `ROLE`): witness,
+    /// godparent, officiant… `phrase` says more (“uncle of the bride”); required for `OTHER`.
+    AddAssociate {
+        record: String,
+        index: usize,
+        person: String,
+        role: String,
+        phrase: String,
+    },
+    /// Removes a person associated with an event.
+    RemoveAssociate {
+        record: String,
+        index: usize,
+        person: String,
+    },
+    /// Links a media to a record or to one of its events: an existing one (`media`), or the
+    /// media of a file of the tree's folder (`file`), created if needed.
+    AttachMedia {
+        record: String,
+        event: Option<usize>,
+        media: Option<String>,
+        file: Option<String>,
+    },
+    /// Unlinks a media from a record or one of its events; the media stays in the file.
+    DetachMedia {
+        record: String,
+        event: Option<usize>,
+        media: String,
+    },
 }
+
+/// GEDCOM 7 roles of a person associated with an event (`ASSO.ROLE`).
+pub const ASSOCIATE_ROLES: &[&str] = &["WITN", "GODP", "OFFICIATOR", "CLERGY", "NGHBR", "FRIEND", "PARENT", "OTHER"];
+
+/// GEDCOM 7 values of `FAMC.PEDI`.
+pub const PEDIGREES: &[&str] = &["BIRTH", "ADOPTED", "FOSTER", "SEALING", "OTHER"];
 
 impl Edit {
     /// Name of the edit, as the agent gives it.
@@ -129,6 +210,16 @@ impl Edit {
             Edit::DeleteStructure => "delete_structure",
             Edit::SetName { .. } => "set_name",
             Edit::AddName { .. } => "add_name",
+            Edit::SetAge { .. } => "set_age",
+            Edit::LinkRelative { .. } => "link_relative",
+            Edit::UnlinkRelative { .. } => "unlink_relative",
+            Edit::SetPedigree { .. } => "set_pedigree",
+            Edit::AddNote { .. } => "add_note",
+            Edit::SetNote { .. } => "set_note",
+            Edit::AddAssociate { .. } => "add_associate",
+            Edit::RemoveAssociate { .. } => "remove_associate",
+            Edit::AttachMedia { .. } => "attach_media",
+            Edit::DetachMedia { .. } => "detach_media",
         }
     }
 
@@ -138,9 +229,21 @@ impl Edit {
             Edit::SetEvent { record, .. }
             | Edit::AddEvent { record, .. }
             | Edit::DeleteEvent { record, .. }
-            | Edit::CiteSource { record, .. } => Some(record),
+            | Edit::CiteSource { record, .. }
+            | Edit::SetAge { record, .. }
+            | Edit::AddNote { record, .. }
+            | Edit::SetNote { record, .. }
+            | Edit::AddAssociate { record, .. }
+            | Edit::RemoveAssociate { record, .. }
+            | Edit::AttachMedia { record, .. }
+            | Edit::DetachMedia { record, .. } => Some(record),
             Edit::SetRepository { source, .. } => Some(source),
-            Edit::SetSex { person, .. } | Edit::SetName { person, .. } | Edit::AddName { person, .. } => Some(person),
+            Edit::SetSex { person, .. }
+            | Edit::SetName { person, .. }
+            | Edit::AddName { person, .. }
+            | Edit::LinkRelative { person, .. }
+            | Edit::UnlinkRelative { person, .. }
+            | Edit::SetPedigree { person, .. } => Some(person),
             _ => None,
         }
     }
@@ -210,6 +313,16 @@ pub const CORRECTIONS: &[&str] = &[
     "set_coordinates",
     "rename_place",
     "set_repository",
+    "set_age",
+    "link_relative",
+    "unlink_relative",
+    "set_pedigree",
+    "add_note",
+    "set_note",
+    "add_associate",
+    "remove_associate",
+    "attach_media",
+    "detach_media",
 ];
 
 /// Edits each kind of issue allows. Changing a filiation (own ancestor) or a person's links stays
@@ -384,6 +497,101 @@ impl QualityChange {
                 }
                 Ok(())
             }
+            Edit::SetAge { record, index, spouse, age } => {
+                event_ref(g, record, *index)?;
+                if !age.trim().is_empty() && age_value(age).is_none() {
+                    return Err(format!("`{age}` is not an age: give it as `42y`, `6m` or `3d`"));
+                }
+                if let Some(f) = g.family(record) {
+                    let s = spouse.as_deref().ok_or("on a family event, give `spouse`: whose age it is")?;
+                    if f.husband() != Some(s) && f.wife() != Some(s) {
+                        return Err(format!("{s} is not one of the couple of {record}"));
+                    }
+                }
+                Ok(())
+            }
+            Edit::LinkRelative { person, other, .. } => {
+                individual(g, person)?;
+                individual(g, other)?;
+                Ok(())
+            }
+            Edit::UnlinkRelative { person, relation, other } => {
+                individual(g, person)?;
+                individual(g, other)?;
+                link_family(g, person, *relation, other).map(|_| ()).ok_or_else(|| {
+                    format!("{other} is not the {} of {person} in the tree (`person_sheet`)", relation_name(*relation))
+                })
+            }
+            Edit::SetPedigree { person, parent, pedigree } => {
+                individual(g, person)?;
+                if !PEDIGREES.contains(&pedigree.trim().to_uppercase().as_str()) {
+                    return Err(format!("`pedigree` is one of {}", PEDIGREES.join(", ")));
+                }
+                parents_family(g, person, parent.as_deref()).map(|_| ())
+            }
+            Edit::AddNote { record, event, text } => {
+                if text.trim().is_empty() {
+                    return Err("`add_note` needs the note's `text`".into());
+                }
+                note_holder(g, record, *event).map(|_| ())
+            }
+            Edit::SetNote { record, event, note, .. } => {
+                let holder = note_holder(g, record, *event)?;
+                let n = holder.children_with("NOTE").nth(*note).ok_or_else(|| {
+                    format!("{record} has {} note(s) there: `note` counts from 0", holder.children_with("NOTE").count())
+                })?;
+                if n.pointer().is_some() {
+                    return Err("this note is shared between records: the user changes it in GEDRoots".into());
+                }
+                Ok(())
+            }
+            Edit::AddAssociate { record, index, person, role, phrase } => {
+                event_ref(g, record, *index)?;
+                individual(g, person)?;
+                let role = role.trim().to_uppercase();
+                if !ASSOCIATE_ROLES.contains(&role.as_str()) {
+                    return Err(format!("`role` is one of {}", ASSOCIATE_ROLES.join(", ")));
+                }
+                if role == "OTHER" && phrase.trim().is_empty() {
+                    return Err(
+                        "for the role `OTHER`, say which in `phrase` (“neighbour”, “uncle of the bride”)".into()
+                    );
+                }
+                Ok(())
+            }
+            Edit::RemoveAssociate { record, index, person } => {
+                let ev = event_ref(g, record, *index)?;
+                if !ev.children_with("ASSO").any(|a| a.pointer() == Some(person.as_str())) {
+                    return Err(format!("{person} is not associated with this event"));
+                }
+                Ok(())
+            }
+            Edit::AttachMedia { record, event, media, file } => {
+                match (media, file) {
+                    (Some(m), None) if g.get(m).is_none_or(|n| n.tag != "OBJE") => {
+                        return Err(format!("no media {m} in the tree"));
+                    }
+                    (Some(_), None) => {}
+                    (None, Some(f)) if f.trim().is_empty() => return Err("give the file's path".into()),
+                    (None, Some(_)) => {}
+                    _ => return Err("`attach_media` needs `media` (an existing one) or `file`, not both".into()),
+                }
+                match event {
+                    Some(i) => event_ref(g, record, *i).map(|_| ()),
+                    None if g.get(record).is_some_and(|n| matches!(n.tag.as_str(), "INDI" | "FAM" | "SOUR")) => Ok(()),
+                    None => Err(format!("{record} cannot hold a media: give a person, a family or a source")),
+                }
+            }
+            Edit::DetachMedia { record, event, media } => {
+                let holder = match event {
+                    Some(i) => event_ref(g, record, *i)?,
+                    None => g.get(record).ok_or_else(|| format!("no record {record}"))?,
+                };
+                if !holder.children_with("OBJE").any(|o| o.pointer() == Some(media.as_str())) {
+                    return Err(format!("{media} is not linked there"));
+                }
+                Ok(())
+            }
             _ => Ok(()),
         }
     }
@@ -480,11 +688,16 @@ impl QualityChange {
                 g.merge_individuals(&plan, &sides)?;
             }
             Action::Edit(edits) => {
-                // Removals last, from the end, so the positions given stay right.
+                // Changes in place first; then removals, from the end, and what moves the
+                // record's structures (a name goes before the events): the positions given stay
+                // right. What is added goes at the end of the record.
                 let mut order: Vec<&Edit> = edits.iter().collect();
                 order.sort_by_key(|e| match e {
                     Edit::DeleteEvent { index, .. } => (1, usize::MAX - index),
-                    Edit::DeleteStructure => (2, 0),
+                    Edit::SetNote { note, text, .. } if text.trim().is_empty() => (2, usize::MAX - note),
+                    Edit::UnlinkRelative { .. } | Edit::DetachMedia { event: None, .. } => (2, 0),
+                    Edit::AddName { .. } | Edit::LinkRelative { .. } => (3, 0),
+                    Edit::DeleteStructure => (4, 0),
                     _ => (0, 0),
                 });
                 for e in order {
@@ -549,7 +762,7 @@ impl QualityChange {
     fn apply_edit(&self, g: &mut Gedcom, e: &Edit) -> Result<(), String> {
         let outdated = || -> String { t!("change.outdated").into() };
         match e {
-            Edit::SetEvent { record, index, value, date, place, address } => {
+            Edit::SetEvent { record, index, value, date, place, address, cause } => {
                 let mut ev = g.read_event(record, *index).ok_or_else(|| format!("no event {index} in {record}"))?;
                 if let Some(v) = value {
                     ev.detail = v.trim().to_string();
@@ -564,7 +777,35 @@ impl QualityChange {
                 if let Some(a) = address {
                     ev.address = a.trim().to_string();
                 }
-                g.update_event(record, *index, &ev)
+                g.update_event(record, *index, &ev)?;
+                if let Some(c) = cause {
+                    event_mut(g, record, *index)?.set_child_val("CAUS", c);
+                }
+                Ok(())
+            }
+            Edit::SetAge { record, index, spouse, age } => {
+                let age = age_value(age).unwrap_or_default();
+                let tag = g.family(record).map(|f| if f.husband() == spouse.as_deref() { "HUSB" } else { "WIFE" });
+                let ev = event_mut(g, record, *index)?;
+                match tag {
+                    None => ev.set_child_val("AGE", &age),
+                    Some(t) => {
+                        if ev.child(t).is_none() {
+                            // Before the citations, as an act writes it.
+                            let at = ev.children.iter().position(|c| c.tag == "SOUR").unwrap_or(ev.children.len());
+                            ev.children.insert(at, Node::new(t));
+                        }
+                        let mut empty = false;
+                        if let Some(h) = ev.child_mut(t) {
+                            h.set_child_val("AGE", &age);
+                            empty = h.children.is_empty();
+                        }
+                        if empty {
+                            ev.children.retain(|c| c.tag != t);
+                        }
+                    }
+                }
+                Ok(())
             }
             Edit::AddEvent { record, tag, value, date, place, address } => {
                 let ev = crate::NewEvent {
@@ -684,6 +925,106 @@ impl QualityChange {
                 r.children.insert(at, node);
                 Ok(())
             }
+            Edit::LinkRelative { person, relation, other } => g.link_relative(person, *relation, other),
+            Edit::UnlinkRelative { person, relation, other } => {
+                let fam = link_family(g, person, *relation, other).ok_or_else(outdated)?;
+                match relation {
+                    // The couple stays: the child leaves it, with the other parent if any.
+                    Relation::Father | Relation::Mother => detach_child(g, person, other, &fam),
+                    Relation::Child => detach_child(g, other, person, &fam),
+                    Relation::Spouse | Relation::Sibling => {
+                        g.unlink_from_family(other, &fam);
+                        Ok(())
+                    }
+                }
+            }
+            Edit::SetPedigree { person, parent, pedigree } => {
+                let fam = parents_family(g, person, parent.as_deref())?;
+                let p = format!("@{fam}@");
+                let r = g.get_mut(person).ok_or_else(outdated)?;
+                let link = r.children.iter_mut().find(|c| c.tag == "FAMC" && c.val() == p).ok_or_else(outdated)?;
+                link.set_child_val("PEDI", &pedigree.trim().to_uppercase());
+                Ok(())
+            }
+            Edit::AddNote { record, event, text } => {
+                let mut n = Node::new("NOTE");
+                n.set_text(text.trim());
+                let holder = note_holder_mut(g, record, *event)?;
+                // An event's note after its own details; a record's before CHAN.
+                match event {
+                    Some(_) => {
+                        let at = holder
+                            .children
+                            .iter()
+                            .rposition(|c| matches!(c.tag.as_str(), "NOTE" | "SNOTE"))
+                            .map(|i| i + 1)
+                            .unwrap_or(holder.children.len());
+                        holder.children.insert(at, n);
+                    }
+                    None => holder.insert_child(n),
+                }
+                Ok(())
+            }
+            Edit::SetNote { record, event, note, text } => {
+                let holder = note_holder_mut(g, record, *event)?;
+                let at = holder
+                    .children
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, c)| c.tag == "NOTE")
+                    .nth(*note)
+                    .map(|(i, _)| i)
+                    .ok_or_else(outdated)?;
+                if text.trim().is_empty() {
+                    holder.children.remove(at);
+                } else {
+                    holder.children[at].set_text(text.trim());
+                }
+                Ok(())
+            }
+            Edit::AddAssociate { record, index, person, role, phrase } => {
+                let mut r = Node::with_value("ROLE", role.trim().to_uppercase());
+                if !phrase.trim().is_empty() {
+                    r.children.push(Node::with_value("PHRASE", phrase.trim()));
+                }
+                let asso = Node::with_value("ASSO", format!("@{person}@")).push(r);
+                let ev = event_mut(g, record, *index)?;
+                if !ev.children.contains(&asso) {
+                    let at = ev.children.iter().position(|c| c.tag == "SOUR").unwrap_or(ev.children.len());
+                    ev.children.insert(at, asso);
+                }
+                if ev.value.as_deref() == Some("Y") {
+                    ev.value = None;
+                }
+                Ok(())
+            }
+            Edit::RemoveAssociate { record, index, person } => {
+                let p = format!("@{person}@");
+                let ev = event_mut(g, record, *index)?;
+                ev.children.retain(|c| !(c.tag == "ASSO" && c.val() == p));
+                if ev.children.is_empty() && crate::model::event_label(&ev.tag).is_some() && ev.value.is_none() {
+                    ev.value = Some("Y".into());
+                }
+                Ok(())
+            }
+            Edit::AttachMedia { record, event, media, file } => {
+                let media = match (media, file) {
+                    (Some(m), _) => m.clone(),
+                    (None, Some(f)) => g.media_for_file(f.trim()),
+                    (None, None) => return Err(outdated()),
+                };
+                match event {
+                    Some(i) => g.attach_media_to_event(record, *i, &media),
+                    None => g.attach_media(record, &media),
+                }
+            }
+            Edit::DetachMedia { record, event, media } => match event {
+                Some(i) => g.detach_media_from_event(record, *i, media),
+                None => {
+                    g.detach_media(record, media);
+                    Ok(())
+                }
+            },
         }
     }
 
@@ -803,20 +1144,127 @@ impl QualityChange {
             Action::Edit(edits) => edits
                 .iter()
                 .map(|e| match e {
-                    Edit::SetEvent { record, index, value, date, place, address } => {
+                    Edit::SetEvent { record, index, value, date, place, address, cause } => {
                         let label = g.event_title(record, *index).unwrap_or_default();
                         let ev = g.read_event(record, *index).unwrap_or_default();
                         let new_value = value.as_deref().map(str::trim).unwrap_or(&ev.detail).to_string();
                         let new_date = date.as_deref().map(|d| Date::parse(d).to_gedcom()).unwrap_or(ev.date.clone());
                         let new_place = place.as_deref().map(|p| g.known_place(p)).unwrap_or(ev.place.clone());
                         let new_address = address.as_deref().map(str::trim).unwrap_or(&ev.address).to_string();
+                        let old_cause = event_ref(g, record, *index)
+                            .ok()
+                            .and_then(|e| e.child_val("CAUS"))
+                            .unwrap_or_default()
+                            .to_string();
+                        let new_cause = cause.as_deref().map(str::trim).unwrap_or(&old_cause).to_string();
+                        let with_cause = |text: String, cause: &str| {
+                            if cause.is_empty() { text } else { format!("{text} ({cause})") }
+                        };
                         row(
                             label,
-                            or_dash(event_text(&ev.detail, &ev.date, &ev.address, &ev.place)),
-                            or_dash(event_text(&new_value, &new_date, &new_address, &new_place)),
+                            or_dash(with_cause(event_text(&ev.detail, &ev.date, &ev.address, &ev.place), &old_cause)),
+                            or_dash(with_cause(
+                                event_text(&new_value, &new_date, &new_address, &new_place),
+                                &new_cause,
+                            )),
                             Change::Differs,
                         )
                     }
+                    Edit::SetAge { record, index, spouse, age } => {
+                        let ev = event_ref(g, record, *index).ok();
+                        let holder = match g.family(record) {
+                            Some(f) => {
+                                let t = if f.husband() == spouse.as_deref() { "HUSB" } else { "WIFE" };
+                                ev.and_then(|e| e.child(t))
+                            }
+                            None => ev,
+                        };
+                        let current = holder.and_then(|h| h.child_val("AGE")).unwrap_or_default().to_string();
+                        let who = spouse.as_deref().map(|s| format!(" · {}", g.record_label(s))).unwrap_or_default();
+                        let label = format!(
+                            "{} · {}{who}",
+                            g.event_title(record, *index).unwrap_or_default(),
+                            t!("change.age")
+                        );
+                        let proposed = age_value(age).unwrap_or_default();
+                        let change = if current.is_empty() { Change::Added } else { Change::Differs };
+                        row(label, or_dash(current), or_dash(proposed), change)
+                    }
+                    Edit::LinkRelative { person, relation, other } => {
+                        let label = format!("{} · {}", relation_label(*relation), g.record_label(person));
+                        row(label, "—".into(), g.record_label(other), Change::Added)
+                    }
+                    Edit::UnlinkRelative { person, relation, other } => {
+                        let label = format!("{} · {}", relation_label(*relation), g.record_label(person));
+                        row(label, g.record_label(other), t!("change.deleted").into(), Change::Differs)
+                    }
+                    Edit::SetPedigree { person, parent, pedigree } => {
+                        let fam = parents_family(g, person, parent.as_deref()).ok();
+                        let current = fam
+                            .and_then(|f| {
+                                let p = format!("@{f}@");
+                                g.get(person)?
+                                    .children
+                                    .iter()
+                                    .find(|c| c.tag == "FAMC" && c.val() == p)?
+                                    .child_val("PEDI")
+                                    .map(str::to_string)
+                            })
+                            .unwrap_or_default();
+                        let pedi =
+                            |v: &str| crate::schema::enum_label(v).map(|l| l.into_owned()).unwrap_or(v.to_string());
+                        let label = format!("{} · {}", t!("change.pedigree"), g.record_label(person));
+                        let change = if current.is_empty() { Change::Added } else { Change::Differs };
+                        let current = if current.is_empty() { String::new() } else { pedi(&current) };
+                        row(label, or_dash(current), pedi(&pedigree.trim().to_uppercase()), change)
+                    }
+                    Edit::AddNote { record, event, text } => {
+                        row(note_label(g, record, *event), "—".into(), text.trim().to_string(), Change::Added)
+                    }
+                    Edit::SetNote { record, event, note, text } => {
+                        let current = note_holder(g, record, *event)
+                            .ok()
+                            .and_then(|h| h.children_with("NOTE").nth(*note))
+                            .map(|n| n.text())
+                            .unwrap_or_default();
+                        let proposed = if text.trim().is_empty() {
+                            t!("change.deleted").into_owned()
+                        } else {
+                            text.trim().to_string()
+                        };
+                        row(note_label(g, record, *event), or_dash(current), proposed, Change::Differs)
+                    }
+                    Edit::AddAssociate { record, index, person, role, phrase } => {
+                        let sex = g.individual(person).map(|i| i.sex().to_string()).unwrap_or_default();
+                        let (role, detail) =
+                            crate::act::association_role(&role.trim().to_uppercase(), phrase.trim(), &sex);
+                        let role = match detail {
+                            Some(d) => format!("{role}, {d}"),
+                            None => role,
+                        };
+                        let label = g.event_title(record, *index).unwrap_or_default();
+                        row(label, "—".into(), format!("{} ({role})", g.record_label(person)), Change::Added)
+                    }
+                    Edit::RemoveAssociate { record, index, person } => {
+                        let label = g.event_title(record, *index).unwrap_or_default();
+                        row(label, g.record_label(person), t!("change.deleted").into(), Change::Differs)
+                    }
+                    Edit::AttachMedia { record, event, media, file } => {
+                        let title = match (media, file) {
+                            (Some(m), _) => g.record_label(m),
+                            (None, Some(f)) => {
+                                g.media_by_file(f.trim()).map(|m| g.record_label(&m)).unwrap_or(f.clone())
+                            }
+                            (None, None) => String::new(),
+                        };
+                        row(media_label(g, record, *event), "—".into(), or_dash(title), Change::Added)
+                    }
+                    Edit::DetachMedia { record, event, media } => row(
+                        media_label(g, record, *event),
+                        g.record_label(media),
+                        t!("change.deleted").into(),
+                        Change::Differs,
+                    ),
                     Edit::AddEvent { tag, value, date, place, address, .. } => {
                         let label = crate::model::event_label(&tag.trim().to_uppercase())
                             .map(|l| l.to_string())
@@ -970,6 +1418,157 @@ impl QualityChange {
         }
         Ok(out)
     }
+}
+
+/// A GEDCOM age (`42y`, `3y 6m`, `< 1y`) as given, or one read from words (“42 ans”, `6 months`).
+fn age_value(s: &str) -> Option<String> {
+    let s = s.trim();
+    let gedcom = !s.is_empty()
+        && s.trim_start_matches(['<', '>']).split_whitespace().all(|p| {
+            let digits = p.trim_end_matches(['y', 'm', 'w', 'd']);
+            !digits.is_empty() && digits.len() + 1 == p.len() && digits.chars().all(|c| c.is_ascii_digit())
+        });
+    if gedcom { Some(s.to_string()) } else { crate::act::gedcom_age(s) }
+}
+
+/// An event of a record, by its position.
+fn event_ref<'a>(g: &'a Gedcom, record: &str, index: usize) -> Result<&'a Node, String> {
+    g.get(record)
+        .and_then(|n| n.children.get(index))
+        .filter(|c| crate::model::event_label(&c.tag).is_some())
+        .ok_or_else(|| format!("no event {index} in {record} (`index` in `person_sheet`)"))
+}
+
+fn event_mut<'a>(g: &'a mut Gedcom, record: &str, index: usize) -> Result<&'a mut Node, String> {
+    g.get_mut(record)
+        .and_then(|n| n.children.get_mut(index))
+        .filter(|c| crate::model::event_label(&c.tag).is_some())
+        .ok_or_else(|| format!("no event {index} in {record}"))
+}
+
+fn individual<'a>(g: &'a Gedcom, x: &str) -> Result<&'a Node, String> {
+    g.get(x).filter(|n| n.tag == "INDI").ok_or_else(|| format!("no person {x} in the tree"))
+}
+
+/// The record, or its event, that holds notes.
+fn note_holder<'a>(g: &'a Gedcom, record: &str, event: Option<usize>) -> Result<&'a Node, String> {
+    match event {
+        Some(i) => event_ref(g, record, i),
+        None => g.get(record).ok_or_else(|| format!("no record {record} in the tree")),
+    }
+}
+
+fn note_holder_mut<'a>(g: &'a mut Gedcom, record: &str, event: Option<usize>) -> Result<&'a mut Node, String> {
+    match event {
+        Some(i) => event_mut(g, record, i),
+        None => g.get_mut(record).ok_or_else(|| format!("no record {record} in the tree")),
+    }
+}
+
+/// `child` is no longer the child of `parent`: they leave the family `fam`, and stay the child of
+/// the other parent of that family, in a family of their own with them.
+fn detach_child(g: &mut Gedcom, child: &str, parent: &str, fam: &str) -> Result<(), String> {
+    let f = g.family(fam).ok_or_else(|| t!("change.outdated").to_string())?;
+    let other = [("HUSB", f.husband()), ("WIFE", f.wife())]
+        .into_iter()
+        .find_map(|(slot, p)| p.filter(|p| *p != parent).map(|p| (slot, p.to_string())));
+    let pedi = g
+        .get(child)
+        .and_then(|c| c.children.iter().find(|l| l.tag == "FAMC" && l.pointer() == Some(fam)))
+        .and_then(|l| l.child_val("PEDI"))
+        .map(str::to_string);
+    g.unlink_from_family(child, fam);
+    if let Some((slot, other)) = other {
+        let new = g.create_family();
+        g.set_parent_slot(&new, &other, Some(slot))?;
+        g.add_child_to_family(&new, child)?;
+        if let Some(p) = pedi
+            && let Some(l) = g
+                .get_mut(child)
+                .and_then(|c| c.children.iter_mut().find(|l| l.tag == "FAMC" && l.pointer() == Some(new.as_str())))
+        {
+            l.set_child_val("PEDI", &p);
+        }
+    }
+    Ok(())
+}
+
+/// The family that holds the link “`other` is the `relation` of `person`”.
+fn link_family(g: &Gedcom, person: &str, relation: Relation, other: &str) -> Option<String> {
+    let me = g.individual(person)?;
+    let (families, as_parent) = match relation {
+        Relation::Father | Relation::Mother => (me.famc(), true),
+        Relation::Sibling => (me.famc(), false),
+        Relation::Spouse => (me.fams(), true),
+        Relation::Child => (me.fams(), false),
+    };
+    families
+        .into_iter()
+        .filter_map(|f| g.family(f))
+        .find(|f| match as_parent {
+            true => f.husband() == Some(other) || f.wife() == Some(other),
+            false => f.children().contains(&other),
+        })
+        .map(|f| f.xref().to_string())
+}
+
+/// The family of origin of `person` with `parent` among its parents (the only one, without
+/// `parent`).
+fn parents_family(g: &Gedcom, person: &str, parent: Option<&str>) -> Result<String, String> {
+    let me = g.individual(person).ok_or_else(|| format!("no person {person} in the tree"))?;
+    let families = me.famc();
+    match parent {
+        Some(p) => families
+            .into_iter()
+            .filter_map(|f| g.family(f))
+            .find(|f| f.husband() == Some(p) || f.wife() == Some(p))
+            .map(|f| f.xref().to_string())
+            .ok_or_else(|| format!("{p} is not a parent of {person} in the tree")),
+        None => match families.as_slice() {
+            [f] => Ok(f.to_string()),
+            [] => Err(format!("{person} has no parents in the tree")),
+            _ => Err(format!("{person} has several families of parents: give `parent`")),
+        },
+    }
+}
+
+/// “Note · Death” or “Note · Jean GUYOT”.
+fn note_label(g: &Gedcom, record: &str, event: Option<usize>) -> String {
+    let of = match event {
+        Some(i) => g.event_title(record, i).unwrap_or_default(),
+        None => g.record_label(record),
+    };
+    format!("{} · {of}", t!("change.note"))
+}
+
+/// “Media · Baptism” or “Media · Jean GUYOT”.
+fn media_label(g: &Gedcom, record: &str, event: Option<usize>) -> String {
+    let of = match event {
+        Some(i) => g.event_title(record, i).unwrap_or_default(),
+        None => g.record_label(record),
+    };
+    format!("{} · {of}", t!("change.media"))
+}
+
+fn relation_name(r: Relation) -> &'static str {
+    match r {
+        Relation::Father => "father",
+        Relation::Mother => "mother",
+        Relation::Spouse => "spouse",
+        Relation::Child => "child",
+        Relation::Sibling => "sibling",
+    }
+}
+
+fn relation_label(r: Relation) -> String {
+    match r {
+        Relation::Father => t!("change.relation.father"),
+        Relation::Mother => t!("change.relation.mother"),
+        Relation::Spouse => t!("change.relation.spouse"),
+        Relation::Child => t!("change.relation.child"),
+        Relation::Sibling => t!("change.relation.sibling"),
+    }
+    .into_owned()
 }
 
 /// A GEDCOM date as typed by the agent, checked; empty stays empty.
