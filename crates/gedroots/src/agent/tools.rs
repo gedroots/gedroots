@@ -196,6 +196,9 @@ pub struct Sources {
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct LocateParams {
+    /// Tree to work on, as `list_trees` names it, when several are open (default: the one in
+    /// front in GEDRoots).
+    pub tree: Option<String>,
     /// The place as the act or the tree writes it, with what tells it apart: "Saint-Martin,
     /// Manche", "Lebach, Saarland".
     pub place: String,
@@ -926,7 +929,7 @@ impl GedrootsMcp {
         annotations(read_only_hint = true, open_world_hint = true)
     )]
     async fn locate_place(&self, Parameters(p): Parameters<LocateParams>) -> Res<Located> {
-        let s = self.snapshot().await?;
+        let s = self.snapshot(p.tree.as_deref()).await?;
         let query = p.place.trim().to_string();
         if query.is_empty() {
             return Err("give the `place` to locate".into());
@@ -1381,7 +1384,7 @@ mod tests {
         let (_, _, list) =
             post(port, "secret", Some(&sid), serde_json::json!({"jsonrpc":"2.0","id":2,"method":"tools/list"}));
         let tools = list["result"]["tools"].as_array().expect("tools");
-        assert_eq!(tools.len(), 16);
+        assert_eq!(tools.len(), 17);
         // The proposals only queue a proposal; the research tools write the research log only.
         let mut writers: Vec<String> = tools
             .iter()
