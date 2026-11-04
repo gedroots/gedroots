@@ -70,6 +70,10 @@ actions!(
         AddNameTitle,
         AddNameParticle,
         AddNameSuffix,
+        NoteSearch,
+        IgnoreLead,
+        ResumeLead,
+        CopyAgentRequest,
         // Source
         NewSource,
         NewRepository,
@@ -101,6 +105,7 @@ actions!(
         ShowMedia,
         ShowRepositories,
         ShowNotes,
+        ShowResearch,
         ShowQuality,
         ShowStats,
         KinshipWith,
@@ -273,8 +278,10 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new(shortcut!("4"), ShowMedia, WS),
         KeyBinding::new(shortcut!("5"), ShowRepositories, WS),
         KeyBinding::new(shortcut!("6"), ShowNotes, WS),
-        KeyBinding::new(shortcut!("7"), ShowQuality, WS),
-        KeyBinding::new(shortcut!("8"), ShowStats, WS),
+        KeyBinding::new(shortcut!("7"), ShowResearch, WS),
+        KeyBinding::new(shortcut!("8"), ShowQuality, WS),
+        KeyBinding::new(shortcut!("9"), ShowStats, WS),
+        KeyBinding::new(shortcut!("shift-l"), NoteSearch, WS),
         // Like Finder and Mail: ⌃⌘S (Ctrl+Alt+S elsewhere).
         KeyBinding::new(if cfg!(target_os = "macos") { "ctrl-cmd-s" } else { "ctrl-alt-s" }, ToggleSidebar, WS),
         // Like the inspectors of Finder, Pages or Xcode: ⌥⌘I (Ctrl+Alt+I elsewhere).
@@ -368,6 +375,18 @@ pub mod label {
     }
     pub fn sibling_link() -> SharedString {
         t!("cmd.sibling_link").into()
+    }
+    pub fn note_search() -> SharedString {
+        t!("cmd.note_search").into()
+    }
+    pub fn ignore_lead() -> SharedString {
+        t!("cmd.ignore_lead").into()
+    }
+    pub fn resume_lead() -> SharedString {
+        t!("cmd.resume_lead").into()
+    }
+    pub fn copy_agent_request() -> SharedString {
+        t!("cmd.copy_agent_request").into()
     }
     pub fn add_event() -> SharedString {
         t!("cmd.add_event").into()
@@ -573,6 +592,17 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
             Sep,
             a(t!("cmd.merge_with_person"), MergeWithPerson),
             a(t!("cmd.find_duplicates"), FindDuplicates),
+            Sep,
+            Sub(
+                t!("menu.research").into(),
+                vec![
+                    a(label::note_search(), NoteSearch),
+                    Sep,
+                    a(label::ignore_lead(), IgnoreLead),
+                    a(label::resume_lead(), ResumeLead),
+                    a(label::copy_agent_request(), CopyAgentRequest),
+                ],
+            ),
         ],
     ));
     // Search sites of the file; submenu hidden if there are none.
@@ -624,6 +654,7 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
             a(label::merge_with_media(), MergeWithMedia),
             a(label::merge_selected_media(), MergeSelectedMedia),
             a(t!("cmd.rename_media_files"), RenameMediaFiles),
+            a(t!("cmd.unreferenced_files"), ShowUnreferencedFiles),
             Sep,
             a(label::tag_person(), TagPerson),
         ],
@@ -698,8 +729,8 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
             a(t!("cmd.repositories"), ShowRepositories),
             a(t!("cmd.notes"), ShowNotes),
             Sep,
+            a(t!("cmd.research"), ShowResearch),
             a(t!("cmd.quality"), ShowQuality),
-            a(t!("cmd.unreferenced_files"), ShowUnreferencedFiles),
             a(t!("cmd.stats"), ShowStats),
             Sep,
             a(label::go_to_root(), GoToRoot),

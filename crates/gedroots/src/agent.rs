@@ -4,8 +4,7 @@
 //! on `127.0.0.1`: an agent such as Claude Code reads the open file (records, search, records to
 //! find) without ever changing the tree: the records it finds become proposals, reviewed in the
 //! “To Review” page before being saved. Only its research log (what it planned and searched, even in
-//! vain) is written at once, with an undo point. Of living people, only what identifies them is
-//! given.
+//! vain) is written at once, with an undo point.
 //!
 //! - the server runs on its own thread (tokio runtime);
 //! - each tool call asks the app's loop for a copy of the displayed document (a cheap copy: records

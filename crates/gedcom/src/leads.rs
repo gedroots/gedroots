@@ -17,7 +17,7 @@
 //!   detailed for France, generic elsewhere), each with the registers of the same place the file
 //!   already cites, so that the research starts from the archive the file already uses.
 //!
-//! Living people never get a lead. Labels are in English: they are read by agents; the interface
+//! Labels are in English: they are read by agents; the interface
 //! translates them from their stable identifiers ([`RecordType::id`]).
 
 use crate::analysis::span::Span;
@@ -207,6 +207,9 @@ pub struct WhereToLook {
     pub record: RecordType,
     /// “Decennial tables (tables décennales): deaths”.
     pub label: String,
+    /// Name in the country (“tables décennales”), for the interface.
+    #[cfg_attr(feature = "serde", serde(skip))]
+    pub local_name: String,
     pub place: String,
     pub years: Option<Years>,
     /// Census years, for `census`.
@@ -242,6 +245,100 @@ pub struct PastSearch {
     pub by_agent: bool,
 }
 
+/// How a person was seen alive, for [`Reason::Seen`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Sighting {
+    /// One of their events or of their unions (event tag).
+    Event(String),
+    /// Present at someone else's event (tag, whose).
+    Witness { tag: String, whose: String },
+    /// Birth of their child (name).
+    ChildBirth(String),
+}
+
+/// What an estimated period rests on.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Reason {
+    /// The record's date is known (a birth, marriage or death without a source).
+    Dated(Goal, Years),
+    /// Seen alive in a year.
+    Seen(Sighting, i32),
+    /// A parent was born that year.
+    ParentBorn(i32),
+    /// The person was born in these years.
+    Born(Years),
+    /// A spouse (name) remarried that year.
+    Remarried(String, i32),
+    /// The spouses were born from that year.
+    SpousesBornFrom(i32),
+    /// The first child (name) was born that year.
+    FirstChild(String, i32),
+    /// Searched in vain over these years.
+    NotFound(Years),
+}
+
+/// Name of an event in a language, lowercase (“marriage”, « mariage »).
+fn event_in(tag: &str, lang: &str) -> String {
+    crate::i18n::lookup_in(&format!("event.{tag}"), lang)
+        .map(|l| l.to_lowercase())
+        .unwrap_or_else(|| tag.to_lowercase())
+}
+
+impl std::fmt::Display for Reason {
+    /// English, for agents: “present at the marriage of Louis MARCHAND in 1852”.
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Reason::Dated(goal, y) => write!(f, "{} dated {y}", goal.name()),
+            Reason::Seen(Sighting::Event(tag), y) => write!(f, "{} in {y}", event_in(tag, "en")),
+            Reason::Seen(Sighting::Witness { tag, whose }, y) => {
+                write!(f, "present at the {} of {whose} in {y}", event_in(tag, "en"))
+            }
+            Reason::Seen(Sighting::ChildBirth(name), y) => write!(f, "birth of their child {name} in {y}"),
+            Reason::ParentBorn(y) => write!(f, "a parent born in {y}"),
+            Reason::Born(y) => write!(f, "born {y}"),
+            Reason::Remarried(name, y) => write!(f, "{name} remarried in {y}"),
+            Reason::SpousesBornFrom(y) => write!(f, "spouses born from {y}"),
+            Reason::FirstChild(name, y) => write!(f, "first child {name} born in {y}"),
+            Reason::NotFound(y) => write!(f, "not found in {y}"),
+        }
+    }
+}
+
+impl Reason {
+    /// In the interface's language: « Naissance de son enfant Yvonne OHL en 1903 ».
+    pub fn label(&self) -> String {
+        use rust_i18n::t;
+        let lang = crate::i18n::language();
+        let text = match self {
+            Reason::Dated(goal, y) => match goal {
+                Goal::Birth => t!("leads.reason.birth_dated", years = y),
+                Goal::Marriage => t!("leads.reason.marriage_dated", years = y),
+                _ => t!("leads.reason.death_dated", years = y),
+            },
+            Reason::Seen(Sighting::Event(tag), y) => {
+                t!("leads.reason.seen", event = event_in(tag, &lang), year = y)
+            }
+            Reason::Seen(Sighting::Witness { tag, whose }, y) => {
+                t!("leads.reason.witness", event = event_in(tag, &lang), whose = whose, year = y)
+            }
+            Reason::Seen(Sighting::ChildBirth(name), y) => t!("leads.reason.child_birth", name = name, year = y),
+            Reason::ParentBorn(y) => t!("leads.reason.parent_born", year = y),
+            Reason::Born(y) => t!("leads.reason.born", years = y),
+            Reason::Remarried(name, y) => t!("leads.reason.remarried", name = name, year = y),
+            Reason::SpousesBornFrom(y) => t!("leads.reason.spouses_born", year = y),
+            Reason::FirstChild(name, y) => t!("leads.reason.first_child", name = name, year = y),
+            Reason::NotFound(y) => t!("leads.reason.not_found", years = y),
+        };
+        let mut c = text.chars();
+        c.next().map(|f| f.to_uppercase().chain(c).collect()).unwrap_or_default()
+    }
+}
+
+#[cfg(feature = "serde")]
+fn reasons_as_text<S: serde::Serializer>(reasons: &[Reason], s: S) -> Result<S::Ok, S::Error> {
+    s.collect_seq(reasons.iter().map(ToString::to_string))
+}
+
 /// A record to find.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, schemars::JsonSchema))]
@@ -264,8 +361,11 @@ pub struct Lead {
     pub place: String,
     /// Estimated years of the record.
     pub years: Option<Years>,
-    /// What the estimate rests on (“seen alive in 1852”, “born about 1797”).
-    pub years_reasons: Vec<String>,
+    /// What the estimate rests on (“seen alive in 1852”, “born about 1797”): English text for
+    /// agents, translated by [`Reason::label`] in the interface.
+    #[cfg_attr(feature = "serde", serde(serialize_with = "reasons_as_text"))]
+    #[cfg_attr(feature = "serde", schemars(with = "Vec<String>"))]
+    pub years_reasons: Vec<Reason>,
     /// Places to search, best first.
     pub places: Vec<String>,
     pub where_to_look: Vec<WhereToLook>,
@@ -333,8 +433,7 @@ struct Seen {
     /// Year of the event, for the reason (a father is alive 9 months before the birth).
     shown: i32,
     place: String,
-    /// “witness at the marriage of Louis MARCHAND”.
-    what: String,
+    what: Sighting,
 }
 
 /// Municipality of a place, normalized (“Saint-Lô, Manche” → `saint-lo`): the municipality
@@ -481,7 +580,6 @@ impl<'g> Context<'g> {
                     }
                 }
                 let Some((lo, _)) = years else { continue };
-                let label = crate::model::event_name(&ev.tag);
                 // A dead person is not seen alive at their own death or burial.
                 if !Goal::Death.tags().contains(&ev.tag.as_str()) {
                     for p in &principals {
@@ -489,7 +587,7 @@ impl<'g> Context<'g> {
                             year: lo,
                             shown: lo,
                             place: place.clone(),
-                            what: label.to_lowercase(),
+                            what: Sighting::Event(ev.tag.clone()),
                         });
                     }
                 }
@@ -502,7 +600,7 @@ impl<'g> Context<'g> {
                         year: lo,
                         shown: lo,
                         place: place.clone(),
-                        what: format!("present at the {} of {whose}", label.to_lowercase()),
+                        what: Sighting::Witness { tag: ev.tag.clone(), whose: whose.clone() },
                     });
                 }
             }
@@ -515,7 +613,7 @@ impl<'g> Context<'g> {
                 let Some(b) = child.birth() else { continue };
                 let Some((lo, _)) = b.date_raw().and_then(years_of) else { continue };
                 let place = b.place().unwrap_or("").to_string();
-                let what = format!("birth of their child {}", child.display_name());
+                let what = Sighting::ChildBirth(child.display_name());
                 if let Some(h) = fam.husband() {
                     self.seen.entry(h.to_string()).or_default().push(Seen {
                         year: lo - 1,
@@ -624,7 +722,7 @@ impl<'g> Context<'g> {
     }
 
     fn person(&self, x: &str) -> PersonRef {
-        self.g.person_ref(x, self.this_year)
+        self.g.person_ref(x)
     }
 
     fn seen(&self, x: &str) -> &[Seen] {
@@ -683,7 +781,7 @@ fn dedup_places(ctx: &Context, places: impl IntoIterator<Item = String>) -> Vec<
 }
 
 /// A kind of records to search: type, label, years, census years and last public year.
-type Rule = (RecordType, String, Option<Years>, Vec<i32>, Option<i32>);
+type Rule = (RecordType, String, String, Option<Years>, Vec<i32>, Option<i32>);
 
 /// Kinds of records for a goal, in a country and a period, best first: those of the country's
 /// file in the Atlas, or the generic ones when it kept none for the period (records still closed to the
@@ -739,7 +837,7 @@ fn country_rules(country: &Country, goal: Goal, years: Option<Years>, male: bool
             continue;
         }
         let public = public.filter(|p| found.is_none_or(|f| f.to > *p) && r.years.is_empty());
-        out.push((r.kind, label(r, goal), found, census, public));
+        out.push((r.kind, label(r, goal), r.local_name.clone(), found, census, public));
     }
     out
 }
@@ -776,8 +874,7 @@ fn label(r: &atlas::Record, goal: Goal) -> String {
 
 impl Gedcom {
     /// Leads of the people matching `focus` (search syntax: `sosa:1-63`, `place:troyes
-    /// born:<1850`…; empty: [`DEFAULT_FOCUS`]), sorted by Sosa number then name. Living people are
-    /// left out.
+    /// born:<1850`…; empty: [`DEFAULT_FOCUS`]), sorted by Sosa number then name.
     pub fn research_leads(&self, focus: &str, this_year: i32) -> Vec<Lead> {
         let focus = if focus.trim().is_empty() { DEFAULT_FOCUS } else { focus };
         let ctx = Context::new(self, this_year);
@@ -849,9 +946,6 @@ impl Gedcom {
     fn person_leads(&self, ctx: &Context, x: &str, families_done: &mut std::collections::HashSet<String>) -> Vec<Lead> {
         let mut out = Vec::new();
         let Some(ind) = self.individual(x) else { return out };
-        if self.is_living(x, ctx.this_year) {
-            return out;
-        }
         let sosa = ctx.sosa.get(x).copied();
         let events = ind.events();
         let pick = |tags: &[&str]| {
@@ -900,9 +994,6 @@ impl Gedcom {
             }
             let Some(fam) = self.family(f) else { continue };
             let spouse = [fam.husband(), fam.wife()].into_iter().flatten().find(|s| *s != x);
-            if spouse.is_some_and(|s| self.is_living(s, ctx.this_year)) {
-                continue;
-            }
             let fev = fam.events();
             let marr: Vec<_> = fev.iter().filter(|e| e.tag() == "MARR").collect();
             let found = marr.iter().find(|e| e.is_sourced()).or(marr.first()).copied();
@@ -997,7 +1088,9 @@ impl Gedcom {
         let places: Vec<String> = if l.places.is_empty() { vec![String::new()] } else { l.places.clone() };
         for (i, place) in places.iter().enumerate() {
             let country = ctx.country(place);
-            for (record, label, years, census, public_until) in rules(country, l.goal, l.years, male, ctx.this_year) {
+            for (record, label, local_name, years, census, public_until) in
+                rules(country, l.goal, l.years, male, ctx.this_year)
+            {
                 // The other places only get the main registers.
                 if i > 0 && !matches!(record, RecordType::CivilRegistration | RecordType::ChurchRegisters) {
                     continue;
@@ -1005,6 +1098,7 @@ impl Gedcom {
                 l.where_to_look.push(WhereToLook {
                     record,
                     label,
+                    local_name,
                     place: place.clone(),
                     years,
                     census_years: census,
@@ -1024,16 +1118,16 @@ impl Gedcom {
     }
 
     /// Possible years of birth, and why.
-    fn birth_years(&self, ctx: &Context, ind: &Individual) -> (Option<Years>, Vec<String>) {
+    fn birth_years(&self, ctx: &Context, ind: &Individual) -> (Option<Years>, Vec<Reason>) {
         let birth = ind.events().into_iter().find(|e| Goal::Birth.tags().contains(&e.tag()));
         if let Some((lo, hi)) = birth.as_ref().and_then(|e| e.date_raw()).and_then(years_of) {
-            return (Some(Years::new(lo, hi)), vec![format!("birth dated {}", Years::new(lo, hi))]);
+            return (Some(Years::new(lo, hi)), vec![Reason::Dated(Goal::Birth, Years::new(lo, hi))]);
         }
         let mut reasons = Vec::new();
         let mut hi: Option<i32> = None;
         if let Some(first) = ctx.seen(ind.xref()).iter().min_by_key(|s| s.year) {
             hi = Some(first.year - 15);
-            reasons.push(format!("{} in {}", first.what, first.shown));
+            reasons.push(Reason::Seen(first.what.clone(), first.shown));
         }
         let (f, m) = self.parents(ind.xref());
         let parent_birth = [f, m]
@@ -1044,7 +1138,7 @@ impl Gedcom {
             .max();
         let lo = match (hi, parent_birth) {
             (_, Some(p)) => {
-                reasons.push(format!("a parent born in {p}"));
+                reasons.push(Reason::ParentBorn(p));
                 p + 15
             }
             (Some(h), None) => h - 30,
@@ -1063,15 +1157,15 @@ impl Gedcom {
         ind: &Individual,
         known: Option<&str>,
         birth: &Option<Years>,
-    ) -> (Option<Years>, Vec<String>) {
+    ) -> (Option<Years>, Vec<Reason>) {
         if let Some((lo, hi)) = known.and_then(years_of) {
-            return (Some(Years::new(lo, hi)), vec![format!("death dated {}", Years::new(lo, hi))]);
+            return (Some(Years::new(lo, hi)), vec![Reason::Dated(Goal::Death, Years::new(lo, hi))]);
         }
         let mut reasons = Vec::new();
         let last = ctx.seen(x).iter().max_by_key(|s| s.year);
         let lo = match (last, birth) {
             (Some(s), _) => {
-                reasons.push(format!("{} in {}", s.what, s.shown));
+                reasons.push(Reason::Seen(s.what.clone(), s.shown));
                 s.year
             }
             (None, Some(b)) => b.from,
@@ -1079,7 +1173,7 @@ impl Gedcom {
         };
         let mut hi = match birth {
             Some(b) => {
-                reasons.push(format!("born {b}"));
+                reasons.push(Reason::Born(*b));
                 (b.to + MAX_AGE).max(lo)
             }
             None => lo + 60,
@@ -1099,7 +1193,7 @@ impl Gedcom {
                     .min();
                 if let Some(y) = married.filter(|y| *y >= lo && *y < hi) {
                     hi = y;
-                    reasons.push(format!("{} remarried in {y}", sp.display_name()));
+                    reasons.push(Reason::Remarried(sp.display_name(), y));
                 }
             }
         }
@@ -1109,9 +1203,9 @@ impl Gedcom {
 
     /// Possible years of a marriage: after both spouses reached the legal age of their country,
     /// before the first child.
-    fn marriage_years(&self, ctx: &Context, f: &str, known: Option<&str>) -> (Option<Years>, Vec<String>) {
+    fn marriage_years(&self, ctx: &Context, f: &str, known: Option<&str>) -> (Option<Years>, Vec<Reason>) {
         if let Some((lo, hi)) = known.and_then(years_of) {
-            return (Some(Years::new(lo, hi)), vec![format!("marriage dated {}", Years::new(lo, hi))]);
+            return (Some(Years::new(lo, hi)), vec![Reason::Dated(Goal::Marriage, Years::new(lo, hi))]);
         }
         let Some(fam) = self.family(f) else { return (None, Vec::new()) };
         let mut reasons = Vec::new();
@@ -1142,10 +1236,10 @@ impl Gedcom {
             .min();
         let lo = births.iter().map(|(_, adult)| *adult).max();
         if let Some(born) = births.iter().map(|(b, _)| *b).max() {
-            reasons.push(format!("spouses born from {born}"));
+            reasons.push(Reason::SpousesBornFrom(born));
         }
         let hi = first_child.as_ref().map(|(y, n)| {
-            reasons.push(format!("first child {n} born in {y}"));
+            reasons.push(Reason::FirstChild(n.clone(), *y));
             *y
         });
         match (lo, hi) {
@@ -1198,13 +1292,13 @@ impl Gedcom {
             match l.goal {
                 Goal::Death if sy.from <= y.from && sy.to >= y.from && sy.to < y.to => {
                     y.from = sy.to + 1;
-                    l.years_reasons.push(format!("not found in {sy}"));
+                    l.years_reasons.push(Reason::NotFound(sy));
                 }
                 Goal::Birth | Goal::Marriage | Goal::Parents
                     if sy.to >= y.to && sy.from <= y.to && sy.from > y.from =>
                 {
                     y.to = sy.from - 1;
-                    l.years_reasons.push(format!("not found in {sy}"));
+                    l.years_reasons.push(Reason::NotFound(sy));
                 }
                 _ => {}
             }
@@ -1214,17 +1308,17 @@ impl Gedcom {
 }
 
 /// A lead whose record is already cited (so no longer computed), to show its research log.
-pub fn closed_lead(g: &Gedcom, xref: &str, goal: Goal, family: Option<&str>, this_year: i32) -> Lead {
+pub fn closed_lead(g: &Gedcom, xref: &str, goal: Goal, family: Option<&str>) -> Lead {
     let spouse = family
         .and_then(|f| g.family(f))
         .and_then(|fam| [fam.husband(), fam.wife()].into_iter().flatten().find(|s| *s != xref).map(str::to_string));
     Lead {
-        person: g.person_ref(xref, this_year),
+        person: g.person_ref(xref),
         goal,
         kind: LeadKind::Unsourced,
         sosa: g.sosa_numbers().get(xref).filter(|n| n.branch.is_empty()).map(|n| n.sosa),
         family_id: family.map(str::to_string),
-        spouse: spouse.map(|s| g.person_ref(&s, this_year)),
+        spouse: spouse.map(|s| g.person_ref(&s)),
         date: String::new(),
         place: String::new(),
         years: None,
@@ -1370,8 +1464,12 @@ mod tests {
         let death = find(&leads, 4, Goal::Death).unwrap();
         // Witness in 1852, his widow remarried in 1860.
         assert_eq!(death.years, Some(Years::new(1852, 1860)));
-        assert!(death.years_reasons.iter().any(|r| r.contains("present at the marriage")), "{:?}", death.years_reasons);
-        assert!(death.years_reasons.iter().any(|r| r.contains("remarried in 1860")));
+        assert!(
+            death.years_reasons.iter().any(|r| r.to_string().contains("present at the marriage")),
+            "{:?}",
+            death.years_reasons
+        );
+        assert!(death.years_reasons.iter().any(|r| r.to_string().contains("remarried in 1860")));
         // Last seen in Saint-Lô.
         assert_eq!(death.places[0], "Saint-Lô, Manche, France");
         let kinds: Vec<RecordType> =
@@ -1451,9 +1549,9 @@ mod tests {
         // Belgian births are public after 100 years: those after 1926 are given on request.
         let r = rules(be, Goal::Birth, Some(Years::new(1900, 1950)), true, 2026);
         let civil = r.iter().find(|r| r.0 == RecordType::CivilRegistration).unwrap();
-        assert_eq!((civil.2, civil.4), (Some(Years::new(1900, 1950)), Some(1926)));
+        assert_eq!((civil.3, civil.5), (Some(Years::new(1900, 1950)), Some(1926)));
         let r = rules(be, Goal::Birth, Some(Years::new(1800, 1850)), true, 2026);
-        assert!(r.iter().all(|r| r.4.is_none()));
+        assert!(r.iter().all(|r| r.5.is_none()));
         // Population registers help to date a death.
         let r = rules(be, Goal::Death, Some(Years::new(1880, 1900)), true, 2026);
         assert!(r.iter().any(|r| r.0 == RecordType::PopulationRegisters));
@@ -1461,7 +1559,7 @@ mod tests {
         let gb = atlas::by_code("GB").unwrap();
         let r = rules(gb, Goal::Death, Some(Years::new(1900, 1940)), true, 2026);
         let census = r.iter().find(|r| r.0 == RecordType::Census).unwrap();
-        assert_eq!(census.3, vec![1901, 1911, 1921]);
+        assert_eq!(census.4, vec![1901, 1911, 1921]);
         // A country without a rule for the period falls back to the generic rules.
         let dz = atlas::by_code("DZ").unwrap();
         let r = rules(dz, Goal::Birth, Some(Years::new(1700, 1720)), true, 2026);

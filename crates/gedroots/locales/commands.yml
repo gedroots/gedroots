@@ -12,6 +12,9 @@ menu:
   person:
     en: Person
     fr: Individu
+  research:
+    en: Research
+    fr: Recherche
   source:
     en: Source
     fr: Source
@@ -255,6 +258,18 @@ cmd:
   enter_act:
     en: Enter Record…
     fr: Saisir un acte…
+  note_search:
+    en: Note a Search…
+    fr: Noter une recherche…
+  ignore_lead:
+    en: Ignore Lead
+    fr: Ignorer la piste
+  resume_lead:
+    en: Resume Lead
+    fr: Reprendre la piste
+  copy_agent_request:
+    en: Copy Request for the Agent
+    fr: Copier la demande pour l’agent
   new_source:
     en: New Source
     fr: Nouvelle source
@@ -332,6 +347,9 @@ cmd:
   notes:
     en: Notes
     fr: Notes
+  research:
+    en: Research
+    fr: Recherches
   quality:
     en: Data Quality
     fr: Qualité des données

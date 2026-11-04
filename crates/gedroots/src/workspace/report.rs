@@ -107,7 +107,7 @@ impl Workspace {
         .filter_map(|(on, name)| on.then_some(name))
         .collect();
         let selected = self.selected.as_ref().and_then(|x| g.get(x)).and_then(|n| RecordKind::from_tag(&n.tag));
-        let pages = matches!(self.view, View::Quality | View::Stats);
+        let pages = matches!(self.view, View::Research | View::Quality | View::Stats);
         let screen = json!({
             "view": format!("{:?}", self.view),
             "tab": (!pages).then(|| format!("{:?}", self.tab)),

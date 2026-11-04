@@ -81,6 +81,11 @@ gpui_kit::assets::icon_assets!(
         Smartphone,
         Tablet,
         RotateCcwClock,
+        Circle,
+        CircleDashed,
+        CircleDot,
+        CircleSlash,
+        CircleMinus,
     ]
 );
 
