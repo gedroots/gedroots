@@ -17,13 +17,14 @@ pub struct ChangeParams {
     pub issue: Option<String>,
     /// `fix`: the Quality page's own fix (only when the issue has `automatic_fix`). `edit`: the
     /// edits in `edits`. `hide`: the issue is right (e.g. a marriage really celebrated very young),
-    /// and the reason says why; for a possible duplicate, they are two different people. `merge`:
-    /// a possible duplicate is one person, the two records become one.
+    /// and the reason says why; for a possible duplicate, they are two different people or places.
+    /// `merge`: a possible duplicate is one person (or one place), the two become one.
     pub action: String,
     /// For `edit`: what to change, among the issue's `edits`.
     pub edits: Option<Vec<EditParams>>,
     /// For `merge`: for each fact of the issue's `merge.conflicts`, the person (`keep` or `other`)
-    /// whose value is right, e.g. `{"BIRT": "I12"}`.
+    /// whose value is right, e.g. `{"BIRT": "I12"}`; for two places, the place whose level is
+    /// right, e.g. `{"Region": ", Leudon, 77320, Seine-et-Marne, Île-de-France, France"}`.
     pub choices: Option<std::collections::BTreeMap<String, String>>,
     /// Why: what you read, in a sentence the user can check. Required for `edit` and `hide`.
     pub reason: Option<String>,

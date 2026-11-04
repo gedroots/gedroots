@@ -251,7 +251,7 @@ fn place_checks() {
     let of = |code: &str| issues.iter().filter(|i| i.code == code).map(|i| i.related.clone()).collect::<Vec<_>>();
     // Variants: different spelling, and abbreviated form of a single place; “Saint-Martin” is
     // ambiguous.
-    let variants = of("place_variant");
+    let variants = of("possible_duplicate_place");
     assert!(variants.contains(&vec![
         "St Etienne, Loire, Auvergne-Rhône-Alpes, France".to_string(),
         "Saint-Étienne, Loire, Auvergne-Rhône-Alpes, France".to_string()
@@ -272,14 +272,12 @@ fn place_checks() {
 #[test]
 fn place_fixes() {
     let mut g = Gedcom::parse(PLACES).unwrap();
-    let fix: Vec<_> =
-        quality::run(&g).into_iter().filter(|i| matches!(i.code, "place_variant" | "place_hierarchy")).collect();
-    assert_eq!(g.fix_issues(&fix), 3);
+    // Duplicate places are compared in the merge window, never fixed in bulk.
+    let fix: Vec<_> = quality::run(&g)
+        .into_iter()
+        .filter(|i| matches!(i.code, "possible_duplicate_place" | "place_hierarchy"))
+        .collect();
+    assert_eq!(g.fix_issues(&fix), 1);
     let names: Vec<String> = g.places().into_iter().map(|p| p.name).collect();
-    assert!(!names.iter().any(|n| n.starts_with("St ") || n == "Unias" || n.contains(", Rhône-Alpes")));
-    // The variant takes the coordinates of the kept place.
-    let st = g.places().into_iter().find(|p| p.name.starts_with("Saint-Étienne")).unwrap();
-    assert_eq!(st.uses, 3);
-    assert!(st.coords().is_some());
-    assert!(g.places().iter().any(|p| p.name == "Unias, Loire, Auvergne-Rhône-Alpes, France" && p.uses == 2));
+    assert!(!names.iter().any(|n| n.contains(", Rhône-Alpes")));
 }

@@ -136,6 +136,94 @@ pub fn fan(cells: &[FanCell], generations: u32, labels: bool) -> String {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Fan of descendants
+// ---------------------------------------------------------------------------------------------
+
+/// A cell of the fan of descendants: its ring (0 = the person) and its angles, in degrees from
+/// the left (180) to the right (0), each family sharing its parent's angle by the number of its
+/// descendants.
+#[derive(Debug, Clone)]
+pub struct DescCell {
+    pub ring: usize,
+    pub a0: f64,
+    pub a1: f64,
+    pub given: String,
+    pub surname: String,
+    pub years: String,
+    pub color: Option<String>,
+}
+
+/// Half-circle fan of descendants over `rings` rings: the person in the middle, each child's
+/// sector inside their parent's.
+pub fn descendant_fan(cells: &[DescCell], rings: usize, labels: bool) -> String {
+    let rings = rings.clamp(2, 9);
+    let (w, h) = (1000., 560.);
+    let (cx, cy) = (500., 520.);
+    let widths = [95., 70., 65., 60., 50., 40., 32., 28., 22.];
+    let total: f64 = widths[..rings].iter().sum();
+    let scale = 440. / total;
+    let mut radii = vec![0.];
+    for wd in &widths[..rings] {
+        let last = *radii.last().unwrap();
+        radii.push(last + wd * scale);
+    }
+    let pt = |r: f64, a: f64| (cx + r * a.to_radians().cos(), cy - r * a.to_radians().sin());
+    let mut s = svg_open(w, h);
+    for c in cells.iter().filter(|c| c.ring < rings) {
+        let (r0, r1) = (radii[c.ring], radii[c.ring + 1]);
+        let fill = c.color.as_deref().unwrap_or("#FFFFFF");
+        let path = if c.ring == 0 {
+            format!("M{},{cy} A{r1},{r1} 0 0 1 {},{cy} Z", cx - r1, cx + r1)
+        } else {
+            let (x0, y0) = pt(r1, c.a0);
+            let (x1, y1) = pt(r1, c.a1);
+            let (x2, y2) = pt(r0, c.a1);
+            let (x3, y3) = pt(r0, c.a0);
+            let large = if c.a0 - c.a1 > 180. { 1 } else { 0 };
+            format!(
+                "M{x0:.1},{y0:.1} A{r1:.1},{r1:.1} 0 {large} 1 {x1:.1},{y1:.1} L{x2:.1},{y2:.1} A{r0:.1},{r0:.1} 0 {large} 0 {x3:.1},{y3:.1} Z"
+            )
+        };
+        let sw = if c.ring < 6 { 1.4 } else { 0.8 };
+        let _ = write!(s, r##"<path d="{path}" fill="{fill}" stroke="#FFFFFF" stroke-width="{sw}"/>"##);
+        if !labels {
+            continue;
+        }
+        let text = |s: &mut String, x: f64, y: f64, rot: f64, size: f64, weight: u32, t: &str| {
+            let _ = write!(
+                s,
+                r##"<text x="{x:.1}" y="{y:.1}" transform="rotate({rot:.1} {x:.1} {y:.1})" text-anchor="middle" dominant-baseline="middle" font-size="{size}" font-weight="{weight}" fill="{INK}">{}</text>"##,
+                esc(t)
+            );
+        };
+        let span = c.a0 - c.a1;
+        let mid = (c.a0 + c.a1) / 2.;
+        let rm = (r0 + r1) / 2.;
+        if c.ring == 0 {
+            text(&mut s, cx, cy - 46., 0., 17., 600, &c.given);
+            text(&mut s, cx, cy - 27., 0., 12., 600, &c.surname);
+            text(&mut s, cx, cy - 10., 0., 11., 400, &c.years);
+        } else if span * rm.to_radians() >= 34. && c.ring <= 2 {
+            // Wide enough: the names along the ring.
+            let rot = 90. - mid;
+            for (j, (t, size, weight)) in
+                [(&c.given, 12., 600), (&c.surname, 10., 600), (&c.years, 9.5, 400)].iter().enumerate()
+            {
+                let (x, y) = pt(rm - (j as f64 - 1.) * 14. * scale.min(1.2), mid);
+                text(&mut s, x, y, rot, *size, *weight, t);
+            }
+        } else if span * rm.to_radians() >= 11. && c.ring <= 5 {
+            // Narrow: the given name across the ring.
+            let rot = if mid < 90. { -mid } else { 180. - mid };
+            let (x, y) = pt(rm, mid);
+            text(&mut s, x, y, rot, [0., 0., 9.5, 9., 8., 6.5][c.ring], 600, &c.given);
+        }
+    }
+    s.push_str("</svg>");
+    s
+}
+
+// ---------------------------------------------------------------------------------------------
 // Map
 // ---------------------------------------------------------------------------------------------
 

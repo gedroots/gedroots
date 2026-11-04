@@ -181,6 +181,9 @@ review:
   merge_people:
     en: one person
     fr: un seul individu
+  merge_places:
+    en: one place
+    fr: un seul lieu
   compare_merge:
     en: Compare and Merge…
     fr: Comparer et fusionner…

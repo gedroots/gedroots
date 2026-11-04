@@ -168,7 +168,7 @@ quality.uses.one:
 quality.uses.other:
   en: "%{n} uses"
   fr: "%{n} fois"
-quality.place_variant:
+quality.possible_duplicate_place:
   en: "“%{a}” (%{a_uses}) seems to be “%{b}” (%{b_uses})"
   fr: "« %{a} » (%{a_uses}) semble être « %{b} » (%{b_uses})"
 quality.place_hierarchy.one:

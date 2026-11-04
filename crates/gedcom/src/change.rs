@@ -16,9 +16,10 @@ use crate::date::Date;
 use crate::document::Gedcom;
 use crate::geo::{format_latitude, format_longitude};
 use crate::merge::{MergePlan, RowKind, Side};
-use crate::model::NameForm;
+use crate::model::{NameForm, short_place};
 use crate::node::Node;
 use crate::parse::node_to_string;
+use crate::place_merge::{PlacePlan, RowKind as PlaceRow};
 use crate::proposal::{Change, DiffLine, line_diff};
 use crate::quality::{self, Category, issue_ids};
 use crate::relations::Relation;
@@ -258,7 +259,8 @@ pub enum Action {
     Hide,
     Edit(Vec<Edit>),
     /// Two possible duplicates become one person. For each contradictory fact (`NAME`, `BIRT`…),
-    /// the person whose value is kept.
+    /// the person whose value is kept. For two possible duplicate places: for each level that
+    /// differs (its label, or `MAP` for the coordinates), the place whose value is kept.
     Merge(Vec<(String, String)>),
 }
 
@@ -331,7 +333,7 @@ pub fn edits_for(code: &str) -> &'static [&'static str] {
     match code {
         "husband_not_male" | "wife_not_female" | "role_sex_mismatch" => &["set_sex"],
         // A possible duplicate is merged (`Action::Merge`) or marked as two people (`Action::Hide`).
-        "own_ancestor" | "disconnected" | "possible_duplicate" => &[],
+        "own_ancestor" | "disconnected" | "possible_duplicate" | "possible_duplicate_place" => &[],
         "tag_not_allowed" | "missing_required" | "too_many" | "wrong_pointer" | "invalid_value" => {
             &["set_value", "delete_structure"]
         }
@@ -343,9 +345,10 @@ pub fn edits_for(code: &str) -> &'static [&'static str] {
     }
 }
 
-/// Can the issue be hidden? Only an issue about a record: `_GR_IGNORE` is written under it.
+/// Can the issue be hidden? An issue about a record (`_GR_IGNORE` is written under it), or two
+/// places that are not the same (`_GR_DISTINCT` in the header).
 pub fn can_hide(g: &Gedcom, issue: &Issue) -> bool {
-    g.get(&issue.xref).is_some()
+    g.get(&issue.xref).is_some() || issue.code == "possible_duplicate_place"
 }
 
 /// The issue with this identifier ([`quality::issue_ids`]), among `issues`.
@@ -602,7 +605,9 @@ impl QualityChange {
         let code = issue.code;
         match &self.action {
             Action::Fix => {
-                if quality::fix_of(code).is_none() {
+                // A possible duplicate's “fix” is the comparison window: merged or hidden instead.
+                if quality::fix_of(code).is_none() || matches!(code, "possible_duplicate" | "possible_duplicate_place")
+                {
                     return Err(format!(
                         "`{code}` has no automatic fix: propose edits ({}) or hide it with a reason",
                         allowed_list(code)
@@ -618,13 +623,19 @@ impl QualityChange {
                 }
             }
             Action::Merge(_) => {
-                if code != "possible_duplicate" {
-                    return Err(format!("only a `possible_duplicate` can be merged, not `{code}`"));
+                if !matches!(code, "possible_duplicate" | "possible_duplicate_place") {
+                    return Err(format!(
+                        "only a `possible_duplicate` or a `possible_duplicate_place` can be merged, not `{code}`"
+                    ));
                 }
                 if self.reason.trim().is_empty() {
-                    return Err("give the reason they are the same person in `reason`".into());
+                    return Err("give the reason they are the same in `reason`".into());
                 }
-                self.merge_choices(g)?;
+                if code == "possible_duplicate" {
+                    self.merge_choices(g)?;
+                } else {
+                    self.place_merge_choices(g)?;
+                }
             }
             Action::Edit(edits) => {
                 if edits.is_empty() {
@@ -677,11 +688,22 @@ impl QualityChange {
                     return Err(t!("change.outdated").into());
                 }
             }
+            // Two places that are not the same: recorded in the header.
+            Action::Hide if self.place_pair().is_some() => {
+                let (a, b) = self.place_pair().unwrap_or_default();
+                if !g.mark_places_distinct(&a, &b) {
+                    return Err(t!("change.outdated").into());
+                }
+            }
             Action::Hide => {
                 let i = self.the_issue()?;
                 if !g.ignore_issue_because(&i.xref, i.code, &self.reason) {
                     return Err(t!("change.outdated").into());
                 }
+            }
+            Action::Merge(_) if self.place_pair().is_some() => {
+                let (plan, sides) = self.place_merge_choices(g)?;
+                g.merge_places(&plan, &sides).ok_or_else(|| t!("change.outdated").to_string())?;
             }
             Action::Merge(_) => {
                 let (plan, sides) = self.merge_choices(g)?;
@@ -721,6 +743,53 @@ impl QualityChange {
     pub fn merge_pair(&self) -> Option<(String, String)> {
         let i = self.issue.as_ref()?;
         (i.code == "possible_duplicate").then(|| Some((i.xref.clone(), i.related.first()?.clone()))).flatten()
+    }
+
+    /// The two places of a possible duplicate place.
+    pub fn place_pair(&self) -> Option<(String, String)> {
+        let i = self.issue.as_ref()?;
+        match (i.code, &i.related[..]) {
+            ("possible_duplicate_place", [a, b]) => Some((a.clone(), b.clone())),
+            _ => None,
+        }
+    }
+
+    /// The comparison of two places and, for each choice it asks for, the place the agent chose.
+    pub fn place_merge_choices(&self, g: &Gedcom) -> Result<(PlacePlan, Vec<Side>), String> {
+        let Action::Merge(choices) = &self.action else { return Err("not a merge".into()) };
+        let (a, b) = self.place_pair().ok_or_else(|| t!("change.outdated").to_string())?;
+        let plan = g.place_merge_plan(&a, &b).ok_or_else(|| t!("change.outdated").to_string())?;
+        let conflicts = plan.choices();
+        let list = || {
+            if conflicts.is_empty() {
+                "nothing: every level agrees, give empty `choices`".to_string()
+            } else {
+                conflicts.iter().map(|c| format!("`{}`", c.fact)).collect::<Vec<_>>().join(", ")
+            }
+        };
+        for (fact, _) in choices {
+            if !conflicts.iter().any(|c| c.is(fact)) {
+                return Err(format!("`{fact}` does not differ between the two places: choose only for {}", list()));
+            }
+        }
+        let sides = conflicts
+            .iter()
+            .map(|c| {
+                let which = choices
+                    .iter()
+                    .find(|(fact, _)| c.is(fact))
+                    .map(|(_, which)| which.trim())
+                    .ok_or_else(|| format!("choose which place's `{}` to keep in `choices`", c.fact))?;
+                if which == plan.a.trim() {
+                    Ok(Side::Keep)
+                } else if which == plan.b.trim() {
+                    Ok(Side::Other)
+                } else {
+                    Err(format!("`{}`: give one of the two places, `{}` or `{}`", c.fact, plan.a, plan.b))
+                }
+            })
+            .collect::<Result<Vec<_>, String>>()?;
+        Ok((plan, sides))
     }
 
     /// The merge plan and, for each of its conflicts, the side the agent chose.
@@ -1081,6 +1150,7 @@ impl QualityChange {
         match g.get(&issue.xref) {
             Some(_) => format!("{kind} · {}", g.record_label(&issue.xref)),
             None => match issue.related.first() {
+                Some(v) if quality::category(issue.code) == Category::Places => format!("{kind} · {}", short_place(v)),
                 Some(v) => format!("{kind} · {v}"),
                 None => kind,
             },
@@ -1108,6 +1178,43 @@ impl QualityChange {
             }
             Action::Hide => {
                 vec![row(t!("change.issue").into(), message, t!("change.hidden").into(), Change::Same)]
+            }
+            // What the place will be: level by level, then its coordinates.
+            Action::Merge(_) if self.place_pair().is_some() => {
+                let Ok((plan, sides)) = self.place_merge_choices(g) else { return vec![] };
+                let pick = |c: usize, a: &str, b: &str| match sides.get(c) {
+                    Some(Side::Keep) => a.to_string(),
+                    _ => b.to_string(),
+                };
+                // A level both places leave empty (no locality) is not shown.
+                let mut rows: Vec<ChangeRow> = plan
+                    .rows
+                    .iter()
+                    .filter(|r| !(r.kind == PlaceRow::Same && r.a.is_empty()))
+                    .map(|r| match r.kind {
+                        PlaceRow::Same => {
+                            row(r.label.clone(), or_dash(r.a.clone()), or_dash(r.a.clone()), Change::Same)
+                        }
+                        PlaceRow::Added => {
+                            let v = if r.a.is_empty() { r.b.clone() } else { r.a.clone() };
+                            row(r.label.clone(), v.clone(), v, Change::Refined)
+                        }
+                        PlaceRow::Conflict(c) => {
+                            row(r.label.clone(), format!("{} / {}", r.a, r.b), pick(c, &r.a, &r.b), Change::Differs)
+                        }
+                    })
+                    .collect();
+                if let crate::place_merge::Coords::Conflict(c, _) = plan.coords {
+                    let text = |side| plan.coords_text(side).unwrap_or_default();
+                    let (a, b) = (text(Side::Keep), text(Side::Other));
+                    rows.push(row(
+                        t!("change.coordinates").into(),
+                        format!("{a} / {b}"),
+                        pick(c, &a, &b),
+                        Change::Differs,
+                    ));
+                }
+                rows
             }
             // What the person will have: kept, added, or the chosen value.
             Action::Merge(_) => {
@@ -1628,6 +1735,9 @@ fn conflict_list(plan: &MergePlan) -> String {
 fn allowed_list(code: &str) -> String {
     if code == "possible_duplicate" {
         return "nothing: merge them (`merge`, with `choices`) or, if they are two people, hide it".into();
+    }
+    if code == "possible_duplicate_place" {
+        return "nothing: merge them (`merge`, with `choices`) or, if they are two places, hide it".into();
     }
     let e = edits_for(code);
     if e.is_empty() { "nothing: this issue can only be hidden, or fixed by the user".into() } else { e.join(", ") }

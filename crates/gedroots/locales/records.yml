@@ -261,6 +261,9 @@ picker.merge_into:
 picker.act_person:
   en: Choose an Existing Person
   fr: Choisir une personne existante
+picker.book_person:
+  en: Choose the Book's Person
+  fr: Choisir la personne du livre
 picker.act_media:
   en: Choose the Record Image
   fr: Choisir l’image de l’acte
@@ -288,6 +291,9 @@ picker.source_hint:
 picker.person_hint:
   en: Search for a person
   fr: Rechercher une personne
+picker.place_hint:
+  en: Search for a place
+  fr: Rechercher un lieu
 picker.linked_as:
   en: "%{who} linked as %{rel} of %{name}"
   fr: "%{who} lié(e) comme %{rel} de %{name}"

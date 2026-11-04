@@ -24,11 +24,15 @@ pub enum PickPurpose {
     Kinship { indi: String },
     /// `indi` and the chosen person are compared in the merge window.
     MergeWith { indi: String },
+    /// `place` and the chosen place (a place name) are compared in the place merge window.
+    MergePlaceWith { place: String },
     /// The chosen person is the person at `idx` in the record being entered; the likely
     /// individuals (individual, why) come first.
     ActPerson { idx: usize, suggestions: Vec<(String, String)> },
     /// The chosen media is the image of the record being entered.
     ActMedia,
+    /// The chosen person is the one the book in the New Book window starts from.
+    BookPerson,
 }
 
 impl PickPurpose {
@@ -40,10 +44,12 @@ impl PickPurpose {
             PickPurpose::TagPerson { .. } => t!("picker.who").into(),
             PickPurpose::Kinship { indi } => t!("picker.kinship", name = g.record_label(indi)).into_owned(),
             PickPurpose::MergeWith { indi } => t!("picker.merge_with", name = g.record_label(indi)).into_owned(),
+            PickPurpose::MergePlaceWith { place } => t!("picker.merge_with", name = short_place(place)).into_owned(),
             PickPurpose::MergeInto { media } => t!("picker.merge_into", name = g.record_label(media)).into_owned(),
             PickPurpose::ActSource { .. } => t!("picker.act_source").into(),
             PickPurpose::ActPerson { .. } => t!("picker.act_person").into(),
             PickPurpose::ActMedia => t!("picker.act_media").into(),
+            PickPurpose::BookPerson => t!("picker.book_person").into(),
         }
     }
 }
@@ -209,6 +215,7 @@ impl Workspace {
         let hint = match purpose {
             PickPurpose::MergeInto { .. } | PickPurpose::ActMedia => t!("picker.media_hint"),
             PickPurpose::ActSource { .. } => t!("picker.source_hint"),
+            PickPurpose::MergePlaceWith { .. } => t!("picker.place_hint"),
             _ => t!("picker.person_hint"),
         };
         let input = cx.new(|cx| InputState::new(window, cx).placeholder(hint));
@@ -237,6 +244,21 @@ impl Workspace {
         let (Some(p), Some(doc)) = (&self.picker, &self.doc) else { return vec![] };
         let g = &doc.ged;
         let text = p.input.read(cx).value().to_string();
+        if let PickPurpose::MergePlaceWith { place } = &p.purpose {
+            // The other places of the file, by any of their levels; its possible duplicates first.
+            let words: Vec<String> = text.split_whitespace().map(sort_key).collect();
+            let likely: Vec<String> =
+                g.place_duplicates_of(place).into_iter().map(|d| if d.a == *place { d.b } else { d.a }).collect();
+            let mut out: Vec<String> = g
+                .places()
+                .into_iter()
+                .map(|p| p.name)
+                .filter(|n| n != place && words.iter().all(|w| sort_key(n).contains(w.as_str())))
+                .collect();
+            out.sort_by_key(|n| !likely.contains(n));
+            out.truncate(80);
+            return out;
+        }
         let q = IndividualQuery::parse(&text);
         let exclude: Option<&str> = match &p.purpose {
             PickPurpose::Relative { indi, .. } => Some(indi),
@@ -402,6 +424,10 @@ impl Workspace {
             }
             return;
         }
+        if let PickPurpose::BookPerson = p.purpose {
+            self.set_book_person(chosen, window, cx);
+            return;
+        }
         if let PickPurpose::Kinship { indi } = p.purpose {
             self.kinship = Some((indi, chosen));
             cx.notify();
@@ -409,6 +435,10 @@ impl Workspace {
         }
         if let PickPurpose::MergeWith { indi } = p.purpose {
             self.open_merge(vec![(indi, chosen)], 0, cx);
+            return;
+        }
+        if let PickPurpose::MergePlaceWith { place } = p.purpose {
+            self.open_place_merge(vec![(place, chosen)], 0, cx);
             return;
         }
         self.mutate(window, cx, |g| {
@@ -450,8 +480,10 @@ impl Workspace {
                 // Handled before: nothing to change.
                 PickPurpose::Kinship { .. }
                 | PickPurpose::MergeWith { .. }
+                | PickPurpose::MergePlaceWith { .. }
                 | PickPurpose::ActPerson { .. }
-                | PickPurpose::ActMedia => Err(t!("stats.kinship_title").into()),
+                | PickPurpose::ActMedia
+                | PickPurpose::BookPerson => Err(t!("stats.kinship_title").into()),
             }
         });
     }
@@ -484,6 +516,10 @@ impl Workspace {
         let g = &self.doc.as_ref()?.ged;
         let results = self.picker_results(cx);
         let title = p.purpose.title(g);
+        let uses: std::collections::HashMap<String, usize> = match p.purpose {
+            PickPurpose::MergePlaceWith { .. } => g.places().into_iter().map(|p| (p.name, p.uses)).collect(),
+            _ => Default::default(),
+        };
         Some(
             div()
                 .absolute()
@@ -540,6 +576,7 @@ impl Workspace {
                                     )
                                 })
                                 .children(results.into_iter().enumerate().map(|(n, x)| {
+                                    let place = matches!(p.purpose, PickPurpose::MergePlaceWith { .. });
                                     let kind = g.get(&x).and_then(|r| RecordKind::from_tag(&r.tag));
                                     let why = match &p.purpose {
                                         PickPurpose::ActPerson { suggestions, .. } => {
@@ -548,6 +585,10 @@ impl Workspace {
                                         _ => None,
                                     };
                                     let meta = match g.individual(&x) {
+                                        // A place: how often it is used.
+                                        _ if place => {
+                                            crate::tn!("places.uses", uses.get(&x).copied().unwrap_or(0)).into_owned()
+                                        }
                                         // A likely individual: why it is suggested.
                                         Some(i) if why.as_deref().is_some_and(|w| !w.is_empty()) => {
                                             [i.years(), why.clone().unwrap_or_default()].join(" · ")
@@ -585,7 +626,9 @@ impl Workspace {
                                         .hover(|d| d.bg(theme::surface()))
                                         .child(
                                             div().flex_1().overflow_hidden().whitespace_nowrap().text_ellipsis().child(
-                                                if x.is_empty() {
+                                                if place {
+                                                    gedcom::model::place_label(&x)
+                                                } else if x.is_empty() {
                                                     t!("picker.new_source").into_owned()
                                                 } else {
                                                     g.record_label(&x)

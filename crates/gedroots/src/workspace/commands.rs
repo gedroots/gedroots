@@ -124,6 +124,28 @@ impl Workspace {
         let d = on!(d, cx, ShowNotes, |this, w, cx| this.show_view(View::Notes, w, cx));
         let d = on!(d, cx, ShowResearch, |this, w, cx| this.show_view(View::Research, w, cx));
         let d = on!(d, cx, ShowQuality, |this, w, cx| this.show_view(View::Quality, w, cx));
+        // The place shown on the Places page.
+        let d = d.when(g.is_some(), |d| on!(d, cx, FindDuplicatePlaces, |this, _w, cx| this.find_duplicate_places(cx)));
+        let place = self.selected_place();
+        let unlocated = place
+            .as_ref()
+            .and_then(|p| g?.places().into_iter().find(|x| x.name == *p))
+            .is_some_and(|p| p.coords().is_none());
+        let d = d.when(place.is_some(), |d| {
+            let d = on!(d, cx, MergeWithPlace, |this, w, cx| this.ask_merge_place_with(w, cx));
+            on!(d, cx, PlaceOnMap, |this, w, cx| {
+                if let Some(p) = this.selected_place() {
+                    this.place_by_hand(p, cx)
+                }
+            })
+        });
+        let d = d.when(unlocated, |d| {
+            on!(d, cx, LocatePlace, |this, w, cx| {
+                if let Some(p) = this.selected_place() {
+                    this.start_locate(p, cx)
+                }
+            })
+        });
         // Research: the commands of the chosen lead.
         let d = match self.selected_lead().map(|l| l.state) {
             Some(state) => {

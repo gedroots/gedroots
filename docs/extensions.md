@@ -285,12 +285,13 @@ with the right code.
 | `unattached_file` | File in the `.ged` folder that no media points to (cannot be hidden: it has no record) |
 | `missing_coords` | Place without coordinates (`PLAC.MAP`) |
 | `bad_coords` | Unreadable or incomplete coordinates |
-| `place_variant` | Same place written differently (case, accents, "St"/"Saint", codes), or a shortened form of exactly one other place |
+| `possible_duplicate_place` | Two places that may be the same: written differently (case, accents, "St"/"Saint", codes), a shortened form of exactly one other place, or a name that starts the other one ("Leudon" / "Leudon-en-Brie") under the same higher level with the same code or coordinates less than 2 km apart. Compared in the **Merge Two Places** window; hidden with `_GR_DISTINCT` in the header. An agent proposes to merge them (its choice for each level that differs) or to hide them, reviewed in To Review |
 | `place_hierarchy` | The same division attached to two higher divisions ("Loire" in "Rhône-Alpes" and in "Auvergne-Rhône-Alpes"); "Harmonize" keeps the most frequent |
 | `possible_duplicate` | Two individuals that may be the same person; hidden with `_GR_DISTINCT` on the pair, not `_GR_IGNORE` |
 
 File and place issues cannot be hidden: they concern no record where `_GR_IGNORE` could be
-written.
+written. Possible duplicate places are the exception: **Not a Duplicate** writes the pair in the
+header (see [`_GR_DISTINCT`](#_gr_distinct)).
 
 The GEDCOM 7 schema check only applies to version 7 files; extension tags (`_XXX`) are never
 reported.
@@ -317,6 +318,25 @@ cannot propose to merge them.
 
 Merging two individuals carries the marks of the merged-away one over to the kept one. If the
 other individual is deleted, the line goes with it, like any pointer to a deleted record.
+
+The same tag marks two **places** that look alike but are different (an old municipality and
+the one it merged into, for instance). A GEDCOM place is not a record, so the mark goes in the
+header:
+
+- **Under**: `HEAD`, at level 1. One line per place, with one `PLAC` per place known to be
+  another one.
+- **Value**: the full place name, as in the `PLAC` tags of the file.
+- **Substructures**: `PLAC <the other place>`, one or more. GEDRoots reads each pair in both
+  directions.
+
+```
+0 HEAD
+1 _GR_DISTINCT , Fontaine-Denis, 51120, Marne, Grand Est, France
+2 PLAC , Fontaine-Denis-Nuisy, 51120, Marne, Grand Est, France
+```
+
+Renaming or merging a place updates its marks; a pair that becomes a single place loses its
+mark.
 
 ## Source and media types (no extension)
 
@@ -481,7 +501,8 @@ Legacy and RootsMagic keep their to-do items in `_TODO`; GEDRoots does not read 
 ## `_GR_BOOK`
 
 A family book (Create on the Books page): a PDF typeset from the tree, with its charts, a record for each
-person written from the facts, and an index. Only what the book is made of is stored; its
+person written from the facts, and an index. A book longer than 500 pages is exported in volumes,
+cut between chapters. Only what the book is made of is stored; its
 pages are computed from the tree each time, so the book follows the changes. See
 `crates/book`.
 
@@ -492,8 +513,12 @@ pages are computed from the tree each time, so the book follows the changes. See
   - `_GR_LINE <line>`: `ANCESTORS` (the person's ancestors, one chapter per generation) or
     `DESCENDANTS`; absent: `ANCESTORS`;
   - `_GR_GENS <n>`: generations, from 2 to 12; absent: 8;
-  - `_GR_SIZE <size>`: page size, `170X240` (17 × 24 cm, a printed book), `A4` or `LETTER`;
-    absent: `170X240`.
+  - `_GR_SIZE <size>`: page size, `170X240` (17 × 24 cm, a printed book), `156X234`
+    (15.6 × 23.4 cm, Lulu's “Royal”), `152X229` (6 × 9 in, Lulu and Blurb), `A4` or `LETTER`;
+    absent: `170X240`;
+  - `_GR_PRNT Y`: exported for a printer: the pages with 3.175 mm of bleed, a title page in
+    place of the cover, and the cover as a file of its own (back, spine, front); absent: for
+    reading and printing at home.
   - `_GR_CHAP <n>`: what an AI agent wrote for chapter *n* (the generation, 1 = the person),
     saved from To Review. Its substructures, in the order the book shows them:
     - the chapter's introduction, as blocks;
@@ -516,6 +541,7 @@ pages are computed from the tree each time, so the book follows the changes. See
 2 TAG _GR_LINE https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_book
 2 TAG _GR_GENS https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_book
 2 TAG _GR_SIZE https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_book
+2 TAG _GR_PRNT https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_book
 0 @BK1@ _GR_BOOK The Guyot Family
 1 _GR_SUBJ @I1@
 1 _GR_LINE ANCESTORS
