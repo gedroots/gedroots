@@ -4183,7 +4183,6 @@ impl Render for Workspace {
             .child(self.render_header(cx))
             .child(div().flex_1().min_h_0().flex().relative().child(body).children(self.render_drawer(cx)))
             .when(self.doc.is_some(), |d| d.child(self.render_status_bar()))
-            .children(self.render_picker(cx))
             .children(self.render_kinship(cx))
             .children(self.render_merge(cx))
             .children(self.render_place_merge(cx))
@@ -4194,6 +4193,8 @@ impl Render for Workspace {
             .children(self.render_add_dialog(cx))
             .children(self.render_new_tree(cx))
             .children(self.render_book_dialog(cx))
+            // Above the New Book window, which opens it to choose the book's person.
+            .children(self.render_picker(cx))
             .children(self.render_new_place(cx))
             .children(self.render_report(cx))
             .children(self.render_palette(cx))

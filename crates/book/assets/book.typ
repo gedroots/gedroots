@@ -13,10 +13,12 @@
 #set document(title: data.title)
 #set text(font: serif, size: 9.6pt, fill: ink, lang: data.lang, hyphenate: true)
 #set par(justify: true, leading: 0.62em, spacing: 0.9em)
+// For a printer, each page is larger by the bleed on every side, which the margins absorb.
+#let bleed = data.bleed_mm * 1mm
 #set page(
-  width: data.width_mm * 1mm,
-  height: data.height_mm * 1mm,
-  margin: (inside: 18mm, outside: 16mm, top: 18mm, bottom: 20mm),
+  width: data.width_mm * 1mm + 2 * bleed,
+  height: data.height_mm * 1mm + 2 * bleed,
+  margin: (inside: 18mm + bleed, outside: 16mm + bleed, top: 18mm + bleed, bottom: 20mm + bleed),
   binding: left,
   footer: context {
     let n = counter(page).get().first()
@@ -49,18 +51,32 @@
 }
 #let ref-name(p) = if p.key != none [#p.name #text(font: sans, size: 6.6pt, fill: violet)[#L.page~#page-of(p.key)]] else [#p.name]
 
-// --- Cover --------------------------------------------------------------------------------
-#page(margin: 0mm, fill: paper2, footer: none)[
-  #set par(justify: false)
-  #place(top + left, dx: 20mm, dy: 26mm, block(width: data.width_mm * 1mm - 40mm)[
+// --- Cover (or, for a printer, whose cover is a file of its own: the title page) -----------
+#if data.print [
+  #page(footer: none)[
+    #set par(justify: false)
+    #v(30mm)
     #kicker(data.subtitle)
     #v(6mm)
-    #text(size: 32pt, weight: 600, tracking: -0.02em, data.title)
-  ])
-  #if data.fan {
-    place(bottom + center, dy: -30mm, image("fan-cover.svg", width: data.width_mm * 1mm - 32mm))
-  }
-  #place(bottom + left, dx: 20mm, dy: -14mm, text(font: sans, size: 7pt, fill: muted, data.summary))
+    #text(size: 26pt, weight: 600, tracking: -0.02em, data.title)
+    #if data.volume != "" [#v(4mm) #text(size: 13pt, style: "italic", fill: muted, data.volume)]
+    #v(1fr)
+    #small(data.summary)
+  ]
+] else [
+  #page(margin: 0mm, fill: paper2, footer: none)[
+    #set par(justify: false)
+    #place(top + left, dx: 20mm, dy: 26mm, block(width: data.width_mm * 1mm - 40mm)[
+      #kicker(data.subtitle)
+      #v(6mm)
+      #text(size: 32pt, weight: 600, tracking: -0.02em, data.title)
+      #if data.volume != "" [#v(4mm) #text(size: 14pt, style: "italic", fill: muted, data.volume)]
+    ])
+    #if data.fan {
+      place(bottom + center, dy: -30mm, image("fan-cover.svg", width: data.width_mm * 1mm - 32mm))
+    }
+    #place(bottom + left, dx: 20mm, dy: -14mm, text(font: sans, size: 7pt, fill: muted, data.summary))
+  ]
 ]
 
 // --- Contents -----------------------------------------------------------------------------
@@ -79,9 +95,9 @@
 ]
 
 // --- Fan ----------------------------------------------------------------------------------
-#if data.fan [
-  = #L.origins
-  #text(size: 10.5pt, style: "italic", fill: muted, L.origins_sub)
+#if data.fan_page != none [
+  = #data.fan_page.title
+  #text(size: 10.5pt, style: "italic", fill: muted, data.fan_page.subtitle)
   #v(4mm)
   #image("fan.svg", width: 100%)
   #v(4mm)

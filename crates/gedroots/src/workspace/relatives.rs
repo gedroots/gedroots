@@ -31,6 +31,8 @@ pub enum PickPurpose {
     ActPerson { idx: usize, suggestions: Vec<(String, String)> },
     /// The chosen media is the image of the record being entered.
     ActMedia,
+    /// The chosen person is the one the book in the New Book window starts from.
+    BookPerson,
 }
 
 impl PickPurpose {
@@ -47,6 +49,7 @@ impl PickPurpose {
             PickPurpose::ActSource { .. } => t!("picker.act_source").into(),
             PickPurpose::ActPerson { .. } => t!("picker.act_person").into(),
             PickPurpose::ActMedia => t!("picker.act_media").into(),
+            PickPurpose::BookPerson => t!("picker.book_person").into(),
         }
     }
 }
@@ -421,6 +424,10 @@ impl Workspace {
             }
             return;
         }
+        if let PickPurpose::BookPerson = p.purpose {
+            self.set_book_person(chosen, window, cx);
+            return;
+        }
         if let PickPurpose::Kinship { indi } = p.purpose {
             self.kinship = Some((indi, chosen));
             cx.notify();
@@ -475,7 +482,8 @@ impl Workspace {
                 | PickPurpose::MergeWith { .. }
                 | PickPurpose::MergePlaceWith { .. }
                 | PickPurpose::ActPerson { .. }
-                | PickPurpose::ActMedia => Err(t!("stats.kinship_title").into()),
+                | PickPurpose::ActMedia
+                | PickPurpose::BookPerson => Err(t!("stats.kinship_title").into()),
             }
         });
     }

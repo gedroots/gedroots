@@ -2,7 +2,7 @@
 //! (complete, short or a line in a table, depending on what the tree knows about them), the charts
 //! and the index. The result is data for the Typst template, plus the files it shows.
 
-use crate::charts::{self, FanCell, Life, MapPoint};
+use crate::charts::{self, DescCell, FanCell, Life, MapPoint};
 use crate::prose;
 use crate::spec::{BookSpec, Line};
 use crate::writing::{Block, Writing};
@@ -17,6 +17,34 @@ use std::path::Path;
 pub const FULL_FACTS: usize = 5;
 /// From this many, a short record; below, a line in the generation's table.
 pub const SHORT_FACTS: usize = 2;
+
+/// Which part of a book to typeset: all of it, or one volume of a book too long for one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Part {
+    /// The chapters (generations, both included); `None`: all of them.
+    pub chapters: Option<(u32, u32)>,
+    /// “Volume 2 of 3”: (2, 3).
+    pub volume: Option<(usize, usize)>,
+    /// The opening charts (fan, map, lives): in the first volume.
+    pub opening: bool,
+    /// The figures: in the last volume.
+    pub figures: bool,
+    /// For a printer: pages with bleed, a title page in place of the cover.
+    pub print: bool,
+}
+
+impl Part {
+    pub fn whole() -> Part {
+        Part { chapters: None, volume: None, opening: true, figures: true, print: false }
+    }
+
+    fn has(&self, generation: u32) -> bool {
+        self.chapters.is_none_or(|(a, b)| (a..=b).contains(&generation))
+    }
+}
+
+/// Bleed around the pages and the cover for a printer: 0.125 in, as Lulu and Blurb ask.
+pub const BLEED_MM: f64 = 3.175;
 
 /// A file the template shows: a chart or a portrait.
 pub struct Asset {
@@ -34,7 +62,10 @@ pub struct Data {
     pub width_mm: f64,
     pub height_mm: f64,
     pub labels: BTreeMap<&'static str, String>,
+    /// A fan (of ancestors or descendants) on the cover.
     pub fan: bool,
+    /// The fan's own page, with its title.
+    pub fan_page: Option<FanPage>,
     pub legend: Vec<Legend>,
     pub map: Option<MapInfo>,
     pub lifespans: bool,
@@ -45,6 +76,17 @@ pub struct Data {
     pub index: Vec<IndexGroup>,
     /// Context or hypotheses in the book: the contents page says how to read them.
     pub levels: bool,
+    /// “Volume 2 of 3”, or empty.
+    pub volume: String,
+    /// For a printer: a title page instead of the cover, and the bleed around each page.
+    pub print: bool,
+    pub bleed_mm: f64,
+}
+
+#[derive(Serialize)]
+pub struct FanPage {
+    pub title: String,
+    pub subtitle: String,
 }
 
 /// A block an agent wrote: text, context or hypothesis.
@@ -229,7 +271,13 @@ fn origin_place(g: &Gedcom, ind: &Individual) -> Option<String> {
 /// Jurisdictions of a place from the broadest (country) to the most precise, empty ones kept so
 /// that the levels stay aligned (“, Troyes, 10000, Aube, Grand Est, France”).
 fn levels(place: &str) -> Vec<String> {
-    place.split(',').rev().map(|s| s.trim().to_string()).collect()
+    // Postcodes and other codes name no region: a legend shows names.
+    place
+        .split(',')
+        .rev()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.chars().any(|c| c.is_ascii_digit()) || s.chars().any(char::is_alphabetic))
+        .collect()
 }
 
 /// Groups of places for the colours: the broadest level where no group holds more than 70 % of
@@ -292,10 +340,8 @@ fn years(ind: &Individual) -> String {
 }
 
 fn labels() -> BTreeMap<&'static str, String> {
-    let keys: [(&str, std::borrow::Cow<str>); 26] = [
+    let keys: [(&str, std::borrow::Cow<str>); 24] = [
         ("contents", t!("book.contents")),
-        ("origins", t!("book.origins")),
-        ("origins_sub", t!("book.origins_sub")),
         ("places_sub", t!("book.places_sub")),
         ("lives", t!("book.lives")),
         ("lives_sub", t!("book.lives_sub")),
@@ -362,6 +408,7 @@ pub fn build(
     file_name: &str,
     media_dir: Option<&Path>,
     today: (i32, String),
+    part: &Part,
 ) -> Result<(Data, Vec<Asset>), String> {
     let subject = g.individual(&spec.subject).ok_or_else(|| t!("book.no_subject").into_owned())?;
     let members = match spec.line {
@@ -386,6 +433,9 @@ pub fn build(
         height_mm: h,
         labels: labels(),
         colophon: t!("book.made_with", date = today.1, file = file_name).into_owned(),
+        volume: part.volume.map(|(n, of)| t!("book.volume", n = n, of = of).into_owned()).unwrap_or_default(),
+        print: part.print,
+        bleed_mm: if part.print { BLEED_MM } else { 0. },
         ..Default::default()
     };
 
@@ -443,6 +493,77 @@ pub fn build(
         }
     }
 
+    // Fan of descendants: each family shares its parent's sector by its number of descendants.
+    if spec.line == Line::Descendants {
+        let rings = spec.generations.min(9) as usize;
+        let parent = |n: &str| n.rsplit_once('.').map(|(p, _)| p.to_string());
+        // Weight of a member: the leaves under it, within the drawn rings.
+        let mut weight: HashMap<String, f64> = HashMap::new();
+        for m in members.iter().rev().filter(|m| (m.generation as usize) <= rings) {
+            let w = weight.get(&m.number).copied().unwrap_or(0.).max(1.);
+            weight.insert(m.number.clone(), w);
+            if let Some(p) = parent(&m.number) {
+                let pw = weight.entry(p).or_insert(0.);
+                *pw += w;
+            }
+        }
+        let mut cells = Vec::new();
+        let mut start: HashMap<String, f64> = HashMap::new();
+        let mut angle: HashMap<String, (f64, f64)> = HashMap::new();
+        for m in members.iter().filter(|m| (m.generation as usize) <= rings) {
+            let Some(ind) = g.individual(&m.xref) else { continue };
+            let (a0, a1) = match parent(&m.number) {
+                None => (180., 0.),
+                Some(p) => {
+                    let Some(&(pa0, pa1)) = angle.get(&p) else { continue };
+                    let total = weight.get(&p).copied().unwrap_or(1.).max(1.);
+                    let from = *start.get(&p).unwrap_or(&pa0);
+                    let span = (pa0 - pa1) * weight.get(&m.number).copied().unwrap_or(1.) / total;
+                    start.insert(p, from - span);
+                    (from, from - span)
+                }
+            };
+            angle.insert(m.number.clone(), (a0, a1));
+            cells.push(DescCell {
+                ring: m.generation as usize - 1,
+                a0,
+                a1,
+                given: ind.given().split_whitespace().next().unwrap_or_default().to_string(),
+                surname: ind.surname(),
+                years: years(&ind),
+                color: color_of(&m.xref),
+            });
+        }
+        // Only the rings that hold someone.
+        let rings = cells.iter().map(|c| c.ring + 1).max().unwrap_or(1).max(2);
+        assets.push(Asset { path: "fan.svg".into(), bytes: charts::descendant_fan(&cells, rings, true).into_bytes() });
+        assets.push(Asset {
+            path: "fan-cover.svg".into(),
+            bytes: charts::descendant_fan(&cells, rings, false).into_bytes(),
+        });
+        data.fan = true;
+        data.legend = groups
+            .iter()
+            .enumerate()
+            .map(|(i, (label, count))| Legend {
+                label: label.clone(),
+                color: group_color(i, keep),
+                count: *count,
+                unknown: false,
+            })
+            .collect();
+    }
+    if data.fan && part.opening {
+        data.fan_page = Some(match spec.line {
+            Line::Ancestors => {
+                FanPage { title: t!("book.origins").into_owned(), subtitle: t!("book.origins_sub").into_owned() }
+            }
+            Line::Descendants => {
+                FanPage { title: t!("book.descent").into_owned(), subtitle: t!("book.descent_sub").into_owned() }
+            }
+        });
+    }
+
     // Map of the places of origin.
     let coords: HashMap<String, (f64, f64)> = g
         .places()
@@ -461,7 +582,7 @@ pub fn build(
         located += 1;
         points.entry(p.clone()).or_insert_with(|| MapPoint { lon, lat, label: prose::town(p), count: 0 }).count += 1;
     }
-    if points.len() >= 2 {
+    if points.len() >= 2 && part.opening {
         let mut links = Vec::new();
         for m in &members {
             let Some(a) = origins.get(m.xref.as_str()).and_then(|p| coords.get(p)) else { continue };
@@ -510,7 +631,7 @@ pub fn build(
         });
         last_gen = m.generation;
     }
-    if lives.len() >= 3 {
+    if lives.len() >= 3 && part.opening {
         let svg = charts::lifespans(&lives, today.0, &t!("book.marriage"), &t!("book.ongoing"), |a| {
             t!("book.age_years", n = a).into_owned()
         });
@@ -523,7 +644,7 @@ pub fn build(
     let generations = members.iter().map(|m| m.generation).max().unwrap_or(1);
     for n in 1..=generations {
         let here: Vec<&Member> = members.iter().filter(|m| m.generation == n).collect();
-        if here.is_empty() {
+        if here.is_empty() || !part.has(n) {
             continue;
         }
         let writing = spec.chapters.get(&n);
@@ -578,8 +699,8 @@ pub fn build(
     }
     data.levels = spec.chapters.values().flat_map(Writing::blocks).any(Block::optional);
 
-    // Figures.
-    if spec.line == Line::Ancestors {
+    // Figures, in the last volume.
+    if spec.line == Line::Ancestors && part.figures {
         let found: Vec<(usize, usize)> = (1..=spec.generations.min(12))
             .map(|n| {
                 let lo = 1usize << (n - 1);
@@ -604,7 +725,7 @@ pub fn build(
             ages.push((by, age as f64, ind.sex().chars().next().unwrap_or('U')));
         }
     }
-    if ages.len() >= 8 {
+    if ages.len() >= 8 && part.figures {
         assets.push(Asset { path: "longevity.svg".into(), bytes: charts::longevity(&ages).into_bytes() });
         data.longevity = Some(t!("book.longevity_caption", n = ages.len()).into_owned());
     }
@@ -625,11 +746,13 @@ pub fn build(
     let mut jobs: Vec<(String, usize)> = jobs.into_iter().filter(|(_, n)| *n >= 2).collect();
     jobs.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
     jobs.truncate(10);
-    data.occupations = jobs;
+    if part.figures {
+        data.occupations = jobs;
+    }
 
-    // Index.
+    // Index of the people in this part.
     let mut index: BTreeMap<String, (String, Vec<(String, IndexEntry)>)> = BTreeMap::new();
-    for m in &members {
+    for m in members.iter().filter(|m| part.has(m.generation)) {
         let Some(ind) = g.individual(&m.xref) else { continue };
         let surname = ind.surname();
         let group = index.entry(sort_key(&surname)).or_insert_with(|| (surname.clone(), vec![]));
