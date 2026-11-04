@@ -1,0 +1,17 @@
+[package]
+name = "gedroots-book"
+version = "0.1.0"
+edition = "2024"
+description = "Family books for GEDRoots: built-in charts and texts from a GEDCOM 7 tree, typeset as PDF with Typst"
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+gedcom = { path = "../gedcom" }
+rust-i18n = "4.2.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+typst = "0.15.1"
+typst-pdf = "0.15.1"
+typst-render = "0.15.1"
+typst-layout = "0.15.1"

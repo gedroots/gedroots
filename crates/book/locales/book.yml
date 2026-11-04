@@ -1,0 +1,285 @@
+_version: 2
+# Texts of the books (crates/book): written in the interface language. Sentences are short and
+# factual: they only say what the tree says.
+
+# Months in full, for running text (dates in the lists stay short).
+book.month.1:
+  en: January
+  fr: janvier
+book.month.2:
+  en: February
+  fr: février
+book.month.3:
+  en: March
+  fr: mars
+book.month.4:
+  en: April
+  fr: avril
+book.month.5:
+  en: May
+  fr: mai
+book.month.6:
+  en: June
+  fr: juin
+book.month.7:
+  en: July
+  fr: juillet
+book.month.8:
+  en: August
+  fr: août
+book.month.9:
+  en: September
+  fr: septembre
+book.month.10:
+  en: October
+  fr: octobre
+book.month.11:
+  en: November
+  fr: novembre
+book.month.12:
+  en: December
+  fr: décembre
+book.first_day:
+  en: "1"
+  fr: 1er
+
+# A date inside a sentence.
+book.date.day:
+  en: "on %{date}"
+  fr: "le %{date}"
+book.date.month:
+  en: "in %{date}"
+  fr: "en %{date}"
+book.date.year:
+  en: "in %{date}"
+  fr: "en %{date}"
+book.date.about:
+  en: "about %{date}"
+  fr: "vers %{date}"
+book.date.before:
+  en: "before %{date}"
+  fr: "avant %{date}"
+book.date.after:
+  en: "after %{date}"
+  fr: "après %{date}"
+book.place:
+  en: "in %{place}"
+  fr: "à %{place}"
+
+# Who does something: the pronoun, or the given name when the sex is unknown.
+book.he:
+  en: He
+  fr: Il
+book.she:
+  en: She
+  fr: Elle
+
+book.born:
+  en: "%{name} was born %{when}."
+  fr: "%{name} naît %{when}."
+book.born_unknown:
+  en: "%{name}’s birth is not recorded."
+  fr: "La naissance de %{name} n’est pas connue."
+book.child_of.m:
+  en: "son of %{parents}"
+  fr: "fils de %{parents}"
+book.child_of.f:
+  en: "daughter of %{parents}"
+  fr: "fille de %{parents}"
+book.child_of.u:
+  en: "child of %{parents}"
+  fr: "enfant de %{parents}"
+book.and:
+  en: "%{a} and %{b}"
+  fr: "%{a} et de %{b}"
+book.list_and:
+  en: "%{list} and %{last}"
+  fr: "%{list} et %{last}"
+book.occupation:
+  en: "%{who} worked as %{what}."
+  fr: "%{who} est %{what}."
+book.married:
+  en: "%{when}%{who} married %{spouse}."
+  fr: "%{when}%{who} épouse %{spouse}."
+book.married_who.he:
+  en: he
+  fr: il
+book.married_who.she:
+  en: she
+  fr: elle
+book.children.one:
+  en: "They had a child: %{list}."
+  fr: "De cette union naît un enfant : %{list}."
+book.children.other:
+  en: "They had %{n} children: %{list}."
+  fr: "De cette union naissent %{n} enfants : %{list}."
+book.event:
+  en: "%{event} %{when}."
+  fr: "%{event} %{when}."
+book.died:
+  en: "%{name} died %{when}."
+  fr: "%{name} meurt %{when}."
+book.died_aged:
+  en: "%{name} died %{when}, aged %{age}."
+  fr: "%{name} meurt %{when}, à l’âge de %{age} ans."
+book.buried.m:
+  en: "%{name} was buried %{when}."
+  fr: "%{name} est inhumé %{when}."
+book.buried.f:
+  en: "%{name} was buried %{when}."
+  fr: "%{name} est inhumée %{when}."
+book.buried.u:
+  en: "%{name} was buried %{when}."
+  fr: "Inhumation de %{name} %{when}."
+
+# Page furniture.
+book.contents:
+  en: Contents
+  fr: Sommaire
+book.chapter:
+  en: Chapter %{n}
+  fr: Chapitre %{n}
+book.origins:
+  en: Where we come from
+  fr: D’où venons-nous
+book.origins_sub:
+  en: Each cell is an ancestor, coloured by where they were born.
+  fr: Chaque case est un ancêtre, coloré selon la région où il est né.
+book.places.one:
+  en: One place
+  fr: Un lieu
+book.places.other:
+  en: "%{n} places"
+  fr: "%{n} lieux"
+book.places_sub:
+  en: Places of birth; the lines join each child to their parents.
+  fr: Lieux de naissance ; les traits relient chaque enfant à ses parents.
+book.places_caption:
+  en: "Dot size: number of people born in the place. Places known for %{known} of %{total} people."
+  fr: "Taille du point : nombre de personnes nées dans le lieu. Lieux connus pour %{known} des %{total} personnes."
+book.lives:
+  en: Lives
+  fr: Des vies
+book.lives_sub:
+  en: From birth to death, with the marriages.
+  fr: De la naissance au décès, avec les mariages.
+book.marriage:
+  en: Marriage
+  fr: Mariage
+book.ongoing:
+  en: Living, or death unknown
+  fr: Vie en cours ou décès inconnu
+book.age_years:
+  en: "%{n} y"
+  fr: "%{n} ans"
+book.generation:
+  en: Generation %{n}
+  fr: Génération %{n}
+book.generation_1:
+  en: The subject of this book
+  fr: Le point de départ
+book.ancestors_gen.2:
+  en: Parents
+  fr: Les parents
+book.ancestors_gen.3:
+  en: Grandparents
+  fr: Les grands-parents
+book.ancestors_gen.4:
+  en: Great-grandparents
+  fr: Les arrière-grands-parents
+book.ancestors_gen.n:
+  en: "Ancestors in generation %{n}"
+  fr: "Les ancêtres de la génération %{n}"
+book.descendants_gen.2:
+  en: Children
+  fr: Les enfants
+book.descendants_gen.3:
+  en: Grandchildren
+  fr: Les petits-enfants
+book.descendants_gen.n:
+  en: "Descendants in generation %{n}"
+  fr: "Les descendants de la génération %{n}"
+book.people.one:
+  en: one person
+  fr: une personne
+book.people.other:
+  en: "%{n} people"
+  fr: "%{n} personnes"
+book.also_known:
+  en: Also in this generation
+  fr: Aussi dans cette génération
+book.birth:
+  en: Birth
+  fr: Naissance
+book.death:
+  en: Death
+  fr: Décès
+book.parents:
+  en: Parents
+  fr: Parents
+book.spouse:
+  en: Spouse
+  fr: Conjoint
+book.children:
+  en: Children
+  fr: Enfants
+book.sources:
+  en: Sources
+  fr: Sources
+book.sosa:
+  en: Sosa %{n}
+  fr: Sosa %{n}
+book.also_sosa:
+  en: also Sosa %{n}
+  fr: aussi Sosa %{n}
+book.figures:
+  en: The tree in figures
+  fr: L’arbre en chiffres
+book.found:
+  en: Ancestors found in each generation
+  fr: Ancêtres retrouvés par génération
+book.longevity:
+  en: Age at death by year of birth
+  fr: Âge au décès selon l’année de naissance
+book.longevity_caption:
+  en: "■ men  ○ women  — median age per half-century · %{n} people"
+  fr: "■ hommes  ○ femmes  — âge médian par demi-siècle · %{n} personnes"
+book.occupations:
+  en: Occupations
+  fr: Métiers
+book.index:
+  en: Index of names
+  fr: Index des noms
+book.index_note:
+  en: Numbers refer to pages
+  fr: Les nombres renvoient aux pages
+book.unknown_place:
+  en: Place unknown
+  fr: Lieu inconnu
+book.other:
+  en: Other
+  fr: Autres
+book.generation_short:
+  en: Generation
+  fr: Génération
+book.summary:
+  en: "%{people} · %{generations} generations · %{places}"
+  fr: "%{people} · %{generations} générations · %{places}"
+book.made_with:
+  en: "Made with GEDRoots on %{date} from “%{file}”."
+  fr: "Livre composé avec GEDRoots le %{date} à partir de « %{file} »."
+book.ancestors_of:
+  en: "Ancestors of %{name}"
+  fr: "Ascendance de %{name}"
+book.descendants_of:
+  en: "Descendants of %{name}"
+  fr: "Descendance de %{name}"
+book.default_title:
+  en: "The %{surname} family"
+  fr: "La famille %{surname}"
+book.see_page:
+  en: "p. %{n}"
+  fr: "p. %{n}"
+book.no_subject:
+  en: The person of this book is no longer in the tree
+  fr: La personne de ce livre n’est plus dans l’arbre

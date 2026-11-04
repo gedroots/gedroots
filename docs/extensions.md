@@ -19,6 +19,7 @@ start with `_GR_` and are declared in the header, as GEDCOM 7 requires:
 2 TAG _GR_WEB https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_web
 2 TAG _GR_DISTINCT https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_distinct
 2 TAG _GR_TASK https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_task
+2 TAG _GR_BOOK https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_book
 ```
 
 Other software ignores these tags without losing data.
@@ -496,3 +497,38 @@ and, later, by the research page. The leads themselves are computed, not stored.
 ```
 
 Legacy and RootsMagic keep their to-do items in `_TODO`; GEDRoots does not read or write it.
+
+## `_GR_BOOK`
+
+A family book (Source › New Book…): a PDF typeset from the tree, with its charts, a record for each
+person written from the facts, and an index. Only what the book is made of is stored; its
+pages are computed from the tree each time, so the book follows the changes. See
+`crates/book`.
+
+- **Where**: a record at level 0, with an identifier (`@BK1@`). One per book.
+- **Value**: the title; when empty, GEDRoots shows “The *surname* family”.
+- **Substructures**:
+  - `_GR_SUBJ @<INDI>@`: the person the book starts from;
+  - `_GR_LINE <line>`: `ANCESTORS` (the person's ancestors, one chapter per generation) or
+    `DESCENDANTS`; absent: `ANCESTORS`;
+  - `_GR_GENS <n>`: generations, from 2 to 12; absent: 8;
+  - `_GR_SIZE <size>`: page size, `170X240` (17 × 24 cm, a printed book), `A4` or `LETTER`;
+    absent: `170X240`.
+
+```
+0 HEAD
+1 SCHMA
+2 TAG _GR_BOOK https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_book
+2 TAG _GR_SUBJ https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_book
+2 TAG _GR_LINE https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_book
+2 TAG _GR_GENS https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_book
+2 TAG _GR_SIZE https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_book
+0 @BK1@ _GR_BOOK The Guyot Family
+1 _GR_SUBJ @I1@
+1 _GR_LINE ANCESTORS
+1 _GR_GENS 8
+1 _GR_SIZE 170X240
+```
+
+Deleting the person leaves the book without a subject: it stays in the list, empty, until it is
+deleted. GEDCOM 5.5.1 exports leave it out.

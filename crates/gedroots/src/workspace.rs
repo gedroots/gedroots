@@ -26,6 +26,7 @@ use std::rc::Rc;
 
 mod add;
 mod agent;
+mod books;
 mod chart;
 mod commands;
 mod event_detail;
@@ -89,13 +90,15 @@ pub enum View {
     Research,
     Quality,
     Stats,
+    Books,
 }
 
 impl View {
     /// The main sidebar zones.
     const SIDEBAR: [View; 4] = [View::Individuals, View::Sources, View::Places, View::Media];
     /// The secondary group of the sidebar, under a separator.
-    const SECONDARY: [View; 5] = [View::Repositories, View::Notes, View::Research, View::Quality, View::Stats];
+    const SECONDARY: [View; 6] =
+        [View::Repositories, View::Notes, View::Research, View::Quality, View::Stats, View::Books];
 
     fn label(self) -> SharedString {
         match self {
@@ -108,6 +111,7 @@ impl View {
             View::Research => t!("ws.research"),
             View::Quality => t!("ws.quality"),
             View::Stats => t!("ws.stats"),
+            View::Books => t!("books.view"),
         }
         .into()
     }
@@ -123,6 +127,7 @@ impl View {
             View::Research => IconName::Compass,
             View::Quality => IconName::CircleCheck,
             View::Stats => IconName::ChartPie,
+            View::Books => IconName::BookMarked,
         }
     }
 
@@ -132,9 +137,9 @@ impl View {
         matches!(self, View::Individuals | View::Places)
     }
 
-    /// Pages without a record (Research, Quality, Statistics).
+    /// Pages without a record page (Research, Quality, Statistics, Books).
     fn page(self) -> Option<View> {
-        matches!(self, View::Research | View::Quality | View::Stats).then_some(self)
+        matches!(self, View::Research | View::Quality | View::Stats | View::Books).then_some(self)
     }
 
     /// Zone with search by criteria (the other lists filter the text).
@@ -157,7 +162,7 @@ impl View {
             View::Media => RecordKind::Media,
             View::Repositories => RecordKind::Repository,
             View::Notes => RecordKind::SharedNote,
-            View::Places | View::Research | View::Quality | View::Stats => return None,
+            View::Places | View::Research | View::Quality | View::Stats | View::Books => return None,
         })
     }
 
@@ -511,6 +516,8 @@ pub struct Workspace {
     /// Quality page: problems of the file.
     quality: quality::QualityState,
     research: research::ResearchState,
+    /// Books page: the selected book's preview, the New Book window.
+    books: books::BooksState,
     /// Relationship shown in a modal window (A, B).
     kinship: Option<(String, String)>,
     /// Merge window (possible duplicates, or two people chosen by the user).
@@ -639,6 +646,7 @@ impl Workspace {
             list_scroll: UniformListScrollHandle::new(),
             quality: quality::QualityState { stale: true, ..Default::default() },
             research: research::ResearchState::default(),
+            books: books::BooksState::default(),
             kinship: None,
             merge: None,
             place_merge: None,
@@ -1023,7 +1031,7 @@ impl Workspace {
             View::Notes => t!("ws.search_notes"),
             View::Quality => t!("ws.search_quality"),
             View::Research => t!("research.focus_placeholder"),
-            View::Individuals | View::Stats => t!("ws.search_people"),
+            View::Individuals | View::Stats | View::Books => t!("ws.search_people"),
         };
         // Research: the field holds the focus of the leads, kept while the file is open.
         // A trailing space makes its last criterion a token.
@@ -1071,6 +1079,9 @@ impl Workspace {
         self.photo_draw = None;
         self.photo_hover = None;
         self.refresh_editor(window, cx);
+        if self.view == View::Books {
+            self.typeset_book(cx);
+        }
         cx.notify();
     }
 
@@ -1220,6 +1231,9 @@ impl Workspace {
 
     /// Premier clic : demande confirmation ; second clic : supprime.
     fn delete_selected(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.view == View::Books {
+            return self.delete_book(window, cx);
+        }
         let Some(key) = self.selected.clone().filter(|_| self.view.page().is_none()) else { return };
         if self.pending_delete.as_ref() != Some(&key) {
             self.pending_delete = Some(key);
@@ -1591,6 +1605,11 @@ impl Workspace {
             self.rows = Rc::new(self.research_rows());
             return;
         }
+        if self.view == View::Books {
+            self.rows = Rc::new(self.book_rows());
+            self.typeset_book(cx);
+            return;
+        }
         if self.view == View::Stats {
             // A single “row”, never shown: it is used for the history (⌘[).
             self.refresh_stats();
@@ -1713,7 +1732,7 @@ impl Workspace {
                     }
                 })
                 .collect(),
-            View::Research | View::Quality | View::Stats => Vec::new(),
+            View::Research | View::Quality | View::Stats | View::Books => Vec::new(),
             View::Notes => g
                 .records_of(RecordKind::SharedNote)
                 .map(|r| {
@@ -2117,6 +2136,7 @@ impl Workspace {
                 View::Quality if self.quality.stale => return None,
                 View::Quality => self.quality.issues.iter().filter(|i| !i.ignored).count(),
                 View::Stats => return None,
+                View::Books => self.book_count(),
                 v => d.ged.count(v.kind()?),
             })
         };
@@ -2146,7 +2166,9 @@ impl Workspace {
         let secondary: Vec<_> = View::SECONDARY
             .into_iter()
             .map(|v| (v, count(v)))
-            .filter(|&(v, n)| v == self.view || !matches!(v, View::Repositories | View::Notes) || n.unwrap_or(0) > 0)
+            .filter(|&(v, n)| {
+                v == self.view || !matches!(v, View::Repositories | View::Notes | View::Books) || n.unwrap_or(0) > 0
+            })
             .map(|(v, n)| zone(v, n, cx))
             .collect();
         v_flex()
@@ -2379,6 +2401,9 @@ impl Workspace {
         }
         if self.view == View::Stats {
             return self.render_stats(cx);
+        }
+        if self.view == View::Books {
+            return self.render_books(cx);
         }
         // Raw GEDCOM: a tab only when it was asked for. With no other view than the record, no tab
         // bar.
@@ -4010,6 +4035,7 @@ impl Render for Workspace {
         if self.drawer == Some(Drawer::Inspector) && !self.has_inspector() {
             self.drawer = None;
         }
+        self.release_book_pages(window);
         // Shortcuts (Save…) go through this node: keep it in the focus chain.
         if window.focused(cx).is_none() {
             window.focus(&self.focus, cx);
@@ -4041,7 +4067,10 @@ impl Render for Workspace {
                 .items_stretch()
                 .when(self.sidebar && !self.compact.sidebar, |d| d.child(self.render_sidebar(cx)))
                 .when(self.view == View::Research, |d| d.child(self.render_research_list(cx)))
-                .when(!matches!(self.view, View::Stats | View::Research), |d| d.child(self.render_list(cx)))
+                .when(self.view == View::Books, |d| d.child(self.render_books_list(cx)))
+                .when(!matches!(self.view, View::Stats | View::Research | View::Books), |d| {
+                    d.child(self.render_list(cx))
+                })
                 .child(self.render_center(cx))
                 .when(self.inspector && !self.compact.inspector, |d| d.child(self.render_detail(cx)))
                 .into_any_element()
@@ -4092,6 +4121,9 @@ impl Render for Workspace {
                     if this.add_dialog.is_some() {
                         return this.close_add_dialog(w, cx);
                     }
+                    if this.books.dialog.is_some() {
+                        return this.close_book_dialog(w, cx);
+                    }
                     if this.gallery_escape(w, cx) {
                         return;
                     }
@@ -4128,6 +4160,7 @@ impl Render for Workspace {
             .children(self.render_media_gallery(cx))
             .children(self.render_add_dialog(cx))
             .children(self.render_new_tree(cx))
+            .children(self.render_book_dialog(cx))
             .children(self.render_new_place(cx))
             .children(self.render_report(cx))
             .children(self.render_palette(cx))

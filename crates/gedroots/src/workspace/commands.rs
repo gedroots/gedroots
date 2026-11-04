@@ -74,7 +74,14 @@ impl Workspace {
         let d = on!(d, cx, ConnectAgent, |this, w, cx| this.open_agent_dialog(cx));
         let d = on!(d, cx, MobileDevices, |this, w, cx| this.open_mobile_dialog(w, cx));
         let d = if sample { d } else { on!(d, cx, SaveFileAs, |this, w, cx| this.save_file_as(w, cx)) };
-        let d = on!(d, cx, ExportFile, |this, w, cx| this.export(w, cx));
+        // On the Books page, File › Export… exports the book shown, as PDF.
+        let d = on!(d, cx, ExportFile, |this, w, cx| {
+            if this.view == View::Books && this.selected.is_some() {
+                this.export_book(w, cx)
+            } else {
+                this.export(w, cx)
+            }
+        });
         let d = d.when(self.has_version_history(), |d| {
             let d = on!(d, cx, SaveVersion, |this, w, cx| this.open_save_version(w, cx));
             on!(d, cx, BrowseVersions, |this, w, cx| this.open_version_history(w, cx))
@@ -171,6 +178,10 @@ impl Workspace {
             None => d,
         };
         let d = on!(d, cx, ShowStats, |this, w, cx| this.show_view(View::Stats, w, cx));
+        let d = d.when(has_doc, |d| on!(d, cx, NewBook, |this, w, cx| this.new_book(w, cx)));
+        let d = d.when(self.view == View::Books && sel.is_some(), |d| {
+            on!(d, cx, EditRecord, |this, w, cx| this.edit_book(w, cx))
+        });
         let d = on!(d, cx, ToggleIgnoredIssues, |this, _w, cx| this.toggle_ignored_issues(cx));
         let d = on!(d, cx, ToggleRelativeEvents, |this, _w, cx| this.toggle_relative_events(cx));
         // Individuals and places: the record is the right panel, not a tab.
