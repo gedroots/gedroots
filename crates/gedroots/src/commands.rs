@@ -135,6 +135,7 @@ actions!(
         FilterWithMedia,
         ClearSearch,
         // Help
+        About,
         CommandPalette,
         TakeTour,
         OpenSampleTree,
@@ -475,7 +476,8 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
     };
     if mac {
         // On macOS, settings go where they usually are: the application menu, ⌘,.
-        let mut app = updates();
+        let mut app = vec![a(t!("cmd.about"), About), Sep];
+        app.extend(updates());
         app.extend([Sep, a(t!("cmd.file_settings"), OpenFileSettings), Sep, a(t!("cmd.quit_app"), Quit)]);
         menus.push(("GEDRoots".into(), app));
     }
@@ -729,6 +731,8 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
     if !mac {
         help.push(Sep);
         help.extend(updates());
+        // Like Windows and GNOME apps: About comes last in Help.
+        help.extend([Sep, a(t!("cmd.about"), About)]);
     }
     menus.push((t!("menu.help").into(), help));
     menus

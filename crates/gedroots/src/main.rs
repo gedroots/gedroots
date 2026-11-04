@@ -3,6 +3,7 @@
 // On Windows, no console window behind the app (except in debug, for the messages).
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod about;
 mod act_editor;
 mod agent;
 mod commands;
@@ -24,7 +25,7 @@ mod updates;
 mod viewer;
 mod workspace;
 
-use commands::{CheckForUpdates, Quit, ReleaseNotes, ToggleAutomaticUpdates};
+use commands::{About, CheckForUpdates, Quit, ReleaseNotes, ToggleAutomaticUpdates};
 use gpui_kit::*;
 use std::borrow::Cow;
 use std::path::PathBuf;
@@ -89,11 +90,13 @@ gpui_kit::assets::icon_assets!(
 struct AppAssets;
 
 /// GEDRoots brand (SVG sources from the brand kit), displayed with `img("brand/…")`.
-const BRAND: [(&str, &[u8]); 4] = [
+const BRAND: [(&str, &[u8]); 5] = [
     ("brand/logo-horizontal-light.svg", include_bytes!("../assets/brand/logo-horizontal-light.svg")),
     ("brand/logo-horizontal-dark.svg", include_bytes!("../assets/brand/logo-horizontal-dark.svg")),
     ("brand/icon-primary.svg", include_bytes!("../assets/brand/icon-primary.svg")),
     ("brand/icon-micro.svg", include_bytes!("../assets/brand/icon-micro.svg")),
+    // The application icon (Dock, taskbar), for the About window.
+    ("brand/app-icon.png", include_bytes!("../../../packaging/icon.png")),
 ];
 
 impl AssetSource for AppAssets {
@@ -156,6 +159,7 @@ fn main() {
             cx.quit()
         });
         cx.on_action(|_: &ReleaseNotes, cx| cx.open_url(&updates::release_notes_url()));
+        cx.on_action(|_: &About, cx| about::open(cx));
         // Only declared for an installed copy: greyed out otherwise.
         if updates::available() {
             cx.on_action(|_: &CheckForUpdates, cx| updates::check_now(cx));
@@ -182,6 +186,7 @@ pub(crate) fn is_global_action(action: &dyn Action) -> bool {
     let name = action.name();
     name == Quit.name()
         || name == ReleaseNotes.name()
+        || name == About.name()
         || (updates::available() && (name == CheckForUpdates.name() || name == ToggleAutomaticUpdates.name()))
 }
 
