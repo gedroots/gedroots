@@ -532,7 +532,7 @@ impl Workspace {
         });
     }
 
-    fn place_by_hand(&mut self, name: String, cx: &mut Context<Self>) {
+    pub(super) fn place_by_hand(&mut self, name: String, cx: &mut Context<Self>) {
         self.locate = None;
         self.tab = CenterTab::Map;
         self.map.update(cx, |m, cx| m.start_placing(name, cx));

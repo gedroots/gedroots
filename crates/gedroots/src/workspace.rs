@@ -43,6 +43,7 @@ mod mobile;
 mod new_tree;
 mod pages;
 mod photo;
+mod place_merging;
 mod places;
 mod quality;
 mod record_history;
@@ -522,6 +523,7 @@ pub struct Workspace {
     kinship: Option<(String, String)>,
     /// Merge window (possible duplicates, or two people chosen by the user).
     merge: Option<merging::MergeDialog>,
+    place_merge: Option<place_merging::PlaceMergeDialog>,
     /// File › Revert To › Browse All Versions… window.
     version_history: Option<version_history::VersionHistory>,
     /// Edit › Record History… window.
@@ -648,6 +650,7 @@ impl Workspace {
             books: books::BooksState::default(),
             kinship: None,
             merge: None,
+            place_merge: None,
             version_history: None,
             record_history: None,
             tour: None,
@@ -1265,6 +1268,17 @@ impl Workspace {
     }
 
     fn apply_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        // A place renamed to another place of the file: the two are compared and merged.
+        if let Some(ed) = &self.editor
+            && let Target::Place(old) = &ed.target
+            && let Some(new) = ed.place_name(cx).filter(|n| n != old)
+            && self.doc.as_ref().is_some_and(|d| d.ged.places().iter().any(|p| p.name == new))
+        {
+            let old = old.clone();
+            self.cancel_edit(window, cx);
+            self.open_place_merge(vec![(old, new)], 0, cx);
+            return;
+        }
         let Some(ed) = self.editor.take() else { return };
         self.checkpoint();
         let doc = self.doc.as_mut().unwrap();
@@ -4152,6 +4166,7 @@ impl Render for Workspace {
                         this.cancel_draw(cx);
                     } else if this.kinship.take().is_some()
                         || this.close_merge(cx)
+                        || this.close_place_merge(cx)
                         || this.close_version_history(cx)
                         || this.close_record_history(cx)
                         || this.close_event_detail(cx)
@@ -4171,6 +4186,7 @@ impl Render for Workspace {
             .children(self.render_picker(cx))
             .children(self.render_kinship(cx))
             .children(self.render_merge(cx))
+            .children(self.render_place_merge(cx))
             .children(self.render_version_history(cx))
             .children(self.render_record_history(cx))
             .children(self.render_event_detail(cx))

@@ -99,7 +99,7 @@ impl Workspace {
                     .cursor_pointer()
                     .text_color(theme::accent())
                     .hover(|d| d.underline())
-                    .child(p)
+                    .child(gedcom::place_label(&p))
                     .on_click(cx.listener(move |this, _, w, cx| {
                         this.event_detail = None;
                         this.goto_place(target.clone(), w, cx)

@@ -424,7 +424,8 @@ impl Gedcom {
             .skip(offset)
             .take(limit)
             .map(|(i, id, category)| {
-                let fix = quality::fix_of(i.code);
+                // Compared by the user in the place merge window: no automatic fix for an agent.
+                let fix = quality::fix_of(i.code).filter(|_| i.code != "possible_duplicate_place");
                 let (related, values): (Vec<&String>, Vec<&String>) =
                     i.related.iter().partition(|x| self.get(x).is_some());
                 QualityIssue {

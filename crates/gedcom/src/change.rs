@@ -602,6 +602,9 @@ impl QualityChange {
         let code = issue.code;
         match &self.action {
             Action::Fix => {
+                if code == "possible_duplicate_place" {
+                    return Err("a possible duplicate place is compared and merged by the user, in GEDRoots".into());
+                }
                 if quality::fix_of(code).is_none() {
                     return Err(format!(
                         "`{code}` has no automatic fix: propose edits ({}) or hide it with a reason",

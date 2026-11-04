@@ -288,6 +288,9 @@ picker.source_hint:
 picker.person_hint:
   en: Search for a person
   fr: Rechercher une personne
+picker.place_hint:
+  en: Search for a place
+  fr: Rechercher un lieu
 picker.linked_as:
   en: "%{who} linked as %{rel} of %{name}"
   fr: "%{who} lié(e) comme %{rel} de %{name}"

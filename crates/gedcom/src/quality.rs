@@ -12,7 +12,7 @@
 use crate::analysis::check::{self, Issue, Severity, Thresholds};
 use crate::date::Date;
 use crate::document::{Gedcom, RecordKind};
-use crate::model::{Place, event_label, sort_key};
+use crate::model::{Place, event_label, place_label, sort_key};
 use crate::node::Node;
 use crate::relations::mime_for;
 use crate::schema::{self, Payload, StructDef};
@@ -124,7 +124,7 @@ pub fn category(code: &str) -> Category {
         "missing_file" | "moved_file" | "duplicate_media" | "missing_form" => Category::Media,
         "unsourced" => Category::Sources,
         "unattached_file" => Category::Files,
-        "place_variant" | "place_hierarchy" | "bad_coords" => Category::Places,
+        "possible_duplicate_place" | "place_hierarchy" | "bad_coords" => Category::Places,
         "missing_coords" => Category::Coords,
         "possible_duplicate" => Category::Duplicates,
         _ => Category::Dates,
@@ -157,11 +157,9 @@ pub fn fix_of(code: &str) -> Option<Fix> {
         "unattached_file" => {
             Fix { label: t!("quality.fix.create_media"), batch: Some(t!("quality.fix.create_all_media")) }
         }
-        // Two places with the same name can be distinct: to check one by one.
-        "place_variant" => Fix { label: t!("quality.fix.merge"), batch: None },
         "place_hierarchy" => Fix { label: t!("quality.fix.harmonize"), batch: None },
         // Compared and merged in the merge window, never in bulk.
-        "possible_duplicate" => Fix { label: t!("quality.fix.compare"), batch: None },
+        "possible_duplicate" | "possible_duplicate_place" => Fix { label: t!("quality.fix.compare"), batch: None },
         _ => return None,
     })
 }
@@ -228,6 +226,7 @@ pub fn run_with(g: &Gedcom, files: Option<&Files>) -> Vec<Issue> {
     check::mark_ignored(g, &mut more);
     // Hidden with `_GR_DISTINCT`, not `_GR_IGNORE`.
     duplicates(g, &mut more);
+    distinct_places(g, &mut more);
     issues.extend(more);
     issues.sort_by(|a, b| {
         (category(a.code), a.severity, a.code, &a.message, &a.path).cmp(&(
@@ -665,7 +664,7 @@ fn media(g: &Gedcom, files: Option<&Files>, out: &mut Vec<Issue>) {
 
 /// Meaningful parts of a place name, to compare two spellings: without case, accents, hyphens or
 /// punctuation, without codes (postal, INSEE), “St” and “Ste” expanded. Empty parts are removed.
-fn place_parts(name: &str) -> Vec<String> {
+pub(crate) fn place_parts(name: &str) -> Vec<String> {
     name.split(',')
         .map(|part| {
             let clean: String = sort_key(part).chars().map(|c| if c.is_alphanumeric() { c } else { ' ' }).collect();
@@ -685,7 +684,7 @@ fn place_parts(name: &str) -> Vec<String> {
 
 /// Is `short` an abbreviated spelling of `long` (same parts in the same order, some missing, the
 /// first one identical)?
-fn abbreviates(short: &[String], long: &[String]) -> bool {
+pub(crate) fn abbreviates(short: &[String], long: &[String]) -> bool {
     if short.len() >= long.len() || short.first() != long.first() {
         return false;
     }
@@ -703,14 +702,14 @@ fn places(g: &Gedcom, out: &mut Vec<Issue>) {
     let all = g.places();
     for p in &all {
         match (&p.latitude, &p.longitude) {
-            (None, None) => out.push(place_issue("missing_coords", Severity::Info, &[&p.name], p.name.clone())),
+            (None, None) => out.push(place_issue("missing_coords", Severity::Info, &[&p.name], place_label(&p.name))),
             _ if p.coords().is_none() => out.push(place_issue(
                 "bad_coords",
                 Severity::Warning,
                 &[&p.name],
                 t!(
                     "quality.bad_coords",
-                    place = p.name,
+                    place = place_label(&p.name),
                     lat = p.latitude.as_deref().unwrap_or("?"),
                     long = p.longitude.as_deref().unwrap_or("?")
                 )
@@ -720,46 +719,45 @@ fn places(g: &Gedcom, out: &mut Vec<Issue>) {
         }
     }
 
-    // Variants: same name once normalized, or abbreviated form of a single other place. Each
-    // variant is matched with the most used place of its group.
-    let parts: Vec<Vec<String>> = all.iter().map(|p| place_parts(&p.name)).collect();
-    let better = |a: &Place, b: &Place| {
-        (a.uses, a.coords().is_some(), a.name.len()) > (b.uses, b.coords().is_some(), b.name.len())
-    };
-    let mut groups: HashMap<&[String], Vec<usize>> = HashMap::new();
-    for (i, k) in parts.iter().enumerate().filter(|(_, k)| !k.is_empty()) {
-        groups.entry(k.as_slice()).or_default().push(i);
-    }
-    let mut target: Vec<Option<usize>> = vec![None; all.len()];
-    for members in groups.values().filter(|m| m.len() > 1) {
-        let best = *members.iter().reduce(|a, b| if better(&all[*b], &all[*a]) { b } else { a }).unwrap();
-        for &m in members.iter().filter(|&&m| m != best) {
-            target[m] = Some(best);
-        }
-    }
-    for i in 0..all.len() {
-        if target[i].is_some() || parts[i].is_empty() {
-            continue;
-        }
-        let longer: Vec<usize> =
-            (0..all.len()).filter(|&j| target[j].is_none() && abbreviates(&parts[i], &parts[j])).collect();
-        // Several possible places (Saint-Martin, Isère / Saint-Martin, Gard): do not guess.
-        if let [j] = longer[..] {
-            target[i] = Some(j);
-        }
-    }
     hierarchy(&all, out);
-    for (i, t) in target.iter().enumerate() {
-        let Some(t) = *t else { continue };
-        let (a, b) = (&all[i], &all[t]);
-        let n = |p: &Place| tn!("quality.uses", p.uses);
-        out.push(place_issue(
-            "place_variant",
-            Severity::Warning,
-            &[&a.name, &b.name],
-            t!("quality.place_variant", a = a.name, a_uses = n(a), b = b.name, b_uses = n(b)).into(),
-        ));
+    let uses = |name: &str| all.iter().find(|p| p.name == name).map_or(0, |p| p.uses);
+    let n = |name: &str| tn!("quality.uses", uses(name));
+    for d in g.place_duplicates() {
+        let severity = if d.level == crate::duplicates::Level::Likely { Severity::Warning } else { Severity::Info };
+        let mut i = place_issue("possible_duplicate_place", severity, &[&d.a, &d.b], {
+            let (la, lb) = place_labels(&d.a, &d.b);
+            t!("quality.possible_duplicate_place", a = la, a_uses = n(&d.a), b = lb, b_uses = n(&d.b)).into()
+        });
+        // The message already names both places: the first clue (“X starts Y”) is left out when
+        // others back it.
+        let skip = usize::from(d.clues.len() > 1);
+        i.detail = std::iter::once(d.level.label().into_owned())
+            .chain(d.clues.into_iter().skip(skip))
+            .collect::<Vec<_>>()
+            .join(" · ");
+        out.push(i);
     }
+}
+
+/// Pairs of places marked as different, as hidden issues (shown again from the page).
+fn distinct_places(g: &Gedcom, out: &mut Vec<Issue>) {
+    let all = g.places();
+    let uses = |name: &str| all.iter().find(|p| p.name == name).map_or(0, |p| p.uses);
+    let n = |name: &str| tn!("quality.uses", uses(name));
+    for (a, b) in g.distinct_places() {
+        let mut i = place_issue("possible_duplicate_place", Severity::Info, &[&a, &b], {
+            let (la, lb) = place_labels(&a, &b);
+            t!("quality.possible_duplicate_place", a = la, a_uses = n(&a), b = lb, b_uses = n(&b)).into()
+        });
+        i.ignored = true;
+        out.push(i);
+    }
+}
+
+/// Short labels of two places (“Leudon (Seine-et-Marne)”), unless they are the same for both.
+fn place_labels(a: &str, b: &str) -> (String, String) {
+    let (sa, sb) = (crate::model::short_place(a), crate::model::short_place(b));
+    if sa == sb { (place_label(a), place_label(b)) } else { (sa, sb) }
 }
 
 /// Levels of a place name, at their position (empty ones included).
@@ -846,10 +844,6 @@ impl Gedcom {
                 "duplicate_media" => i.related.first().is_some_and(|keep| self.merge_duplicate_media(keep, &i.xref)),
                 "place_hierarchy" => match (&i.related[..], i.path.first()) {
                     ([parent, from, to], Some(&level)) => self.rename_jurisdiction(level, parent, from, to) > 0,
-                    _ => false,
-                },
-                "place_variant" => match &i.related[..] {
-                    [from, to] => self.merge_place(from, to),
                     _ => false,
                 },
                 "unattached_file" => i.related.first().is_some_and(|f| {
@@ -964,23 +958,6 @@ impl Gedcom {
             &[keep],
         );
         self.delete(dup).is_some()
-    }
-
-    /// Replaces place `from` with `to` everywhere, keeping the coordinates of `to` (or those of
-    /// `from` if `to` has none).
-    pub fn merge_place(&mut self, from: &str, to: &str) -> bool {
-        let places = self.places();
-        let find = |n: &str| places.iter().find(|p| p.name == n);
-        let (Some(a), Some(b)) = (find(from), find(to)) else { return false };
-        let (lat, long) = match (&b.latitude, &b.longitude, &a.latitude, &a.longitude) {
-            (Some(la), Some(lo), _, _) | (_, _, Some(la), Some(lo)) => (la.clone(), lo.clone()),
-            _ => (String::new(), String::new()),
-        };
-        self.update_place(from, to, &lat, &long);
-        if !lat.is_empty() {
-            self.update_place(to, to, &lat, &long);
-        }
-        true
     }
 
     /// In the places whose level `level` is `parent`, replaces `from` with `to` at the next level.

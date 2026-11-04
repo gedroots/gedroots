@@ -402,6 +402,9 @@ impl Workspace {
         if self.merge.is_some() {
             return self.merge_current(window, cx);
         }
+        if self.place_merge.is_some() {
+            return self.merge_places_current(window, cx);
+        }
         if !self.review.open || self.doc.is_none() {
             return;
         }
@@ -888,7 +891,7 @@ impl Workspace {
         for place in &chain.places {
             links = links.child(link_row(
                 t!("review.place").into_owned(),
-                place.value.clone(),
+                gedcom::place_label(&place.value),
                 t!("review.located", coords = place.detail).into_owned(),
                 place.created,
             ));

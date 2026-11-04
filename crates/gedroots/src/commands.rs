@@ -81,6 +81,11 @@ actions!(
         NewRepository,
         NewNote,
         EnterRecord,
+        // Place
+        LocatePlace,
+        PlaceOnMap,
+        MergeWithPlace,
+        FindDuplicatePlaces,
         // Media
         NewMedia,
         AttachMediaTo,
@@ -572,6 +577,16 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
         person.push(Sub(label::search_web(), items.collect()));
     }
     menus.push((t!("menu.person").into(), person));
+    // Places are not records: their commands apply to the place shown on the Places page.
+    menus.push((
+        t!("menu.place").into(),
+        vec![
+            a(t!("cmd.locate_place"), LocatePlace),
+            Sep,
+            a(t!("cmd.merge_with_place"), MergeWithPlace),
+            a(t!("cmd.find_duplicate_places"), FindDuplicatePlaces),
+        ],
+    ));
     menus.push((
         t!("menu.media").into(),
         vec![
@@ -755,6 +770,7 @@ fn palette_only() -> Vec<(SharedString, Vec<Item>)> {
                 a(label::add_pages(), AddPages),
             ],
         ),
+        (t!("menu.place").into(), vec![a(t!("cmd.place_on_map"), PlaceOnMap)]),
         (t!("menu.view").into(), vec![a(label::save_search(), SaveSearch)]),
         (
             t!("menu.go").into(),
