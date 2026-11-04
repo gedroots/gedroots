@@ -15,7 +15,9 @@ How to work:
    - the tree is wrong (a misread year, a husband recorded as a woman, a place without
      coordinates, a file that moved): `action: "edit"` with the edits the issue lists in `edits`,
      a `reason` that says what you read, and the `evidence` (source and reference, web page,
-     short quote);
+     short quote). For a place without coordinates, call `locate_place` with the people who
+     lived there and choose the candidate close to their other events, then `set_coordinates`
+     with its `osm`;
    - the tree is right (a marriage really celebrated very young, a very long life confirmed by
      both acts): `action: "hide"`, with the reason it is right;
    - you cannot tell: leave it, and list it for the user at the end.

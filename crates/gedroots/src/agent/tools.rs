@@ -194,6 +194,72 @@ pub struct Sources {
     pub repositories: Vec<RepositoryRef>,
 }
 
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct LocateParams {
+    /// Tree to work on, as `list_trees` names it, when several are open (default: the one in
+    /// front in GEDRoots).
+    pub tree: Option<String>,
+    /// The place as the act or the tree writes it, with what tells it apart: "Saint-Martin,
+    /// Manche", "Lebach, Saarland".
+    pub place: String,
+    /// Ids of the act's people already in the tree: their events and their relatives' are the
+    /// context that picks the right homonym.
+    #[serde(default)]
+    pub people: Vec<String>,
+    /// Date of the act (GEDCOM), to put the events closest in time first.
+    pub date: Option<String>,
+    /// Maximum number of candidates (default 8, at most 15).
+    pub limit: Option<usize>,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct TreePlace {
+    /// As the tree writes it: give it as is in `propose_act`.
+    pub place: String,
+    pub located: bool,
+    /// Events and records that name it.
+    pub uses: usize,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct NearbyPlace {
+    /// “Birth of Jean MARCHAND, 1802, Agneaux (Manche)”.
+    pub event: String,
+    /// self, father, mother, spouse, child or sibling of the people given.
+    pub relation: String,
+    pub latitude: f64,
+    pub longitude: f64,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct PlaceCandidate {
+    /// The place in the tree's place format: give it as the act's (or a fact's) `place`, and in
+    /// `locations`.
+    pub place: String,
+    /// Name and broader jurisdictions, as the gazetteer gives them.
+    pub name: String,
+    pub context: String,
+    pub latitude: f64,
+    pub longitude: f64,
+    /// OpenStreetMap identifier (`relation/415228`): give it in `locations`.
+    pub osm: Option<String>,
+    /// Distance to the closest place of `nearby`, in km.
+    pub distance_km: Option<f64>,
+    /// That closest event.
+    pub nearest: Option<String>,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct Located {
+    /// Places of the tree with this name: when one is the act's place, use it (it needs no
+    /// location, or, if not located, propose_change set_coordinates).
+    pub in_tree: Vec<TreePlace>,
+    /// Located places of the people's events and their relatives', closest in time first.
+    pub nearby: Vec<NearbyPlace>,
+    /// What the gazetteer (OpenStreetMap) finds, places near `nearby` ranked higher.
+    pub candidates: Vec<PlaceCandidate>,
+}
+
 #[derive(Debug, Serialize, JsonSchema)]
 pub struct NewPerson {
     /// Temporary id: link it (`identity` link) to name the same new person in another proposal.
@@ -389,6 +455,18 @@ fn owner(
 
 fn clean_id(id: &str) -> &str {
     id.trim().trim_matches('@')
+}
+
+/// One gazetteer request at a time, at most one per [`crate::gazetteer::PAUSE`], whatever the
+/// agent asks: places are located one by one, never in bulk.
+fn pace() {
+    static LAST: std::sync::Mutex<Option<std::time::Instant>> = std::sync::Mutex::new(None);
+    let mut last = LAST.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(t) = *last {
+        let wait = crate::gazetteer::PAUSE.saturating_sub(t.elapsed());
+        std::thread::sleep(wait);
+    }
+    *last = Some(std::time::Instant::now());
 }
 
 /// A person's id in the tree. A temporary id (`new-3`) of a saved proposal becomes the id the
@@ -763,7 +841,7 @@ impl GedrootsMcp {
 
     #[tool(
         name = "search_sources",
-        description = "Searches the tree's sources (with their register, repository and number of acts) and repositories. Use it before proposing an act, to cite an existing source or repository.",
+        description = "Searches the tree's sources (with their register, repository and number of acts) and repositories. Use it before proposing an act, to cite an existing source or repository; when the archive is not among the repositories, propose_act creates it with the new source (`source.repository`).",
         annotations(read_only_hint = true, open_world_hint = false)
     )]
     async fn sources(&self, Parameters(p): Parameters<SourceSearch>) -> Res<Sources> {
@@ -846,8 +924,71 @@ impl GedrootsMcp {
     }
 
     #[tool(
+        name = "locate_place",
+        description = "Finds where a place of an act is, one place at a time, before proposing it: the tree's places of that name, the located places of the people's events and of their relatives' (closest in time first), and the candidates of the gazetteer (OpenStreetMap) with their distance to those events. Homonyms are common (Saint-Martin, Neukirchen): choose the candidate that fits the act (its jurisdictions, the family's region, the distance), not merely the first, and give its `place` and coordinates in `propose_act` (`place` and `locations`). When none fits or you are unsure, propose the place without a location.",
+        annotations(read_only_hint = true, open_world_hint = true)
+    )]
+    async fn locate_place(&self, Parameters(p): Parameters<LocateParams>) -> Res<Located> {
+        let s = self.snapshot(p.tree.as_deref()).await?;
+        let query = p.place.trim().to_string();
+        if query.is_empty() {
+            return Err("give the `place` to locate".into());
+        }
+        let g = &s.ged;
+        let in_tree = g
+            .places_named(&query)
+            .into_iter()
+            .take(10)
+            .map(|pl| TreePlace { located: pl.coords().is_some(), uses: pl.uses, place: pl.name })
+            .collect();
+        let people: Vec<String> = p.people.iter().filter_map(|x| person_id(&s, x).ok()).collect();
+        let refs: Vec<&str> = people.iter().map(String::as_str).collect();
+        let year = p.date.as_deref().and_then(|d| gedcom::Date::parse(d).year());
+        let nearby = g.nearby_places(&refs, year, 15);
+        if crate::gazetteer::offline() {
+            return Err("place search is turned off on this computer (offline)".into());
+        }
+        let limit = p.limit.unwrap_or(8).clamp(1, 15);
+        let near = gedcom::locate::center(&nearby);
+        let q = query.clone();
+        let found = tokio::task::spawn_blocking(move || {
+            pace();
+            crate::gazetteer::search_near(&q, limit, near)
+        })
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| format!("the gazetteer did not answer: {e}"))?;
+        let candidates = gedcom::locate::rank(found, &nearby, &g.place_form())
+            .into_iter()
+            .map(|r| PlaceCandidate {
+                place: r.place,
+                name: r.candidate.title(),
+                context: r.candidate.context(),
+                latitude: r.candidate.lat,
+                longitude: r.candidate.lon,
+                osm: r.candidate.exid.as_ref().and_then(|(id, ty)| {
+                    let kind = ty.trim_end_matches('/').rsplit('/').next()?;
+                    Some(format!("{kind}/{id}"))
+                }),
+                distance_km: r.nearest.map(|(km, _)| (km * 10.0).round() / 10.0),
+                nearest: r.nearest.map(|(_, i)| gedcom::locate::describe(&nearby[i])),
+            })
+            .collect();
+        let nearby = nearby
+            .iter()
+            .map(|n| NearbyPlace {
+                event: gedcom::locate::describe(n),
+                relation: n.relation.to_string(),
+                latitude: n.latitude,
+                longitude: n.longitude,
+            })
+            .collect();
+        self.answer(&s, Located { in_tree, nearby, candidates })
+    }
+
+    #[tool(
         name = "propose_act",
-        description = "Proposes an act found in the archives (birth, marriage, death…), with its source, people and image. Nothing is written: the proposal waits in GEDRoots' review page, where the user compares it with the tree and saves or rejects it. Each person says who they are: identity link (in the tree, with id), create or mention; call match_people first. Give every other fact the act states about a person in their `facts` (birth date in a baptism, marginal mention of a death, occupations, residences), each with its own date or none; the answer lists everything that will be written, the proposal's id (to correct it, propose it again with `replaces`) and the temporary id of each new person (link it to name the same person in another proposal: never create them twice). It is refused, with the reason, if it does not fit the tree (unknown source or person, a parent other than the tree's, a person to create who resembles someone of the tree, impossible date): fix it and propose again. Write facts in the tree's language and wording (an occupation the tree already has keeps the tree's text; only the transcription keeps the act's language and spelling); an occupation or residence at another date is another attestation, not a duplicate. Give the place as the tree names it (the municipality: a street, number or building goes in `address`, never in the place), the date in GEDCOM format, the downloaded file (a PDF register needs pdf_page) and the act's page in the archive's viewer (url): both are kept, the image and a web link.",
+        description = "Proposes an act found in the archives (birth, marriage, death…), with its source, people and image. Nothing is written: the proposal waits in GEDRoots' review page, where the user compares it with the tree and saves or rejects it. Each person says who they are: identity link (in the tree, with id), create or mention; call match_people first. Give every other fact the act states about a person in their `facts` (birth date in a baptism, marginal mention of a death, occupations, residences), each with its own date or none; the answer lists everything that will be written, the proposal's id (to correct it, propose it again with `replaces`) and the temporary id of each new person (link it to name the same person in another proposal: never create them twice). It is refused, with the reason, if it does not fit the tree (unknown source or person, a parent other than the tree's, a person to create who resembles someone of the tree, impossible date): fix it and propose again. Write facts in the tree's language and wording (an occupation the tree already has keeps the tree's text; only the transcription keeps the act's language and spelling); an occupation or residence at another date is another attestation, not a duplicate. Give the place as the tree names it (the municipality: a street, number or building goes in `address`, never in the place); a new place can carry its coordinates in `locations`, chosen with `locate_place`. A new source names its repository: an existing one (`repository_id`), or one to create (`repository`, when search_sources finds none). Give the date in GEDCOM format, the downloaded file (a PDF register needs pdf_page) and the act's page in the archive's viewer (url): both are kept, the image and a web link.",
         annotations(
             read_only_hint = false,
             destructive_hint = false,
@@ -994,7 +1135,7 @@ impl GedrootsMcp {
 
     #[tool(
         name = "propose_change",
-        description = "Proposes a change for a Data Quality issue (`quality_issues`), or a correction you read in a document. Nothing is written: it waits in GEDRoots' review page, where the user saves or rejects it. `fix` applies the Quality page's own fix (issues with `automatic_fix`). `edit` changes the records the issue is about, with the edits the issue lists in `edits` (a date read in the act, the sex of a spouse, a place's coordinates, a citation of an existing source…). `hide` keeps the issue as right, for instance a marriage really celebrated very young, and saves the reason with it. For a `possible_duplicate`: `merge` when the two records are the same person (read both with `read_record` first; `choices` says, for each fact of the issue's `merge.conflicts`, whose value is right), `hide` when they are two people. The user reviews a merge in GEDRoots' merge window. Give `reason` (what you read) and, when you can, `evidence`. Never hide an issue only to clear the list. It is refused, with the reason, if the edit is not one the issue allows, touches another record, or does not make the issue go away: GEDRoots applies it to a copy first. The answer lists the issues the change would create. Without `issue`, it is a correction of any record: a given name or surname misread in an earlier proposal or wrong in the tree (`set_name`; `add_name` keeps a variant spelling as another name), an occupation or other fact, its value, date, place or street address (`set_event` on an existing one, `add_event` for a new one), a place's name everywhere it is used or its coordinates (`rename_place`, `set_coordinates`), a sex, a citation; `edit` only, with `reason` and `evidence` (the source, the viewer page or a quote of the document).",
+        description = "Proposes a change for a Data Quality issue (`quality_issues`), or a correction you read in a document. Nothing is written: it waits in GEDRoots' review page, where the user saves or rejects it. `fix` applies the Quality page's own fix (issues with `automatic_fix`). `edit` changes the records the issue is about, with the edits the issue lists in `edits` (a date read in the act, the sex of a spouse, a place's coordinates, a citation of an existing source…). `hide` keeps the issue as right, for instance a marriage really celebrated very young, and saves the reason with it. For a `possible_duplicate`: `merge` when the two records are the same person (read both with `read_record` first; `choices` says, for each fact of the issue's `merge.conflicts`, whose value is right), `hide` when they are two people. The user reviews a merge in GEDRoots' merge window. Give `reason` (what you read) and, when you can, `evidence`. Never hide an issue only to clear the list. It is refused, with the reason, if the edit is not one the issue allows, touches another record, or does not make the issue go away: GEDRoots applies it to a copy first. The answer lists the issues the change would create. Without `issue`, it is a correction of any record: a given name or surname misread in an earlier proposal or wrong in the tree (`set_name`; `add_name` keeps a variant spelling as another name), an occupation or other fact, its value, date, place or street address (`set_event` on an existing one, `add_event` for a new one), a place's name everywhere it is used or its coordinates (`rename_place`, `set_coordinates`, choosing with `locate_place`), the repository of a source (`set_repository`: an existing one, or one to create), a sex, a citation; `edit` only, with `reason` and `evidence` (the source, the viewer page or a quote of the document).",
         annotations(
             read_only_hint = false,
             destructive_hint = false,
@@ -1032,7 +1173,9 @@ death acts), call `research_leads`: each lead gives the estimated years, the pla
 and the searches already made; `person_sheet` gives the person's dates, places and sources. Note \
 every search with `log_search`, found or not. When you find an act, read it, check it matches the person, \
 call `match_people` to know who each person named is in the tree (link them, create them or only \
-mention them), `search_sources` to reuse the source or repository, then `propose_act`. A person \
+mention them), `search_sources` to reuse the source or repository (a new source may create its \
+repository when the tree has none for that archive), `locate_place` for a place the tree has not \
+located (choose the homonym close to the family's other events), then `propose_act`. A person \
 that a waiting proposal creates has a temporary id (new-3): link it to name them again. To correct a \
 waiting act, propose it again with `replaces`; `list_proposals` says which are still waiting. \
 Every answer carries `news` when the user saved, rejected or edited a proposal since your last call: \
@@ -1241,7 +1384,7 @@ mod tests {
         let (_, _, list) =
             post(port, "secret", Some(&sid), serde_json::json!({"jsonrpc":"2.0","id":2,"method":"tools/list"}));
         let tools = list["result"]["tools"].as_array().expect("tools");
-        assert_eq!(tools.len(), 16);
+        assert_eq!(tools.len(), 17);
         // The proposals only queue a proposal; the research tools write the research log only.
         let mut writers: Vec<String> = tools
             .iter()

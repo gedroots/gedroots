@@ -6,7 +6,7 @@
 //!   relevant page of a PDF becomes a JPEG image (rendered in pure Rust, on every platform), stored
 //!   in the app's cache until it is saved.
 
-use gedcom::proposal::{NewSource, Proposal, SourceChoice};
+use gedcom::proposal::{Location, NewRepository, NewSource, Proposal, SourceChoice};
 use gedcom::{Act, ActRole, Gedcom, MediaChoice, Participant, PersonChoice, PersonField, RecordKind};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -23,8 +23,33 @@ pub struct SourceParams {
     pub title: Option<String>,
     /// New source: existing repository id (from `search_sources`).
     pub repository_id: Option<String>,
+    /// New source, when the tree has no repository for it (`search_sources` finds none): the
+    /// archive to create. A repository of the tree with the same name is used instead.
+    pub repository: Option<RepositoryParams>,
     /// New source: call number of the register at the repository (e.g. "10 NUM 35238").
     pub call_number: Option<String>,
+}
+
+/// A repository to create: the archive, library or office that keeps the register.
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct RepositoryParams {
+    /// Its usual full name ("Archives départementales de la Manche").
+    pub name: String,
+    /// Postal address, one line per line of the address.
+    pub address: Option<String>,
+    /// Website (home page of the archive, not the act's page).
+    pub website: Option<String>,
+}
+
+/// Coordinates for a new place of the proposal, chosen among `locate_place`'s candidates.
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct LocationParams {
+    /// The place, written exactly as in `place` or a fact's `place` of this proposal.
+    pub place: String,
+    pub latitude: f64,
+    pub longitude: f64,
+    /// The candidate's `osm` (`relation/415228`), kept as the place's identifier.
+    pub osm: Option<String>,
 }
 
 /// Who a person of the act is in the tree, decided before proposing (`match_people` lists the
@@ -141,6 +166,10 @@ pub struct ProposeParams {
     pub pdf_page: Option<usize>,
     /// Permanent address of the act's page in the archive's viewer; kept as a web link of the source.
     pub url: Option<String>,
+    /// Coordinates of the new places it names, chosen with `locate_place` (the candidate close to
+    /// the people's other events). Only for places the tree has not located.
+    #[serde(default)]
+    pub locations: Vec<LocationParams>,
     /// Id of a waiting proposal (`P3`) that this one corrects: it takes its place in the review
     /// page, and its new people keep their temporary ids when linked again.
     pub replaces: Option<String>,
@@ -572,10 +601,42 @@ pub fn to_proposal(p: &ProposeParams) -> Result<Proposal, String> {
                 .as_ref()
                 .map(|r| r.trim().trim_matches('@').to_string())
                 .filter(|r| !r.is_empty()),
+            new_repository: s.repository.as_ref().map(|r| NewRepository {
+                name: r.name.trim().to_string(),
+                address: opt(&r.address).to_string(),
+                www: opt(&r.website).to_string(),
+            }),
             call_number: opt(&s.call_number).to_string(),
         }),
     };
-    Ok(Proposal { source, act, url: opt(&p.url).to_string(), conflicts: Default::default() })
+    if s.id.as_deref().is_some_and(|x| !x.trim().is_empty()) && s.repository.is_some() {
+        return Err("source.repository creates the repository of a new source: an existing source keeps its own (to set it, propose_change)".into());
+    }
+    let mut locations = Vec::new();
+    for l in &p.locations {
+        let exid = match opt(&l.osm) {
+            "" => None,
+            osm => Some(osm_exid(osm)?),
+        };
+        locations.push(Location {
+            place: l.place.trim().to_string(),
+            latitude: l.latitude,
+            longitude: l.longitude,
+            exid,
+        });
+    }
+    Ok(Proposal { source, act, url: opt(&p.url).to_string(), conflicts: Default::default(), locations })
+}
+
+/// `relation/415228` (a candidate's `osm`) as an `EXID` value and `TYPE`.
+pub fn osm_exid(osm: &str) -> Result<(String, String), String> {
+    let (kind, id) = osm.trim().trim_matches('/').split_once('/').unwrap_or(("", ""));
+    if !matches!(kind, "node" | "way" | "relation") || id.is_empty() || !id.chars().all(|c| c.is_ascii_digit()) {
+        return Err(format!(
+            "osm `{osm}`: give the candidate's `osm` as `locate_place` returns it (`relation/415228`)"
+        ));
+    }
+    Ok((id.to_string(), format!("https://www.openstreetmap.org/{kind}/")))
 }
 
 /// What saving the proposal will write, one line per row of the review: people created, linked or

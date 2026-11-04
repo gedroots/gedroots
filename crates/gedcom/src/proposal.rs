@@ -16,6 +16,7 @@
 use crate::DateKind;
 use crate::act::{Act, ActResult, ActRole, Conflicts, PersonChoice, PersonField, Suggestion};
 use crate::document::{Gedcom, RecordKind};
+use crate::geo::{format_latitude, format_longitude};
 use crate::node::Node;
 use crate::parse::node_to_string;
 
@@ -33,8 +34,34 @@ pub struct NewSource {
     pub register: String,
     /// Existing repository (`REPO`).
     pub repository: Option<String>,
+    /// Repository to create with the source, when `repository` is empty: an archive the tree does
+    /// not cite yet. One of the file named the same way is used instead.
+    pub new_repository: Option<NewRepository>,
     /// Call number in the repository (`CALN`).
     pub call_number: String,
+}
+
+/// New repository (`REPO` record), created with the new source that cites it.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct NewRepository {
+    /// `NAME`: “Archives départementales de la Manche”.
+    pub name: String,
+    /// Postal address (`ADDR`), lines separated by newlines.
+    pub address: String,
+    /// Website (`WWW`).
+    pub www: String,
+}
+
+/// Coordinates for a place the proposal names and the tree has not located yet, chosen by the
+/// agent among a gazetteer's results.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Location {
+    /// The place, as the proposal writes it (`PLAC`).
+    pub place: String,
+    pub latitude: f64,
+    pub longitude: f64,
+    /// Identifier in the gazetteer (`EXID` value and `TYPE` URI), e.g. an OpenStreetMap relation.
+    pub exid: Option<(String, String)>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -44,7 +71,7 @@ pub enum SourceChoice {
 }
 
 /// A proposed record, with its source.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Proposal {
     pub source: SourceChoice,
     /// The record; its source (`act.source`) is replaced by the one created if it is new.
@@ -53,6 +80,8 @@ pub struct Proposal {
     pub url: String,
     /// What to do with the values that contradict the tree, chosen in To Review.
     pub conflicts: Conflicts,
+    /// Coordinates of the new places it names (`PLAC.MAP`, `EXID`).
+    pub locations: Vec<Location>,
 }
 
 /// What a line of the comparison changes.
@@ -116,6 +145,8 @@ pub struct Link {
 pub struct Chain {
     pub repository: Option<Link>,
     pub source: Option<Link>,
+    /// New places located by the proposal: the place, and its coordinates as detail.
+    pub places: Vec<Link>,
     /// Sources of the file taken from the same register.
     pub same_register: usize,
 }
@@ -137,6 +168,10 @@ impl Proposal {
             }
         }
         act.place = ged.known_place(&act.place);
+        for l in &mut self.locations {
+            l.place = ged.known_place(&l.place);
+        }
+        let act = &mut self.act;
         for p in &mut act.participants {
             for f in [PersonField::Residence, PersonField::Birthplace] {
                 let v = p.get(f).to_string();
@@ -199,7 +234,13 @@ impl Proposal {
                 if !s.register.trim().is_empty() {
                     node.insert_child(Node::with_value("PUBL", s.register.trim()));
                 }
-                if let Some(r) = &s.repository {
+                let repository = match (&s.repository, &s.new_repository) {
+                    (Some(r), _) => Some(r.clone()),
+                    (None, Some(new)) => Some(ged.create_repository(new)?),
+                    (None, None) => None,
+                };
+                let node = ged.get_mut(&x).ok_or("source not created")?;
+                if let Some(r) = &repository {
                     let mut repo = Node::with_value("REPO", format!("@{r}@"));
                     if !s.call_number.trim().is_empty() {
                         repo = repo.push(Node::with_value("CALN", s.call_number.trim()));
@@ -234,10 +275,21 @@ impl Proposal {
         let mut copy = ged.clone();
         let act = self.materialize(&mut copy)?;
         let mut res = act.save_with(&mut copy, &self.conflicts)?;
+        for l in &self.locations {
+            copy.locate_place(&l.place, &format_latitude(l.latitude), &format_longitude(l.longitude), l.exid.as_ref());
+        }
         if (matches!(self.source, SourceChoice::New(_)) || !self.url.trim().is_empty())
             && !res.touched.contains(&act.source)
         {
             res.touched.insert(0, act.source.clone());
+        }
+        // A repository created with the source.
+        if let SourceChoice::New(NewSource { repository: None, new_repository: Some(new), .. }) = &self.source
+            && ged.repository_named(&new.name).is_none()
+            && let Some(r) = copy.repository_named(&new.name)
+            && !res.touched.contains(&r)
+        {
+            res.touched.insert(0, r);
         }
         if let Ok(url) = crate::weblink::normalize_url(&self.url)
             && let Some(m) = copy.media_by_file(&url)
@@ -254,6 +306,7 @@ impl Proposal {
     pub fn check(&self, ged: &Gedcom) -> Result<(), String> {
         self.check_source(ged)?;
         self.check_people(ged)?;
+        self.check_locations(ged)?;
         self.apply(&mut ged.clone()).map(|_| ())
     }
 
@@ -270,9 +323,58 @@ impl Proposal {
                 {
                     return Err(format!("no repository with id {r}"));
                 }
+                if s.repository.is_none()
+                    && let Some(new) = &s.new_repository
+                    && new.name.trim().is_empty()
+                {
+                    return Err(
+                        "give the new repository's `name` (e.g. \"Archives départementales de la Manche\")".into()
+                    );
+                }
                 if s.register.trim().is_empty() && s.title.trim().is_empty() {
                     return Err("give the new source's register (e.g. \"Rennes, births 1802\")".into());
                 }
+            }
+        }
+        Ok(())
+    }
+
+    /// Places the proposal writes: the event's and its facts'.
+    pub fn places(&self) -> Vec<&str> {
+        let mut out: Vec<&str> = Vec::new();
+        let facts = self.act.participants.iter().flat_map(|p| p.facts.iter().map(|f| f.place.as_str()));
+        for p in std::iter::once(self.act.place.as_str()).chain(facts) {
+            if !p.trim().is_empty() && !out.contains(&p) {
+                out.push(p);
+            }
+        }
+        out
+    }
+
+    /// Coordinates go to a new place of the proposal, never move one the tree has located.
+    fn check_locations(&self, ged: &Gedcom) -> Result<(), String> {
+        let places = self.places();
+        for l in &self.locations {
+            if !(-90.0..=90.0).contains(&l.latitude) || !(-180.0..=180.0).contains(&l.longitude) {
+                return Err(format!(
+                    "location of `{}`: latitude must be within ±90 and longitude within ±180 degrees",
+                    l.place
+                ));
+            }
+            if !places.contains(&l.place.as_str()) {
+                return Err(format!(
+                    "location of `{}`: the proposal names no such place (its places: {})",
+                    l.place,
+                    places.iter().map(|p| format!("`{p}`")).collect::<Vec<_>>().join(", ")
+                ));
+            }
+            if let Some(p) = ged.places().into_iter().find(|p| p.name == l.place && p.coords().is_some()) {
+                return Err(format!(
+                    "`{}` is already located in the tree ({}, {}): leave it out of `locations` (to move it, propose_change set_coordinates)",
+                    p.short(),
+                    p.latitude.unwrap_or_default(),
+                    p.longitude.unwrap_or_default()
+                ));
             }
         }
         Ok(())
@@ -511,12 +613,36 @@ impl Proposal {
                 }
             }
             SourceChoice::New(s) => {
-                chain.repository = s.repository.as_deref().and_then(|r| repo_link(r, false, &s.call_number));
+                chain.repository = match (&s.repository, &s.new_repository) {
+                    (Some(r), _) => repo_link(r, false, &s.call_number),
+                    (None, Some(new)) => match ged.repository_named(&new.name) {
+                        Some(r) => repo_link(&r, false, &s.call_number),
+                        None => Some(Link {
+                            value: new.name.trim().to_string(),
+                            detail: [s.call_number.trim(), &crate::address::one_line(&new.address), new.www.trim()]
+                                .into_iter()
+                                .filter(|v| !v.is_empty())
+                                .collect::<Vec<_>>()
+                                .join(" · "),
+                            created: true,
+                        }),
+                    },
+                    (None, None) => None,
+                };
                 chain.same_register = ged.register_sources(&s.register).len();
                 let title = if s.title.trim().is_empty() { self.act.auto_title() } else { s.title.trim().to_string() };
                 chain.source = Some(Link { value: title, detail: s.register.trim().to_string(), created: true });
             }
         }
+        chain.places = self
+            .locations
+            .iter()
+            .map(|l| Link {
+                value: crate::short_place(&l.place),
+                detail: format!("{}, {}", format_latitude(l.latitude), format_longitude(l.longitude)),
+                created: true,
+            })
+            .collect();
         chain
     }
 
@@ -733,6 +859,31 @@ impl Gedcom {
         }
     }
 
+    /// Repository of the file with this name, written the same way or nearly (case, accents,
+    /// punctuation).
+    pub fn repository_named(&self, name: &str) -> Option<String> {
+        let want = loose(name);
+        if want.is_empty() {
+            return None;
+        }
+        self.records_of(RecordKind::Repository)
+            .find(|r| r.child_val("NAME").is_some_and(|n| loose(n) == want))
+            .and_then(|r| r.xref.clone())
+    }
+
+    /// Creates a repository, or returns the one of the file with the same name.
+    pub fn create_repository(&mut self, new: &NewRepository) -> Result<String, String> {
+        if let Some(x) = self.repository_named(&new.name) {
+            return Ok(x);
+        }
+        let x = self.create(RecordKind::Repository);
+        let node = self.get_mut(&x).ok_or("repository not created")?;
+        node.set_child_val("NAME", new.name.trim());
+        node.set_child_text("ADDR", new.address.trim());
+        node.set_child_val("WWW", new.www.trim());
+        Ok(x)
+    }
+
     /// Sources whose register (`PUBL`) is this one.
     pub fn register_sources(&self, register: &str) -> Vec<String> {
         let r = norm(register);
@@ -803,7 +954,7 @@ mod tests {
             Participant { choice: PersonChoice::Link("I3".into()), ..Participant::new(ActRole::Father) },
             Participant::new(ActRole::Mother).with(PersonField::Given, "Marie").with(PersonField::Surname, "DURAND"),
         ];
-        Proposal { source, act, url: String::new(), conflicts: Conflicts::default() }
+        Proposal { source, act, url: String::new(), conflicts: Conflicts::default(), locations: Vec::new() }
     }
 
     fn new_source() -> SourceChoice {
@@ -1156,5 +1307,81 @@ mod tests {
         assert_eq!(act.address, "12, rue Saint-Malo");
         let facts: Vec<&crate::act::Fact> = act.participants.iter().flat_map(|p| &p.facts).collect();
         assert!(facts.iter().any(|f| f.tag == "RESI" && f.address == "3, rue de la Monnaie"), "{facts:?}");
+    }
+
+    #[test]
+    fn new_repository_is_created_once() {
+        let g = ged();
+        let new = |name: &str| {
+            SourceChoice::New(NewSource {
+                register: "Saint-Lô, naissances 1802".into(),
+                new_repository: Some(NewRepository {
+                    name: name.into(),
+                    address: "103, rue du Maréchal-Juin\nSaint-Lô".into(),
+                    www: "https://archives.manche.fr".into(),
+                }),
+                call_number: "5 Mi 1".into(),
+                ..Default::default()
+            })
+        };
+        let p = birth(new("Archives départementales de la Manche"));
+        p.check(&g).unwrap();
+        let chain = p.chain(&g);
+        let repo = chain.repository.unwrap();
+        assert!(repo.created);
+        assert!(repo.detail.contains("103, rue du Maréchal-Juin, Saint-Lô"), "{}", repo.detail);
+        let mut g2 = g.clone();
+        let res = p.apply(&mut g2).unwrap();
+        let x = g2.repository_named("archives departementales de la manche").unwrap();
+        assert!(res.touched.contains(&x), "{:?}", res.touched);
+        let text = g2.to_gedcom_string();
+        assert!(text.contains("1 NAME Archives départementales de la Manche\n1 ADDR 103, rue du Maréchal-Juin\n2 CONT Saint-Lô\n1 WWW https://archives.manche.fr\n"), "{text}");
+        assert!(text.contains(&format!("1 REPO @{x}@\n2 CALN 5 Mi 1\n")), "{text}");
+        // Named like a repository of the tree: that one is cited, nothing is created.
+        let p = birth(new("Archives d’Ille et Vilaine"));
+        assert!(!p.chain(&g).repository.unwrap().created);
+        let mut g3 = g.clone();
+        p.apply(&mut g3).unwrap();
+        assert_eq!(g3.records_of(RecordKind::Repository).count(), 1);
+        assert!(g3.to_gedcom_string().contains("1 REPO @R1@\n2 CALN 5 Mi 1"));
+        // A name is required.
+        assert!(birth(new(" ")).check(&g).unwrap_err().contains("name"));
+    }
+
+    #[test]
+    fn locations_go_to_new_places_only() {
+        let mut g = ged();
+        let mut p = birth(SourceChoice::Existing("S1".into()));
+        p.act.place = "Agneaux, Manche, France".into();
+        let osm = ("1234".to_string(), "https://www.openstreetmap.org/relation/".to_string());
+        p.locations = vec![Location {
+            place: "Agneaux, Manche, France".into(),
+            latitude: 49.1188,
+            longitude: -1.1061,
+            exid: Some(osm.clone()),
+        }];
+        p.complete(&g);
+        p.check(&g).unwrap();
+        assert_eq!(p.chain(&g).places[0].detail, "N49.1188, W1.1061");
+        let mut g2 = g.clone();
+        p.apply(&mut g2).unwrap();
+        let text = g2.to_gedcom_string();
+        assert!(
+            text.contains("2 PLAC Agneaux, Manche, France\n3 MAP\n4 LATI N49.1188\n4 LONG W1.1061\n3 EXID 1234\n"),
+            "{text}"
+        );
+        // A place the proposal does not name.
+        let mut q = p.clone();
+        q.locations[0].place = "Rennes".into();
+        assert!(q.check(&g).unwrap_err().contains("names no such place"));
+        // Out of range.
+        let mut q = p.clone();
+        q.locations[0].latitude = 120.0;
+        assert!(q.check(&g).unwrap_err().contains("latitude"));
+        // Already located in the tree: never moved by an act.
+        g.update_place("Rennes", "Rennes", "N48.11", "W1.68");
+        let mut q = birth(SourceChoice::Existing("S1".into()));
+        q.locations = vec![Location { place: "Rennes".into(), latitude: 48.0, longitude: -1.0, exid: None }];
+        assert!(q.check(&g).unwrap_err().contains("already located"));
     }
 }

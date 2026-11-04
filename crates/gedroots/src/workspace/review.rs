@@ -860,6 +860,14 @@ impl Workspace {
             }
             links = links.child(link_row(t!("review.source").into_owned(), s.value.clone(), detail, s.created));
         }
+        for place in &chain.places {
+            links = links.child(link_row(
+                t!("review.place").into_owned(),
+                place.value.clone(),
+                t!("review.located", coords = place.detail).into_owned(),
+                place.created,
+            ));
+        }
         if let Some(img) = &item.pending.image {
             let planned = planned_file(g, &p)
                 .unwrap_or_else(|| img.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default());

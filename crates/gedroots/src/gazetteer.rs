@@ -34,15 +34,28 @@ fn agent() -> &'static ureq::Agent {
 /// Inhabited places (municipalities, hamlets, towns…) matching the search, most likely first.
 /// Blocking: call it off the interface thread.
 pub fn search(q: &str, limit: usize) -> Result<Vec<Candidate>, String> {
+    search_near(q, limit, None)
+}
+
+/// Like [`search`], places around `near` (latitude, longitude) ranked higher: the region where a
+/// family lived, for an agent locating one of its places.
+pub fn search_near(q: &str, limit: usize, near: Option<(f64, f64)>) -> Result<Vec<Candidate>, String> {
     let url = std::env::var("GEDROOTS_GEOCODER").unwrap_or_else(|_| DEFAULT_GEOCODER.into());
-    let resp = agent()
+    let mut req = agent()
         .get(&url)
         .query("q", q)
         .query("limit", &limit.to_string())
         .query("lang", &crate::i18n::language())
-        .query("osm_tag", "place")
-        .call()
-        .map_err(|e| e.to_string())?;
+        .query("osm_tag", "place");
+    if let Some((lat, lon)) = near {
+        // A region (zoom 8 ≈ 100 km), and a light bias: a famous homonym far away still shows.
+        req = req
+            .query("lat", &format!("{lat:.4}"))
+            .query("lon", &format!("{lon:.4}"))
+            .query("zoom", "8")
+            .query("location_bias_scale", "0.3");
+    }
+    let resp = req.call().map_err(|e| e.to_string())?;
     let v: serde_json::Value = resp.into_json().map_err(|e| e.to_string())?;
     Ok(parse(&v))
 }

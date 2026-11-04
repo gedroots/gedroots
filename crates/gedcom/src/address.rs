@@ -25,7 +25,7 @@ pub fn address_of(node: &Node) -> Option<String> {
 }
 
 /// Lines of an address joined by commas, blank lines dropped.
-fn one_line(text: &str) -> String {
+pub fn one_line(text: &str) -> String {
     text.lines().map(str::trim).filter(|l| !l.is_empty()).collect::<Vec<_>>().join(", ")
 }
 

@@ -35,7 +35,9 @@ How to work:
    latest sources and people. Then call `search_sources` with the register or the archive's name.
    Reuse the repository, and write the source the way this file does: reuse a register's source
    when the file keeps one source per register, otherwise propose a new source, with a title,
-   register (PUBL) and call number shaped like the file's examples.
+   register (PUBL) and call number shaped like the file's examples. When the tree has no
+   repository for the archive (search it by its name and its town first), describe it in the new
+   source's `repository`: its usual full name, postal address and website.
 5. Call `match_people` with the act's event, date and everyone named (give the id of the
    principal person already identified). Decide for each person who they are: `link` someone of
    the tree (check a likely candidate with `person_sheet`), `create` a new person, or `mention`
@@ -48,7 +50,12 @@ How to work:
    none. Check the `will_write` list of the answer against your inventory: when it says the tree
    writes a close occupation another way, and it is the same one, propose again with `replaces`
    and the tree's wording. Give the place as
-   the tree names it, the transcription, and both the downloaded file (`file`, with `pdf_page`
+   the tree names it. A place the tree does not have yet (or has without coordinates) is located
+   with `locate_place`, one place at a time: give the people of the act already in the tree and
+   the act's date, then choose the candidate that fits the act's jurisdictions and is close to
+   the family's other events, not merely the first; give its `place` and, in `locations`, its
+   coordinates and `osm`. When no candidate clearly fits, propose the place without a location.
+   Give the transcription, and both the downloaded file (`file`, with `pdf_page`
    for a PDF) and the act's page in the archive's viewer (`url`, its permanent link such as an
    ark when the viewer offers one): GEDRoots keeps the image and a web link, so the user can see
    the act and find the original again.
