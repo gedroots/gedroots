@@ -74,7 +74,7 @@ fn repositories_use_www() {
 #[test]
 fn migrate_legacy_url_tags() {
     let mut g = Gedcom::parse(LEGACY).unwrap();
-    assert_eq!(g.web_links("S1")[0].kind, WebLinkKind::Legacy(0));
+    assert!(g.web_links("S1").is_empty(), "a `_URL` is not shown before its conversion");
     assert_eq!(g.legacy_url_count(), 4);
     assert_eq!(g.migrate_url_tags(), 4);
     assert_eq!(g.legacy_url_count(), 0);

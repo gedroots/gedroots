@@ -703,6 +703,12 @@ impl Workspace {
             return self.import_path(path, window, cx);
         }
         match gedcom::load(&path) {
+            // A file from other software opens as a copy, with the import wizard: its file is
+            // never overwritten, like a Word document opened in Pages.
+            Ok(ged) if !ged.written_by_gedroots() => {
+                let file = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+                self.open_imported(ged, path, file, String::new(), window, cx);
+            }
             Ok(ged) => {
                 crate::recent::add(&path, cx);
                 self.set_document(ged, Some(path), false, window, cx);
@@ -3924,19 +3930,15 @@ impl Workspace {
                             .on_click(cx.listener(|this, _, w, cx| this.new_file(&NewFile, w, cx))),
                     )
                     .child(
-                        row("welcome-open", IconName::FolderOpen, t!("welcome.open").into(), None, &OpenFile, false)
-                            .on_click(cx.listener(|this, _, w, cx| this.open_file(&OpenFile, w, cx))),
-                    )
-                    .child(
                         row(
-                            "welcome-import",
-                            IconName::Import,
-                            t!("welcome.import").into(),
-                            Some(t!("welcome.import_formats").into()),
-                            &ImportFile,
+                            "welcome-open",
+                            IconName::FolderOpen,
+                            t!("welcome.open").into(),
+                            Some(t!("welcome.open_formats").into()),
+                            &OpenFile,
                             false,
                         )
-                        .on_click(cx.listener(|this, _, w, cx| this.import_file(w, cx))),
+                        .on_click(cx.listener(|this, _, w, cx| this.open_file(&OpenFile, w, cx))),
                     ),
             )
             .children(self.render_recents(cx))

@@ -21,7 +21,6 @@ actions!(
         Create,
         OpenFile,
         ClearRecent,
-        ImportFile,
         OpenFileSettings,
         SaveFile,
         SaveFileAs,
@@ -518,7 +517,6 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
         file.push(Sub(t!("menu.open_recent").into(), items));
     }
     file.extend([
-        a(t!("cmd.import_gedcom"), ImportFile),
         Sep,
         a(t!("cmd.close_window"), CloseWindow),
         a(t!("cmd.save"), SaveFile),

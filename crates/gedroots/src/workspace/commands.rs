@@ -56,7 +56,6 @@ impl Workspace {
         let d = d.on_action(cx.listener(|_, _: &MinimizeWindow, w, _| w.minimize_window()));
         let d = d.on_action(cx.listener(|_, _: &ZoomWindow, w, _| w.zoom_window()));
         let d = on!(d, cx, ClearRecent, |_this, w, cx| crate::recent::clear(cx));
-        let d = on!(d, cx, ImportFile, |this, w, cx| this.import_file(w, cx));
         let d = on!(d, cx, NewFile, |this, w, cx| this.new_file(&NewFile, w, cx));
         let d = on!(d, cx, CommandPalette, |this, w, cx| this.toggle_palette(w, cx));
         let d = on!(d, cx, ReportIssue, |this, w, cx| this.open_report(w, cx));

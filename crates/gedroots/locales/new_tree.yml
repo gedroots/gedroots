@@ -7,12 +7,9 @@ welcome:
   open:
     en: Open a Tree…
     fr: Ouvrir un arbre…
-  import:
-    en: Import From Another App…
-    fr: Importer depuis un autre logiciel…
-  import_formats:
-    en: GEDCOM 5.5.1 · GEDZIP
-    fr: GEDCOM 5.5.1 · GEDZIP
+  open_formats:
+    en: GEDCOM · GEDZIP, from GEDRoots or another app
+    fr: GEDCOM · GEDZIP, de GEDRoots ou d’un autre logiciel
 new_tree:
   title:
     en: New Tree

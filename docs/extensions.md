@@ -112,7 +112,7 @@ Renaming a `TYPE` in the settings rewrites every matching `TYPE` (renaming to an
 type merges them) and keeps its label; a declared, unused type can be removed. A declaration
 that is no longer needed (type in use, no label) is removed.
 
-On import (**File › Import GEDCOM…**), events with extension tags from other software
+On import (File › Open… on a file from other software), events with extension tags from other software
 (`_MILT`, `_MILI`, `_DEG`, `_FUN`…, or any dated or located `_XXX` tag under an individual or
 a family) become `EVEN` + `TYPE`.
 

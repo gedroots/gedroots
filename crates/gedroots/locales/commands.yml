@@ -96,9 +96,6 @@ cmd:
   clear_recent:
     en: Clear Menu
     fr: Effacer le menu
-  import_gedcom:
-    en: Import GEDCOM…
-    fr: Importer un GEDCOM…
   save:
     en: Save
     fr: Enregistrer

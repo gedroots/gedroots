@@ -138,6 +138,12 @@ impl Gedcom {
         FileInfo { version: self.version().to_string(), software, saved, extensions }
     }
 
+    /// Was the file last saved by GEDRoots (`HEAD.SOUR GEDROOTS`)? Otherwise it comes from other
+    /// software, and opens through the import wizard.
+    pub fn written_by_gedroots(&self) -> bool {
+        self.header.child_val("SOUR") == Some("GEDROOTS")
+    }
+
     /// Before saving: GEDRoots becomes the software that produced the file (`HEAD.SOUR`), dated now
     /// (`HEAD.DATE`).
     pub fn stamp_header(&mut self) {
@@ -249,7 +255,10 @@ mod tests {
     #[test]
     fn stamps_header() {
         let mut g = Gedcom::parse(HEAD).unwrap();
+        // Last saved by Ancestris: opens through the import wizard, until GEDRoots saves it.
+        assert!(!g.written_by_gedroots());
         g.stamp_header();
+        assert!(g.written_by_gedroots());
         let i = g.file_info();
         assert!(i.software.starts_with("GEDRoots "));
         assert!(g.header.child("SOUR").unwrap().child("CORP").is_none());

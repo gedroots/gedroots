@@ -1,5 +1,6 @@
-//! Import (File › Import GEDCOM…): opens a GEDCOM file, or unzips a GEDZIP archive, as a tree
-//! not saved yet, so that the export of the other software is never overwritten. The wizard then
+//! Import: File › Open… on a file from other software (`HEAD.SOUR` other than GEDRoots) or on a
+//! GEDZIP archive opens it as a tree not saved yet, so that the export of the other software is
+//! never overwritten. The wizard then
 //! asks for the root person if the file declares none, lists what the file contains that is not
 //! standard (see `gedcom::import`) and offers to convert it to GEDCOM 7. The conversion can be
 //! undone like any change.
@@ -27,27 +28,6 @@ pub(super) fn is_gedzip(path: &Path) -> bool {
 }
 
 impl Workspace {
-    pub(super) fn import_file(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let rx = cx.prompt_for_paths(PathPromptOptions {
-            files: true,
-            directories: false,
-            multiple: false,
-            prompt: Some(t!("import.prompt").into()),
-        });
-        cx.spawn_in(window, async move |this, cx| {
-            if let Ok(Ok(Some(mut paths))) = rx.await
-                && let Some(p) = paths.pop()
-            {
-                let _ = this.update_in(cx, |this, window, cx| match this.is_empty() {
-                    true => this.import_path(p, window, cx),
-                    // One window per tree: the imported one gets its own.
-                    false => crate::windows::open_then(cx, |ws, window, cx| ws.import_path(p, window, cx)),
-                });
-            }
-        })
-        .detach();
-    }
-
     /// Imports `path`: a GEDZIP is unzipped into a folder next to it, whose tree is saved there.
     pub(super) fn import_path(&mut self, path: PathBuf, window: &mut Window, cx: &mut Context<Self>) {
         let file = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
@@ -88,7 +68,7 @@ impl Workspace {
         .detach();
     }
 
-    fn open_imported(
+    pub(super) fn open_imported(
         &mut self,
         ged: Gedcom,
         path: PathBuf,
