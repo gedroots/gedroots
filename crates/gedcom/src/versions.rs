@@ -23,7 +23,7 @@ use flate2::Compression;
 use flate2::read::DeflateDecoder;
 use flate2::write::DeflateEncoder;
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::io::{self, Read, Write};
+use std::io::{self, BufRead, Read, Write};
 use std::path::{Path, PathBuf};
 
 const VERSION_MAGIC: &str = "GEDROOTS VERSION 1";
@@ -184,6 +184,21 @@ impl Version {
         s
     }
 
+    /// The version without its records, reading `file` only up to them.
+    fn read_summary(file: std::fs::File) -> Option<Self> {
+        let mut text = String::new();
+        for line in io::BufReader::new(DeflateDecoder::new(io::BufReader::new(file))).lines() {
+            let line = line.ok()?;
+            let head = line.starts_with("head ");
+            text.push_str(&line);
+            text.push('\n');
+            if head {
+                break;
+            }
+        }
+        Self::read(&text)
+    }
+
     fn read(text: &str) -> Option<Self> {
         let mut lines = text.lines();
         if lines.next()? != VERSION_MAGIC {
@@ -286,23 +301,30 @@ struct Pack {
 }
 
 impl Pack {
+    /// Reads the index only (uncompressed, at the start of the file), not the data.
     fn read_index(path: &Path) -> io::Result<Self> {
-        let bytes = std::fs::read(path)?;
+        let mut reader = io::BufReader::new(std::fs::File::open(path)?);
         let bad = || io::Error::new(io::ErrorKind::InvalidData, format!("{}: not a pack", path.display()));
         let mut pos = 0;
-        let mut line = || -> Option<&str> {
-            let end = bytes[pos..].iter().position(|&b| b == b'\n')? + pos;
-            let l = std::str::from_utf8(&bytes[pos..end]).ok()?;
-            pos = end + 1;
-            Some(l)
+        let mut buf = String::new();
+        let mut line = |buf: &mut String| -> Option<()> {
+            buf.clear();
+            let n = reader.read_line(buf).ok()?;
+            if n == 0 || !buf.ends_with('\n') {
+                return None;
+            }
+            pos += n;
+            buf.pop();
+            Some(())
         };
-        if line() != Some(PACK_MAGIC) {
+        if line(&mut buf).is_none() || buf != PACK_MAGIC {
             return Err(bad());
         }
         let mut blobs = Vec::new();
         let mut offset = 0;
         loop {
-            let l = line().ok_or_else(bad)?;
+            line(&mut buf).ok_or_else(bad)?;
+            let l = buf.as_str();
             if l.is_empty() {
                 break;
             }
@@ -403,12 +425,7 @@ impl Store {
             let Some(file) = name.strip_prefix('.').and_then(|n| n.strip_suffix(".history")) else { return false };
             p.is_dir()
                 && !parent.join(file).exists()
-                && Store { dir: p.clone() }
-                    .versions()
-                    .ok()
-                    .and_then(|v| v.last().and_then(|v| v.tree.clone()))
-                    .as_deref()
-                    == Some(tree)
+                && Store { dir: p.clone() }.latest().and_then(|v| v.tree).as_deref() == Some(tree)
         })
     }
 
@@ -430,6 +447,26 @@ impl Store {
             rd.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|e| e == ext)).collect();
         v.sort();
         v
+    }
+
+    /// The latest version: only the newest readable file is read, whatever the size of the
+    /// history (recording a version must not slow down as the history grows).
+    pub fn latest(&self) -> Option<Version> {
+        Self::files(&self.versions_dir(), "ver")
+            .iter()
+            .rev()
+            .find_map(|p| Version::read(&decompress(&std::fs::read(p).ok()?).ok()?))
+    }
+
+    /// What every version is (id, time, kind, label, author, tree), oldest first, without their
+    /// lists of records: only the start of each file is inflated.
+    fn summaries(&self) -> Vec<Version> {
+        let mut out: Vec<Version> = Self::files(&self.versions_dir(), "ver")
+            .iter()
+            .filter_map(|p| Version::read_summary(std::fs::File::open(p).ok()?))
+            .collect();
+        out.sort_by(|a, b| a.id.cmp(&b.id));
+        out
     }
 
     /// Every version, oldest first. Unreadable files (a newer format, a download in progress) are
@@ -461,7 +498,7 @@ impl Store {
     /// Records the file as GEDRoots opens it: its first version, or the changes made outside
     /// GEDRoots since the latest one. Nothing when it did not change.
     pub fn record_opened(&self, ged: &Gedcom) -> io::Result<Option<Version>> {
-        let kind = if self.versions()?.is_empty() { Kind::Opened } else { Kind::Outside };
+        let kind = if self.latest().is_none() { Kind::Opened } else { Kind::Outside };
         self.record(ged, kind, None, None)
     }
 
@@ -476,7 +513,7 @@ impl Store {
         let time = millis / 1000;
         let snap = Snapshot::of(ged);
         let list = snap.list();
-        let latest = self.versions()?.pop();
+        let latest = self.latest();
         if let Some(l) = &latest
             && l.same_content(&snap.head.0, &list)
             && !matches!(kind, Kind::Named | Kind::RestorePoint)
@@ -650,7 +687,7 @@ impl Store {
     }
 
     fn prune_at(&self, now: u64) -> io::Result<usize> {
-        let versions = self.versions()?;
+        let versions = self.summaries();
         let Some(latest) = versions.last() else { return Ok(0) };
         let mut keep: HashSet<&str> = HashSet::from([latest.id.as_str()]);
         // Last version of each period (day for the last 30 days, week before).
@@ -672,7 +709,10 @@ impl Store {
             std::fs::remove_file(self.versions_dir().join(format!("{}.ver", v.id)))?;
             removed += 1;
         }
-        self.collect_packs(now)?;
+        // Packs only lose their use when versions go.
+        if removed > 0 {
+            self.collect_packs(now)?;
+        }
         Ok(removed)
     }
 
@@ -770,6 +810,29 @@ mod tests {
         let versions = s.versions().unwrap();
         assert_eq!(s.load(&versions[0]).unwrap().get("I00003"), first.get("I00003"));
         assert_eq!(s.load(&versions[1]).unwrap().get("I00003"), g.get("I00003"));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn the_latest_version_and_the_summaries_read_little() {
+        let (s, dir) = store();
+        let mut g = Gedcom::parse(SAMPLE).unwrap();
+        assert!(s.latest().is_none());
+        s.record_at(&g, Kind::Saved, Some("first"), None, 1_000_000).unwrap();
+        g.get_mut("I00003").unwrap().set_child_val("SEX", "M");
+        s.record_at(&g, Kind::Agent, None, Some("Claude"), 2_000_000).unwrap();
+        let all = s.versions().unwrap();
+        assert_eq!(s.latest().as_ref(), all.last());
+        let summaries = s.summaries();
+        assert_eq!(summaries.len(), 2);
+        for (sum, v) in summaries.iter().zip(&all) {
+            assert_eq!(
+                (&sum.id, sum.time, sum.kind, &sum.label, &sum.author),
+                (&v.id, v.time, v.kind, &v.label, &v.author)
+            );
+            assert_eq!(sum.head, v.head);
+            assert!(sum.records.is_empty());
+        }
         std::fs::remove_dir_all(dir).unwrap();
     }
 

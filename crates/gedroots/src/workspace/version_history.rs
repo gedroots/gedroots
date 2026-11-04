@@ -337,7 +337,7 @@ impl Workspace {
     pub(super) fn restore_point(&mut self, what: String) {
         let Some(doc) = &mut self.doc else { return };
         let Some(path) = doc.own_file().map(std::path::Path::to_path_buf) else { return };
-        match doc.write(&path, Versioning::RestorePoint(what), true) {
+        match doc.write(&path, Versioning::RestorePoint(what), false) {
             Ok(_) => doc.dirty = false,
             Err(e) => eprintln!("restore point: {}: {e}", path.display()),
         }
@@ -347,7 +347,7 @@ impl Workspace {
     /// that the agent's version holds only its own changes.
     pub(super) fn before_agent_change(&mut self) {
         if let Some(doc) = &mut self.doc {
-            doc.flush();
+            doc.flush_queued();
         }
     }
 

@@ -273,7 +273,7 @@ impl Document {
     }
 
     /// Writes the tree to `path` (dates of the changed records, header), and records a version
-    /// as `versioning` says, on another thread unless `wait`. Returns whether a version was
+    /// as `versioning` says, waiting for it only when `wait`. Returns whether a version was
     /// recorded.
     fn write(&mut self, path: &std::path::Path, versioning: Versioning, wait: bool) -> std::io::Result<bool> {
         self.ged.ensure_tree_id();
@@ -298,16 +298,31 @@ impl Document {
         Ok(versioned)
     }
 
-    /// When the window closes or the app quits: saves the changes and records the last version.
+    /// When the window closes or the app quits: saves the changes and records the last version,
+    /// waiting for it.
     fn flush(&mut self) {
+        self.flush_with(true);
+    }
+
+    /// Saves the changes and records the last version without waiting: the version is still
+    /// recorded before any version asked for afterwards.
+    fn flush_queued(&mut self) {
+        self.flush_with(false);
+    }
+
+    fn flush_with(&mut self, wait: bool) {
         let Some(path) = self.own_file().map(std::path::Path::to_path_buf) else { return };
         if self.unsaved() {
-            match self.write(&path, Versioning::Now, true) {
+            match self.write(&path, Versioning::Now, wait) {
                 Ok(_) => self.dirty = false,
                 Err(e) => eprintln!("save before closing: {}: {e}", path.display()),
             }
         } else if self.unversioned {
-            record_version_now(&path, &self.ged, Some(gedcom::versions::Kind::Saved), None, None);
+            let kind = Some(gedcom::versions::Kind::Saved);
+            match wait {
+                true => record_version_now(&path, &self.ged, kind, None, None),
+                false => record_version(&path, &self.ged, kind, None, None),
+            }
             self.unversioned = false;
         }
     }
@@ -326,9 +341,29 @@ impl Document {
     }
 }
 
-/// Records the tree in the history folder beside its file, on its own thread: as it was found
-/// on opening (`kind` none: first version, or changes made outside GEDRoots), or as saved. The
-/// old versions are pruned after a save.
+/// Work on the version history, done in order on a thread of its own: the window never waits
+/// for the history, and versions are recorded in the order they were asked for.
+type HistoryJob = Box<dyn FnOnce() + Send>;
+
+fn history_queue() -> &'static std::sync::mpsc::Sender<HistoryJob> {
+    static QUEUE: std::sync::OnceLock<std::sync::mpsc::Sender<HistoryJob>> = std::sync::OnceLock::new();
+    QUEUE.get_or_init(|| {
+        let (tx, rx) = std::sync::mpsc::channel::<HistoryJob>();
+        std::thread::Builder::new()
+            .name("version history".into())
+            .spawn(move || {
+                for job in rx {
+                    job();
+                }
+            })
+            .expect("version history thread");
+        tx
+    })
+}
+
+/// Records the tree in the history folder beside its file, after the versions asked for before,
+/// without waiting: as it was found on opening (`kind` none: first version, or changes made
+/// outside GEDRoots), or as saved. The old versions are pruned after a save.
 fn record_version(
     path: &std::path::Path,
     ged: &Gedcom,
@@ -337,12 +372,35 @@ fn record_version(
     author: Option<String>,
 ) {
     let (path, ged) = (path.to_path_buf(), ged.clone());
-    std::thread::spawn(move || record_version_now(&path, &ged, kind, label, author));
+    let job: HistoryJob = Box::new(move || record_in_history(&path, &ged, kind, label, author));
+    if let Err(e) = history_queue().send(job) {
+        // The thread is gone: recorded here.
+        (e.0)();
+    }
 }
 
-/// [`record_version`] on the calling thread: when the window closes or the app quits, or before
-/// the version history is shown.
+/// [`record_version`], waiting until it and the versions asked for before are recorded: when the
+/// window closes or the app quits, or before the version history is shown.
 fn record_version_now(
+    path: &std::path::Path,
+    ged: &Gedcom,
+    kind: Option<gedcom::versions::Kind>,
+    label: Option<String>,
+    author: Option<String>,
+) {
+    record_version(path, ged, kind, label, author);
+    let (done, wait) = std::sync::mpsc::channel();
+    if history_queue()
+        .send(Box::new(move || {
+            let _ = done.send(());
+        }))
+        .is_ok()
+    {
+        let _ = wait.recv();
+    }
+}
+
+fn record_in_history(
     path: &std::path::Path,
     ged: &Gedcom,
     kind: Option<gedcom::versions::Kind>,
