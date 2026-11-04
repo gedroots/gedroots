@@ -15,6 +15,8 @@ pub(super) enum AddDialog {
         target: String,
     },
     WebLink(Box<super::weblinks::WebLinkDialog>),
+    /// Research › Note a Search….
+    Search(Box<super::research::SearchDialog>),
     Import(Box<super::import::ImportDialog>),
     Settings(Box<super::settings::SettingsDialog>),
     RenameMedia(Box<super::media_files::RenameDialog>),
@@ -297,6 +299,7 @@ impl Workspace {
                 self.relatives_body(target, cx),
             ),
             AddDialog::WebLink(d) => (self.weblink_dialog_title(d), self.weblink_body(d, cx)),
+            AddDialog::Search(d) => (self.search_dialog_title(d), self.search_dialog_body(d, cx)),
             AddDialog::Import(d) => (self.import_title(d), self.import_body(d, cx)),
             AddDialog::Settings(d) => {
                 (t!("cmd.file_settings").trim_end_matches('…').to_string(), self.settings_body(d, cx))

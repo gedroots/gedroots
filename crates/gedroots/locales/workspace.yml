@@ -1,5 +1,8 @@
 _version: 2
 # Main window: sidebar, lists, details and status messages.
+ws.research:
+  en: Research
+  fr: Recherches
 ws.quality:
   en: Quality
   fr: Qualité

@@ -199,7 +199,8 @@ Rules shared by the three guidelines, to apply everywhere.
   links, links, then "Used by".
 - Sidebar: the four areas (Individuals, Sources, Places, Media), then a secondary group under
   a separator, like Mail's or Finder's sections: Repositories and Notes when the file has some,
-  Quality (with its count) and Statistics. The Go menu lists the same places (`⌘1`–`⌘8`).
+  Research and Quality (with their counts) and Statistics. The Go menu lists the same places
+  (`⌘1`–`⌘9`).
 - **Narrow window**: below 1200 px the sidebar folds away, below 1100 px the details panel does
   too (like libadwaita's breakpoints or Mail's columns); the list and the centre never shrink
   under their content. View › Show or Hide Sidebar (`⌃⌘S`) or Details Panel (`⌥⌘I`) then shows
