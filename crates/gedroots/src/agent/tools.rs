@@ -906,7 +906,8 @@ impl GedrootsMcp {
         let people: Vec<(String, String)> = (0..proposal.act.participants.len())
             .map(|i| (proposal.act.role_label(i).into_owned(), proposal.act.participants[i].display_name()))
             .collect();
-        let pending = Pending { proposal, original, pdf_page: p.pdf_page, image, preview, temps, replaces };
+        let remarks = p.remarks.as_deref().unwrap_or("").trim().to_string();
+        let pending = Pending { proposal, original, pdf_page: p.pdf_page, image, preview, temps, replaces, remarks };
         let (tx, rx) = tokio::sync::oneshot::channel();
         self.send(tree.as_deref(), Request::Propose(Box::new(pending), tx))
             .await

@@ -48,7 +48,7 @@ tree's data.
 | `quality_issues` | The Data Quality page's issues, filtered by category, kind or record and paged (`offset`, `limit`): message, records and places involved, whether the page fixes it in one click, whether it can be hidden, counts per category |
 | `search_sources` | Sources (register, repository, call number, number of acts) and repositories, to cite an existing one |
 | `match_people` | For the people named in an act (role, names, sex, age, act date), the people of the tree who could be them, with the reason and whether the match is likely |
-| `propose_act` | Adds an act to the To Review page: event, date, place, street address, source, reference, transcription, people with their role, downloaded file. Answers its id, what it will write and the temporary id of each new person; with `replaces`, corrects a waiting proposal |
+| `propose_act` | Adds an act to the To Review page: event, date, place, street address, source, reference, transcription (plain text, only the act), people with their role, downloaded file, and the agent's remarks for the reviewer (shown, never written). Answers its id, what it will write and the temporary id of each new person; with `replaces`, corrects a waiting proposal |
 | `list_proposals` | Proposals waiting for review (id, `kind`, people with their ids, what each will write), and what became of the others: saved, rejected, edited in record entry, withdrawn, replaced |
 | `withdraw_proposal` | Takes back a waiting proposal |
 | `propose_change` | Adds a change for one Data Quality issue to the To Review page: the page's own fix (`fix`), edits among those the issue allows (`edit`), merging a possible duplicate (`merge`), or hiding a correct issue (`hide`), with the reason and the evidence. Without an issue, it proposes a correction read in a document (a name, a date, a sex, a citation). The answer lists the issues the change would create |
@@ -170,7 +170,7 @@ The **To Review** page (sidebar, or Source › Review Agent Proposals) shows, fo
 the act's image, a comparison of what the tree holds and what is proposed (each person can be
 unchecked), the **Facts** it gives (each one can be unchecked; the occupations, residences and
 estimated births deduced from the act are listed there too, so nothing is written unseen; the
-answer of `propose_act` lists the same lines in `will_write`), the attachment (repository, source, file, web link, event), the transcription and, on demand,
+answer of `propose_act` lists the same lines in `will_write`), the attachment (repository, source, file, web link, event), the agent's remarks, the transcription line by line and, on demand,
 the exact GEDCOM lines that will change, computed on a copy of the file. **Save to Tree** (⌘↩)
 writes everything at once, as a single undo step, and stores the image next to the `.ged`,
 named by File Settings › Media; **Reject** (⌘⌫) drops it; **Edit in Record Entry…** opens it in
