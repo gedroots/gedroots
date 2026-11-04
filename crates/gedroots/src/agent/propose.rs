@@ -54,8 +54,12 @@ pub struct FactParams {
     /// Date in GEDCOM 7 format. Leave empty when the act does not date the fact (an occupation
     /// from a photo caption): never give the act's date by default.
     pub date: Option<String>,
-    /// Place, as named in the tree when it exists there (the residence for RESI).
+    /// Place, as named in the tree when it exists there (the residence for RESI): the
+    /// municipality and its jurisdictions, never a street.
     pub place: Option<String>,
+    /// Street address within the place, as written ("43, rue de la République", "Hôtel-Dieu"):
+    /// number, street, building, hamlet of a town. Kept apart from the place.
+    pub address: Option<String>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -82,6 +86,8 @@ pub struct PersonParams {
     /// Age as written in the record.
     pub age: Option<String>,
     pub occupation: Option<String>,
+    /// Place of residence at the act's date (municipality, as named in the tree). With a street
+    /// address, give a RESI fact instead, dated with the act, with its place and `address`.
     pub residence: Option<String>,
     pub birthplace: Option<String>,
     /// Relationship as written ("son", "neighbour"…).
@@ -108,8 +114,11 @@ pub struct ProposeParams {
     pub date: Option<String>,
     /// Date the act was written, when it differs from the event (e.g. a burial registered later).
     pub record_date: Option<String>,
-    /// Place of the event, as named in the tree when it exists there.
+    /// Place of the event, as named in the tree when it exists there: the municipality and its
+    /// jurisdictions, never a street.
     pub place: Option<String>,
+    /// Street address of the event within the place, as written ("12, rue Mercière", "Hôtel-Dieu").
+    pub address: Option<String>,
     pub source: SourceParams,
     /// Reference of the act in its source: act number, page, image ("act 27, image 45").
     pub page: Option<String>,
@@ -490,6 +499,7 @@ pub fn to_proposal(p: &ProposeParams) -> Result<Proposal, String> {
     act.event_type = opt(&p.event_type).to_string();
     act.record_date = opt(&p.record_date).to_string();
     act.place = opt(&p.place).to_string();
+    act.address = opt(&p.address).to_string();
     act.page = opt(&p.page).to_string();
     act.transcription = opt(&p.transcription).to_string();
     act.participants = Vec::new();
@@ -516,6 +526,7 @@ pub fn to_proposal(p: &ProposeParams) -> Result<Proposal, String> {
                 value: opt(&f.value).to_string(),
                 date: opt(&f.date).to_string(),
                 place: opt(&f.place).to_string(),
+                address: opt(&f.address).to_string(),
             });
         }
         let id = person.id.as_deref().map(clean_id).filter(|x| !x.is_empty());
@@ -572,6 +583,7 @@ pub fn effects(proposal: &Proposal, ged: &Gedcom) -> Vec<String> {
             let what = match &r.field {
                 Field::Date => format!("{event} date"),
                 Field::Place => format!("{event} place"),
+                Field::Address => format!("{event} address"),
                 Field::Person { role, .. } => role.clone(),
                 Field::Fact { person, fact, name, .. } => {
                     let tag = &proposal.act.participants[*person].facts[*fact].tag;

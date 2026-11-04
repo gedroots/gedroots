@@ -66,6 +66,8 @@ struct FactRow {
     date: Entity<DateField>,
     /// The occupation of `OCCU` (attributes), otherwise the place.
     text: Entity<InputState>,
+    /// Street address within the place (facts without a value).
+    address: Option<Entity<InputState>>,
 }
 
 struct PersonRow {
@@ -89,6 +91,8 @@ pub struct ActEditor {
     event_type: Entity<InputState>,
     date: Entity<DateField>,
     place: Entity<InputState>,
+    /// Street address of the event within the place (`ADDR`).
+    address: Entity<InputState>,
     page: Entity<InputState>,
     record_date: Entity<DateField>,
     transcription: Entity<TextareaState>,
@@ -187,6 +191,7 @@ impl ActEditor {
         let event_type = mk(cx, window, &t!("act.type_placeholder"), &custom_type);
         let page = mk(cx, window, &t!("act.page_placeholder"), &act.page);
         let place = mk(cx, window, &t!("event_dialog.town"), &place_label(&act.place));
+        let address = mk(cx, window, &t!("event_dialog.address"), &act.address);
         // Narrow columns (4-column grid): example without “e.g.” so it is not truncated.
         let short = |value: &str, phrase: &str, window: &mut Window, cx: &mut Context<Self>| {
             cx.new(|cx| {
@@ -220,6 +225,7 @@ impl ActEditor {
             event_type,
             date,
             place,
+            address,
             page,
             record_date,
             transcription,
@@ -242,6 +248,7 @@ impl ActEditor {
             (this.page.clone(), Kind::Plain),
             (this.date.read(cx).input().clone(), Kind::Name),
             (this.place.clone(), Kind::Place),
+            (this.address.clone(), Kind::Plain),
             (this.record_date.read(cx).input().clone(), Kind::Plain),
         ] {
             let sub = this.watch(&e, kind, window, cx);
@@ -358,10 +365,17 @@ impl ActEditor {
                     (t!("event_dialog.town").into_owned(), place_label(&f.place), Kind::Place)
                 };
                 let text = cx.new(|cx| InputState::new(window, cx).placeholder(ph).default_value(v));
+                let address = (!f.has_value()).then(|| {
+                    let v = f.address.clone();
+                    cx.new(|cx| InputState::new(window, cx).placeholder(t!("editor.address")).default_value(v))
+                });
                 let d = date.read(cx).input().clone();
                 subs.push(self.watch(&d, Kind::Plain, window, cx));
                 subs.push(self.watch(&text, kind, window, cx));
-                facts.push(FactRow { tag: f.tag.clone(), event_type: f.event_type.clone(), date, text });
+                if let Some(a) = &address {
+                    subs.push(self.watch(a, Kind::Plain, window, cx));
+                }
+                facts.push(FactRow { tag: f.tag.clone(), event_type: f.event_type.clone(), date, text, address });
             }
             self.rows.push(PersonRow {
                 role: p.role,
@@ -400,6 +414,7 @@ impl ActEditor {
         };
         (a.date, a.date_phrase) = date(&self.date);
         a.place = v(&self.place);
+        a.address = v(&self.address);
         a.page = v(&self.page);
         (a.record_date, a.record_date_phrase) = date(&self.record_date);
         a.transcription = self.transcription.read(cx).value().to_string();
@@ -431,6 +446,7 @@ impl ActEditor {
                             fact.value = v(&f.text);
                         } else {
                             fact.place = v(&f.text);
+                            fact.address = f.address.as_ref().map(v).unwrap_or_default();
                         }
                         fact
                     })
@@ -1065,8 +1081,8 @@ impl ActEditor {
                     // Dates take half a row: a full date (“23 sept. 1795”) is never cut.
                     .child(date_cell(t!("event_dialog.date"), &self.date).col_span(2))
                     .child(field(t!("editor.place"), &self.place).col_span(2))
+                    .child(field(t!("editor.address"), &self.address).col_span(2))
                     .child(date_cell(t!("act.record_date"), &self.record_date).col_span(2))
-                    .child(field(t!("act.reference"), &self.page).col_span(GRID / 2))
                     .child(
                         v_flex()
                             .gap_1()
@@ -1074,7 +1090,8 @@ impl ActEditor {
                             .col_span(GRID / 2)
                             .child(caps(t!("act.quality")))
                             .child(Select::new(&self.quality_picker).small()),
-                    ),
+                    )
+                    .child(field(t!("act.reference"), &self.page).col_span(GRID)),
             )
             .when_some(place_hints, |d, h| d.child(h))
     }
@@ -1253,6 +1270,7 @@ impl ActEditor {
                 .child(div().w(px(96.)).flex_none().text_sm().text_color(theme::muted()).child(label))
                 .child(div().w(px(150.)).flex_none().child(f.date.clone()))
                 .child(div().flex_1().min_w_0().child(Input::new(&f.text).small()))
+                .when_some(f.address.as_ref(), |d, a| d.child(div().flex_1().min_w_0().child(Input::new(a).small())))
                 .child(
                     Button::new(SharedString::from(format!("remove-fact-{idx}-{k}")))
                         .ghost()

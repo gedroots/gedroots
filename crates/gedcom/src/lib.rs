@@ -45,6 +45,7 @@ macro_rules! extension_uri {
 pub mod i18n;
 
 pub mod act;
+pub mod address;
 pub mod analysis;
 pub mod associations;
 pub mod atlas;
@@ -93,6 +94,7 @@ pub use act::{
     Act, ActKey, ActResult, ActRole, Conflict, Conflicts, Fact, MediaChoice, Participant, PersonChoice, PersonField,
     Suggestion,
 };
+pub use address::{address_of, set_address};
 pub use associations::{Associate, AttendedEvent};
 pub use crop::{Crop, MediaLink, Rect};
 pub use custom::{EventType, Jurisdiction, PlaceRewrite};
