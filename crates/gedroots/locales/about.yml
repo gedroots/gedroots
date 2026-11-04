@@ -1,0 +1,28 @@
+_version: 2
+# About GEDRoots window (crates/gedroots/src/about.rs).
+
+about:
+  title:
+    en: About GEDRoots
+    fr: À propos de GEDRoots
+  version:
+    en: Version %{version}
+    fr: Version %{version}
+  copy_details:
+    en: Copy Version Details
+    fr: Copier les détails de la version
+  copied:
+    en: Copied
+    fr: Copié
+  whats_new:
+    en: What’s New
+    fr: Nouveautés
+  source_code:
+    en: Source Code
+    fr: Code source
+  copyright:
+    en: © %{year} The GEDRoots contributors
+    fr: © %{year} Les contributeurs de GEDRoots
+  license:
+    en: MIT or Apache 2.0 licence
+    fr: Licence MIT ou Apache 2.0
