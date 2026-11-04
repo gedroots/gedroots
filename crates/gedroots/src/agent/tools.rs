@@ -373,20 +373,13 @@ pub struct TreeInfo {
     /// Stable identifier of the tree, to tell apart two trees of the same name.
     pub id: Option<String>,
     pub people: usize,
-    /// The tree the tools use when they name none.
-    pub in_front: bool,
-}
-
-#[derive(Debug, Serialize, JsonSchema)]
-pub struct FileInfo {
-    /// Name of the `.ged` file (empty for a file never saved).
-    pub file: String,
-    pub people: usize,
     pub families: usize,
     pub sources: usize,
     pub media: usize,
     /// Root person, start of the Sosa numbering.
     pub root: Option<PersonRef>,
+    /// The tree the tools use when they name none.
+    pub in_front: bool,
 }
 
 #[derive(Debug, Serialize, JsonSchema)]
@@ -556,7 +549,7 @@ impl GedrootsMcp {
 
     #[tool(
         name = "list_trees",
-        description = "The trees open in GEDRoots, one per window, the one in front first. Every other tool works on the tree in front unless given `tree`: call this when the user names a tree, or before working when several may be open.",
+        description = "The trees open in GEDRoots, one per window, the one in front first, with their number of people, families, sources and media and their root person. Every other tool works on the tree in front unless given `tree`: call this when the user names a tree, or before working when several may be open.",
         annotations(read_only_hint = true, open_world_hint = false)
     )]
     async fn list_trees(&self) -> Result<Json<Trees>, String> {
@@ -566,36 +559,19 @@ impl GedrootsMcp {
         Ok(Json(Trees {
             trees: trees
                 .into_iter()
-                .map(|t| TreeInfo { name: t.name, file: t.file, id: t.id, people: t.people, in_front: t.in_front })
+                .map(|t| TreeInfo {
+                    name: t.name,
+                    file: t.file,
+                    id: t.id,
+                    people: t.people,
+                    families: t.families,
+                    sources: t.sources,
+                    media: t.media,
+                    root: t.root,
+                    in_front: t.in_front,
+                })
                 .collect(),
         }))
-    }
-
-    #[tool(
-        name = "file_info",
-        description = "File open in GEDRoots: name, number of people, families, sources and media, root person.",
-        annotations(read_only_hint = true, open_world_hint = false)
-    )]
-    async fn file_info(&self, Parameters(p): Parameters<TreeParams>) -> Res<FileInfo> {
-        let tree = p.tree.clone();
-        let s = self.snapshot(tree.as_deref()).await?;
-        let g = &s.ged;
-        self.answer(
-            &s,
-            FileInfo {
-                file: s
-                    .path
-                    .as_ref()
-                    .and_then(|p| p.file_name())
-                    .map(|n| n.to_string_lossy().into_owned())
-                    .unwrap_or_default(),
-                people: g.count(RecordKind::Individual),
-                families: g.count(RecordKind::Family),
-                sources: g.count(RecordKind::Source),
-                media: g.count(RecordKind::Media),
-                root: g.root().map(|r| g.person_ref(&r)),
-            },
-        )
     }
 
     #[tool(
@@ -1394,6 +1370,10 @@ mod tests {
                             file: Some("Marchand.ged".into()),
                             id: None,
                             people: ged.count(RecordKind::Individual),
+                            families: ged.count(RecordKind::Family),
+                            sources: ged.count(RecordKind::Source),
+                            media: ged.count(RecordKind::Media),
+                            root: ged.root().map(|r| ged.person_ref(&r)),
                             in_front: true,
                         }]);
                     }
@@ -1425,7 +1405,7 @@ mod tests {
         let (_, _, list) =
             post(port, "secret", Some(&sid), serde_json::json!({"jsonrpc":"2.0","id":2,"method":"tools/list"}));
         let tools = list["result"]["tools"].as_array().expect("tools");
-        assert_eq!(tools.len(), 19);
+        assert_eq!(tools.len(), 18);
         // The proposals only queue a proposal; the research tools write the research log only.
         let mut writers: Vec<String> = tools
             .iter()

@@ -9,11 +9,11 @@ Searching a parish register image by image is slow. An AI agent can do the legwo
 
 GEDRoots runs a small server on your computer, using the [Model Context Protocol](https://modelcontextprotocol.io) (MCP), that AI agents know how to talk to. Through it, the agent can:
 
-- read the file open in GEDRoots: people, events, sources, places;
-- list the gaps among the root person's direct ancestors: births, marriages and deaths missing or without a source, with the places where each person lived;
-- propose a record it found.
+- read the trees open in GEDRoots: people, events, sources, places;
+- list the records still to find, with where to look, and note its searches in the research log;
+- propose a record it found, a correction or a chapter of a family book.
 
-Of living people, the agent only gets what identifies them: name, birth and close relatives. Only your computer can reach the server.
+It reads every person the way the app shows them, and nothing it proposes reaches your tree before you review it. Only your computer can reach the server.
 
 ## Before you begin
 
@@ -21,7 +21,7 @@ You need an AI agent that supports MCP servers, such as Claude Code, Codex, Gemi
 
 ## Connect the agent
 
-1. In GEDRoots, select **File › Connect an AI Agent…**.
+1. In GEDRoots, select **GEDRoots › Connect an AI Agent…**.
 2. Turn on **Allow AI agents**.
 3. Pick your agent in the list. GEDRoots shows the shortest way to connect it:
 
@@ -57,7 +57,7 @@ The methods tell the agent never to bypass a login or a captcha.
 
 ## Review a proposal
 
-When the agent proposes a record, GEDRoots tells you that it's waiting in **To Review**. Open it from the sidebar or with **Source › Review Agent Proposals**.
+When the agent proposes a record, GEDRoots tells you that it's waiting in **To Review**. Open it from the sidebar.
 
 For each proposal, you see:
 
