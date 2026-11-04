@@ -13,7 +13,7 @@ struct GEDRootsApp: App {
     var body: some Scene {
         WindowGroup {
             Group {
-                if model.desktop == nil || model.removed {
+                if model.current == nil || model.removed {
                     PairView(model: model)
                 } else {
                     TabView(selection: $model.tab) {
@@ -34,12 +34,14 @@ struct GEDRootsApp: App {
                             .tag(AppTab.media)
                     }
                     .tint(Theme.accent)
+                    .sheet(isPresented: $model.adding) { PairView(model: model) }
+                    .sheet(isPresented: $model.managing) { ManageTreesView(model: model).tint(Theme.accent) }
                 }
             }
             .task { await model.syncIfPaired() }
             .onContinueUserActivity(CSSearchableItemActionType) { activity in
                 if let id = activity.userInfo?[CSSearchableItemActivityIdentifier] as? String {
-                    model.openPerson(id)
+                    model.openSearchResult(id)
                 }
             }
             .onChange(of: scenePhase) { _, phase in

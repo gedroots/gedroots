@@ -11,6 +11,7 @@ start with `_GR_` and are declared in the header, as GEDCOM 7 requires:
 2 TAG _GR_IGNORE https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_ignore
 2 TAG _GR_ROOT https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_root
 2 TAG _GR_TREE https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_tree
+2 TAG _GR_NAME https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_name
 2 TAG _GR_FILE https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_file
 2 TAG _GR_EVEN https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_even
 2 TAG _GR_MEDIA https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_media
@@ -56,6 +57,22 @@ another computer.
 1 SCHMA
 2 TAG _GR_TREE https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_tree
 1 _GR_TREE 3f2b8c1e-9a4d-4e57-b0c2-6d1f8e7a9b40
+```
+
+## `_GR_NAME`
+
+Name of the tree on the computer that shares it, so a mobile device that follows several trees
+can tell them apart. Written only in the copy sent to mobile devices, never in the `.ged`.
+
+- **Under**: `HEAD`.
+- **Value**: the tree's name, as its window shows it, without `.ged`.
+- **Substructures**: none.
+
+```
+0 HEAD
+1 SCHMA
+2 TAG _GR_NAME https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_name
+1 _GR_NAME Guyot
 ```
 
 ## `_GR_EVEN`

@@ -94,11 +94,24 @@ pub enum Status {
 
 /// What the app asks of the server's thread.
 enum Cmd {
-    Publish { share: String, dataset: String, files: Vec<(String, PathBuf)>, people: usize },
+    Publish {
+        share: String,
+        dataset: String,
+        files: Vec<(String, PathBuf)>,
+        people: usize,
+    },
     Unpublish(String),
     Revoke(String),
-    PairCode { share: String, reply: async_channel::Sender<String> },
+    PairCode {
+        share: String,
+        reply: async_channel::Sender<String>,
+    },
     CancelPairing(String),
+    /// A device's pairing moved to another key.
+    Allow {
+        device: String,
+        share: String,
+    },
 }
 
 /// What the server's thread tells the app's loop.
@@ -123,9 +136,29 @@ pub fn now() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
 }
 
-/// Key of a file's sharing: its canonical path.
-pub fn share_key(path: &Path) -> String {
-    std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf()).to_string_lossy().into_owned()
+/// Key of a tree's sharing: its identifier (`HEAD._GR_TREE`), so that renaming or moving the
+/// file keeps its devices; its canonical path while it has none (never saved by GEDRoots).
+/// Pairings saved under the path move to the identifier the first time it is known.
+pub fn share_key(path: &Path, tree: Option<&str>) -> String {
+    let by_path = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf()).to_string_lossy().into_owned();
+    let Some(id) = tree else { return by_path };
+    let key = format!("tree:{id}");
+    let moves = lock_saved(|s| !s.shares.contains_key(&key) && s.shares.contains_key(&by_path));
+    if moves {
+        let mut devices = Vec::new();
+        update(|s| {
+            if let Some(share) = s.shares.remove(&by_path) {
+                devices = share.devices.iter().map(|d| d.id.clone()).collect();
+                s.shares.insert(key.clone(), share);
+            }
+        });
+        if lock(&COMMANDS).is_some() {
+            for device in devices {
+                send(Cmd::Allow { device, share: key.clone() });
+            }
+        }
+    }
+    key
 }
 
 /// Connects the server's events to the app's loop.
@@ -335,6 +368,9 @@ fn start() -> Option<tokio::sync::mpsc::UnboundedSender<Cmd>> {
                         let _ = reply.send(code.encode()).await;
                     }
                     Cmd::CancelPairing(share) => server.cancel_pairing(&share),
+                    Cmd::Allow { device, share } => {
+                        let _ = server.allow(&device, &share);
+                    }
                 }
             }
             let _ = server.shutdown().await;
