@@ -3363,12 +3363,18 @@ impl Workspace {
                     Some(v) => t!("ws.event_value", label = e.label(), value = v).into_owned(),
                     None => e.label(),
                 };
-                // Second line, plain text: with whom (event of a union), where.
+                // Second line, plain text: with whom (event of a union), where (street address,
+                // then the place).
+                let place = e.place().filter(|p| !p.is_empty()).map(short_place);
+                let where_ = match (e.address(), place) {
+                    (Some(a), Some(p)) => Some(format!("{a}, {p}")),
+                    (a, p) => a.or(p),
+                };
                 let sub: Vec<String> = spouse
                     .filter(|_| family)
                     .map(|s| t!("ws.with", name = g.record_label(&s)).into_owned())
                     .into_iter()
-                    .chain(e.place().filter(|p| !p.is_empty()).map(short_place))
+                    .chain(where_)
                     .collect();
                 let date = e.date().map(|d| d.display()).unwrap_or_default();
                 let (o1, o2, subject) = (ev_owner.clone(), ev_owner.clone(), x.clone());

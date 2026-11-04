@@ -47,8 +47,8 @@ fn change(g: &Gedcom, code: &str, action: Action, reason: &str) -> QualityChange
     let ids = issue_ids(&issues);
     let i = issues.iter().position(|i| i.code == code).unwrap_or_else(|| panic!("no {code} in {issues:#?}"));
     QualityChange {
-        issue: issues[i].clone(),
-        issue_id: ids[i].clone(),
+        issue: Some(issues[i].clone()),
+        issue_id: Some(ids[i].clone()),
         action,
         reason: reason.into(),
         evidence: Evidence::default(),
@@ -68,7 +68,7 @@ fn an_edit_that_fixes_the_date_is_accepted_and_applied() {
     let mut g2 = g.clone();
     c.apply(&mut g2).unwrap();
     assert!(rerun(&g2).iter().all(|i| i.code != "death_before_birth"));
-    assert!(find_issue(&rerun(&g2), &c.issue_id).is_none());
+    assert!(find_issue(&rerun(&g2), c.issue_id.as_deref().unwrap()).is_none());
 }
 
 #[test]
@@ -122,8 +122,8 @@ fn automatic_fix_sex_and_citation() {
     let ids = issue_ids(&issues);
     let i = issues.iter().position(|i| i.code == "unsourced" && i.xref == "I2").expect("unsourced birth");
     let mut c = QualityChange {
-        issue: issues[i].clone(),
-        issue_id: ids[i].clone(),
+        issue: Some(issues[i].clone()),
+        issue_id: Some(ids[i].clone()),
         action: Action::Edit(vec![cite("S9")]),
         reason: "Birth act found".into(),
         evidence: Evidence::default(),
@@ -148,4 +148,45 @@ fn coordinates_of_a_place() {
     let far = Edit::SetCoordinates { place: "Agneaux".into(), latitude: 120.0, longitude: 0.0 };
     let c = QualityChange { action: Action::Edit(vec![far]), ..c };
     assert!(c.check(&g, &rerun).is_err());
+}
+
+#[test]
+fn a_correction_without_an_issue_renames_a_person() {
+    let g = ged();
+    let evidence =
+        Evidence { url: "https://example.org/register/51".into(), quote: "Jean Pierre".into(), ..Default::default() };
+    let correction = |edits: Vec<Edit>, evidence: Evidence| QualityChange {
+        issue: None,
+        issue_id: None,
+        action: Action::Edit(edits),
+        reason: "The marriage act names him Jean Pierre".into(),
+        evidence,
+    };
+    let rename = Edit::SetName { person: "I1".into(), index: 0, given: Some("Jean Pierre".into()), surname: None };
+    let c = correction(vec![rename.clone()], evidence.clone());
+    c.check(&g, &rerun).unwrap();
+    assert!(c.title(&g).contains("GUYOT"), "{}", c.title(&g));
+    let rows = c.rows(&g);
+    assert_eq!((rows[0].current.as_str(), rows[0].proposed.as_str()), ("Jean GUYOT", "Jean Pierre GUYOT"));
+    let mut g2 = g.clone();
+    c.apply(&mut g2).unwrap();
+    assert_eq!(g2.individual("I1").unwrap().display_name(), "Jean Pierre GUYOT");
+    // A variant spelling kept as another name, after the main one.
+    let variant =
+        Edit::AddName { person: "I1".into(), given: "Johann".into(), surname: "GUYOT".into(), kind: "aka".into() };
+    let c = correction(vec![variant], evidence.clone());
+    let mut g3 = g.clone();
+    c.apply(&mut g3).unwrap();
+    let names = g3.individual("I1").unwrap().names();
+    assert_eq!((names.len(), names[1].given.as_str(), names[1].kind.as_str()), (2, "Johann", "AKA"));
+    // Evidence is needed, and the edits that only an issue designates are refused.
+    assert!(correction(vec![rename], Evidence::default()).check(&g, &rerun).unwrap_err().contains("evidence"));
+    assert!(
+        correction(vec![Edit::DeleteStructure], evidence.clone())
+            .check(&g, &rerun)
+            .unwrap_err()
+            .contains("needs an issue")
+    );
+    let hide = QualityChange { action: Action::Hide, ..correction(vec![], evidence) };
+    assert!(hide.check(&g, &rerun).unwrap_err().contains("only `edit`"));
 }

@@ -45,6 +45,9 @@ editor.place_placeholder:
 editor.place:
   en: Place
   fr: Lieu
+editor.address:
+  en: Address
+  fr: Adresse
 editor.latitude:
   en: Latitude
   fr: Latitude
@@ -327,6 +330,9 @@ event_dialog.no_spouse:
 event_dialog.town:
   en: Town…
   fr: Commune…
+event_dialog.address:
+  en: 12 High Street
+  fr: 12, rue Mercière
 event_dialog.choose_type:
   en: Choose the event type
   fr: "Choisissez le type d'événement"

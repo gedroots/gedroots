@@ -302,8 +302,8 @@ fn an_agent_merge_is_checked_and_needs_a_choice_for_each_conflict() {
     let plan = g.merge_plan(&issue.xref, &issue.related[0]).unwrap();
     assert_eq!(plan.conflicts.iter().map(|c| c.tag.as_str()).collect::<Vec<_>>(), ["NAME"]);
     let change = |choices: Vec<(&str, &str)>| QualityChange {
-        issue: issue.clone(),
-        issue_id: ids[n].clone(),
+        issue: Some(issue.clone()),
+        issue_id: Some(ids[n].clone()),
         action: Action::Merge(choices.into_iter().map(|(a, b)| (a.to_string(), b.to_string())).collect()),
         reason: "Same witness of two acts seven months apart".into(),
         evidence: Default::default(),

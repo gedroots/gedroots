@@ -46,6 +46,11 @@ How to work:
    person found in another act before the user saved the first one (a father in two baptisms) is
    linked with that temporary id, never created twice. If you find a mistake in a proposal still
    waiting, propose it again with `replaces` (its id), or withdraw it with `withdraw_proposal`.
+   If the proposal is already saved, or the act shows the tree is wrong (a given name misread, a
+   name the act spells otherwise, a wrong date), propose the correction with `propose_change`
+   without `issue` (`set_name`, `add_name` for a variant spelling, `set_event`…), with the reason
+   and the evidence: never leave it for the user to fix by hand. `will_write` tells you when a
+   person you link is named otherwise in the act.
 9. Every answer of GEDRoots carries `news` when the user saved, rejected or edited one of your
    proposals since your last call. Tell the user, and once a proposal is saved, link its new
    people by the id they now have in the tree. Before the next proposal, read the people again

@@ -180,6 +180,9 @@ ws.ev_people:
 ws.ev_place:
   en: Place
   fr: Lieu
+ws.ev_address:
+  en: Address
+  fr: Adresse
 ws.ev_associates:
   en: Participants
   fr: Participants
