@@ -1,5 +1,13 @@
 # Changelog
 
+## [2026.11.7](https://github.com/gedroots/gedroots/releases/tag/v2026.11.7) - 2026-11-04
+
+### 🔄 Changed
+
+- Show how much of the tree has arrived while it syncs by @antoninguyot in [#154](https://github.com/gedroots/gedroots/pull/154)
+- Keep the version history off the window's thread and fast as it grows by @antoninguyot in [#156](https://github.com/gedroots/gedroots/pull/156)
+- Books in the tree's language, and an Export button on the book by @antoninguyot in [#157](https://github.com/gedroots/gedroots/pull/157)
+
 ## [2026.11.6](https://github.com/gedroots/gedroots/releases/tag/v2026.11.6) - 2026-11-04
 
 ### 🔄 Changed
