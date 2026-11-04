@@ -290,9 +290,28 @@ impl Gedcom {
         let ids: Vec<String> = if query.trim().is_empty() {
             self.records_of(RecordKind::Individual).filter_map(|n| n.xref.clone()).collect()
         } else {
-            self.search_individuals(query)
+            let found = self.search_individuals(query);
+            if found.is_empty() { self.sounds_like(query) } else { found }
         };
         ids.iter().take(limit).map(|x| self.person_ref(x)).collect()
+    }
+
+    /// People whose names sound like every word of `query` (Carl finds Karl, Anneliese finds
+    /// Annelise): the spelling of a name in a document is often not the tree's.
+    fn sounds_like(&self, query: &str) -> Vec<String> {
+        let words: Vec<&str> = query.split_whitespace().collect();
+        self.records_of(RecordKind::Individual)
+            .filter(|r| {
+                let names: Vec<String> = crate::model::Individual::new(r)
+                    .names()
+                    .iter()
+                    .flat_map(|n| [n.given.clone(), n.surname.clone()])
+                    .collect();
+                let parts: Vec<&str> = names.iter().flat_map(|n| n.split_whitespace()).collect();
+                words.iter().all(|w| parts.iter().any(|p| crate::phonetic::similar(w, p)))
+            })
+            .filter_map(|r| r.xref.clone())
+            .collect()
     }
 
     fn record_ref(&self, xref: &str) -> Option<RecordRef> {
@@ -454,6 +473,19 @@ mod tests {
 
     fn ged() -> Gedcom {
         Gedcom::parse(FILE).unwrap()
+    }
+
+    #[test]
+    fn a_name_spelled_otherwise_is_still_found() {
+        let g = Gedcom::parse(
+            "0 HEAD\n1 GEDC\n2 VERS 7.0\n0 @I1@ INDI\n1 NAME Karl /Götte/\n\
+             0 @I2@ INDI\n1 NAME Annelise /Altenbucher/\n0 TRLR\n",
+        )
+        .unwrap();
+        let ids = |q: &str| g.search_people(q, 10).into_iter().map(|p| p.id).collect::<Vec<_>>();
+        assert_eq!(ids("Carl"), ["I1"]);
+        assert_eq!(ids("Anneliese Altenbucher"), ["I2"]);
+        assert!(ids("Durand").is_empty());
     }
 
     #[test]
