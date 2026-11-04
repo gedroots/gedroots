@@ -145,10 +145,6 @@ impl DateKind {
             DateKind::To => t!("date_kind.to"),
         }
     }
-
-    pub fn two_dates(self) -> bool {
-        matches!(self, DateKind::Between | DateKind::FromTo)
-    }
 }
 
 const GREG_MONTHS: [&str; 12] = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];

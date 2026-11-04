@@ -1349,7 +1349,6 @@ mod tests {
                     Request::Snapshot(reply) => {
                         let _ = reply.send(Some(Snapshot {
                             key: String::new(),
-                            path: None,
                             ged: ged.clone(),
                             queue: Default::default(),
                         }));
@@ -1357,7 +1356,7 @@ mod tests {
                     Request::Quality(reply) => {
                         let issues = gedcom::quality::run(&ged);
                         let _ = reply.send(Some((
-                            Snapshot { key: String::new(), path: None, ged: ged.clone(), queue: Default::default() },
+                            Snapshot { key: String::new(), ged: ged.clone(), queue: Default::default() },
                             issues,
                         )));
                     }

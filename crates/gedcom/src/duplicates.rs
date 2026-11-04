@@ -136,18 +136,6 @@ impl Window {
     }
 }
 
-/// Years covered by a date: `(earliest, latest)`.
-fn years(raw: &str) -> Option<(i32, i32)> {
-    let s = Span::parse(raw)?;
-    let y = |d: i64| 1970 + (d as f64 / 365.2425).floor() as i32;
-    match (s.lo, s.hi) {
-        (Some(a), Some(b)) => Some((y(a), y(b))),
-        (Some(a), None) => Some((y(a), y(a))),
-        (None, Some(b)) => Some((y(b), y(b))),
-        (None, None) => None,
-    }
-}
-
 /// An event that mentions the person: their own, or one they attended (`ASSO`).
 #[derive(Debug, Clone)]
 struct Seen {
@@ -226,7 +214,7 @@ fn profiles(g: &Gedcom) -> HashMap<String, Profile> {
                 continue;
             }
             let date = ev.path_val(&["DATE"]).unwrap_or("");
-            let y = years(date);
+            let y = Span::years_of(date);
             let place = ev.path_val(&["PLAC"]).unwrap_or("").to_string();
             if SINGLE_BIRTH.contains(&ev.tag.as_str()) && p.birth.is_none() {
                 p.birth = y;
@@ -276,7 +264,7 @@ fn profiles(g: &Gedcom) -> HashMap<String, Profile> {
                     if !place.is_empty() {
                         p.places.insert(place.clone());
                     }
-                    let y = years(ev.path_val(&["DATE"]).unwrap_or(""));
+                    let y = Span::years_of(ev.path_val(&["DATE"]).unwrap_or(""));
                     p.seen.push(Seen { owner: f.clone(), index, years: y, attended: false });
                 }
             }
@@ -297,7 +285,7 @@ fn profiles(g: &Gedcom) -> HashMap<String, Profile> {
             vec![owner.to_string()]
         };
         for (index, ev) in r.children.iter().enumerate().filter(|(_, e)| event_label(&e.tag).is_some()) {
-            let y = years(ev.path_val(&["DATE"]).unwrap_or(""));
+            let y = Span::years_of(ev.path_val(&["DATE"]).unwrap_or(""));
             let place = place_key(ev.path_val(&["PLAC"]).unwrap_or(""));
             for a in ev.children_with("ASSO").filter_map(|a| a.pointer()) {
                 let Some(p) = out.get_mut(a) else { continue };

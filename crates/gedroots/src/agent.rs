@@ -121,7 +121,6 @@ pub struct Edit {
 pub struct Snapshot {
     /// Which tree it is, to tell each tree's news apart (its id, else its file).
     pub key: String,
-    pub path: Option<PathBuf>,
     pub ged: Gedcom,
     /// The review page: waiting proposals and what became of the others.
     pub queue: propose::Queue,

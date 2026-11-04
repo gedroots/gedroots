@@ -396,11 +396,6 @@ impl Gedcom {
         Some(removed)
     }
 
-    /// Deletes a family and the `FAMS`/`FAMC` links to it (the people stay).
-    pub fn delete_family(&mut self, xref: &str) -> Option<Node> {
-        self.delete(xref)
-    }
-
     /// Deletes any record, with the cleanup suited to its type.
     pub fn delete_record(&mut self, xref: &str) -> Option<Node> {
         match self.get(xref).map(|n| n.tag.clone()).as_deref() {

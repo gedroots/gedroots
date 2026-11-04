@@ -62,8 +62,6 @@ pub struct Thresholds {
     pub max_mother_age: f64,
     pub min_marriage_age: f64,
     pub max_marriage_age_gap: f64,
-    /// Individual events without a source: reported as information only.
-    pub report_unsourced: bool,
 }
 
 impl Default for Thresholds {
@@ -75,7 +73,6 @@ impl Default for Thresholds {
             max_mother_age: 55.,
             min_marriage_age: 14.,
             max_marriage_age_gap: 30.,
-            report_unsourced: false,
         }
     }
 }
@@ -290,20 +287,19 @@ pub(crate) fn check_all(g: &Gedcom, t: &Thresholds) -> Vec<Issue> {
                 );
             }
         }
-        if t.report_unsourced {
-            for e in &r.children {
-                if let Some(label) = event_label(&e.tag)
-                    && !ATTRIBUTES.contains(&e.tag.as_str())
-                    && e.child("SOUR").is_none()
-                {
-                    push(
-                        Severity::Info,
-                        "unsourced",
-                        x,
-                        vec![],
-                        t!("check.msg.unsourced", who = who, event = label).into(),
-                    );
-                }
+        // Individual events without a source: information only.
+        for e in &r.children {
+            if let Some(label) = event_label(&e.tag)
+                && !ATTRIBUTES.contains(&e.tag.as_str())
+                && e.child("SOUR").is_none()
+            {
+                push(
+                    Severity::Info,
+                    "unsourced",
+                    x,
+                    vec![],
+                    t!("check.msg.unsourced", who = who, event = label).into(),
+                );
             }
         }
         // FAMC/FAMS without their counterpart.

@@ -76,7 +76,7 @@ impl Workspace {
             (None, Some(p)) => p.to_string_lossy().into_owned(),
             (None, None) => String::new(),
         };
-        Some(agent::Snapshot { key, path: doc.path.clone(), ged: doc.ged.clone(), queue: self.review_queue() })
+        Some(agent::Snapshot { key, ged: doc.ged.clone(), queue: self.review_queue() })
     }
 
     /// The tree of this window, for `list_trees` (not in front: the caller knows which one is).

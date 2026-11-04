@@ -529,7 +529,7 @@ impl Workspace {
             .filter(|e| window.is_action_available(e.action.as_ref(), cx) || crate::is_global_action(e.action.as_ref()))
             .map(|e| {
                 // Keywords without accents: “pere” finds “Père”.
-                let words: Vec<String> = e.path.split(" › ").map(fold_accents).collect();
+                let words: Vec<String> = e.path.split(" › ").map(gedcom::sort_key).collect();
                 CommandItem::new().label(e.path).keywords(words).action(e.action)
             })
             .collect();
@@ -589,22 +589,4 @@ impl Workspace {
                 .into_any_element(),
         )
     }
-}
-
-/// Removes accents (é → e, œ → oe…) for the search in the palette.
-fn fold_accents(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    for c in s.chars() {
-        match c {
-            'à' | 'â' | 'ä' | 'À' | 'Â' | 'Ä' => out.push('a'),
-            'é' | 'è' | 'ê' | 'ë' | 'É' | 'È' | 'Ê' | 'Ë' => out.push('e'),
-            'î' | 'ï' | 'Î' | 'Ï' => out.push('i'),
-            'ô' | 'ö' | 'Ô' | 'Ö' => out.push('o'),
-            'ù' | 'û' | 'ü' | 'Ù' | 'Û' | 'Ü' => out.push('u'),
-            'ç' | 'Ç' => out.push('c'),
-            'œ' | 'Œ' => out.push_str("oe"),
-            c => out.extend(c.to_lowercase()),
-        }
-    }
-    out
 }
