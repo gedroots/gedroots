@@ -42,6 +42,28 @@ impl Workspace {
         cx.notify();
     }
 
+    /// Opens the window on two places an agent proposed to merge, with its choices ticked.
+    pub(super) fn open_place_merge_prefilled(
+        &mut self,
+        pair: (String, String),
+        choices: &[(String, String)],
+        cx: &mut Context<Self>,
+    ) {
+        self.open_place_merge(vec![pair], 0, cx);
+        if let Some(d) = self.place_merge.as_mut()
+            && let Some(plan) = &d.plan
+        {
+            for (k, c) in plan.choices().iter().enumerate() {
+                let which = choices.iter().find(|(fact, _)| c.is(fact)).map(|(_, w)| w.trim());
+                d.choices[k] = match which {
+                    Some(w) if w == plan.a.trim() => Some(Side::Keep),
+                    Some(w) if w == plan.b.trim() => Some(Side::Other),
+                    _ => None,
+                };
+            }
+        }
+    }
+
     /// Prepares the pair at `d.at`, or the next one that still exists. `false` when none is left.
     fn load_place_pair(&self, d: &mut PlaceMergeDialog) -> bool {
         let Some(g) = self.doc.as_ref().map(|d| &d.ged) else { return false };
@@ -172,6 +194,9 @@ impl Workspace {
             window,
             cx,
         );
+        if result.is_some() {
+            self.drop_place_merge_changes(&plan.a, &plan.b);
+        }
         // The place shown was one of the two: show the merged one.
         if let Some(r) = result
             && self.view == View::Places
@@ -187,6 +212,7 @@ impl Workspace {
         let Some((a, b)) = self.place_merge.as_ref().and_then(|d| d.current().cloned()) else { return };
         let msg = t!("merge.marked_distinct", name = short_place(&a)).to_string();
         self.edit_ged(|g| g.mark_places_distinct(&a, &b), msg, window, cx);
+        self.drop_place_merge_changes(&a, &b);
         self.place_merge_advance(true, cx);
     }
 

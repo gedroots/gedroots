@@ -183,7 +183,8 @@ pub struct QualityIssue {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, schemars::JsonSchema))]
 pub struct MergeInfo {
     /// Person kept (the root person, otherwise the one with the most links) and person merged
-    /// into it.
+    /// into it. For two places: the first place and the second, whose levels are chosen one by
+    /// one.
     pub keep: String,
     pub other: String,
     pub conflicts: Vec<MergeConflict>,
@@ -193,7 +194,8 @@ pub struct MergeInfo {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, schemars::JsonSchema))]
 pub struct MergeConflict {
-    /// `NAME`, `SEX`, `BIRT`… (the key in `choices`).
+    /// `NAME`, `SEX`, `BIRT`… (the key in `choices`); for two places, the level (`Town`…) or
+    /// `MAP` for the coordinates.
     pub fact: String,
     /// Value of `keep`, value of `other`.
     pub keep: String,
@@ -389,6 +391,31 @@ impl Gedcom {
         Some(RecordRef { id: xref.to_string(), kind: kind.to_string(), label: self.record_label(xref) })
     }
 
+    /// What merging a possible duplicate (two people, or two places) involves.
+    fn merge_info(&self, i: &Issue) -> Option<MergeInfo> {
+        match (i.code, &i.related[..]) {
+            ("possible_duplicate", [other, ..]) => self.merge_plan(&i.xref, other).ok().map(|p| MergeInfo {
+                keep: p.keep,
+                other: p.other,
+                conflicts: p
+                    .conflicts
+                    .into_iter()
+                    .map(|c| MergeConflict { fact: c.tag, keep: c.keep, other: c.other })
+                    .collect(),
+            }),
+            ("possible_duplicate_place", [a, b]) => self.place_merge_plan(a, b).map(|p| MergeInfo {
+                conflicts: p
+                    .choices()
+                    .into_iter()
+                    .map(|c| MergeConflict { fact: c.fact, keep: c.a, other: c.b })
+                    .collect(),
+                keep: p.a,
+                other: p.b,
+            }),
+            _ => None,
+        }
+    }
+
     /// The Data Quality issues (`issues`, from [`quality::run_with`]) for an agent: filtered, then
     /// `limit` from `offset`.
     pub fn quality_report(
@@ -424,8 +451,9 @@ impl Gedcom {
             .skip(offset)
             .take(limit)
             .map(|(i, id, category)| {
-                // Compared by the user in the place merge window: no automatic fix for an agent.
-                let fix = quality::fix_of(i.code).filter(|_| i.code != "possible_duplicate_place");
+                // A possible duplicate is merged or hidden: no automatic fix for an agent.
+                let fix = quality::fix_of(i.code)
+                    .filter(|_| !matches!(i.code, "possible_duplicate" | "possible_duplicate_place"));
                 let (related, values): (Vec<&String>, Vec<&String>) =
                     i.related.iter().partition(|x| self.get(x).is_some());
                 QualityIssue {
@@ -447,20 +475,9 @@ impl Gedcom {
                     automatic_fix: fix.is_some(),
                     batch_fix: fix.is_some_and(|f| f.batch.is_some()),
                     edits: crate::change::edits_for(i.code).iter().map(|e| e.to_string()).collect(),
-                    can_hide: self.get(&i.xref).is_some(),
+                    can_hide: crate::change::can_hide(self, i),
                     hidden: i.ignored,
-                    merge: (i.code == "possible_duplicate")
-                        .then(|| self.merge_plan(&i.xref, i.related.first()?).ok())
-                        .flatten()
-                        .map(|p| MergeInfo {
-                            keep: p.keep,
-                            other: p.other,
-                            conflicts: p
-                                .conflicts
-                                .into_iter()
-                                .map(|c| MergeConflict { fact: c.tag, keep: c.keep, other: c.other })
-                                .collect(),
-                        }),
+                    merge: self.merge_info(i),
                 }
             })
             .collect();

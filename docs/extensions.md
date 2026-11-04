@@ -285,7 +285,7 @@ with the right code.
 | `unattached_file` | File in the `.ged` folder that no media points to (cannot be hidden: it has no record) |
 | `missing_coords` | Place without coordinates (`PLAC.MAP`) |
 | `bad_coords` | Unreadable or incomplete coordinates |
-| `possible_duplicate_place` | Two places that may be the same: written differently (case, accents, "St"/"Saint", codes), a shortened form of exactly one other place, or a name that starts the other one ("Leudon" / "Leudon-en-Brie") under the same higher level with the same code or coordinates less than 2 km apart. Compared in the **Merge Two Places** window; hidden with `_GR_DISTINCT` in the header |
+| `possible_duplicate_place` | Two places that may be the same: written differently (case, accents, "St"/"Saint", codes), a shortened form of exactly one other place, or a name that starts the other one ("Leudon" / "Leudon-en-Brie") under the same higher level with the same code or coordinates less than 2 km apart. Compared in the **Merge Two Places** window; hidden with `_GR_DISTINCT` in the header. An agent proposes to merge them (its choice for each level that differs) or to hide them, reviewed in To Review |
 | `place_hierarchy` | The same division attached to two higher divisions ("Loire" in "Rhône-Alpes" and in "Auvergne-Rhône-Alpes"); "Harmonize" keeps the most frequent |
 | `possible_duplicate` | Two individuals that may be the same person; hidden with `_GR_DISTINCT` on the pair, not `_GR_IGNORE` |
 

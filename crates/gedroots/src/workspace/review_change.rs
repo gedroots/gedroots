@@ -165,6 +165,16 @@ impl Workspace {
         }
     }
 
+    /// After the place merge window merged two places or set them apart: their proposed merge is
+    /// done.
+    pub(super) fn drop_place_merge_changes(&mut self, a: &str, b: &str) {
+        let same =
+            |c: &ChangeItem| c.change.place_pair().is_some_and(|(x, y)| (x == a && y == b) || (x == b && y == a));
+        while let Some(i) = self.review.changes.iter().position(|g| g.items.iter().any(same)) {
+            self.take_change(i);
+        }
+    }
+
     pub(super) fn reject_change(&mut self, i: usize, cx: &mut Context<Self>) {
         self.take_change(i);
         self.set_status(t!("review.rejected"), false);
@@ -183,6 +193,10 @@ impl Workspace {
         if let (Action::Merge(choices), Some(pair)) = (&kept[0].change.action, kept[0].change.merge_pair()) {
             let choices = choices.clone();
             return self.open_merge_prefilled(pair, &choices, cx);
+        }
+        if let (Action::Merge(choices), Some(pair)) = (&kept[0].change.action, kept[0].change.place_pair()) {
+            let choices = choices.clone();
+            return self.open_place_merge_prefilled(pair, &choices, cx);
         }
         let title = group.title(&doc.ged);
         // Checked on a copy first: an error leaves the tree as it is, with its reason.
@@ -233,7 +247,11 @@ impl Workspace {
                 .into_iter()
                 .filter(|r| r.change == Change::Differs)
                 .map(|r| format!("{} → {}", r.label, r.proposed))
-                .chain(Some(t!("review.merge_people").into_owned()))
+                .chain(Some(if c.place_pair().is_some() {
+                    t!("review.merge_places").into_owned()
+                } else {
+                    t!("review.merge_people").into_owned()
+                }))
                 .collect::<Vec<_>>()
                 .join(" · "),
             _ => c.rows(g).into_iter().map(|r| format!("{} → {}", r.label, r.proposed)).collect::<Vec<_>>().join(" · "),
