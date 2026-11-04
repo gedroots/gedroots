@@ -35,7 +35,7 @@ tree's data.
 | Tool | Returns |
 | --- | --- |
 | `file_info` | File name, counts, root person |
-| `file_context` | How the file is written: the description the user wrote (File Settings › General, `HEAD.NOTE`, word for word), language, place format, events, custom event types and occupations in use with their counts, media folders and naming, and the latest sources, people, families, media and repositories changed as raw GEDCOM (`examples`, never a living person). Also served as the resource `gedroots://file/context` |
+| `file_context` | How the file is written: the description the user wrote (File Settings › General, `HEAD.NOTE`, word for word), language, place format, events, custom event types and occupations in use with their counts, media folders and naming, and the latest sources, people, families, media and repositories changed as raw GEDCOM (`examples`). Also served as the resource `gedroots://file/context` |
 | `search_people` | People matching a search, as in the app's search box |
 | `person_sheet` | Events with their position in the record, date, place, cited sources (`PAGE`) and media; parents, unions, children; Sosa number |
 | `research_leads` | Records still to find for the people of a focus (search syntax, default `sosa:1-63`) or one person: births, marriages and deaths missing or without a source, parents of ancestors at the end of a line. Each lead has estimated years and why, places to search first, where to look, its state and the searches already noted |
@@ -172,17 +172,9 @@ the act editor. Proposals live in memory: they are lost when the app closes.
 
 ## Privacy and safety
 
-- **Living people are reduced to what identifies them.** A person with no death, burial or
-  cremation is treated as living unless they were born more than 100 years ago, as their birth
-  shows or the tree places it (`Gedcom::latest_birth_year`): the latest year their own dated
-  events and the dated acts cited about them allow (an occupation 15 years earlier), their unions and children (15 years
-  earlier), grandchildren and further down, their parents (born at most 60 years earlier, or
-  dead), spouses (30 years apart), and the dated events where they are a witness or godparent
-  (`ASSO`, 15 years earlier). An open date (“after 1850”) places nobody; an approximate one is taken 10 years later. The agent can find and
-  link a living person, but only gets their name, their birth (date and place, `born`) and their
-  close relatives: their sheet leaves out their other events and notes, and they never get a
-  research lead (`crates/gedcom/src/research.rs`). `quality_issues` lists their issues too, their
-  records marked `living`.
+- **Living people are not set apart.** The agent reads every person the way the app shows them
+  and can research and log searches for anyone: nothing it does reaches the tree without your
+  review, except its research log.
 - **Local only.** The server listens on `127.0.0.1:47280`, requires the token in the
   `Authorization` header and rejects requests sent by a web page (`Origin` header).
 - **The agent never writes the tree's data.** It can only propose; a person reviews, compares and

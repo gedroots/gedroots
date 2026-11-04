@@ -314,9 +314,6 @@ fn owner(
     spouse: Option<&str>,
 ) -> Result<(String, Option<String>), String> {
     let ind = g.individual(person).ok_or_else(|| format!("no person with id {person}"))?;
-    if g.is_living(person, current_year()) {
-        return Err("this person may be living: GEDRoots does not research living people".into());
-    }
     if goal != Goal::Marriage {
         return Ok((person.to_string(), None));
     }
@@ -423,7 +420,6 @@ impl GedrootsMcp {
     async fn file_info(&self) -> Res<FileInfo> {
         let s = self.snapshot().await?;
         let g = &s.ged;
-        let year = current_year();
         self.answer(
             &s,
             FileInfo {
@@ -437,7 +433,7 @@ impl GedrootsMcp {
                 families: g.count(RecordKind::Family),
                 sources: g.count(RecordKind::Source),
                 media: g.count(RecordKind::Media),
-                root: g.root().map(|r| g.person_ref(&r, year)),
+                root: g.root().map(|r| g.person_ref(&r)),
             },
         )
     }
@@ -449,26 +445,23 @@ impl GedrootsMcp {
     )]
     async fn file_context(&self, Parameters(p): Parameters<ContextParams>) -> Res<FileContext> {
         let s = self.snapshot().await?;
-        let context = s.ged.file_context(p.examples.unwrap_or(5).min(20), current_year());
+        let context = s.ged.file_context(p.examples.unwrap_or(5).min(20));
         self.answer(&s, context)
     }
 
     #[tool(
         name = "search_people",
-        description = "Searches the tree for people by name, given name or place. A living person is given only their name and birth (`born`).",
+        description = "Searches the tree for people by name, given name or place.",
         annotations(read_only_hint = true, open_world_hint = false)
     )]
     async fn search(&self, Parameters(p): Parameters<SearchParams>) -> Res<People> {
         let s = self.snapshot().await?;
-        self.answer(
-            &s,
-            People { people: s.ged.search_people(&p.query, p.limit.unwrap_or(50).min(500), current_year()) },
-        )
+        self.answer(&s, People { people: s.ged.search_people(&p.query, p.limit.unwrap_or(50).min(500)) })
     }
 
     #[tool(
         name = "person_sheet",
-        description = "A person's sheet: events (date, place, cited sources with their reference, media), parents, unions and children, Sosa number. A living person's sheet only gives their birth and close relatives.",
+        description = "A person's sheet: events (date, place, cited sources with their reference, media), parents, unions and children, Sosa number.",
         annotations(read_only_hint = true, open_world_hint = false)
     )]
     async fn person(&self, Parameters(p): Parameters<PersonParams>) -> Res<PersonSheet> {
@@ -477,7 +470,7 @@ impl GedrootsMcp {
         if s.ged.individual(id).is_none() {
             return Err(format!("no person with id {id}"));
         }
-        let sheet = s.ged.person_sheet(id, current_year()).ok_or_else(|| format!("no person with id {id}"))?;
+        let sheet = s.ged.person_sheet(id).ok_or_else(|| format!("no person with id {id}"))?;
         self.answer(&s, sheet)
     }
 
@@ -525,8 +518,7 @@ impl GedrootsMcp {
         let g = &s.ged;
         let x = &person_id(&s, &p.person)?;
         owner(g, x, Goal::Birth, None)?;
-        let year = current_year();
-        let person = g.person_ref(x, year);
+        let person = g.person_ref(x);
         let mut log = Vec::new();
         let mut add = |owner: &str, spouse: Option<PersonRef>| {
             for t in g.research_tasks(owner) {
@@ -548,7 +540,7 @@ impl GedrootsMcp {
         for f in g.individual(x).map(|i| i.fams()).unwrap_or_default() {
             let spouse =
                 g.family(f).and_then(|fam| [fam.husband(), fam.wife()].into_iter().flatten().find(|s| *s != x));
-            add(f, spouse.map(|s| g.person_ref(s, year)));
+            add(f, spouse.map(|s| g.person_ref(s)));
         }
         self.answer(&s, ResearchLog { person, log })
     }
@@ -646,7 +638,7 @@ impl GedrootsMcp {
             Ok(lead) => self.answer(&s, lead),
             // The record is already cited: the lead is closed, its log stays.
             Err(_) => {
-                let mut lead = gedcom::leads::closed_lead(&s.ged, &x, p.goal, family.as_deref(), year);
+                let mut lead = gedcom::leads::closed_lead(&s.ged, &x, p.goal, family.as_deref());
                 if let Some(t) = s.ged.research_task(lead.owner(), p.goal) {
                     lead.state = t.state;
                     lead.note = t.note;
@@ -659,7 +651,7 @@ impl GedrootsMcp {
 
     #[tool(
         name = "quality_issues",
-        description = "The Data Quality issues of the tree, as GEDRoots' Quality page lists them: inconsistent dates and ages, family links, GEDCOM structure, empty or unused items, media, places, events without a source, files to attach, places without coordinates. Each issue has its record, what is involved, whether the Quality page fixes it in one click, and whether the user can hide it. Filter by category, kind or record; `categories` counts every category. Records of people who may be living are marked `living`.",
+        description = "The Data Quality issues of the tree, as GEDRoots' Quality page lists them: inconsistent dates and ages, family links, GEDCOM structure, empty or unused items, media, places, events without a source, files to attach, places without coordinates. Each issue has its record, what is involved, whether the Quality page fixes it in one click, and whether the user can hide it. Filter by category, kind or record; `categories` counts every category.",
         annotations(read_only_hint = true, open_world_hint = false)
     )]
     async fn quality(&self, Parameters(p): Parameters<QualityParams>) -> Res<QualityReport> {
@@ -674,7 +666,7 @@ impl GedrootsMcp {
             include_hidden: p.include_hidden.unwrap_or(false),
         };
         let limit = p.limit.unwrap_or(100).min(500);
-        let report = s.ged.quality_report(&issues, &filter, p.offset.unwrap_or(0), limit, current_year())?;
+        let report = s.ged.quality_report(&issues, &filter, p.offset.unwrap_or(0), limit)?;
         self.answer(&s, report)
     }
 
@@ -737,7 +729,6 @@ impl GedrootsMcp {
     async fn match_people(&self, Parameters(p): Parameters<MatchParams>) -> Res<Matches> {
         let s = self.snapshot().await?;
         let act = propose::match_act(&p)?;
-        let year = current_year();
         let people = act
             .participants
             .iter()
@@ -751,7 +742,7 @@ impl GedrootsMcp {
                     .suggestions(&s.ged, i)
                     .into_iter()
                     .map(|c| Candidate {
-                        person: s.ged.person_ref(&c.xref, year),
+                        person: s.ged.person_ref(&c.xref),
                         reason: c.reason,
                         likely: c.score >= gedcom::proposal::PLAUSIBLE_MATCH,
                     })
@@ -935,8 +926,7 @@ a proposal to the app's review page, where the user compares it with the tree be
 the research log (`plan_research`, `log_search`: what you plan and search, even in vain) is written \
 at once. \
 Start with `file_context`: it shows how this file is written (the user's own conventions, source \
-titles, names, event types), so that what you propose looks like the rest of the file. Of a living person, only \
-what identifies them is given (name, birth, close relatives). Ids (I12, F3, S4…) are \
+titles, names, event types), so that what you propose looks like the rest of the file. Ids (I12, F3, S4…) are \
 only for passing between tools: never show them to the user. To look for records (birth, marriage, \
 death acts), call `research_leads`: each lead gives the estimated years, the places, where to look \
 and the searches already made; `person_sheet` gives the person's dates, places and sources. Note \
@@ -988,7 +978,7 @@ impl ServerHandler for GedrootsMcp {
             return Err(rmcp::ErrorData::resource_not_found(format!("no resource {}", request.uri), None));
         }
         let s = self.snapshot().await.map_err(|e| rmcp::ErrorData::internal_error(e, None))?;
-        let json = serde_json::to_string_pretty(&s.ged.file_context(5, current_year()))
+        let json = serde_json::to_string_pretty(&s.ged.file_context(5))
             .map_err(|e| rmcp::ErrorData::internal_error(e.to_string(), None))?;
         let mut text = rmcp::model::ResourceContents::text(json, CONTEXT_URI);
         if let rmcp::model::ResourceContents::TextResourceContents { mime_type, .. } = &mut text {
