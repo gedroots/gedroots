@@ -38,6 +38,8 @@ pub(super) struct EventDialog {
     detail: Entity<InputState>,
     date: Entity<DateField>,
     place: Entity<InputState>,
+    /// Street address within the place (`ADDR`).
+    address: Entity<InputState>,
     source: Entity<PickerState>,
     /// First note of the event.
     note: Entity<TextareaState>,
@@ -147,6 +149,7 @@ impl Workspace {
         let detail = text("".into(), cur.detail, window, cx);
         let date = date_field(&cur.date, &cur.date_phrase, window, cx);
         let place = text(t!("event_dialog.town").into(), place_label(&cur.place), window, cx);
+        let address = text(t!("event_dialog.address").into(), cur.address, window, cx);
         let source = picker(g, RecordKind::Source, cur.source.as_deref().unwrap_or(""), window, cx);
         let note = cx.new(|cx| TextareaState::new(window, cx).auto_grow(2, 8).default_value(cur.note));
         let sub =
@@ -159,6 +162,7 @@ impl Workspace {
             detail,
             date,
             place,
+            address,
             source,
             note,
             union,
@@ -213,6 +217,7 @@ impl Workspace {
                 &self.pending_places,
                 &d.place.read(cx).value(),
             ),
+            address: d.address.read(cx).value().to_string(),
             source: d.source.read(cx).selected_value().cloned(),
             note: d.note.read(cx).value().to_string(),
         };
@@ -414,9 +419,15 @@ impl Workspace {
                     .items_start()
                     .child(field(t!("event_dialog.date"), d.date.clone().into_any_element()).w(px(230.)).flex_none())
                     .child(
-                        field(t!("editor.place"), Input::new(&d.place).small().into_any_element())
+                        v_flex()
                             .flex_1()
-                            .children(self.place_suggestions(&d.place, cx)),
+                            .min_w_0()
+                            .gap_3()
+                            .child(
+                                field(t!("editor.place"), Input::new(&d.place).small().into_any_element())
+                                    .children(self.place_suggestions(&d.place, cx)),
+                            )
+                            .child(field(t!("editor.address"), Input::new(&d.address).small().into_any_element())),
                     ),
             )
             .child(field(

@@ -189,6 +189,7 @@ impl Gedcom {
         if !ev.place.trim().is_empty() {
             e.children.push(Node::with_value("PLAC", ev.place.trim()));
         }
+        e.children.extend(crate::address::address_node(&ev.address));
         if let Some(s) = ev.source.as_deref().filter(|s| !s.is_empty()) {
             e.children.push(Node::with_value("SOUR", format!("@{}@", s.trim_matches('@'))));
         }
@@ -537,6 +538,8 @@ pub struct NewEvent {
     pub date: String,
     pub date_phrase: String,
     pub place: String,
+    /// Street address within the place (`ADDR`): “43, rue de la République”.
+    pub address: String,
     pub source: Option<String>,
     /// Text of the event's first note (`NOTE`); the other notes are kept as they are.
     pub note: String,

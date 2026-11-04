@@ -718,6 +718,9 @@ impl Workspace {
                     or_dash(&gedcom::short_place(&row.proposed)),
                     None,
                 ),
+                Field::Address => {
+                    (t!("review.address").into_owned(), None, or_dash(&row.current), or_dash(&row.proposed), None)
+                }
                 Field::Person { index, role } => {
                     let principal = full.act.participants[*index].role == gedcom::ActRole::Principal;
                     let key = (!principal).then_some(Keep::Person(*index));
@@ -749,7 +752,7 @@ impl Workspace {
             let same = row.change == Change::Same;
             // A contradiction: keep both (default), prefer the record's, or keep the tree's.
             let at = match &row.field {
-                Field::Date | Field::Place => Some(None),
+                Field::Date | Field::Place | Field::Address => Some(None),
                 Field::Fact { person, fact, .. } => Some(Some((*person, *fact))),
                 Field::Person { .. } => None,
             }

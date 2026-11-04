@@ -1,5 +1,5 @@
-//! Changes for a Data Quality issue in “To Review”: proposed by an AI agent (`propose_change`),
-//! checked against the file, then saved or rejected by the user.
+//! Changes for a Data Quality issue, or corrections without one, in “To Review”: proposed by an AI
+//! agent (`propose_change`), checked against the file, then saved or rejected by the user.
 //!
 //! The page stays sober: one row per change in the list, and a single column with what changes
 //! (“In the tree” / “Proposed”), the agent's reason and its evidence. The automatic fixes of a
@@ -32,8 +32,8 @@ impl ChangeGroup {
     /// Kind of issue whose fixes are gathered here (an automatic fix that applies to a list).
     fn batch(&self) -> Option<&'static str> {
         let c = &self.items.first()?.change;
-        (c.action == Action::Fix && quality::fix_of(c.issue.code).is_some_and(|f| f.batch.is_some()))
-            .then_some(c.issue.code)
+        let code = c.issue.as_ref()?.code;
+        (c.action == Action::Fix && quality::fix_of(code).is_some_and(|f| f.batch.is_some())).then_some(code)
     }
 
     fn kept(&self) -> impl Iterator<Item = &ChangeItem> {
@@ -78,7 +78,11 @@ impl Workspace {
     /// Is a change waiting for this issue?
     pub(super) fn change_pending(&self, issue: &Issue) -> bool {
         let key = quality::issue_key(issue);
-        self.review.changes.iter().flat_map(|g| &g.items).any(|c| quality::issue_key(&c.change.issue) == key)
+        self.review
+            .changes
+            .iter()
+            .flat_map(|g| &g.items)
+            .any(|c| c.change.issue.as_ref().is_some_and(|i| quality::issue_key(i) == key))
     }
 
     /// Change received from the agent: checked against the displayed file, then queued. Returns
@@ -93,16 +97,23 @@ impl Workspace {
         }
         self.refresh_quality();
         let issues = self.quality.issues.clone();
-        let issue = find_issue(&issues, &req.issue_id)
-            .ok_or_else(|| format!("no issue `{}` any more: call `quality_issues` again", req.issue_id))?;
-        if issue.ignored && req.action == Action::Hide {
-            return Err("this issue is already hidden".into());
-        }
-        if self.change_pending(issue) {
-            return Err("a change for this issue is already waiting for review".into());
-        }
+        // Without an issue: a correction the agent read in a document.
+        let issue = match &req.issue_id {
+            None => None,
+            Some(id) => {
+                let issue = find_issue(&issues, id)
+                    .ok_or_else(|| format!("no issue `{id}` any more: call `quality_issues` again"))?;
+                if issue.ignored && req.action == Action::Hide {
+                    return Err("this issue is already hidden".into());
+                }
+                if self.change_pending(issue) {
+                    return Err("a change for this issue is already waiting for review".into());
+                }
+                Some(issue.clone())
+            }
+        };
         let change = QualityChange {
-            issue: issue.clone(),
+            issue,
             issue_id: req.issue_id,
             action: req.action,
             reason: req.reason,
@@ -175,7 +186,7 @@ impl Workspace {
         // Checked on a copy first: an error leaves the tree as it is, with its reason.
         let mut copy = doc.ged.clone();
         let result = if group.batch().is_some() {
-            let issues: Vec<Issue> = kept.iter().map(|c| c.change.issue.clone()).collect();
+            let issues: Vec<Issue> = kept.iter().filter_map(|c| c.change.issue.clone()).collect();
             if copy.fix_issues(&issues) == 0 { Err(t!("review.outdated").into_owned()) } else { Ok(()) }
         } else {
             kept[0].change.apply(&mut copy)
@@ -285,7 +296,7 @@ impl Workspace {
                             .flex_1()
                             .min_w_0()
                             .when(!on, |d| d.opacity(0.45))
-                            .child(item.change.issue.message.clone()),
+                            .child(item.change.subject().to_string()),
                     )
             });
             body = body.child(
@@ -430,7 +441,13 @@ impl Workspace {
         } else {
             t!("review.save").into_owned()
         };
-        let sub = if batch { t!("review.automatic").into_owned() } else { c.issue.message.clone() };
+        // A correction has no issue: its reason is shown below, once.
+        let by = t!("review.by_agent");
+        let sub = match &c.issue {
+            _ if batch => format!("{} · {by}", t!("review.automatic")),
+            Some(i) => format!("{} · {by}", i.message),
+            None => by.into_owned(),
+        };
         v_flex()
             .flex_1()
             .min_w_0()
@@ -446,12 +463,7 @@ impl Workspace {
                             .pb_2()
                             .gap_0p5()
                             .child(div().text_lg().font_weight(FontWeight::SEMIBOLD).child(group.title(g)))
-                            .child(
-                                div()
-                                    .text_sm()
-                                    .text_color(theme::muted())
-                                    .child(format!("{sub} · {}", t!("review.by_agent"))),
-                            ),
+                            .child(div().text_sm().text_color(theme::muted()).child(sub)),
                     )
                     .child(
                         v_flex().id("change-detail").flex_1().min_h_0().overflow_y_scroll().px_4().py_2().child(body),

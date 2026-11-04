@@ -81,6 +81,8 @@ pub enum Field {
     Date,
     /// Place of the event.
     Place,
+    /// Street address of the event, within its place.
+    Address,
     /// Person of the record (index in `act.participants`) and their displayed role.
     Person { index: usize, role: String },
     /// Other fact `fact` of the person `person` (“Birth”, of “Émile MARCHAND”).
@@ -318,7 +320,7 @@ impl Proposal {
     }
 
     /// Event of the tree that the record completes (on the linked principal person).
-    fn current_event(&self, ged: &Gedcom) -> Option<(String, String)> {
+    fn current_event(&self, ged: &Gedcom) -> Option<(String, String, String)> {
         let x = self.linked_principal(0)?;
         let node = if self.act.is_family() {
             let other = self.linked_principal(1)?;
@@ -332,13 +334,17 @@ impl Proposal {
             ged.get(&x)?
         };
         let ev = node.children.iter().find(|c| c.tag == self.act.event)?;
-        Some((ev.child_val("DATE").unwrap_or("").to_string(), ev.child_val("PLAC").unwrap_or("").to_string()))
+        Some((
+            ev.child_val("DATE").unwrap_or("").to_string(),
+            ev.child_val("PLAC").unwrap_or("").to_string(),
+            crate::address::address_of(ev).unwrap_or_default(),
+        ))
     }
 
     /// “In the tree” / “Proposed” lines.
     pub fn compare(&self, ged: &Gedcom) -> Vec<Row> {
         let act = &self.act;
-        let (cur_date, cur_place) = self.current_event(ged).unwrap_or_default();
+        let (cur_date, cur_place, cur_address) = self.current_event(ged).unwrap_or_default();
         let similar = self.duplicates(ged);
         let mut rows = Vec::new();
         if !act.date.trim().is_empty() || !cur_date.is_empty() {
@@ -358,6 +364,16 @@ impl Proposal {
                 change,
                 current: cur_place,
                 proposed: act.place.trim().to_string(),
+                similar: Vec::new(),
+                close: Vec::new(),
+            });
+        }
+        if !act.address.trim().is_empty() || !cur_address.is_empty() {
+            rows.push(Row {
+                field: Field::Address,
+                change: text_change(&cur_address, &act.address),
+                current: cur_address,
+                proposed: act.address.trim().to_string(),
                 similar: Vec::new(),
                 close: Vec::new(),
             });
@@ -422,12 +438,14 @@ impl Proposal {
                     value: if f.has_value() { c.val().to_string() } else { String::new() },
                     date: c.child_val("DATE").unwrap_or("").to_string(),
                     place: c.child_val("PLAC").unwrap_or("").to_string(),
+                    address: crate::address::address_of(c).unwrap_or_default(),
                     ..Default::default()
                 });
                 let change = match &current {
                     None => Change::Added,
                     Some(c) if f.has_value() => text_change(&c.value, &f.value),
                     Some(c) if !f.date.trim().is_empty() => date_change(&c.date, &f.date),
+                    Some(c) if c.place.trim() == f.place.trim() => text_change(&c.address, &f.address),
                     Some(c) => text_change(&c.place, &f.place),
                 };
                 rows.push(Row {
@@ -1096,5 +1114,47 @@ mod tests {
         assert_eq!(date_change("4 MAY 1796", "4 MAY 1797"), Change::Differs);
         assert_eq!(date_change("", "1802"), Change::Added);
         assert_eq!(date_change("FRENCH_R 30 GERM 4", "@#DFRENCH R@ 30 GERM 4"), Change::Same);
+    }
+
+    #[test]
+    fn street_addresses_stay_apart_from_the_place() {
+        let g = ged();
+        let mut p = birth(SourceChoice::Existing("S1".into()));
+        p.act.address = "12, rue Saint-Malo".into();
+        p.act.participants[2].facts.push(crate::act::Fact {
+            tag: "RESI".into(),
+            date: "4 APR 1802".into(),
+            place: "Rennes".into(),
+            address: "3, rue de la Monnaie".into(),
+            ..Default::default()
+        });
+        p.complete(&g);
+        let rows = p.compare(&g);
+        let address = rows.iter().find(|r| r.field == Field::Address).unwrap();
+        assert_eq!((address.change, address.proposed.as_str()), (Change::Added, "12, rue Saint-Malo"));
+        let resi = rows.iter().find(|r| matches!(r.field, Field::Fact { .. })).unwrap();
+        assert!(resi.proposed.contains("3, rue de la Monnaie"), "{}", resi.proposed);
+
+        let mut g2 = g.clone();
+        p.apply(&mut g2).unwrap();
+        // The birth keeps its place and gains the address, right after it.
+        let birth = g2.get("I2").unwrap().children.iter().find(|c| c.tag == "BIRT").unwrap();
+        let tags: Vec<&str> = birth.children.iter().map(|c| c.tag.as_str()).collect();
+        let at = tags.iter().position(|t| *t == "PLAC").unwrap();
+        assert_eq!(tags[at + 1], "ADDR");
+        assert_eq!(birth.child_val("PLAC"), Some("Rennes"));
+        assert_eq!(birth.child_val("ADDR"), Some("12, rue Saint-Malo"));
+        // The mother's residence: a fact with its place and address, not a new place.
+        let mother = g2.records.iter().find(|r| r.child("RESI").is_some_and(|e| e.child("ADDR").is_some())).unwrap();
+        let resi = mother.child("RESI").unwrap();
+        assert_eq!(resi.child_val("PLAC"), Some("Rennes"));
+        assert_eq!(resi.child_val("ADDR"), Some("3, rue de la Monnaie"));
+        assert!(g2.places().iter().all(|pl| !pl.name.contains("rue")));
+
+        // Read back from the source: the record and the residence keep their addresses.
+        let act = g2.acts("S1").into_iter().find(|a| a.event == "BIRT" && a.page == "vue 45").unwrap();
+        assert_eq!(act.address, "12, rue Saint-Malo");
+        let facts: Vec<&crate::act::Fact> = act.participants.iter().flat_map(|p| &p.facts).collect();
+        assert!(facts.iter().any(|f| f.tag == "RESI" && f.address == "3, rue de la Monnaie"), "{facts:?}");
     }
 }
