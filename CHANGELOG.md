@@ -1,5 +1,11 @@
 # Changelog
 
+## [2026.11.6](https://github.com/gedroots/gedroots/releases/tag/v2026.11.6) - 2026-11-04
+
+### 🔄 Changed
+
+- Always show Repositories, Notes and Books in the sidebar by @antoninguyot in [#152](https://github.com/gedroots/gedroots/pull/152)
+
 ## [2026.11.5](https://github.com/gedroots/gedroots/releases/tag/v2026.11.5) - 2026-11-04
 
 ### 🔄 Changed
