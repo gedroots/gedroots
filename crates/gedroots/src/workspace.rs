@@ -2002,8 +2002,8 @@ impl Workspace {
                             .gap_2()
                             .items_center()
                             .font_weight(FontWeight::SEMIBOLD)
-                            .child(img("brand/icon-micro.svg").size(px(16.)))
-                            .when(!mac, |d| d.child("GEDRoots")),
+                            // Linux, Windows: the GEDRoots menu, first of the bar, names the app.
+                            .child(img("brand/icon-micro.svg").size(px(16.))),
                     )
                     // Linux, Windows: menus in the window (native on macOS).
                     .children(self.menu_bar.clone().map(|m| div().h_full().child(m)))
@@ -2028,15 +2028,46 @@ impl Workspace {
                     .gap_3()
                     .items_center()
                     .justify_end()
-                    .text_xs()
-                    .children(self.status.clone().map(|(msg, err)| {
-                        div().truncate().text_color(if err { theme::danger() } else { theme::muted() }).child(msg)
-                    }))
-                    .children(self.render_update_notice()),
+                    .children(self.render_create_button(cx)),
             )
     }
 
-    /// Where the update stands, on the right of the top bar: the answer to Check for Updates, and
+    /// The top bar's Create button: creates what the page lists (`⌘N`), named after it.
+    fn render_create_button(&self, cx: &mut Context<Self>) -> Option<impl IntoElement> {
+        let label = self.create_label()?;
+        Some(
+            Button::new("create")
+                .primary()
+                .xsmall()
+                .icon(IconName::Plus)
+                .label(label.clone())
+                .tooltip_with_action(label, &Create, Some("Workspace"))
+                // A click does not move the window (macOS).
+                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                .on_click(cx.listener(|this, _, w, cx| this.create_here(w, cx))),
+        )
+    }
+
+    /// The status bar, at the bottom of the window: the last message (in `danger()` for an
+    /// error) and where the update stands. It stays when empty, so the layout does not jump.
+    fn render_status_bar(&self) -> impl IntoElement {
+        h_flex()
+            .flex_none()
+            .h(px(24.))
+            .px_3()
+            .gap_3()
+            .items_center()
+            .border_t_1()
+            .border_color(theme::border())
+            .bg(theme::panel())
+            .text_xs()
+            .child(div().flex_1().min_w_0().children(self.status.clone().map(|(msg, err)| {
+                div().truncate().text_color(if err { theme::danger() } else { theme::muted() }).child(msg)
+            })))
+            .children(self.render_update_notice())
+    }
+
+    /// Where the update stands, in the status bar: the answer to Check for Updates, and
     /// once a new version is downloaded, the button that installs it (like Zed and VS Code).
     fn render_update_notice(&self) -> Option<impl IntoElement> {
         use crate::updates::State;
@@ -4135,6 +4166,7 @@ impl Render for Workspace {
             .text_sm()
             .child(self.render_header(cx))
             .child(div().flex_1().min_h_0().flex().relative().child(body).children(self.render_drawer(cx)))
+            .when(self.doc.is_some(), |d| d.child(self.render_status_bar()))
             .children(self.render_picker(cx))
             .children(self.render_kinship(cx))
             .children(self.render_merge(cx))
