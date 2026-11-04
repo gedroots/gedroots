@@ -3,10 +3,8 @@ name: Test
 # Tools and commands come from mise.toml (and mise.lock): the workflow runs the same task as a
 # local machine (`mise run ci`). The installers are built by the Release workflow.
 
-# Pull requests are tested before they merge, so main is never tested again after a merge.
-# A pull request can only read the caches saved on main (or by itself), so after each merge the
-# `cache` job builds main, without testing it, when its Cargo.lock has no cache yet; otherwise it
-# stops after a few seconds. Every pull request then starts from that shared cache.
+# Pull requests are tested before they merge, and main after each merge: main's run saves the
+# cache that every pull request restores (a pull request can only read caches saved on main).
 on:
   pull_request:
   push:
@@ -21,7 +19,6 @@ env:
 
 jobs:
   test:
-    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     steps:
       # With the Atlas (crates/gedcom/atlas), embedded at build time.
@@ -39,12 +36,13 @@ jobs:
       - uses: jdx/mise-action@v5
         with:
           version: 2026.10.25
-          # Saved by the cache job on main, like the build outputs below.
-          cache_save: false
-      # Downloaded crates and build outputs, saved on main by the cache job: a pull request's own
-      # copy could only be read by that pull request, and those copies filled the repository's
-      # 10 GB, evicting main's. A pull request that changes Cargo.lock starts from main's latest.
+          # Saved by main only, like the build outputs below.
+          cache_save: ${{ github.ref == 'refs/heads/main' }}
+      # Downloaded crates and build outputs: they follow Cargo.lock. Only main saves them: a
+      # pull request's copy could only be read by that pull request, and those copies filled the
+      # repository's 10 GB, evicting main's cache.
       - name: Restore the crates and build outputs
+        id: cache
         uses: actions/cache/restore@v6
         with:
           path: |
@@ -55,51 +53,8 @@ jobs:
           key: rust-${{ runner.os }}-${{ hashFiles('mise.lock', 'Cargo.lock') }}
           restore-keys: rust-${{ runner.os }}-
       - run: mise run ci
-
-  # Builds what `mise run ci` builds, without running the tests, and saves it for pull requests.
-  # Once per Cargo.lock: later merges find the cache and stop. Built from scratch, so the cache
-  # holds only the current dependencies and stays small.
-  cache:
-    if: github.event_name == 'push'
-    runs-on: ubuntu-latest
-    concurrency:
-      group: rust-cache
-      cancel-in-progress: false
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          submodules: true
-      - name: Is there a cache for this Cargo.lock already?
-        id: lookup
-        uses: actions/cache/restore@v6
-        with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-            target
-          key: rust-${{ runner.os }}-${{ hashFiles('mise.lock', 'Cargo.lock') }}
-          lookup-only: true
-      - name: GPUI system dependencies
-        if: steps.lookup.outputs.cache-hit != 'true'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-dev libfontconfig-dev libwayland-dev libxcb1-dev libvulkan-dev
-      - name: Rust toolchain in the mise folder
-        if: steps.lookup.outputs.cache-hit != 'true'
-        run: echo "MISE_RUSTUP_HOME=$HOME/.local/share/mise/rustup" >> "$GITHUB_ENV"
-      - uses: jdx/mise-action@v5
-        if: steps.lookup.outputs.cache-hit != 'true'
-        with:
-          version: 2026.10.25
-      # The same commands as `mise run ci`, so that pull requests reuse every compiled crate.
-      - name: Build the tests and run clippy
-        if: steps.lookup.outputs.cache-hit != 'true'
-        run: |
-          cargo test --workspace --no-run
-          mise run clippy
       - name: Save the crates and build outputs
-        if: steps.lookup.outputs.cache-hit != 'true'
+        if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
         with:
           path: |
@@ -107,4 +62,4 @@ jobs:
             ~/.cargo/registry/cache
             ~/.cargo/git/db
             target
-          key: ${{ steps.lookup.outputs.cache-primary-key }}
+          key: ${{ steps.cache.outputs.cache-primary-key }}

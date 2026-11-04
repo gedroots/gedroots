@@ -64,10 +64,8 @@ The Test workflow ([`.github/workflows/test.yml`](.github/workflows/test.yml)) r
 task as a local machine, `mise run ci`, on Linux. The installers are built by the Release
 workflow (see Releases), also on pull requests that touch packaging, whose packages can be
 downloaded from the artifacts. mise-action's cache keeps the toolchain (rustup
-lives in mise's folder), and a cache keyed on `Cargo.lock` keeps the crates and `target/`. Pull
-requests only restore it: a pull request can only read caches saved on main, so after each merge
-the workflow's `cache` job builds main (without running the tests) when its `Cargo.lock` has no
-cache yet, and saves it for every pull request.
+lives in mise's folder), and a cache keyed on `Cargo.lock` keeps the crates and `target/`. Only main
+saves it, after each merge: a pull request can only read caches saved on main.
 
 ## Packaging
 
