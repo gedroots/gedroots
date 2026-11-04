@@ -1,5 +1,25 @@
 # Changelog
 
+## [2026.11.5](https://github.com/gedroots/gedroots/releases/tag/v2026.11.5) - 2026-11-04
+
+### 🔄 Changed
+
+- Add an About GEDRoots window by @antoninguyot in [#137](https://github.com/gedroots/gedroots/pull/137)
+- Agent proposals: tree's language and wording, repeated facts by date, maiden names by @antoninguyot in [#132](https://github.com/gedroots/gedroots/pull/132)
+- Let agents change occupations, addresses and places in a correction by @antoninguyot in [#138](https://github.com/gedroots/gedroots/pull/138)
+- Release PR: commit Cargo.lock again by @antoninguyot in [#140](https://github.com/gedroots/gedroots/pull/140)
+- Test main after each merge again, so pull requests share its cache by @antoninguyot in [#139](https://github.com/gedroots/gedroots/pull/139)
+- Open several trees: one window per tree, on desktop, MCP and iPhone by @antoninguyot in [#133](https://github.com/gedroots/gedroots/pull/133)
+- To Review: readable transcriptions and the agent's remarks apart by @antoninguyot in [#142](https://github.com/gedroots/gedroots/pull/142)
+- Let agents add repositories and locate the places they propose by @antoninguyot in [#143](https://github.com/gedroots/gedroots/pull/143)
+- Let agents fix family links, notes, event details and media in a correction by @antoninguyot in [#144](https://github.com/gedroots/gedroots/pull/144)
+- Add family books: Typst engine, Books page and PDF export by @antoninguyot in [#145](https://github.com/gedroots/gedroots/pull/145)
+- Menus without duplicates: Create button, status bar, GEDRoots menu by @antoninguyot in [#146](https://github.com/gedroots/gedroots/pull/146)
+- Books written by an AI agent: narratives, context and hypotheses, reviewed chapter by chapter by @antoninguyot in [#148](https://github.com/gedroots/gedroots/pull/148)
+- Print-ready books: volumes, printer formats and cover, descendants fan, person picker by @antoninguyot in [#149](https://github.com/gedroots/gedroots/pull/149)
+- Agents propose to merge duplicate places, or say they are two places by @antoninguyot in [#150](https://github.com/gedroots/gedroots/pull/150)
+- Cleanup after #130–#148: menus in the docs, one Open, no .bak, less duplication by @antoninguyot in [#151](https://github.com/gedroots/gedroots/pull/151)
+
 ## [2026.11.4](https://github.com/gedroots/gedroots/releases/tag/v2026.11.4) - 2026-11-04
 
 ### 🔄 Changed
