@@ -21,8 +21,9 @@ const SUBJECT_TAG: &str = "_GR_SUBJ";
 const LINE_TAG: &str = "_GR_LINE";
 const GENERATIONS_TAG: &str = "_GR_GENS";
 const SIZE_TAG: &str = "_GR_SIZE";
+const PRINT_TAG: &str = "_GR_PRNT";
 /// Every tag of the record, all documented in the same section.
-const TAGS: [&str; 5] = [BOOK_TAG, SUBJECT_TAG, LINE_TAG, GENERATIONS_TAG, SIZE_TAG];
+const TAGS: [&str; 6] = [BOOK_TAG, SUBJECT_TAG, LINE_TAG, GENERATIONS_TAG, SIZE_TAG, PRINT_TAG];
 const URI: &str = concat!(env!("CARGO_PKG_REPOSITORY"), "/blob/main/docs/extensions.md#_gr_book");
 /// Prefix of the identifiers of the books (`@BK1@`).
 const XREF_PREFIX: &str = "BK";
@@ -60,16 +61,22 @@ pub enum PageSize {
     /// 17 × 24 cm, the usual size of illustrated books in Europe.
     #[default]
     Book,
+    /// 15.6 × 23.4 cm (“Royal”), printed by Lulu.
+    Royal,
+    /// 6 × 9 in (15.2 × 22.9 cm), printed by Lulu and Blurb.
+    Trade,
     A4,
     Letter,
 }
 
 impl PageSize {
-    pub const ALL: [PageSize; 3] = [PageSize::Book, PageSize::A4, PageSize::Letter];
+    pub const ALL: [PageSize; 5] = [PageSize::Book, PageSize::Royal, PageSize::Trade, PageSize::A4, PageSize::Letter];
 
     fn tag(self) -> &'static str {
         match self {
             PageSize::Book => "170X240",
+            PageSize::Royal => "156X234",
+            PageSize::Trade => "152X229",
             PageSize::A4 => "A4",
             PageSize::Letter => "LETTER",
         }
@@ -83,6 +90,8 @@ impl PageSize {
     pub fn mm(self) -> (f64, f64) {
         match self {
             PageSize::Book => (170., 240.),
+            PageSize::Royal => (156., 234.),
+            PageSize::Trade => (152.4, 228.6),
             PageSize::A4 => (210., 297.),
             PageSize::Letter => (215.9, 279.4),
         }
@@ -99,6 +108,9 @@ pub struct BookSpec {
     pub line: Line,
     pub generations: u32,
     pub size: PageSize,
+    /// Exported for a printer (Lulu, Blurb…): pages with bleed, and a separate cover with its
+    /// spine.
+    pub print: bool,
     /// What an agent wrote, by chapter (generation number, 1 = the person).
     pub chapters: BTreeMap<u32, Writing>,
 }
@@ -113,6 +125,7 @@ impl BookSpec {
             line: Line::default(),
             generations: DEFAULT_GENERATIONS,
             size: PageSize::default(),
+            print: false,
             chapters: BTreeMap::new(),
         }
     }
@@ -129,6 +142,7 @@ impl BookSpec {
                 .unwrap_or(DEFAULT_GENERATIONS)
                 .clamp(MIN_GENERATIONS, MAX_GENERATIONS),
             size: PageSize::from_tag(node.child_val(SIZE_TAG).unwrap_or_default()),
+            print: node.child_val(PRINT_TAG).is_some_and(|v| v.trim() == "Y"),
             chapters: writing::read(node),
         }
     }
@@ -139,6 +153,7 @@ impl BookSpec {
         node.set_child_val(LINE_TAG, self.line.tag());
         node.set_child_val(GENERATIONS_TAG, &self.generations.clamp(MIN_GENERATIONS, MAX_GENERATIONS).to_string());
         node.set_child_val(SIZE_TAG, self.size.tag());
+        node.set_child_val(PRINT_TAG, if self.print { "Y" } else { "" });
         writing::write(node, &self.chapters);
     }
 }
@@ -209,10 +224,11 @@ mod tests {
         spec.line = Line::Descendants;
         spec.generations = 5;
         spec.size = PageSize::A4;
+        spec.print = true;
         let x = save(&mut g, &spec);
         assert_eq!(x, "BK1");
         let text = g.to_gedcom_string();
-        assert!(text.contains("0 @BK1@ _GR_BOOK The Marchand Family\n1 _GR_SUBJ @I1@\n1 _GR_LINE DESCENDANTS\n1 _GR_GENS 5\n1 _GR_SIZE A4\n"), "{text}");
+        assert!(text.contains("0 @BK1@ _GR_BOOK The Marchand Family\n1 _GR_SUBJ @I1@\n1 _GR_LINE DESCENDANTS\n1 _GR_GENS 5\n1 _GR_SIZE A4\n1 _GR_PRNT Y\n"), "{text}");
         assert!(text.contains("2 TAG _GR_BOOK https://"), "{text}");
 
         let g = Gedcom::parse(&text).unwrap();

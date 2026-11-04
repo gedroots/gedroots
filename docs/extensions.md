@@ -500,8 +500,9 @@ Legacy and RootsMagic keep their to-do items in `_TODO`; GEDRoots does not read 
 
 ## `_GR_BOOK`
 
-A family book (Source › New Book…): a PDF typeset from the tree, with its charts, a record for each
-person written from the facts, and an index. Only what the book is made of is stored; its
+A family book (Create on the Books page): a PDF typeset from the tree, with its charts, a record for each
+person written from the facts, and an index. A book longer than 500 pages is exported in volumes,
+cut between chapters. Only what the book is made of is stored; its
 pages are computed from the tree each time, so the book follows the changes. See
 `crates/book`.
 
@@ -512,8 +513,12 @@ pages are computed from the tree each time, so the book follows the changes. See
   - `_GR_LINE <line>`: `ANCESTORS` (the person's ancestors, one chapter per generation) or
     `DESCENDANTS`; absent: `ANCESTORS`;
   - `_GR_GENS <n>`: generations, from 2 to 12; absent: 8;
-  - `_GR_SIZE <size>`: page size, `170X240` (17 × 24 cm, a printed book), `A4` or `LETTER`;
-    absent: `170X240`.
+  - `_GR_SIZE <size>`: page size, `170X240` (17 × 24 cm, a printed book), `156X234`
+    (15.6 × 23.4 cm, Lulu's “Royal”), `152X229` (6 × 9 in, Lulu and Blurb), `A4` or `LETTER`;
+    absent: `170X240`;
+  - `_GR_PRNT Y`: exported for a printer: the pages with 3.175 mm of bleed, a title page in
+    place of the cover, and the cover as a file of its own (back, spine, front); absent: for
+    reading and printing at home.
   - `_GR_CHAP <n>`: what an AI agent wrote for chapter *n* (the generation, 1 = the person),
     saved from To Review. Its substructures, in the order the book shows them:
     - the chapter's introduction, as blocks;
@@ -536,6 +541,7 @@ pages are computed from the tree each time, so the book follows the changes. See
 2 TAG _GR_LINE https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_book
 2 TAG _GR_GENS https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_book
 2 TAG _GR_SIZE https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_book
+2 TAG _GR_PRNT https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_book
 0 @BK1@ _GR_BOOK The Guyot Family
 1 _GR_SUBJ @I1@
 1 _GR_LINE ANCESTORS

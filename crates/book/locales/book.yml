@@ -142,6 +142,15 @@ book.chapter:
 book.origins:
   en: Where we come from
   fr: D’où venons-nous
+book.descent:
+  en: Their descendants
+  fr: Leur descendance
+book.descent_sub:
+  en: Each cell is a descendant, coloured by where they were born; each family shares its parent's.
+  fr: Chaque case est un descendant, coloré selon la région où il est né ; chaque famille partage celle de son parent.
+book.volume:
+  en: Volume %{n} of %{of}
+  fr: Tome %{n} sur %{of}
 book.origins_sub:
   en: Each cell is an ancestor, coloured by where they were born.
   fr: Chaque case est un ancêtre, coloré selon la région où il est né.

@@ -1,11 +1,14 @@
-//! Books (Source › New Book…): a PDF typeset from the tree by the `gedroots-book` crate, stored in
-//! the `.ged` as a `_GR_BOOK` record (who it starts from, which line, how many generations, the
-//! page size). The Books page lists them and shows the selected one page by page, typeset in the
-//! background; File › Export…, on that page, writes it as PDF.
+//! Books (Create on the Books page): a PDF typeset from the tree by the `gedroots-book` crate,
+//! stored in the `.ged` as a `_GR_BOOK` record (who it starts from, which line, how many
+//! generations, the page size, for a printer or not). The Books page lists them and shows the
+//! selected one page by page, typeset in the background; File › Export…, on that page, writes it as
+//! PDF: in volumes when it is longer than 500 pages, with each volume's cover for a printer.
 
+use super::relatives::PickPurpose;
 use super::*;
 use crate::save_dialog;
 use gedroots_book::{BookSpec, Line, PageSize, Typeset};
+use gpui_kit::component::checkbox::Checkbox;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
@@ -82,6 +85,7 @@ pub(super) struct BookDialog {
     line: Line,
     generations: u32,
     size: PageSize,
+    print: bool,
     title: Entity<InputState>,
     _sub: Subscription,
 }
@@ -97,6 +101,8 @@ fn line_label(line: Line) -> SharedString {
 fn size_label(size: PageSize) -> SharedString {
     match size {
         PageSize::Book => t!("books.size_book"),
+        PageSize::Royal => t!("books.size_royal"),
+        PageSize::Trade => t!("books.size_trade"),
         PageSize::A4 => t!("books.size_a4"),
         PageSize::Letter => t!("books.size_letter"),
     }
@@ -250,7 +256,7 @@ impl Workspace {
     // New Book window
     // ------------------------------------------------------------------
 
-    /// Source › New Book…: starts from the selected person, or the root person.
+    /// Create on the Books page (⌘N): starts from the selected person, or the root person.
     pub(super) fn new_book(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(doc) = &self.doc else { return };
         let g = &doc.ged;
@@ -275,12 +281,7 @@ impl Workspace {
         let Some(doc) = &self.doc else { return };
         let subject_name = doc.ged.individual(&spec.subject).map(|i| i.display_name()).unwrap_or_default();
         let placeholder = gedroots_book::default_title(&doc.ged, &spec);
-        let title = cx.new(|cx| InputState::new(window, cx).placeholder(placeholder).default_value(spec.title.clone()));
-        let sub = cx.subscribe_in(&title, window, |this, _, ev: &InputEvent, window, cx| {
-            if matches!(ev, InputEvent::PressEnter { .. }) {
-                this.save_book(window, cx);
-            }
-        });
+        let (title, sub) = self.book_title_input(spec.title.clone(), placeholder, window, cx);
         title.update(cx, |s, cx| s.focus(window, cx));
         self.books.dialog = Some(BookDialog {
             xref: spec.xref,
@@ -289,9 +290,45 @@ impl Workspace {
             line: spec.line,
             generations: spec.generations,
             size: spec.size,
+            print: spec.print,
             title,
             _sub: sub,
         });
+        cx.notify();
+    }
+
+    /// The title field: the default title as its placeholder, Enter saves.
+    fn book_title_input(
+        &mut self,
+        value: String,
+        placeholder: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> (Entity<InputState>, Subscription) {
+        let title = cx.new(|cx| InputState::new(window, cx).placeholder(placeholder).default_value(value));
+        let sub = cx.subscribe_in(&title, window, |this, _, ev: &InputEvent, window, cx| {
+            if matches!(ev, InputEvent::PressEnter { .. }) {
+                this.save_book(window, cx);
+            }
+        });
+        (title, sub)
+    }
+
+    /// The person chosen in the picker becomes the book's; the default title follows.
+    pub(super) fn set_book_person(&mut self, xref: String, window: &mut Window, cx: &mut Context<Self>) {
+        let (Some(doc), Some(d)) = (&self.doc, &self.books.dialog) else { return };
+        let Some(ind) = doc.ged.individual(&xref) else { return };
+        let name = ind.display_name();
+        let placeholder = gedroots_book::default_title(&doc.ged, &BookSpec::new(&xref, ""));
+        let value = d.title.read(cx).value().to_string();
+        let (title, sub) = self.book_title_input(value, placeholder, window, cx);
+        title.update(cx, |s, cx| s.focus(window, cx));
+        if let Some(d) = &mut self.books.dialog {
+            d.subject = xref;
+            d.subject_name = name;
+            d.title = title;
+            d._sub = sub;
+        }
         cx.notify();
     }
 
@@ -316,6 +353,7 @@ impl Workspace {
             line: d.line,
             generations: d.generations,
             size: d.size,
+            print: d.print,
             chapters,
         };
         self.checkpoint();
@@ -389,44 +427,59 @@ impl Workspace {
         .detach();
     }
 
-    /// Typesets the book (again, from the tree as it is now) and writes the PDF.
+    /// Typesets the book (again, from the tree as it is now) and writes its PDF files: one per
+    /// volume when it is too long for one, and for a printer, each volume's cover beside it.
     fn write_book(&mut self, spec: BookSpec, dest: PathBuf, window: &mut Window, cx: &mut Context<Self>) {
         let Some(doc) = &self.doc else { return };
         let g = doc.ged.clone();
         let file = doc.path.as_ref().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().into_owned());
         let file = file.unwrap_or_else(|| t!("books.untitled_tree").into());
         let media_dir = doc.path.as_ref().and_then(|p| p.parent()).map(Path::to_path_buf);
-        // The preview, when it is the book as it is now.
-        let ready = self
-            .books
-            .preview
-            .as_ref()
-            .filter(|p| p.spec == spec && p.source.records == g.records)
-            .map(|p| p.book.clone());
         let name = dest.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
         self.set_status(t!("books.exporting", file = name), false);
         cx.notify();
+        let (volume_suffix, cover_suffix) =
+            (t!("books.volume_suffix", n = "{n}").into_owned(), t!("books.cover_suffix").into_owned());
         let task = cx.background_spawn(async move {
-            let book = match ready {
-                Some(b) => b,
-                None => Arc::new(gedroots_book::compose(&g, &spec, &file, media_dir.as_deref(), today())?),
-            };
-            let pdf = book.pdf()?;
-            let mut part = dest.as_os_str().to_owned();
-            part.push(".part");
-            let part = PathBuf::from(part);
-            let res = std::fs::write(&part, pdf).and_then(|()| std::fs::rename(&part, &dest));
-            if res.is_err() {
-                let _ = std::fs::remove_file(&part);
+            let volumes = gedroots_book::compose_export(&g, &spec, &file, media_dir.as_deref(), today())?;
+            let stem = dest.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+            let dir = dest.parent().map(Path::to_path_buf).unwrap_or_default();
+            let mut written = Vec::new();
+            let mut pages = 0;
+            for v in &volumes {
+                let base = match v.number {
+                    Some(n) => format!("{stem} - {}", volume_suffix.replace("{n}", &n.to_string())),
+                    None => stem.clone(),
+                };
+                let path = if v.number.is_none() { dest.clone() } else { dir.join(format!("{base}.pdf")) };
+                write_atomic(&path, &v.interior.pdf()?)?;
+                pages += v.interior.page_count();
+                written.push(path);
+                if let Some(cover) = &v.cover {
+                    let path = dir.join(format!("{base} - {cover_suffix}.pdf"));
+                    write_atomic(&path, &cover.pdf()?)?;
+                    written.push(path);
+                }
             }
-            res.map(|()| (dest, book.page_count())).map_err(|e| e.to_string())
+            Ok::<_, String>((dir, written, pages))
         });
         cx.spawn_in(window, async move |this, cx| {
             let res = task.await;
             let _ = this.update(cx, |this, cx| {
                 match res {
-                    Ok((dest, pages)) => {
-                        this.set_status(t!("books.exported", path = dest.display(), pages = pages), false)
+                    Ok((_, written, pages)) if written.len() == 1 => {
+                        this.set_status(t!("books.exported", path = written[0].display(), pages = pages), false)
+                    }
+                    Ok((dir, written, _)) => {
+                        let files: Vec<String> = written
+                            .iter()
+                            .filter_map(|p| p.file_name())
+                            .map(|n| n.to_string_lossy().into_owned())
+                            .collect();
+                        this.set_status(
+                            t!("books.exported_files", folder = dir.display(), files = files.join(", ")),
+                            false,
+                        )
                     }
                     Err(e) => this.set_error("books.export_failed", t!("books.export_failed", error = e)),
                 }
@@ -615,7 +668,7 @@ impl Workspace {
             })
             .into_iter()
             .collect::<Vec<_>>();
-        let sizes = [PageSize::Book, PageSize::A4, PageSize::Letter]
+        let sizes = PageSize::ALL
             .map(|s| {
                 segment(&format!("book-size-{s:?}"), d.size == s, size_label(s))
                     .on_click(cx.listener(move |this, _, _, cx| {
@@ -683,7 +736,7 @@ impl Workspace {
                     v_flex()
                         .id("book-dialog")
                         .occlude()
-                        .w(px(560.))
+                        .w(px(640.))
                         .rounded(theme::RADIUS_LG)
                         .border_1()
                         .border_color(theme::border_strong())
@@ -710,7 +763,19 @@ impl Workspace {
                                 .gap_3()
                                 .child(row(
                                     t!("books.person").into(),
-                                    div().child(d.subject_name.clone()).into_any_element(),
+                                    h_flex()
+                                        .gap_2()
+                                        .items_center()
+                                        .child(div().flex_1().min_w_0().truncate().child(d.subject_name.clone()))
+                                        .child(
+                                            Button::new("book-person")
+                                                .small()
+                                                .label(t!("books.change_person"))
+                                                .on_click(cx.listener(|this, _, w, cx| {
+                                                    this.open_picker(PickPurpose::BookPerson, w, cx)
+                                                })),
+                                        )
+                                        .into_any_element(),
                                 ))
                                 .child(row(
                                     t!("books.line").into(),
@@ -720,6 +785,19 @@ impl Workspace {
                                 .child(row(
                                     t!("books.size").into(),
                                     h_flex().child(segmented(sizes)).into_any_element(),
+                                ))
+                                .child(row(
+                                    t!("books.print").into(),
+                                    Checkbox::new("book-print")
+                                        .checked(d.print)
+                                        .label(t!("books.print_label").into_owned())
+                                        .on_click(cx.listener(|this, on: &bool, _, cx| {
+                                            if let Some(d) = &mut this.books.dialog {
+                                                d.print = *on;
+                                            }
+                                            cx.notify();
+                                        }))
+                                        .into_any_element(),
                                 ))
                                 .child(row(t!("books.title").into(), Input::new(&d.title).into_any_element())),
                         )
@@ -766,6 +844,18 @@ fn render_page(
 }
 
 /// A file name from a book's title: without the characters the systems refuse.
+/// Writes a file through a `.part` beside it, so that a failed export leaves no half file.
+fn write_atomic(dest: &Path, bytes: &[u8]) -> Result<(), String> {
+    let mut part = dest.as_os_str().to_owned();
+    part.push(".part");
+    let part = PathBuf::from(part);
+    let res = std::fs::write(&part, bytes).and_then(|()| std::fs::rename(&part, dest));
+    if res.is_err() {
+        let _ = std::fs::remove_file(&part);
+    }
+    res.map_err(|e| e.to_string())
+}
+
 fn sanitize_file_name(title: &str) -> String {
     let name: String = title
         .chars()

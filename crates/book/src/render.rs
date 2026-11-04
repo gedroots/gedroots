@@ -13,6 +13,7 @@ use typst::{Library, LibraryExt, World};
 use typst_layout::PagedDocument;
 
 const TEMPLATE: &str = include_str!("../assets/book.typ");
+const COVER: &str = include_str!("../assets/cover.typ");
 
 /// Fonts of the books: Inter (shared with the app's interface) and Source Serif 4.
 const FONT_FILES: [&[u8]; 8] = [
@@ -92,10 +93,24 @@ fn messages(errors: &[SourceDiagnostic]) -> String {
 
 /// Typesets the template with `data` (JSON) and its files (charts, portraits).
 pub fn typeset(data: &str, files: Vec<(String, Vec<u8>)>, today: (i32, u8, u8)) -> Result<Typeset, String> {
-    let main = Source::new(id("/book.typ"), TEMPLATE.to_string());
+    compile(("/book.typ", TEMPLATE), ("/data.json", data), files, today)
+}
+
+/// Typesets the cover for a printer (back, spine, front on one spread) with `data` (JSON).
+pub fn typeset_cover(data: &str, files: Vec<(String, Vec<u8>)>, today: (i32, u8, u8)) -> Result<Typeset, String> {
+    compile(("/cover.typ", COVER), ("/cover.json", data), files, today)
+}
+
+fn compile(
+    template: (&str, &str),
+    data: (&str, &str),
+    files: Vec<(String, Vec<u8>)>,
+    today: (i32, u8, u8),
+) -> Result<Typeset, String> {
+    let main = Source::new(id(template.0), template.1.to_string());
     let mut map: HashMap<FileId, Bytes> =
         files.into_iter().map(|(p, b)| (id(&format!("/{p}")), Bytes::new(b))).collect();
-    map.insert(id("/data.json"), Bytes::new(data.as_bytes().to_vec()));
+    map.insert(id(data.0), Bytes::new(data.1.as_bytes().to_vec()));
     let world = BookWorld { main, files: map, today };
     let document = typst::compile::<PagedDocument>(&world).output.map_err(|e| messages(&e))?;
     Ok(Typeset { document })
