@@ -1425,7 +1425,7 @@ mod tests {
         let (_, _, list) =
             post(port, "secret", Some(&sid), serde_json::json!({"jsonrpc":"2.0","id":2,"method":"tools/list"}));
         let tools = list["result"]["tools"].as_array().expect("tools");
-        assert_eq!(tools.len(), 17);
+        assert_eq!(tools.len(), 19);
         // The proposals only queue a proposal; the research tools write the research log only.
         let mut writers: Vec<String> = tools
             .iter()
@@ -1433,7 +1433,10 @@ mod tests {
             .map(|t| t["name"].as_str().unwrap_or_default().to_string())
             .collect();
         writers.sort();
-        assert_eq!(writers, ["log_search", "plan_research", "propose_act", "propose_change", "withdraw_proposal"]);
+        assert_eq!(
+            writers,
+            ["log_search", "plan_research", "propose_act", "propose_change", "propose_chapter", "withdraw_proposal"]
+        );
         let (_, _, call) = post(
             port,
             "secret",
@@ -1510,7 +1513,7 @@ mod tests {
             post(port, "secret", Some(&sid), serde_json::json!({"jsonrpc":"2.0","id":4,"method":"prompts/list"}));
         let names: Vec<_> =
             prompts["result"]["prompts"].as_array().expect("prompts").iter().map(|p| p["name"].clone()).collect();
-        assert_eq!(names.len(), 4, "{prompts}");
+        assert_eq!(names.len(), 5, "{prompts}");
         assert!(names.contains(&"find_record".into()) && names.contains(&"read_record".into()));
         let (_, _, got) = post(
             port,
