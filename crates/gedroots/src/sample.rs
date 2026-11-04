@@ -137,6 +137,7 @@ pub fn demo_proposal(ged_path: &Path) -> Result<Pending, String> {
         preview: Some(image),
         temps: Vec::new(),
         replaces: None,
+        remarks: String::new(),
     })
 }
 

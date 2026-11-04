@@ -123,8 +123,14 @@ pub struct ProposeParams {
     pub source: SourceParams,
     /// Reference of the act in its source: act number, page, image ("act 27, image 45").
     pub page: Option<String>,
-    /// Transcription of the act.
+    /// Text of the act as written, in plain text: no Markdown or other markup, ordinary spaces,
+    /// a line break between its parts (body, marginal mentions, signatures). Only the act: your
+    /// remarks go in `remarks`.
     pub transcription: Option<String>,
+    /// Your remarks for the user who reviews the proposal: doubtful readings, facts left out and
+    /// why, a correction to make by hand. Shown in the review page only, never written to the
+    /// tree.
+    pub remarks: Option<String>,
     pub people: Vec<PersonParams>,
     /// Absolute path of the downloaded image or PDF of the act (required with `url`).
     pub file: Option<String>,
@@ -155,6 +161,8 @@ pub struct Pending {
     pub temps: Vec<Option<String>>,
     /// Waiting proposal this one corrects.
     pub replaces: Option<String>,
+    /// The agent's remarks for the reviewer, never written to the tree.
+    pub remarks: String,
 }
 
 /// A proposal queued for review.
