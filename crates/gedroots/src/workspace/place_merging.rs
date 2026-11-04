@@ -439,7 +439,7 @@ impl Workspace {
             .children(rows);
 
         // What will be written: the full place, empty levels included.
-        let preview = plan.preview_with(&d.choices, "…");
+        let preview = place_label(&plan.preview_with(&d.choices, "…"));
         let result = h_flex()
             .mx_6()
             .mt_3()

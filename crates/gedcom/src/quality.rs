@@ -12,7 +12,7 @@
 use crate::analysis::check::{self, Issue, Severity, Thresholds};
 use crate::date::Date;
 use crate::document::{Gedcom, RecordKind};
-use crate::model::{Place, event_label, sort_key};
+use crate::model::{Place, event_label, place_label, sort_key};
 use crate::node::Node;
 use crate::relations::mime_for;
 use crate::schema::{self, Payload, StructDef};
@@ -702,14 +702,14 @@ fn places(g: &Gedcom, out: &mut Vec<Issue>) {
     let all = g.places();
     for p in &all {
         match (&p.latitude, &p.longitude) {
-            (None, None) => out.push(place_issue("missing_coords", Severity::Info, &[&p.name], p.name.clone())),
+            (None, None) => out.push(place_issue("missing_coords", Severity::Info, &[&p.name], place_label(&p.name))),
             _ if p.coords().is_none() => out.push(place_issue(
                 "bad_coords",
                 Severity::Warning,
                 &[&p.name],
                 t!(
                     "quality.bad_coords",
-                    place = p.name,
+                    place = place_label(&p.name),
                     lat = p.latitude.as_deref().unwrap_or("?"),
                     long = p.longitude.as_deref().unwrap_or("?")
                 )
@@ -757,7 +757,7 @@ fn distinct_places(g: &Gedcom, out: &mut Vec<Issue>) {
 /// Short labels of two places (“Leudon (Seine-et-Marne)”), unless they are the same for both.
 fn place_labels(a: &str, b: &str) -> (String, String) {
     let (sa, sb) = (crate::model::short_place(a), crate::model::short_place(b));
-    if sa == sb { (a.to_string(), b.to_string()) } else { (sa, sb) }
+    if sa == sb { (place_label(a), place_label(b)) } else { (sa, sb) }
 }
 
 /// Levels of a place name, at their position (empty ones included).

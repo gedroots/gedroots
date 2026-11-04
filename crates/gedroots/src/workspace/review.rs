@@ -866,7 +866,7 @@ impl Workspace {
         for place in &chain.places {
             links = links.child(link_row(
                 t!("review.place").into_owned(),
-                place.value.clone(),
+                gedcom::place_label(&place.value),
                 t!("review.located", coords = place.detail).into_owned(),
                 place.created,
             ));
