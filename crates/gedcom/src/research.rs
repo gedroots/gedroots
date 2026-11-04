@@ -55,6 +55,9 @@ pub struct EventInfo {
     pub date: String,
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "String::is_empty"))]
     pub place: String,
+    /// Street address within the place (`ADDR`).
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "String::is_empty"))]
+    pub address: String,
     pub citations: Vec<Citation>,
     pub media: Vec<MediaRef>,
 }
@@ -236,6 +239,7 @@ impl Gedcom {
             value: e.value().unwrap_or("").to_string(),
             date: e.date_raw().unwrap_or("").to_string(),
             place: e.place().unwrap_or("").to_string(),
+            address: e.address().unwrap_or_default(),
             citations,
             media: media.iter().filter_map(|m| self.media_ref(m)).collect(),
         }

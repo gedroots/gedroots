@@ -37,7 +37,7 @@ tree's data.
 | `file_info` | File name, counts, root person |
 | `file_context` | How the file is written: the description the user wrote (File Settings › General, `HEAD.NOTE`, word for word), language, place format, events, custom event types and occupations in use with their counts, media folders and naming, and the latest sources, people, families, media and repositories changed as raw GEDCOM (`examples`). Also served as the resource `gedroots://file/context` |
 | `search_people` | People matching a search, as in the app's search box |
-| `person_sheet` | Events with their position in the record, date, place, cited sources (`PAGE`) and media; parents, unions, children; Sosa number |
+| `person_sheet` | Events with their position in the record, date, place, street address (`ADDR`), cited sources (`PAGE`) and media; parents, unions, children; Sosa number |
 | `research_leads` | Records still to find for the people of a focus (search syntax, default `sosa:1-63`) or one person: births, marriages and deaths missing or without a source, parents of ancestors at the end of a line. Each lead has estimated years and why, places to search first, where to look, its state and the searches already noted |
 | `research_log` | Everything noted for a person and their unions: plan, searches, records found, ignored leads |
 | `plan_research` | Saves the agent's plan: the leads it will search, in order, each with a reason (state `planned`) |
@@ -45,7 +45,7 @@ tree's data.
 | `quality_issues` | The Data Quality page's issues, filtered by category, kind or record and paged (`offset`, `limit`): message, records and places involved, whether the page fixes it in one click, whether it can be hidden, counts per category |
 | `search_sources` | Sources (register, repository, call number, number of acts) and repositories, to cite an existing one |
 | `match_people` | For the people named in an act (role, names, sex, age, act date), the people of the tree who could be them, with the reason and whether the match is likely |
-| `propose_act` | Adds an act to the To Review page: event, date, place, source, reference, transcription, people with their role, downloaded file. Answers its id, what it will write and the temporary id of each new person; with `replaces`, corrects a waiting proposal |
+| `propose_act` | Adds an act to the To Review page: event, date, place, street address, source, reference, transcription, people with their role, downloaded file. Answers its id, what it will write and the temporary id of each new person; with `replaces`, corrects a waiting proposal |
 | `list_proposals` | Proposals waiting for review (id, `kind`, people with their ids, what each will write), and what became of the others: saved, rejected, edited in record entry, withdrawn, replaced |
 | `withdraw_proposal` | Takes back a waiting proposal |
 | `propose_change` | Adds a change for one Data Quality issue to the To Review page: the page's own fix (`fix`), edits among those the issue allows (`edit`), merging a possible duplicate (`merge`), or hiding a correct issue (`hide`), with the reason and the evidence. The answer lists the issues the change would create |
@@ -136,7 +136,10 @@ reason, which the agent reads to fix it:
   candidates, and the agent links one or lists in `not` those it checked and found to be someone
   else. The review page still shows “Resembles …” under such a person;
 - linked people must exist; dates must be valid, and are rewritten in
-  GEDCOM 7 syntax; a place named like a place of the tree becomes that place.
+  GEDCOM 7 syntax; a place named like a place of the tree becomes that place. The place is the
+  municipality and its jurisdictions: a street, number or building goes in `address` (the event's
+  or a fact's `ADDR`), shown on its own line in the review page, so that one street does not become
+  a new place.
 
 A proposal is checked against the tree as if every waiting proposal were saved
 (`propose::Hypothesis`). Each new person gets a temporary id (`new-3`), returned in `new_people`:
