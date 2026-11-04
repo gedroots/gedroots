@@ -39,8 +39,12 @@ pub struct ChangeParams {
 /// `set_media_file` (file), `cite_source` (record, event, source, page),
 /// `set_value` (value), `delete_structure` (nothing: the structure the issue designates),
 /// `set_name` (record, given and/or surname, name), `add_name` (record, given and/or surname,
-/// name_type). Without an issue: set_name, add_name, set_event, add_event, delete_event, set_sex,
-/// cite_source, set_coordinates, rename_place, set_repository.
+/// name_type), `set_age` (record, event, age, person on a family event), `link_relative` and
+/// `unlink_relative` (record, relation, person), `set_pedigree` (record, pedigree, person: a
+/// parent), `add_note` (record, event or not, text), `set_note` (record, event or not, note, text),
+/// `add_associate` (record, event, person, role, phrase), `remove_associate` (record, event,
+/// person), `attach_media` (record, event or not, media or file), `detach_media` (record, event or
+/// not, media). Without an issue: every edit but set_media_file, set_value and delete_structure.
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct EditParams {
     pub kind: String,
@@ -88,6 +92,32 @@ pub struct EditParams {
     pub name: Option<usize>,
     /// For `add_name`: `AKA`, `BIRTH`, `MARRIED`, `MAIDEN`, `IMMIGRANT`, `PROFESSIONAL` or `OTHER`.
     pub name_type: Option<String>,
+    /// For `set_event`: the cause (`CAUS`, of a death…); empty to remove it.
+    pub cause: Option<String>,
+    /// For `set_age`: the age at the event (`42y`, `6m`, `3d`); empty to remove it.
+    pub age: Option<String>,
+    /// The other person: the relative for `link_relative` and `unlink_relative`, one of the
+    /// parents for `set_pedigree`, the associate for `add_associate` and `remove_associate`, whose
+    /// age it is for `set_age` on a family event.
+    pub person: Option<String>,
+    /// For `link_relative` and `unlink_relative`: `father`, `mother`, `spouse`, `child` or
+    /// `sibling`, what `person` is (or is not) to `record`.
+    pub relation: Option<String>,
+    /// For `set_pedigree`: `BIRTH`, `ADOPTED`, `FOSTER`, `SEALING` or `OTHER`.
+    pub pedigree: Option<String>,
+    /// For `add_note` and `set_note`: the note's text; empty in `set_note` to remove it.
+    pub text: Option<String>,
+    /// For `set_note`: position of the note among the notes of the record or event (`notes` in
+    /// `person_sheet`, from 0).
+    pub note: Option<usize>,
+    /// For `add_associate`: `WITN`, `GODP`, `OFFICIATOR`, `CLERGY`, `NGHBR`, `FRIEND`, `PARENT` or
+    /// `OTHER`.
+    pub role: Option<String>,
+    /// For `add_associate`: the rest of the role, as the act says it (“godmother”, “uncle of the
+    /// bride”); required for `OTHER`.
+    pub phrase: Option<String>,
+    /// For `attach_media` and `detach_media`: an existing media id (`media` in `person_sheet`).
+    pub media: Option<String>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -134,8 +164,8 @@ fn edit(p: &EditParams) -> Result<Edit, String> {
     let k = p.kind.trim();
     Ok(match k {
         "set_event" => {
-            if p.value.is_none() && p.date.is_none() && p.place.is_none() && p.address.is_none() {
-                return Err("`set_event` needs `value`, `date`, `place` and/or `address`".into());
+            if p.value.is_none() && p.date.is_none() && p.place.is_none() && p.address.is_none() && p.cause.is_none() {
+                return Err("`set_event` needs `value`, `date`, `place`, `address` and/or `cause`".into());
             }
             Edit::SetEvent {
                 record: need(id(&p.record), k, "record")?,
@@ -144,6 +174,7 @@ fn edit(p: &EditParams) -> Result<Edit, String> {
                 date: p.date.clone(),
                 place: p.place.clone(),
                 address: p.address.clone(),
+                cause: p.cause.clone(),
             }
         }
         "add_event" => Edit::AddEvent {
@@ -202,7 +233,74 @@ fn edit(p: &EditParams) -> Result<Edit, String> {
             surname: p.surname.clone().unwrap_or_default(),
             kind: p.name_type.clone().unwrap_or_default(),
         },
+        "set_age" => Edit::SetAge {
+            record: need(id(&p.record), k, "record")?,
+            index: need(p.event, k, "event")?,
+            spouse: id(&p.person),
+            age: need(p.age.clone(), k, "age")?,
+        },
+        "link_relative" => Edit::LinkRelative {
+            person: need(id(&p.record), k, "record")?,
+            relation: relation(need(p.relation.as_deref(), k, "relation")?)?,
+            other: need(id(&p.person), k, "person")?,
+        },
+        "unlink_relative" => Edit::UnlinkRelative {
+            person: need(id(&p.record), k, "record")?,
+            relation: relation(need(p.relation.as_deref(), k, "relation")?)?,
+            other: need(id(&p.person), k, "person")?,
+        },
+        "set_pedigree" => Edit::SetPedigree {
+            person: need(id(&p.record), k, "record")?,
+            parent: id(&p.person),
+            pedigree: need(p.pedigree.clone(), k, "pedigree")?,
+        },
+        "add_note" => Edit::AddNote {
+            record: need(id(&p.record), k, "record")?,
+            event: p.event,
+            text: need(p.text.clone(), k, "text")?,
+        },
+        "set_note" => Edit::SetNote {
+            record: need(id(&p.record), k, "record")?,
+            event: p.event,
+            note: need(p.note, k, "note")?,
+            text: need(p.text.clone(), k, "text")?,
+        },
+        "add_associate" => Edit::AddAssociate {
+            record: need(id(&p.record), k, "record")?,
+            index: need(p.event, k, "event")?,
+            person: need(id(&p.person), k, "person")?,
+            role: need(p.role.clone(), k, "role")?,
+            phrase: p.phrase.clone().unwrap_or_default(),
+        },
+        "remove_associate" => Edit::RemoveAssociate {
+            record: need(id(&p.record), k, "record")?,
+            index: need(p.event, k, "event")?,
+            person: need(id(&p.person), k, "person")?,
+        },
+        "attach_media" => Edit::AttachMedia {
+            record: need(id(&p.record), k, "record")?,
+            event: p.event,
+            media: id(&p.media),
+            file: p.file.clone().map(|f| f.trim().to_string()).filter(|f| !f.is_empty()),
+        },
+        "detach_media" => Edit::DetachMedia {
+            record: need(id(&p.record), k, "record")?,
+            event: p.event,
+            media: need(id(&p.media), k, "media")?,
+        },
         other => return Err(format!("unknown edit `{other}`")),
+    })
+}
+
+fn relation(r: &str) -> Result<gedcom::relations::Relation, String> {
+    use gedcom::relations::Relation;
+    Ok(match r.trim().to_lowercase().as_str() {
+        "father" => Relation::Father,
+        "mother" => Relation::Mother,
+        "spouse" => Relation::Spouse,
+        "child" => Relation::Child,
+        "sibling" => Relation::Sibling,
+        other => return Err(format!("unknown relation `{other}`: father, mother, spouse, child or sibling")),
     })
 }
 
@@ -262,7 +360,8 @@ mod tests {
                 value: None,
                 date: Some("12 MAR 1869".into()),
                 place: None,
-                address: None
+                address: None,
+                cause: None
             }])
         );
         assert_eq!(r.evidence.source.as_deref(), Some("S1"));

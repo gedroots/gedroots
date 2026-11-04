@@ -36,3 +36,30 @@ change.repository:
 change.new_repository:
   en: "%{name} (new)"
   fr: "%{name} (nouveau)"
+change.age:
+  en: "Age"
+  fr: "Âge"
+change.pedigree:
+  en: "Pedigree"
+  fr: "Filiation"
+change.note:
+  en: "Note"
+  fr: "Note"
+change.media:
+  en: "Media"
+  fr: "Média"
+change.relation.father:
+  en: "Father"
+  fr: "Père"
+change.relation.mother:
+  en: "Mother"
+  fr: "Mère"
+change.relation.spouse:
+  en: "Spouse"
+  fr: "Conjoint"
+change.relation.child:
+  en: "Child"
+  fr: "Enfant"
+change.relation.sibling:
+  en: "Sibling"
+  fr: "Frère ou sœur"

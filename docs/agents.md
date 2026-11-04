@@ -40,7 +40,7 @@ tree's data.
 | `file_info` | File name, counts, root person |
 | `file_context` | How the file is written: the description the user wrote (File Settings › General, `HEAD.NOTE`, word for word), language, place format, events, custom event types and occupations in use with their counts, media folders and naming, and the latest sources, people, families, media and repositories changed as raw GEDCOM (`examples`). Also served as the resource `gedroots://file/context` |
 | `search_people` | People matching a search, as in the app's search box |
-| `person_sheet` | Events with their position in the record, date, place, street address (`ADDR`), cited sources (`PAGE`) and media; parents, unions, children; Sosa number |
+| `person_sheet` | Events with their position in the record, date, place, street address (`ADDR`), age, cause, cited sources (`PAGE`), media, associates and notes; parents (and how, when not by birth), unions, children, the person's notes and media; Sosa number |
 | `research_leads` | Records still to find for the people of a focus (search syntax, default `sosa:1-63`) or one person: births, marriages and deaths missing or without a source, parents of ancestors at the end of a line. Each lead has estimated years and why, places to search first, where to look, its state and the searches already noted |
 | `research_log` | Everything noted for a person and their unions: plan, searches, records found, ignored leads |
 | `plan_research` | Saves the agent's plan: the leads it will search, in order, each with a reason (state `planned`) |
@@ -222,7 +222,8 @@ gives it. Each issue lists the edits it accepts (`edits`): `set_event`, `delete_
 Fixes of the same kind are grouped into one To Review item, applied together. The item shows the
 values in the tree and the proposed ones, the reason, the evidence and the GEDCOM diff; saving it
 is one undo step. Hiding keeps the reason as a `NOTE` under `_GR_IGNORE`, and a possible duplicate
-is hidden with `_GR_DISTINCT`. Filiations (parents, unions) cannot be changed this way.
+is hidden with `_GR_DISTINCT`. For an issue, filiations (parents, unions) cannot be changed this
+way; a correction can change them (below).
 
 Without `issue`, a change is a correction the agent read in a document: a given name misread
 in a proposal the user already saved, a name the act spells otherwise, a wrong date. It may only
@@ -234,7 +235,21 @@ name kept), `add_name` (another `NAME`, with its `TYPE`, for a variant spelling)
 `delete_event`, `set_sex`, `cite_source`, `set_coordinates` (with the `osm` of the
 `locate_place` candidate, kept as the place's `EXID`) or `set_repository` (the repository and
 call number of a source: an existing repository, or one to create, as in `propose_act`), on any
-record. The reason and
+record. It can also change:
+
+- **family links**: `link_relative` (an existing person becomes the father, mother, spouse, child
+  or sibling of another, in the family that already exists or a new one), `unlink_relative` (a
+  wrong link removed; a child taken from a wrong father stays with the mother, in a family of
+  their own, and the couple's union stays), `set_pedigree` (`FAMC.PEDI`: adopted, foster…);
+- **notes**: `add_note` and `set_note` (empty text removes it), on a record or on one of its
+  events; a shared note (`SNOTE`) stays with the user;
+- **event details**: `cause` in `set_event` (`CAUS`), `set_age` (`AGE`; on a family event, the
+  age of one of the couple, under `HUSB`/`WIFE`), `add_associate` and `remove_associate` (`ASSO`
+  with its GEDCOM 7 `ROLE` and `PHRASE`: witnesses, godparents, officiants);
+- **media**: `attach_media` (an existing media, or a file of the tree's folder, on a record or an
+  event) and `detach_media` (the media stays in the file).
+
+The reason and
 the evidence (a source of the tree, the viewer page or a quote) are required: the user checks
 them in To Review, where the item is titled **Correction**. When `propose_act` links a person
 the act names otherwise, its `will_write` says so and points to this correction.
