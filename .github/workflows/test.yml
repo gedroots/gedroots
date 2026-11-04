@@ -3,13 +3,12 @@ name: Test
 # Tools and commands come from mise.toml (and mise.lock): the workflow runs the same task as a
 # local machine (`mise run ci`). The installers are built by the Release workflow.
 
-# Pull requests are tested before they merge, so main is never tested again after a merge. The
-# weekly run on main saves the cache that pull requests restore (a pull request can only read
-# caches saved on main) and keeps it from being evicted; it can also be run by hand.
+# Pull requests are tested before they merge, and main after each merge: main's run saves the
+# cache that every pull request restores (a pull request can only read caches saved on main).
 on:
   pull_request:
-  schedule:
-    - cron: "0 4 * * 1"
+  push:
+    branches: [main]
   workflow_dispatch:
 
 env:
@@ -51,8 +50,8 @@ jobs:
             ~/.cargo/registry/cache
             ~/.cargo/git/db
             target
-          key: ${{ github.job }}-${{ runner.os }}-${{ hashFiles('mise.lock', 'Cargo.lock') }}
-          restore-keys: ${{ github.job }}-${{ runner.os }}-
+          key: rust-${{ runner.os }}-${{ hashFiles('mise.lock', 'Cargo.lock') }}
+          restore-keys: rust-${{ runner.os }}-
       - run: mise run ci
       - name: Save the crates and build outputs
         if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
