@@ -21,7 +21,6 @@ actions!(
         Create,
         OpenFile,
         ClearRecent,
-        ImportFile,
         OpenFileSettings,
         SaveFile,
         SaveFileAs,
@@ -90,7 +89,6 @@ actions!(
         NewMedia,
         AttachMediaTo,
         TagPerson,
-        ShowUnreferencedFiles,
         AddPages,
         PreviousPage,
         NextPage,
@@ -524,7 +522,6 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
         file.push(Sub(t!("menu.open_recent").into(), items));
     }
     file.extend([
-        a(t!("cmd.import_gedcom"), ImportFile),
         Sep,
         a(t!("cmd.close_window"), CloseWindow),
         a(t!("cmd.save"), SaveFile),
@@ -610,7 +607,6 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
             a(label::merge_selected_media(), MergeSelectedMedia),
             Sep,
             a(t!("cmd.rename_media_files"), RenameMediaFiles),
-            a(t!("cmd.unreferenced_files"), ShowUnreferencedFiles),
         ],
     ));
     menus.push((
@@ -649,15 +645,6 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
             Sub(
                 t!("menu.filter_list").into(),
                 vec![
-                    a(t!("cmd.filter_men"), FilterMen),
-                    a(t!("cmd.filter_women"), FilterWomen),
-                    a(t!("cmd.filter_ancestors"), FilterAncestors),
-                    a(t!("cmd.filter_unsourced"), FilterUnsourced),
-                    a(t!("cmd.filter_no_parents"), FilterNoParents),
-                    a(t!("cmd.filter_no_date"), FilterNoDate),
-                    a(t!("cmd.filter_no_marriage"), FilterNoMarriage),
-                    a(t!("cmd.filter_with_media"), FilterWithMedia),
-                    Sep,
                     a(t!("cmd.flagged_only"), ToggleFlagged),
                     a(t!("cmd.ignored_issues"), ToggleIgnoredIssues),
                     a(label::clear_search(), ClearSearch),
@@ -771,7 +758,26 @@ fn palette_only() -> Vec<(SharedString, Vec<Item>)> {
             ],
         ),
         (t!("menu.place").into(), vec![a(t!("cmd.place_on_map"), PlaceOnMap)]),
-        (t!("menu.view").into(), vec![a(label::save_search(), SaveSearch)]),
+        (
+            t!("menu.view").into(),
+            vec![
+                a(label::save_search(), SaveSearch),
+                // The search field suggests these criteria, with their number of results.
+                Sub(
+                    t!("menu.filter_list").into(),
+                    vec![
+                        a(t!("cmd.filter_men"), FilterMen),
+                        a(t!("cmd.filter_women"), FilterWomen),
+                        a(t!("cmd.filter_ancestors"), FilterAncestors),
+                        a(t!("cmd.filter_unsourced"), FilterUnsourced),
+                        a(t!("cmd.filter_no_parents"), FilterNoParents),
+                        a(t!("cmd.filter_no_date"), FilterNoDate),
+                        a(t!("cmd.filter_no_marriage"), FilterNoMarriage),
+                        a(t!("cmd.filter_with_media"), FilterWithMedia),
+                    ],
+                ),
+            ],
+        ),
         (
             t!("menu.go").into(),
             vec![
@@ -901,18 +907,80 @@ mod tests {
         let recents = [PathBuf::from("/a/Martin.ged")];
         let sites = ["Geneanet".to_string()];
         for (menu, items) in model_with(&recents, &sites) {
-            // Elsewhere than on macOS, File also holds the application menu's File Settings and Quit.
-            let app = [rust_i18n::t!("cmd.file_settings"), rust_i18n::t!("cmd.quit")];
-            let n = items
-                .iter()
-                .filter(|i| !matches!(i, Item::Separator))
-                .filter(|i| !matches!(i, Item::Action(name, _) if app.iter().any(|a| a.as_ref() == name.as_ref())))
-                .count();
+            let n = items.iter().filter(|i| !matches!(i, Item::Separator)).count();
             // Window: the open trees fill it (the system, on macOS).
             if menu.as_ref() == rust_i18n::t!("menu.window").as_ref() {
                 continue;
             }
             assert!((3..=12).contains(&n), "{menu} has {n} items");
+        }
+    }
+
+    /// The texts that name a menu command (the app's English texts, the user documentation) name
+    /// one of the menu bar: a command only in the palette has a visible control, which they name
+    /// instead.
+    #[test]
+    fn texts_name_commands_of_the_menu_bar() {
+        fn walk(path: &str, items: Vec<Item>, out: &mut Vec<String>) {
+            for i in items {
+                let name = match &i {
+                    Item::Action(n, _) | Item::Os(n, ..) | Item::Check(n, ..) | Item::Sub(n, _) => n.to_string(),
+                    Item::Recent(..) | Item::Separator => continue,
+                };
+                let here = format!("{path} › {name}");
+                if let Item::Sub(_, items) = i {
+                    walk(&here, items, out);
+                }
+                out.push(here);
+            }
+        }
+        let mut paths = Vec::new();
+        let mut menus = Vec::new();
+        for (menu, items) in model_with(&[PathBuf::from("/a/Martin.ged")], &["Geneanet".to_string()]) {
+            walk(&menu, items, &mut paths);
+            menus.push(menu.to_string());
+        }
+        // The labels of the other platforms (Quit GEDRoots on macOS, Quit elsewhere).
+        paths.extend(["GEDRoots › Quit".to_string(), "GEDRoots › Quit GEDRoots".to_string()]);
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let mut texts: Vec<(String, String)> = Vec::new();
+        for dir in ["crates/gedroots/locales", "crates/gedcom/locales", "crates/book/locales"] {
+            for e in std::fs::read_dir(root.join(dir)).unwrap().flatten() {
+                let text = std::fs::read_to_string(e.path()).unwrap();
+                let english = text.lines().filter(|l| l.trim_start().starts_with("en:"));
+                texts.extend(english.map(|l| (e.path().display().to_string(), l.to_string())));
+            }
+        }
+        fn mdx(dir: &std::path::Path, out: &mut Vec<(String, String)>) {
+            for e in std::fs::read_dir(dir).unwrap().flatten() {
+                let p = e.path();
+                if p.is_dir() {
+                    mdx(&p, out);
+                } else if p.extension().is_some_and(|x| x == "mdx" || x == "md") {
+                    let text = std::fs::read_to_string(&p).unwrap();
+                    out.extend(text.lines().map(|l| (p.display().to_string(), l.to_string())));
+                }
+            }
+        }
+        mdx(&root.join("website/docs"), &mut texts);
+        assert!(texts.len() > 100, "texts not found");
+        for (file, line) in texts {
+            for menu in &menus {
+                let start = format!("{menu} › ");
+                for (at, _) in line.match_indices(&start) {
+                    // Inside a word (“Tree › Free Tree” is not the Tree menu): not a path.
+                    if line[..at].chars().next_back().is_some_and(|c| c.is_alphanumeric()) {
+                        continue;
+                    }
+                    let rest = &line[at..];
+                    // The text names the menu and its command: the longest command that starts it.
+                    assert!(
+                        paths.iter().any(|p| rest.starts_with(p.as_str())),
+                        "{file}: “{}” is not a command of the menu bar",
+                        rest.split("**").next().unwrap_or(rest)
+                    );
+                }
+            }
         }
     }
 

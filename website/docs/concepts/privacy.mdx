@@ -1,6 +1,6 @@
 ---
 title: Privacy and network use
-description: What stays on your computer, the few cases where GEDRoots goes online, and how living people are protected.
+description: What stays on your computer, the few cases where GEDRoots goes online, and what to check before sharing living people.
 ---
 
 Family trees hold personal data about people who never chose to be in them. GEDRoots is built so that your research stays on your computer unless you decide otherwise.
@@ -42,10 +42,10 @@ It is written as JSON, so that it can be read by scripts. No name, date, place, 
 
 When you [connect an AI agent](/workflows/ai-agents), GEDRoots runs a server that only your own computer can reach: it listens on `127.0.0.1`, requires a secret token, and refuses requests from web pages. The setting is off until you turn it on.
 
-What the agent reads may be sent to its provider, depending on the agent you use. GEDRoots limits what it sees:
+What the agent reads may be sent to its provider, depending on the agent you use:
 
-- **Living people are reduced to what identifies them.** A person with no death, burial or cremation is treated as living, unless they were born more than 100 years ago. When their birth isn't recorded, GEDRoots works out the latest year it can be from the rest of the tree: their own dated events and the records cited about them, their marriages and children, grandchildren and further down, their parents (a death, or a birth at most 60 years earlier), their spouses, and the records where they're a witness or godparent. An open date such as *after 1850* places nobody. Of a living person, an AI agent only gets what identifies them: their name, their birth (date and place) and their close relatives, never their other events or notes.
-- **The agent can't write.** It can only propose records. You review, compare and save them yourself.
+- **The agent reads your tree as the app shows it**, living people included. Choose an agent and a provider you trust with your family's data.
+- **The agent can't change your tree's data.** It can only propose records, corrections and book chapters: you review, compare and save them yourself. Only its research log (what it planned and searched) is written directly, with an undo step.
 
 ## Living people in exports
 

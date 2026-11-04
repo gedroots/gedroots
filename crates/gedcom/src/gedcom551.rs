@@ -293,17 +293,7 @@ fn relation(role: &Node, event: Option<&str>, flavor: Flavor) -> String {
 
 /// Jurisdiction name that designates a subdivision of a municipality (locality, hamlet…).
 fn is_sublocality(name: &str) -> bool {
-    let n: String = name
-        .chars()
-        .filter(|c| c.is_alphanumeric())
-        .flat_map(char::to_lowercase)
-        .map(|c| match c {
-            'é' | 'è' | 'ê' => 'e',
-            'à' | 'â' => 'a',
-            'ô' => 'o',
-            c => c,
-        })
-        .collect();
+    let n: String = crate::model::sort_key(name).chars().filter(|c| c.is_alphanumeric()).collect();
     matches!(n.as_str(), "lieudit" | "lieuxdits" | "hameau" | "quartier" | "subdivision" | "ecart" | "souscommune")
 }
 

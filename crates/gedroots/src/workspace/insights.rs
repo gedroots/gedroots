@@ -57,7 +57,7 @@ impl Workspace {
     // Relationship
     // ------------------------------------------------------------------
 
-    /// Individual › Relationship with…: choose the other person.
+    /// Person › Relationship With…: choose the other person.
     pub(super) fn ask_kinship(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(indi) = self.selected_individual() {
             self.open_picker(relatives::PickPurpose::Kinship { indi }, window, cx);

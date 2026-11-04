@@ -129,10 +129,6 @@ impl<'a> Event<'a> {
         crate::address::address_of(self.node)
     }
 
-    pub fn source_xrefs(&self) -> Vec<&str> {
-        self.node.children_with("SOUR").filter_map(|s| s.pointer()).collect()
-    }
-
     /// Media linked to the event (`2 OBJE @M1@`: marriage record, announcement…).
     pub fn media_xrefs(&self) -> Vec<&'a str> {
         self.node.children_with("OBJE").filter_map(|n| n.pointer()).collect()
@@ -442,21 +438,47 @@ impl Place {
     }
 }
 
-/// Sort key insensitive to case and common accents.
+/// Sort key insensitive to case and accents: “Élisabeth” → “elisabeth”, “Œuvray” → “oeuvray”.
 pub fn sort_key(s: &str) -> String {
-    s.chars()
-        .flat_map(char::to_lowercase)
-        .map(|c| match c {
-            'à' | 'â' | 'ä' | 'á' => 'a',
-            'é' | 'è' | 'ê' | 'ë' => 'e',
-            'î' | 'ï' | 'í' => 'i',
-            'ô' | 'ö' | 'ó' => 'o',
-            'ù' | 'û' | 'ü' | 'ú' => 'u',
-            'ç' => 'c',
-            'ÿ' => 'y',
-            c => c,
-        })
-        .collect()
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars().flat_map(char::to_lowercase) {
+        match unaccent(c) {
+            Some(plain) => out.push_str(plain),
+            None => out.push(c),
+        }
+    }
+    out
+}
+
+/// The letter without its accent, or its spelling in plain letters (“é” → “e”, “Œ” → “OE”),
+/// case kept; `""` for a combining accent; `None` for a letter without accent. The one table of
+/// accents: sorting, searching, the palette and file names all use it.
+pub fn unaccent(c: char) -> Option<&'static str> {
+    Some(match c {
+        'à' | 'á' | 'â' | 'ã' | 'ä' | 'å' => "a",
+        'À' | 'Á' | 'Â' | 'Ã' | 'Ä' | 'Å' => "A",
+        'ç' => "c",
+        'Ç' => "C",
+        'è' | 'é' | 'ê' | 'ë' => "e",
+        'È' | 'É' | 'Ê' | 'Ë' => "E",
+        'ì' | 'í' | 'î' | 'ï' => "i",
+        'Ì' | 'Í' | 'Î' | 'Ï' => "I",
+        'ñ' => "n",
+        'Ñ' => "N",
+        'ò' | 'ó' | 'ô' | 'õ' | 'ö' | 'ø' => "o",
+        'Ò' | 'Ó' | 'Ô' | 'Õ' | 'Ö' | 'Ø' => "O",
+        'ù' | 'ú' | 'û' | 'ü' => "u",
+        'Ù' | 'Ú' | 'Û' | 'Ü' => "U",
+        'ý' | 'ÿ' => "y",
+        'Ý' | 'Ÿ' => "Y",
+        'œ' => "oe",
+        'Œ' => "OE",
+        'æ' => "ae",
+        'Æ' => "AE",
+        'ß' => "ss",
+        '\u{300}'..='\u{36f}' => "",
+        _ => return None,
+    })
 }
 
 /// Short label of a place in Ancestris' format (`Lieudit, Commune, Code_Postal, Département,

@@ -1,5 +1,5 @@
 _version: 2
-# File › Mobile Devices… (crates/gedroots/src/workspace/mobile.rs, crates/gedroots/src/mobile.rs)
+# GEDRoots › Mobile Devices… (crates/gedroots/src/workspace/mobile.rs, crates/gedroots/src/mobile.rs)
 mobile:
   title:
     en: Mobile Devices

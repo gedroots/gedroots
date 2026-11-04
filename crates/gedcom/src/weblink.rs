@@ -16,9 +16,9 @@
 //! Repositories (`REPO`) do not accept a multimedia link but have the standard `WWW` tag (up to
 //! three): that is what is used for them.
 //!
-//! The non-standard `_URL` tag (written by several programs) is still read, and
-//! [`Gedcom::migrate_url_tags`] converts it (a check of the import assistant, see
-//! [`crate::import`]).
+//! The non-standard `_URL` tag (written by several programs) is not shown: a file from other
+//! software opens through the import assistant, whose check [`Gedcom::migrate_url_tags`] converts
+//! it (see [`crate::import`]).
 
 use crate::document::{Gedcom, RecordKind};
 use crate::model::Media;
@@ -38,8 +38,6 @@ pub enum WebLinkKind {
     Media(String),
     /// Standard `WWW` (repositories): rank among the record's `WWW`s.
     Www(usize),
-    /// Historical `_URL`: rank among the record's `_URL`s.
-    Legacy(usize),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -58,10 +56,6 @@ impl WebLink {
     /// Title, or failing that the site's name (“www.archives43.fr”).
     pub fn label(&self) -> String {
         self.title.clone().filter(|t| !t.trim().is_empty()).unwrap_or_else(|| host(&self.url).to_string())
-    }
-
-    pub fn is_legacy(&self) -> bool {
-        matches!(self.kind, WebLinkKind::Legacy(_))
     }
 }
 
@@ -144,9 +138,6 @@ impl Gedcom {
         }
         for (i, w) in n.children_with("WWW").enumerate().filter(|(_, w)| !w.val().is_empty()) {
             out.push(WebLink { kind: WebLinkKind::Www(i), url: w.val().to_string(), title: None });
-        }
-        for (i, w) in n.children_with(LEGACY_TAG).enumerate().filter(|(_, w)| !w.val().is_empty()) {
-            out.push(WebLink { kind: WebLinkKind::Legacy(i), url: w.val().to_string(), title: None });
         }
         out
     }
@@ -232,10 +223,6 @@ impl Gedcom {
                 n.touch();
                 Ok(())
             }
-            WebLinkKind::Legacy(_) => {
-                self.remove_web_link(record, kind);
-                self.add_web_link(record, &url, title)
-            }
         }
     }
 
@@ -268,11 +255,6 @@ impl Gedcom {
             WebLinkKind::Www(i) => {
                 if let Some(n) = self.get_mut(record) {
                     nth_removed(n, "WWW", *i);
-                }
-            }
-            WebLinkKind::Legacy(i) => {
-                if let Some(n) = self.get_mut(record) {
-                    nth_removed(n, LEGACY_TAG, *i);
                 }
             }
         }

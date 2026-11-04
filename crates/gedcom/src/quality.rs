@@ -213,8 +213,7 @@ pub fn run(g: &Gedcom) -> Vec<Issue> {
 
 /// Like [`run`], plus the checks that look at the media files (missing, moved, unattached).
 pub fn run_with(g: &Gedcom, files: Option<&Files>) -> Vec<Issue> {
-    let t = Thresholds { report_unsourced: true, ..Thresholds::default() };
-    let mut issues = check::check_all(g, &t);
+    let mut issues = check::check_all(g, &Thresholds::default());
     let mut more = Vec::new();
     if g.version().starts_with('7') {
         structure(g, &mut more);

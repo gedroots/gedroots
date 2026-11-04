@@ -51,9 +51,6 @@ export.failed:
 export.missing_title:
   en: "%{file} · Missing Files"
   fr: "%{file} · fichiers introuvables"
-import.prompt:
-  en: Import a GEDCOM or GEDZIP File
-  fr: Importer un fichier GEDCOM ou GEDZIP
 import.already_conform:
   en: "%{file} imported · already GEDCOM 7 compliant"
   fr: "%{file} importé · déjà conforme à GEDCOM 7"

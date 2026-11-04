@@ -29,15 +29,6 @@ impl Card {
     pub fn required(self) -> bool {
         matches!(self, Card::Required | Card::AtLeastOne)
     }
-
-    pub fn notation(self) -> &'static str {
-        match self {
-            Card::Optional => "{0:1}",
-            Card::Required => "{1:1}",
-            Card::Many => "{0:M}",
-            Card::AtLeastOne => "{1:M}",
-        }
-    }
 }
 
 /// Type of the value carried by a structure.

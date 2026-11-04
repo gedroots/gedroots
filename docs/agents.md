@@ -8,7 +8,7 @@ compares it with the tree and saves it.
 
 ## Connecting
 
-File › Connect an AI Agent…, turn on **Allow AI agents**, then pick the agent in the list. The
+GEDRoots › Connect an AI Agent…, turn on **Allow AI agents**, then pick the agent in the list. The
 window gives the shortest way to connect each one (the token is masked on screen, the copy
 buttons give the real value):
 
@@ -36,8 +36,7 @@ tree's data.
 
 | Tool | Returns |
 | --- | --- |
-| `list_trees` | The trees open in GEDRoots, the one in front first: name, file, id, number of people |
-| `file_info` | File name, counts, root person |
+| `list_trees` | The trees open in GEDRoots, the one in front first: name, file, id, number of people, families, sources and media, root person |
 | `file_context` | How the file is written: the description the user wrote (File Settings › General, `HEAD.NOTE`, word for word), language, place format, events, custom event types and occupations in use with their counts, media folders and naming, and the latest sources, people, families, media and repositories changed as raw GEDCOM (`examples`). Also served as the resource `gedroots://file/context` |
 | `search_people` | People matching a search, as in the app's search box |
 | `person_sheet` | Events with their position in the record, date, place, street address (`ADDR`), age, cause, cited sources (`PAGE`), media, associates and notes; parents (and how, when not by birth), unions, children, the person's notes and media; Sosa number |
@@ -116,14 +115,14 @@ It is written at once, not reviewed: it is the trace of the research, not data o
 change is one undo step, and the top bar says what the agent noted. A found record is still
 proposed with `propose_act` and reviewed.
 
-The same leads and log are on the app's Research page (Go › Research): the list of the focus by
+The same leads and log are on the app's Research page (sidebar): the list of the focus by
 state (to find, no result, ignored), and for each lead its period and why, what is known, where to
-look and the log, the agent's searches marked “AI agent”. Person › Research › Copy Request for the
-Agent puts a request for one lead on the clipboard, to paste in the agent's conversation.
+look and the log, the agent's searches marked “AI agent”. Copy Request for the Agent (the lead's context
+menu) puts a request for one lead on the clipboard, to paste in the agent's conversation.
 
 ## Proposals and review
 
-`propose_act` takes the same model as Source › Enter Record… (`crates/gedcom/src/act.rs`): an
+`propose_act` takes the same model as record entry (Enter Record…, `crates/gedcom/src/act.rs`): an
 event (any event without its own tag, such as military service, is `EVEN` with its
 `event_type`), the people with their standard GEDCOM 7 role and their `identity`, always given
 explicitly: `link` (an existing person, with `id`), `create` or `mention`, and the other facts the act
@@ -174,7 +173,7 @@ web link of the source, like the links added in the app: a media whose `FILE` is
 separate media: the source shows the image and a link button, and a web link is never offered
 as an act's image. A proposal with a `url` must also give the `file`.
 
-The **To Review** page (sidebar, or Source › Review Agent Proposals) shows, for each proposal,
+The **To Review** page (sidebar) shows, for each proposal,
 the act's image, a comparison of what the tree holds and what is proposed (each person can be
 unchecked), the **Facts** it gives (each one can be unchecked; the occupations, residences and
 estimated births deduced from the act are listed there too, so nothing is written unseen; the

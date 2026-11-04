@@ -1009,7 +1009,7 @@ impl Act {
             w.touch(&source);
         }
 
-        // 2. Image de l'acte.
+        // 2. The act's image.
         let media = match &self.media {
             MediaChoice::None => None,
             MediaChoice::Existing(x) => Some(x.clone()),
@@ -1639,7 +1639,7 @@ impl Writer<'_> {
         }
         let pf = father.map(|f| format!("@{f}@"));
         let pm = mother.map(|m| format!("@{m}@"));
-        // Famille d'origine existante compatible.
+        // An existing family of origin that fits.
         let famc: Vec<String> =
             self.ged.individual(child).map(|i| i.famc().iter().map(|s| s.to_string()).collect()).unwrap_or_default();
         let compatible = famc.into_iter().find(|f| {

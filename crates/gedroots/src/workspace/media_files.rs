@@ -4,7 +4,7 @@
 //! - the files of a new record (dropped or chosen in the record editor) directly take the
 //!   template’s name: copied if they come from elsewhere, moved if they are already in the folder
 //!   and used by no other media;
-//! - Media › Rename According to Template… moves the files of a media.
+//! - Media › Rename Using Template… moves the files of a media.
 //!
 //! Moving a file cannot be undone: the undo history is updated with the new path so it never points
 //! to the old one.

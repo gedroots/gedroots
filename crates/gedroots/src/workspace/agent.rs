@@ -1,4 +1,4 @@
-//! Source › Connect an AI Agent…: turns on the local MCP server and gives, for each agent, the
+//! GEDRoots › Connect an AI Agent…: turns on the local MCP server and gives, for each agent, the
 //! shortest way to connect it.
 
 use super::add::AddDialog;
@@ -76,17 +76,22 @@ impl Workspace {
             (None, Some(p)) => p.to_string_lossy().into_owned(),
             (None, None) => String::new(),
         };
-        Some(agent::Snapshot { key, path: doc.path.clone(), ged: doc.ged.clone(), queue: self.review_queue() })
+        Some(agent::Snapshot { key, ged: doc.ged.clone(), queue: self.review_queue() })
     }
 
     /// The tree of this window, for `list_trees` (not in front: the caller knows which one is).
     pub(crate) fn agent_tree(&self) -> Option<agent::Tree> {
         let doc = self.doc.as_ref()?;
+        let g = &doc.ged;
         Some(agent::Tree {
             name: doc.title(),
             file: doc.path.as_ref().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().into_owned()),
-            id: doc.ged.tree_id().map(str::to_string),
-            people: doc.ged.count(gedcom::RecordKind::Individual),
+            id: g.tree_id().map(str::to_string),
+            people: g.count(gedcom::RecordKind::Individual),
+            families: g.count(gedcom::RecordKind::Family),
+            sources: g.count(gedcom::RecordKind::Source),
+            media: g.count(gedcom::RecordKind::Media),
+            root: g.root().map(|r| g.person_ref(&r)),
             in_front: false,
         })
     }

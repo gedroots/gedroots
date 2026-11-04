@@ -60,6 +60,23 @@ impl Span {
         Span::of(&Date::parse(raw))
     }
 
+    /// Years covered by a GEDCOM date, `(earliest, latest)`: see [`Span::years`].
+    pub fn years_of(raw: &str) -> Option<(i32, i32)> {
+        Span::parse(raw)?.years()
+    }
+
+    /// Years covered, `(earliest, latest)`, in the Gregorian calendar; an open bound takes the
+    /// other one. `None` when both are open.
+    pub fn years(&self) -> Option<(i32, i32)> {
+        let y = |d: i64| crate::date::calendar::gregorian_from_fixed(d + UNIX_EPOCH_RD).0 as i32;
+        match (self.lo, self.hi) {
+            (Some(a), Some(b)) => Some((y(a), y(b))),
+            (Some(a), None) => Some((y(a), y(a))),
+            (None, Some(b)) => Some((y(b), y(b))),
+            (None, None) => None,
+        }
+    }
+
     /// True if every possible value of `self` is strictly before every value of `other`.
     pub fn surely_before(&self, other: &Span) -> bool {
         matches!((self.hi, other.lo), (Some(a), Some(b)) if a < b)
@@ -132,6 +149,22 @@ impl Age {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn years_are_exact_at_the_turn_of_a_year() {
+        assert_eq!(Span::years_of("31 DEC 1850"), Some((1850, 1850)));
+        assert_eq!(Span::years_of("1 JAN 1851"), Some((1851, 1851)));
+        assert_eq!(Span::years_of("BET 1802 AND 1805"), Some((1802, 1805)));
+        assert_eq!(Span::years_of(""), None);
+    }
+
+    #[test]
+    fn one_table_of_accents() {
+        use crate::model::sort_key;
+        assert_eq!(sort_key("Élisabeth"), "elisabeth");
+        assert_eq!(sort_key("Œuvray"), "oeuvray");
+        assert_eq!(sort_key("Ángel Muñoz"), "angel munoz");
+    }
 
     #[test]
     fn civil_days() {

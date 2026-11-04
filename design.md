@@ -68,7 +68,7 @@ A proposal without this research is not ready to show.
   `FORM`); rare or destructive actions are collapsed or in menus; GEDCOM identifiers only
   appear through Edit › Copy Special › Copy ID and the advanced search.
 - **Read first, edit in place**: a record opens as text (empty values hidden, linked records
-  clickable). Edit › Edit Record (`⌘L`, like Contacts) or the small pencil next to it turns the
+  clickable). The small pencil next to its name (Edit Record, `⌘L`, like Contacts) turns the
   same layout into fields; Done saves (one undo point), Cancel or `Esc` drops the changes. A
   new record (New Individual, a dashed slot of the tree, Add Relative) opens on its fields;
   until Done, Cancel removes it again, like a new card in Contacts. An item of a record (an event) opens read-only on click, with

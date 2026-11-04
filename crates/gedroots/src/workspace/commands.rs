@@ -56,7 +56,6 @@ impl Workspace {
         let d = d.on_action(cx.listener(|_, _: &MinimizeWindow, w, _| w.minimize_window()));
         let d = d.on_action(cx.listener(|_, _: &ZoomWindow, w, _| w.zoom_window()));
         let d = on!(d, cx, ClearRecent, |_this, w, cx| crate::recent::clear(cx));
-        let d = on!(d, cx, ImportFile, |this, w, cx| this.import_file(w, cx));
         let d = on!(d, cx, NewFile, |this, w, cx| this.new_file(&NewFile, w, cx));
         let d = on!(d, cx, CommandPalette, |this, w, cx| this.toggle_palette(w, cx));
         let d = on!(d, cx, ReportIssue, |this, w, cx| this.open_report(w, cx));
@@ -188,9 +187,6 @@ impl Workspace {
         // Individuals and places: the record is the right panel, not a tab.
         let d =
             d.when(!self.view.has_panel(), |d| on!(d, cx, ShowForm, |this, w, cx| this.show_tab(CenterTab::Form, cx)));
-        let d = on!(d, cx, ShowUnreferencedFiles, |this, w, cx| {
-            this.open_quality(gedcom::quality::Category::Files, w, cx)
-        });
 
         d.when(self.history.can_back(), |d| on!(d, cx, GoBack, |this, w, cx| this.go_back(w, cx)))
             .when(self.history.can_forward(), |d| on!(d, cx, GoForward, |this, w, cx| this.go_forward(w, cx)))
@@ -551,7 +547,7 @@ impl Workspace {
             .filter(|e| window.is_action_available(e.action.as_ref(), cx) || crate::is_global_action(e.action.as_ref()))
             .map(|e| {
                 // Keywords without accents: “pere” finds “Père”.
-                let words: Vec<String> = e.path.split(" › ").map(fold_accents).collect();
+                let words: Vec<String> = e.path.split(" › ").map(gedcom::sort_key).collect();
                 CommandItem::new().label(e.path).keywords(words).action(e.action)
             })
             .collect();
@@ -611,22 +607,4 @@ impl Workspace {
                 .into_any_element(),
         )
     }
-}
-
-/// Removes accents (é → e, œ → oe…) for the search in the palette.
-fn fold_accents(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    for c in s.chars() {
-        match c {
-            'à' | 'â' | 'ä' | 'À' | 'Â' | 'Ä' => out.push('a'),
-            'é' | 'è' | 'ê' | 'ë' | 'É' | 'È' | 'Ê' | 'Ë' => out.push('e'),
-            'î' | 'ï' | 'Î' | 'Ï' => out.push('i'),
-            'ô' | 'ö' | 'Ô' | 'Ö' => out.push('o'),
-            'ù' | 'û' | 'ü' | 'Ù' | 'Û' | 'Ü' => out.push('u'),
-            'ç' | 'Ç' => out.push('c'),
-            'œ' | 'Œ' => out.push_str("oe"),
-            c => out.extend(c.to_lowercase()),
-        }
-    }
-    out
 }

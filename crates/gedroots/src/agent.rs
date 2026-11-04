@@ -1,6 +1,6 @@
 //! AI agents: GEDRoots' local MCP server.
 //!
-//! When the setting is on (Source › Connect an AI Agent…), the app serves the MCP protocol over HTTP
+//! When the setting is on (GEDRoots › Connect an AI Agent…), the app serves the MCP protocol over HTTP
 //! on `127.0.0.1`: an agent such as Claude Code reads the open file (records, search, records to
 //! find) without ever changing the tree: the records it finds become proposals, reviewed in the
 //! “To Review” page before being saved. Only its research log (what it planned and searched, even in
@@ -76,6 +76,11 @@ pub struct Tree {
     /// `HEAD._GR_TREE`, once the tree was saved by GEDRoots.
     pub id: Option<String>,
     pub people: usize,
+    pub families: usize,
+    pub sources: usize,
+    pub media: usize,
+    /// Root person, start of the Sosa numbering.
+    pub root: Option<gedcom::research::PersonRef>,
     /// The window in front: the tree used when a tool names none.
     pub in_front: bool,
 }
@@ -116,7 +121,6 @@ pub struct Edit {
 pub struct Snapshot {
     /// Which tree it is, to tell each tree's news apart (its id, else its file).
     pub key: String,
-    pub path: Option<PathBuf>,
     pub ged: Gedcom,
     /// The review page: waiting proposals and what became of the others.
     pub queue: propose::Queue,
@@ -377,6 +381,10 @@ mod tests {
             file: Some("Guyot.ged".into()),
             id: Some("4b1d".into()),
             people: 1,
+            families: 0,
+            sources: 0,
+            media: 0,
+            root: None,
             in_front: false,
         };
         for name in ["Guyot", "guyot.ged", " GUYOT ", "4B1D"] {

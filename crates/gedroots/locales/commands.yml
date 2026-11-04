@@ -99,9 +99,6 @@ cmd:
   clear_recent:
     en: Clear Menu
     fr: Effacer le menu
-  import_gedcom:
-    en: Import GEDCOM…
-    fr: Importer un GEDCOM…
   save:
     en: Save
     fr: Enregistrer
@@ -341,9 +338,6 @@ cmd:
   tag_person:
     en: Tag a Person in the Photo
     fr: Identifier une personne sur la photo
-  unreferenced_files:
-    en: Files to Attach
-    fr: Fichiers à rattacher
   # View
   back:
     en: Back

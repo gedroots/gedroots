@@ -127,13 +127,10 @@ pub fn load(path: impl AsRef<std::path::Path>) -> Result<Gedcom, String> {
     Gedcom::parse(&text).map_err(|e| e.to_string())
 }
 
-/// Saves the file, keeping a `.bak` copy of the previous version.
+/// Saves the file: written beside it, then renamed, so that a failure never leaves half a file.
+/// Earlier versions are in the version history (`versions`), not in a copy beside the file.
 pub fn save(ged: &Gedcom, path: impl AsRef<std::path::Path>) -> std::io::Result<()> {
     let path = path.as_ref();
-    if path.exists() {
-        let bak = path.with_extension("ged.bak");
-        std::fs::copy(path, bak)?;
-    }
     let tmp = path.with_extension("ged.tmp");
     std::fs::write(&tmp, ged.to_gedcom_string())?;
     std::fs::rename(tmp, path)

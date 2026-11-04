@@ -3,7 +3,7 @@ title: Bring in a tree from other software
 description: Move your research from Ancestris, Heredis, RootsMagic, Gramps or any program that exports GEDCOM, without losing data.
 ---
 
-GEDRoots works directly on GEDCOM files, so there is nothing to convert into a private format. You export your tree from your current software, then import the file in GEDRoots.
+GEDRoots works directly on GEDCOM files, so there is nothing to convert into a private format. You export your tree from your current software, then open the file in GEDRoots.
 
 ## Export from your current software
 
@@ -11,9 +11,9 @@ In your current program, look for an **Export GEDCOM** command. If it offers sev
 
 For a `.ged` file, put it in the folder that holds your scans and photos. Media paths in a GEDCOM file are usually relative to the file, so GEDRoots finds the images when they keep the same place relative to it.
 
-## Import the file
+## Open the file
 
-1. Select **File › Import GEDCOM…**, or click **Import From Another App…** on the welcome screen, and choose the `.ged` or `.gdz` file.
+1. Select **File › Open…** (<kbd>⌘O</kbd> / <kbd>Ctrl+O</kbd>), or click **Open a Tree…** on the welcome screen, and choose the `.ged` or `.gdz` file. A file last saved by other software opens through the import assistant.
 2. If the file doesn't say who the **root person** is, choose them: usually yourself, or the person the research starts from. GEDRoots suggests the Sosa 1 that Ancestris declares, or else the first person in the file.
 3. GEDRoots lists what the file contains that isn't standard GEDCOM 7, with the number of items and what each will become. Click **Normalize** to convert them, or **Keep As Is** to leave them unchanged.
 
@@ -33,15 +33,15 @@ A GEDZIP archive is unzipped into a folder next to it, named after the archive (
 
 Everything else is kept exactly as it was, including tags that GEDRoots doesn't use. If you later open the file in your previous software, its own tags are still there.
 
-## Open a file directly
+## Files you already work on in GEDRoots
 
-**File › Open…** (<kbd>⌘O</kbd> / <kbd>Ctrl+O</kbd>) opens a `.ged` file as it is, without the assistant. Use it for files you already work on in GEDRoots. Recent files are in **File › Open Recent** and on the welcome screen.
+Once GEDRoots has saved a file, **File › Open…** opens it as it is, without the assistant. Recent files are in **File › Open Recent** and on the welcome screen.
 
 ## Check the result
 
-After a first import, open **View › Data Quality** (<kbd>⌘7</kbd> / <kbd>Ctrl+7</kbd>). It lists what other software may have left behind: broken links between families, media files that moved, the same town written three different ways. See [Check and clean your data](/workflows/quality).
+After a first import, open **Data Quality** in the sidebar (<kbd>⌘8</kbd> / <kbd>Ctrl+8</kbd>). It lists what other software may have left behind: broken links between families, media files that moved, the same town written three different ways. See [Check and clean your data](/workflows/quality).
 
-You can change the root person later in **File › File Settings… › General**.
+You can change the root person later in **GEDRoots › File Settings… › General**.
 
 ## Related pages
 

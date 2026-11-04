@@ -1,4 +1,4 @@
-//! File › Mobile Devices…: shares the open tree with the user's phones and tablets, pairs a new
+//! GEDRoots › Mobile Devices…: shares the open tree with the user's phones and tablets, pairs a new
 //! device with a QR code, and lists the paired ones (see `crate::mobile`).
 
 use super::add::AddDialog;

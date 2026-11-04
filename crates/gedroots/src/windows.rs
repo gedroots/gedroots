@@ -3,7 +3,7 @@
 //! - File › Open… (and Open Recent, Import, the Finder) shows the tree in the window it was asked
 //!   from while that window is empty (welcome screen), otherwise in a new window; a tree that is
 //!   already open brings its window to the front.
-//! - File › New Window (⌘N) opens a window on the welcome screen.
+//! - File › New Window (⌥⌘N; ⌘N is Create) opens a window on the welcome screen.
 //! - The Window menu lists the open trees: on macOS the system fills it (`NSApp.windowsMenu`),
 //!   with its native tabs (Window › Merge All Windows); elsewhere the in-window menu bar shows it.
 

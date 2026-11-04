@@ -7,12 +7,9 @@ welcome:
   open:
     en: Open a Tree…
     fr: Ouvrir un arbre…
-  import:
-    en: Import From Another App…
-    fr: Importer depuis un autre logiciel…
-  import_formats:
-    en: GEDCOM 5.5.1 · GEDZIP
-    fr: GEDCOM 5.5.1 · GEDZIP
+  open_formats:
+    en: GEDCOM · GEDZIP, from GEDRoots or another app
+    fr: GEDCOM · GEDZIP, de GEDRoots ou d’un autre logiciel
 new_tree:
   title:
     en: New Tree
@@ -193,8 +190,8 @@ tour:
     en: Connect Your Own Agent
     fr: Connectez votre agent
   connect_body:
-    en: Source › Connect an AI Agent… shows how to connect the AI app you already use.
-    fr: Source › Connecter un agent IA… montre comment brancher l’application d’IA que vous utilisez déjà.
+    en: GEDRoots › Connect an AI Agent… shows how to connect the AI app you already use.
+    fr: GEDRoots › Connecter un agent IA… montre comment brancher l’application d’IA que vous utilisez déjà.
   demo_failed:
     en: "The demo could not be prepared: %{error}"
     fr: "La démo n’a pas pu être préparée : %{error}"

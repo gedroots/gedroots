@@ -142,13 +142,6 @@ impl Gedcom {
         }
     }
 
-    /// Replaces the criteria of a saved search (same name).
-    pub fn update_search(&mut self, i: usize, s: &SavedSearch) -> bool {
-        let Some(k) = self.find_index(i) else { return false };
-        self.header.children[k] = s.node();
-        true
-    }
-
     pub fn delete_search(&mut self, i: usize) -> Option<SavedSearch> {
         let k = self.find_index(i)?;
         let n = self.header.children.remove(k);

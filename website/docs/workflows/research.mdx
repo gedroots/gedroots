@@ -3,11 +3,17 @@ title: Plan your research
 description: See which ancestors and events still lack a record, then search for them on Geneanet, FamilySearch or any archive website.
 ---
 
-Research goes faster when you know what you are looking for. GEDRoots helps you find the gaps in your tree, then opens the right search on the websites you use.
+Research goes faster when you know what you are looking for. GEDRoots lists the records still to find in your tree, then opens the right search on the websites you use.
+
+## See the records still to find
+
+Click **Research** in the sidebar (<kbd>⌘7</kbd> / <kbd>Ctrl+7</kbd>). For the people of the focus, the root person's ancestors over six generations by default (`sosa:1-63` in the field above the list), it lists every birth, marriage and death missing or without a source, and the parents of ancestors at the end of a line. Leads are grouped as **To Find**, **No Result** and **Ignored**, and disappear once their record is cited.
+
+Select a lead to see its **Estimated period** and why, **What is known**, **Where to look** (the kinds of registers for that country and period, and the registers your file already cites for the town) and its **Log**. **Note a Search…** (<kbd>⌘⇧L</kbd> / <kbd>Ctrl+Shift+L</kbd>) records a search, including one that found nothing, so that nobody searches the same register twice. Right-click a lead to ignore it, or to copy a request for an [AI agent](/workflows/ai-agents).
 
 ## See how complete your ancestry is
 
-Open **View › Statistics** (<kbd>⌘8</kbd> / <kbd>Ctrl+8</kbd>). The **Ancestry** chart counts, for each generation above the root person, how many ancestors you've found out of how many there are: 2 parents, 4 grandparents, 8 great-grandparents… The first generation that drops tells you where to dig.
+Click **Statistics** in the sidebar (<kbd>⌘9</kbd> / <kbd>Ctrl+9</kbd>). The **Ancestry** chart counts, for each generation above the root person, how many ancestors you've found out of how many there are: 2 parents, 4 grandparents, 8 great-grandparents… The first generation that drops tells you where to dig.
 
 ![The Statistics page](../images/statistics.png)
 
@@ -27,8 +33,6 @@ Combine searches to turn a vague “I should find more records” into a list:
 
 [Save the searches](/workflows/search#save-a-search) you'll come back to: they stay in the sidebar with their number of results, which goes down as you work.
 
-The **Events Without Sources** category of [Data Quality](/workflows/quality) lists every event without a source, one by one, and opens each with a click.
-
 ## Search a person on the web
 
 GEDRoots opens a person's search on genealogy websites, already filled in with their name, dates and places.
@@ -42,7 +46,7 @@ Your browser opens on the results. Geneanet and FamilySearch are set up by defau
 
 You can add any website whose search page takes the name in its address: a departmental archive, a regional indexing project, a search engine.
 
-1. Select **File › File Settings…**, then the **Search** tab.
+1. Select **GEDRoots › File Settings…**, then the **Search** tab.
 2. Click **+** next to **Search Sites**.
 3. Enter the **Site Name** and the address of a search, with variables in braces where the person's data goes.
 
@@ -64,7 +68,7 @@ The sites are saved in your `.ged` file. A variable with no value is left empty.
 
 When you find a record in an online archive, keep the way back to it:
 
-- add a **web link** to the page of the record in the archive's viewer, on the source or on the person (**Edit › Add Web Link…**);
+- add a **web link** to the page of the record in the archive's viewer, on the source or on the person (**+** next to **Web Links**);
 - [enter the record](/workflows/records) with its reference, so the citation says exactly which page to open.
 
 ## Let an AI agent do the legwork

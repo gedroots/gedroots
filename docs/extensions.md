@@ -78,7 +78,7 @@ can tell them apart. Written only in the copy sent to mobile devices, never in t
 
 ## `_GR_EVEN`
 
-Custom event type (**File › File Settings… › Events**). A custom type is a standard `EVEN`
+Custom event type (**GEDRoots › File Settings… › Events**). A custom type is a standard `EVEN`
 with a `TYPE`: those already in the file are inferred from their `TYPE` and do not need this
 tag. It is only used to offer a type not yet used in **Add Event…**, or to show a type under
 a label other than its `TYPE`.
@@ -112,13 +112,13 @@ Renaming a `TYPE` in the settings rewrites every matching `TYPE` (renaming to an
 type merges them) and keeps its label; a declared, unused type can be removed. A declaration
 that is no longer needed (type in use, no label) is removed.
 
-On import (**File › Import GEDCOM…**), events with extension tags from other software
+On import (File › Open… on a file from other software), events with extension tags from other software
 (`_MILT`, `_MILI`, `_DEG`, `_FUN`…, or any dated or located `_XXX` tag under an individual or
 a family) become `EVEN` + `TYPE`.
 
 ## `_GR_MEDIA`
 
-Filing of media files (**File › File Settings… › Media**): the media folder, then
+Filing of media files (**GEDRoots › File Settings… › Media**): the media folder, then
 subfolders, each with the events it receives and its naming template. Paths stay standard
 `FILE`s, relative to the `.ged` folder.
 
@@ -175,7 +175,7 @@ Variables are taken from the event that carries the media (`2 OBJE`), cites it, 
 source that carries it: preferably the one the source describes (`DATA.EVEN`) or its title
 names ("Birth record…"), rather than an attribute (occupation, residence); on a tie, the one
 the first subfolder receives. Otherwise from the source that carries the media, then from
-the linked person or family. A file imported through **Media › Record Media…** (⌘⇧M) is moved (or
+the linked person or family. A file imported through **Record Media…** (⌘⇧M) is moved (or
 copied, as chosen) under this name, the preview showing the name before import; a name
 already taken gets "(2)", "(3)"… **Media › Rename Using Template…** moves the files of an
 existing media after confirmation.
@@ -238,7 +238,7 @@ tag).
 2 NOTE The marriage act gives her age as 14, with her parents' consent
 ```
 
-Hidden issues are listed in **File › File Settings…**, where they can be shown again (the tag
+Hidden issues are listed in **GEDRoots › File Settings…**, where they can be shown again (the tag
 is removed, and its declaration too when none is left).
 
 The issue is hidden when its main record (the one a click in the list opens) carries the tag
@@ -395,7 +395,7 @@ interface language.
 ## `_GR_FIND`
 
 Saved search, shown in the **Searches** section of the sidebar with its number of results.
-Saved with the section's "+" or **View › Save Search**; renamed (double click, right click
+Saved with the section's "+"; renamed (double click, right click
 or **View › Rename Search**) and deleted the same way.
 
 - **Under**: `HEAD`, at level 1. One occurrence per search, in sidebar order.
@@ -428,7 +428,7 @@ Deleting the last search also removes the declarations.
 ## `_GR_WEB`
 
 Online search site, offered in **Person › Search On** and when right-clicking a person. Set
-in **File › File Settings… › Search**.
+in **GEDRoots › File Settings… › Search**.
 
 - **Under**: `HEAD`, at level 1. One occurrence per site, in menu order.
 - **Value**: name of the site.

@@ -404,27 +404,6 @@ pub const DEFAULT_FOCUS: &str = "sosa:1-63";
 /// Oldest age considered for a death without a known date.
 const MAX_AGE: i32 = 105;
 
-/// Years of a GEDCOM date: (earliest, latest).
-fn years_of(raw: &str) -> Option<(i32, i32)> {
-    let s = Span::parse(raw)?;
-    // Year of a day count since 1970 (“civil_from_days”, H. Hinnant).
-    let y = |d: i64| {
-        let z = d + 719_468;
-        let era = z.div_euclid(146_097);
-        let doe = z - era * 146_097;
-        let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
-        let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-        let mp = (5 * doy + 2) / 153;
-        (yoe + era * 400 + i64::from(mp >= 10)) as i32
-    };
-    match (s.lo, s.hi) {
-        (Some(a), Some(b)) => Some((y(a), y(b))),
-        (Some(a), None) => Some((y(a), y(a))),
-        (None, Some(b)) => Some((y(b), y(b))),
-        (None, None) => None,
-    }
-}
-
 /// A dated sighting of a person, with its place.
 #[derive(Debug, Clone)]
 struct Seen {
@@ -566,7 +545,7 @@ impl<'g> Context<'g> {
                 if let Some(c) = atlas::in_place(&place) {
                     countries.entry(c.code.as_str()).or_insert((c, 0)).1 += 1;
                 }
-                let years = years_of(ev.path_val(&["DATE"]).unwrap_or(""));
+                let years = Span::years_of(ev.path_val(&["DATE"]).unwrap_or(""));
                 // Registers cited for this place, by the events its civil or church registers
                 // record (a military register or a census cited by another event is not one).
                 if !place.is_empty() {
@@ -611,7 +590,7 @@ impl<'g> Context<'g> {
             for c in fam.children() {
                 let Some(child) = g.individual(c) else { continue };
                 let Some(b) = child.birth() else { continue };
-                let Some((lo, _)) = b.date_raw().and_then(years_of) else { continue };
+                let Some((lo, _)) = b.date_raw().and_then(Span::years_of) else { continue };
                 let place = b.place().unwrap_or("").to_string();
                 let what = Sighting::ChildBirth(child.display_name());
                 if let Some(h) = fam.husband() {
@@ -1120,7 +1099,7 @@ impl Gedcom {
     /// Possible years of birth, and why.
     fn birth_years(&self, ctx: &Context, ind: &Individual) -> (Option<Years>, Vec<Reason>) {
         let birth = ind.events().into_iter().find(|e| Goal::Birth.tags().contains(&e.tag()));
-        if let Some((lo, hi)) = birth.as_ref().and_then(|e| e.date_raw()).and_then(years_of) {
+        if let Some((lo, hi)) = birth.as_ref().and_then(|e| e.date_raw()).and_then(Span::years_of) {
             return (Some(Years::new(lo, hi)), vec![Reason::Dated(Goal::Birth, Years::new(lo, hi))]);
         }
         let mut reasons = Vec::new();
@@ -1133,7 +1112,7 @@ impl Gedcom {
         let parent_birth = [f, m]
             .into_iter()
             .flatten()
-            .filter_map(|p| p.birth().and_then(|b| b.date_raw().and_then(years_of)))
+            .filter_map(|p| p.birth().and_then(|b| b.date_raw().and_then(Span::years_of)))
             .map(|(lo, _)| lo)
             .max();
         let lo = match (hi, parent_birth) {
@@ -1158,7 +1137,7 @@ impl Gedcom {
         known: Option<&str>,
         birth: &Option<Years>,
     ) -> (Option<Years>, Vec<Reason>) {
-        if let Some((lo, hi)) = known.and_then(years_of) {
+        if let Some((lo, hi)) = known.and_then(Span::years_of) {
             return (Some(Years::new(lo, hi)), vec![Reason::Dated(Goal::Death, Years::new(lo, hi))]);
         }
         let mut reasons = Vec::new();
@@ -1188,7 +1167,7 @@ impl Gedcom {
                     .events()
                     .iter()
                     .filter(|e| e.tag() == "MARR")
-                    .filter_map(|e| e.date_raw().and_then(years_of))
+                    .filter_map(|e| e.date_raw().and_then(Span::years_of))
                     .map(|(_, h)| h)
                     .min();
                 if let Some(y) = married.filter(|y| *y >= lo && *y < hi) {
@@ -1204,7 +1183,7 @@ impl Gedcom {
     /// Possible years of a marriage: after both spouses reached the legal age of their country,
     /// before the first child.
     fn marriage_years(&self, ctx: &Context, f: &str, known: Option<&str>) -> (Option<Years>, Vec<Reason>) {
-        if let Some((lo, hi)) = known.and_then(years_of) {
+        if let Some((lo, hi)) = known.and_then(Span::years_of) {
             return (Some(Years::new(lo, hi)), vec![Reason::Dated(Goal::Marriage, Years::new(lo, hi))]);
         }
         let Some(fam) = self.family(f) else { return (None, Vec::new()) };
@@ -1231,7 +1210,7 @@ impl Gedcom {
             .iter()
             .filter_map(|c| self.individual(c))
             .filter_map(|c| {
-                c.birth().and_then(|b| b.date_raw().and_then(years_of)).map(|(lo, _)| (lo, c.display_name()))
+                c.birth().and_then(|b| b.date_raw().and_then(Span::years_of)).map(|(lo, _)| (lo, c.display_name()))
             })
             .min();
         let lo = births.iter().map(|(_, adult)| *adult).max();
