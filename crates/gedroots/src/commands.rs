@@ -28,6 +28,7 @@ actions!(
         RevertToOpened,
         BrowseVersions,
         ExportFile,
+        NewBook,
         ConnectAgent,
         MobileDevices,
         ReviewProposals,
@@ -630,6 +631,7 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
             a(label::new_source(), NewSource),
             a(label::new_repository(), NewRepository),
             a(label::new_note(), NewNote),
+            a(t!("cmd.new_book"), NewBook),
         ],
     ));
     menus.push((
