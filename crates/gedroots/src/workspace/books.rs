@@ -530,7 +530,7 @@ impl Workspace {
                 .items_center()
                 .justify_center()
                 .text_color(theme::muted())
-                .child(t!("books.none"))
+                .child(if self.rows.is_empty() { t!("books.empty") } else { t!("books.none") })
                 .into_any_element();
         };
         let g = &self.doc.as_ref().expect("a file is open").ged;
