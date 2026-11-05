@@ -305,6 +305,7 @@ fn an_agent_merge_is_checked_and_needs_a_choice_for_each_conflict() {
         issue: Some(issue.clone()),
         issue_id: Some(ids[n].clone()),
         action: Action::Merge(choices.into_iter().map(|(a, b)| (a.to_string(), b.to_string())).collect()),
+        pair: None,
         reason: "Same witness of two acts seven months apart".into(),
         evidence: Default::default(),
     };
@@ -314,6 +315,16 @@ fn an_agent_merge_is_checked_and_needs_a_choice_for_each_conflict() {
     assert!(change(vec![("NAME", "I12")]).check(&g, &rerun).is_err());
     let ok = change(vec![("NAME", "I10")]);
     ok.check(&g, &rerun).unwrap();
+    // The same merge without the issue: the agent names the two people.
+    let free = QualityChange {
+        issue: None,
+        issue_id: None,
+        pair: Some(gedcom::change::MergePair::People(issue.xref.clone(), issue.related[0].clone())),
+        ..ok.clone()
+    };
+    assert_eq!(free.check(&g, &rerun).unwrap().resolves, None);
+    assert_eq!(free.merge_pair(), ok.merge_pair());
+    assert!(free.title(&g).contains("DARMON"), "{}", free.title(&g));
     assert!(ok.rows(&g).iter().any(|r| r.proposed == "Abraham DARMON"));
     ok.apply(&mut g).unwrap();
     assert!(g.get("I10").is_none() || g.get("I11").is_none());

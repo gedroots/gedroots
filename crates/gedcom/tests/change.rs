@@ -50,6 +50,7 @@ fn change(g: &Gedcom, code: &str, action: Action, reason: &str) -> QualityChange
         issue: Some(issues[i].clone()),
         issue_id: Some(ids[i].clone()),
         action,
+        pair: None,
         reason: reason.into(),
         evidence: Evidence::default(),
     }
@@ -68,7 +69,8 @@ fn an_edit_that_fixes_the_date_is_accepted_and_applied() {
         cause: None,
     };
     let c = change(&g, "death_before_birth", Action::Edit(vec![edit]), "The act says 1869");
-    assert!(c.check(&g, &rerun).unwrap().is_empty());
+    let checked = c.check(&g, &rerun).unwrap();
+    assert!(checked.new.is_empty() && checked.resolves == Some(true));
     let rows = c.rows(&g);
     assert_eq!(rows.len(), 1);
     assert!(rows[0].current.contains("1769") && rows[0].proposed.contains("1869"), "{rows:?}");
@@ -80,36 +82,15 @@ fn an_edit_that_fixes_the_date_is_accepted_and_applied() {
 }
 
 #[test]
-fn changes_that_do_not_fit_the_issue_are_refused() {
+fn a_change_that_leaves_its_issue_says_so() {
     let g = ged();
-    // Not an edit of this kind of issue.
+    // Another kind of edit than the usual one, on another record: allowed, the issue stays.
     let sex = Edit::SetSex { person: "I1".into(), sex: "F".into() };
     let c = change(&g, "death_before_birth", Action::Edit(vec![sex]), "x");
-    assert!(c.check(&g, &rerun).unwrap_err().contains("not allowed"));
-    // Still before the birth.
-    let edit = Edit::SetEvent {
-        record: "I1".into(),
-        index: 3,
-        value: None,
-        date: Some("1770".into()),
-        place: None,
-        address: None,
-        cause: None,
-    };
+    assert_eq!(c.check(&g, &rerun).unwrap().resolves, Some(false));
+    let edit = Edit::SetName { person: "I2".into(), index: 0, given: Some("Marie".into()), surname: None };
     let c = change(&g, "death_before_birth", Action::Edit(vec![edit]), "x");
-    assert!(c.check(&g, &rerun).unwrap_err().contains("still reports"));
-    // Another person's record.
-    let edit = Edit::SetEvent {
-        record: "I2".into(),
-        index: 3,
-        value: None,
-        date: Some("1700".into()),
-        place: None,
-        address: None,
-        cause: None,
-    };
-    let c = change(&g, "death_before_birth", Action::Edit(vec![edit]), "x");
-    assert!(c.check(&g, &rerun).unwrap_err().contains("not one of the records"));
+    assert_eq!(c.check(&g, &rerun).unwrap().resolves, Some(false));
     // No automatic fix, no reason.
     assert!(
         change(&g, "death_before_birth", Action::Fix, "").check(&g, &rerun).unwrap_err().contains("no automatic fix")
@@ -154,6 +135,7 @@ fn automatic_fix_sex_and_citation() {
         issue: Some(issues[i].clone()),
         issue_id: Some(ids[i].clone()),
         action: Action::Edit(vec![cite("S9")]),
+        pair: None,
         reason: "Birth act found".into(),
         evidence: Evidence::default(),
     };
@@ -194,6 +176,7 @@ fn a_correction_without_an_issue_renames_a_person() {
         issue: None,
         issue_id: None,
         action: Action::Edit(edits),
+        pair: None,
         reason: "The marriage act names him Jean Pierre".into(),
         evidence,
     };
@@ -220,10 +203,10 @@ fn a_correction_without_an_issue_renames_a_person() {
         correction(vec![Edit::DeleteStructure], evidence.clone())
             .check(&g, &rerun)
             .unwrap_err()
-            .contains("needs an issue")
+            .contains("give that `issue`")
     );
     let hide = QualityChange { action: Action::Hide, ..correction(vec![], evidence) };
-    assert!(hide.check(&g, &rerun).unwrap_err().contains("only `edit`"));
+    assert!(hide.check(&g, &rerun).unwrap_err().contains("needs the `issue`"));
 }
 
 #[test]
@@ -237,6 +220,7 @@ fn a_correction_changes_and_adds_occupations() {
         issue: None,
         issue_id: None,
         action: Action::Edit(edits),
+        pair: None,
         reason: "The 1852 census says weaver".into(),
         evidence: evidence.clone(),
     };
@@ -287,6 +271,7 @@ fn a_correction_moves_an_address_and_renames_a_place() {
         issue: None,
         issue_id: None,
         action: Action::Edit(edits),
+        pair: None,
         reason: "The census gives the street; the commune is Agneaux".into(),
         evidence: Evidence { quote: "rue Haute".into(), ..Default::default() },
     };
@@ -320,6 +305,7 @@ fn a_correction_sets_the_repository_of_a_source() {
         issue: None,
         issue_id: None,
         action: Action::Edit(vec![edit]),
+        pair: None,
         reason: "The register is kept by the archives of Manche".into(),
         evidence: Evidence { url: "https://archives.manche.fr/ark:/1".into(), ..Default::default() },
     };
@@ -412,6 +398,7 @@ fn correction(edits: Vec<Edit>) -> QualityChange {
         issue: None,
         issue_id: None,
         action: Action::Edit(edits),
+        pair: None,
         reason: "The register says so".into(),
         evidence: Evidence { quote: "fils de Louis Martin".into(), ..Default::default() },
     }
