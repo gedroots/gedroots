@@ -11,6 +11,7 @@ use gedroots_book::{Block, BookSpec};
 use gedroots_viz::{Figure, Kind, Line, Palette, Scope, Tree};
 use gpui_kit::component::menu::{DropdownMenu, PopupMenuItem};
 use std::cell::RefCell;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 /// Key of the tree's figures, the first item of the list.
@@ -26,6 +27,10 @@ pub(super) struct VizState {
     generations: u32,
     /// Table rather than chart.
     table: bool,
+    /// Migrations: the children born in these years (all of them when `None`).
+    period: Option<(i32, i32)>,
+    /// Migrations: the timeline playing, decade after decade.
+    playing: Option<Task<()>>,
     shown: Option<Rc<Shown>>,
     /// Drawing being computed, for this key and tree.
     busy: Option<(VizKey, Gedcom, Task<()>)>,
@@ -40,6 +45,8 @@ impl Default for VizState {
             line: Line::Ancestors,
             generations: gedroots_viz::scope::DEFAULT_GENERATIONS,
             table: false,
+            period: None,
+            playing: None,
             shown: None,
             busy: None,
             dropped: Rc::default(),
@@ -52,6 +59,8 @@ impl Default for VizState {
 struct VizKey {
     kind: Kind,
     scope: Scope,
+    /// Migrations only.
+    period: Option<(i32, i32)>,
     dark: bool,
     lang: String,
 }
@@ -65,6 +74,13 @@ struct Shown {
     image: Option<Arc<RenderImage>>,
     /// Height of the drawing for a width of 1.
     ratio: f32,
+    /// Migrations: the years of the moves, for the timeline.
+    years: Vec<i32>,
+}
+
+/// Decade of a year: 1837 → 1830.
+fn decade(y: i32) -> i32 {
+    y.div_euclid(10) * 10
 }
 
 /// A book in the Add to Book menu: its id, title and chapters (generation, title).
@@ -73,7 +89,9 @@ type BookEntry = (String, String, Vec<(u32, String)>);
 fn icon_of(kind: Kind) -> IconName {
     match kind {
         Kind::Fan => IconName::ChartPie,
-        Kind::Places => IconName::Route,
+        Kind::Places => IconName::MapPin,
+        Kind::Migrations => IconName::Route,
+        Kind::Horizon => IconName::Target,
         Kind::Lives => IconName::ChartGantt,
         Kind::Generations => IconName::Layers,
         Kind::Longevity => IconName::Hourglass,
@@ -123,7 +141,8 @@ impl Workspace {
         if !kind.supports(scope.line) {
             scope.line = Line::Ancestors;
         }
-        Some(VizKey { kind, scope, dark: theme::is_dark(), lang: rust_i18n::locale().to_string() })
+        let period = (kind == Kind::Migrations).then_some(self.viz.period).flatten();
+        Some(VizKey { kind, scope, period, dark: theme::is_dark(), lang: rust_i18n::locale().to_string() })
     }
 
     /// Computes the selected visualization in the background, unless the one shown is up to date.
@@ -142,12 +161,20 @@ impl Workspace {
         let (k, g2) = (key.clone(), g.clone());
         let job = cx.background_spawn(async move {
             let palette = if k.dark { Palette::DARK } else { Palette::LIGHT };
-            let figure = Tree::new(&g2, k.scope.clone()).ok().and_then(|t| t.figure(k.kind, &palette, this_year()));
+            let tree = Tree::new(&g2, k.scope.clone()).ok();
+            let (figure, years) = match &tree {
+                Some(t) if k.kind == Kind::Migrations => (
+                    t.migrations(&palette, k.period),
+                    t.moves().into_iter().filter(|m| m.km > 0.).filter_map(|m| m.year).collect(),
+                ),
+                Some(t) => (t.figure(k.kind, &palette, this_year()), Vec::new()),
+                None => (None, Vec::new()),
+            };
             let pixels = figure.as_ref().and_then(|f| gedroots_viz::raster::bgra(&f.svg, RENDER_W));
-            (figure, pixels)
+            (figure, pixels, years)
         });
         let task = cx.spawn(async move |this, cx| {
-            let (figure, pixels) = job.await;
+            let (figure, pixels, years) = job.await;
             let _ = this.update(cx, |this, cx| {
                 let Some((key, source, _)) = this.viz.busy.take() else { return };
                 let (image, ratio) =
@@ -160,7 +187,7 @@ impl Workspace {
                 if let Some(old) = this.viz.shown.take().and_then(|s| s.image.clone()) {
                     this.viz.dropped.borrow_mut().push(old);
                 }
-                this.viz.shown = Some(Rc::new(Shown { key, source, figure, image, ratio }));
+                this.viz.shown = Some(Rc::new(Shown { key, source, figure, image, ratio, years }));
                 cx.notify();
             });
         });
@@ -177,14 +204,134 @@ impl Workspace {
     /// The person chosen in the picker: the visualizations are now about them.
     pub(super) fn set_viz_person(&mut self, xref: String, cx: &mut Context<Self>) {
         self.viz.subject = Some(xref);
+        self.viz.period = None;
+        self.viz.playing = None;
         self.refresh_viz(cx);
         cx.notify();
     }
 
     fn set_viz(&mut self, cx: &mut Context<Self>, f: impl FnOnce(&mut VizState)) {
+        // Another scope has other years.
+        self.viz.period = None;
+        self.viz.playing = None;
         f(&mut self.viz);
         self.refresh_viz(cx);
         cx.notify();
+    }
+
+    /// Migrations: shows the children born in `period` (all of them when `None`).
+    fn set_period(&mut self, period: Option<(i32, i32)>, cx: &mut Context<Self>) {
+        self.viz.period = period;
+        self.refresh_viz(cx);
+        cx.notify();
+    }
+
+    /// Plays the timeline: the moves appear decade after decade, then all of them stay.
+    fn toggle_play(&mut self, cx: &mut Context<Self>) {
+        if self.viz.playing.take().is_some() {
+            cx.notify();
+            return;
+        }
+        let Some((first, last)) =
+            self.viz.shown.as_ref().and_then(|s| Some((*s.years.iter().min()?, *s.years.iter().max()?)))
+        else {
+            return;
+        };
+        let (first, last) = (decade(first), decade(last));
+        self.set_period(Some((first, first + 9)), cx);
+        self.viz.playing = Some(cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor().timer(std::time::Duration::from_millis(900)).await;
+                let go_on = this
+                    .update(cx, |this, cx| {
+                        // The previous decade is still being drawn: wait for it.
+                        if this.viz.busy.is_some() {
+                            return true;
+                        }
+                        let end = this.viz.period.map_or(last, |(_, b)| b + 1);
+                        if end > last {
+                            this.viz.playing = None;
+                            this.set_period(None, cx);
+                            return false;
+                        }
+                        this.set_period(Some((first, end + 9)), cx);
+                        true
+                    })
+                    .unwrap_or(false);
+                if !go_on {
+                    break;
+                }
+            }
+        }));
+        cx.notify();
+    }
+
+    /// Migrations: the moves per decade, with Play; a decade shows the moves up to its end.
+    fn render_timeline(&self, years: &[i32], cx: &mut Context<Self>) -> impl IntoElement {
+        let mut counts: BTreeMap<i32, usize> = BTreeMap::new();
+        for &y in years {
+            *counts.entry(decade(y)).or_default() += 1;
+        }
+        let (first, last) = (counts.keys().next().copied().unwrap_or(0), counts.keys().last().copied().unwrap_or(0));
+        let max = counts.values().max().copied().unwrap_or(1).max(1);
+        let period = self.viz.period;
+        let playing = self.viz.playing.is_some();
+        let bars = (first..=last).step_by(10).map(|d| {
+            let n = counts.get(&d).copied().unwrap_or(0);
+            let on = period.is_none_or(|(a, b)| d >= decade(a) && d <= b);
+            v_flex()
+                .id(("viz-decade", d as u32))
+                .flex_1()
+                .min_w(px(6.))
+                .h(px(56.))
+                .justify_end()
+                .cursor_pointer()
+                .child(
+                    div()
+                        .w_full()
+                        .h(px(4. + 52. * n as f32 / max as f32))
+                        .rounded_t(px(2.))
+                        .bg(if on { theme::muted() } else { theme::border() })
+                        .when(n == 0, |d| d.h(px(1.))),
+                )
+                .tooltip(move |window, cx| Tooltip::new(format!("{d}–{} · {n}", d + 9)).build(window, cx))
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    this.viz.playing = None;
+                    this.set_period(Some((first, d + 9)), cx);
+                }))
+        });
+        let label = |y: i32| {
+            div().text_xs().text_color(theme::muted()).font_features(theme::tabular_nums()).child(y.to_string())
+        };
+        h_flex()
+            .w_full()
+            .gap_3()
+            .items_end()
+            .child(
+                Button::new("viz-play")
+                    .small()
+                    .ghost()
+                    .icon(if playing { IconName::Pause } else { IconName::Play })
+                    .tooltip(if playing { t!("viz.pause") } else { t!("viz.play") })
+                    .on_click(cx.listener(|this, _, _, cx| this.toggle_play(cx))),
+            )
+            .child(
+                v_flex()
+                    .flex_1()
+                    .min_w_0()
+                    .gap_1()
+                    .child(h_flex().w_full().gap_0p5().items_end().children(bars))
+                    .child(h_flex().justify_between().child(label(first)).child(label(last + 9))),
+            )
+            .when(period.is_some() && !playing, |d| {
+                d.child(
+                    Button::new("viz-all-years")
+                        .small()
+                        .ghost()
+                        .label(t!("viz.all_years"))
+                        .on_click(cx.listener(|this, _, _, cx| this.set_period(None, cx))),
+                )
+            })
     }
 
     /// Places the visualization shown at the end of a chapter's introduction (one undo point).
@@ -420,12 +567,12 @@ impl Workspace {
             None => div().flex_1().into_any_element(),
             Some(s) if s.figure.is_none() => empty_state(icon_of(kind), t!("viz.empty")).into_any_element(),
             Some(s) if self.viz.table => self.render_viz_table(&s, cx),
-            Some(s) => self.render_viz_chart(&s),
+            Some(s) => self.render_viz_chart(&s, cx),
         };
         v_flex().flex_1().min_w_0().bg(theme::bg()).child(header).child(body).into_any_element()
     }
 
-    fn render_viz_chart(&self, s: &Shown) -> AnyElement {
+    fn render_viz_chart(&self, s: &Shown, cx: &mut Context<Self>) -> AnyElement {
         let Some(figure) = &s.figure else { return div().into_any_element() };
         let legend = h_flex().gap_x_4().gap_y_2().flex_wrap().children(figure.legend.iter().map(|l| {
             let swatch = div()
@@ -461,6 +608,9 @@ impl Workspace {
                     .children(
                         s.image.clone().map(|i| div().w_full().aspect_ratio(1. / s.ratio).child(img(i).size_full())),
                     )
+                    .when(s.key.kind == Kind::Migrations && !s.years.is_empty(), |d| {
+                        d.child(self.render_timeline(&s.years, cx))
+                    })
                     .when(!figure.legend.is_empty(), |d| d.child(legend))
                     .when(!figure.caption.is_empty(), |d| {
                         d.child(div().text_xs().text_color(theme::muted()).child(figure.caption.clone()))
