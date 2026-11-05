@@ -99,6 +99,7 @@ gpui_kit::assets::icon_assets!(
         Play,
         Pause,
         Target,
+        SunSnow,
     ]
 );
 

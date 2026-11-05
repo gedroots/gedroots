@@ -397,7 +397,7 @@ mod tests {
         };
         let placed = to_request(&chapter(vec![], vec![viz("Places", None)]), &g).expect("visualization");
         assert_eq!(params(&placed.writing.intro[0]).person.as_deref(), Some("I2"));
-        assert!(to_request(&chapter(vec![], vec![viz("seasons", None)]), &g).unwrap_err().contains("one of fan"));
+        assert!(to_request(&chapter(vec![], vec![viz("weather", None)]), &g).unwrap_err().contains("one of fan"));
         let found = viz("generations", Some("descendants"));
         assert!(to_request(&chapter(vec![], vec![found]), &g).unwrap_err().contains("ancestors only"));
         let mut far = chapter(vec![], vec![text("x")]);

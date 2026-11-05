@@ -169,7 +169,7 @@ mod tests {
         assert_eq!(fan.table.rows.len(), 2);
         assert!(read(&g, &params("longevity", None), 2026).unwrap_err().contains("too little"));
         assert!(read(&g, &params("generations", Some("descendants")), 2026).unwrap_err().contains("ancestors only"));
-        assert!(read(&g, &params("seasons", None), 2026).unwrap_err().contains("fan, places"));
+        assert!(read(&g, &params("weather", None), 2026).unwrap_err().contains("fan, places"));
         assert_eq!(list().visualizations.len(), Kind::ALL.len());
     }
 }

@@ -54,6 +54,12 @@ viz.occupations.title:
 viz.occupations.summary:
   en: The most frequent trades
   fr: Les métiers les plus fréquents
+viz.seasons.title:
+  en: Seasons
+  fr: Saisons
+viz.seasons.summary:
+  en: Births, marriages and deaths by month
+  fr: Naissances, mariages et décès par mois
 
 # Legends and captions.
 viz.other:
@@ -145,6 +151,15 @@ viz.col.age:
 viz.col.marriages:
   en: Marriages
   fr: Mariages
+viz.col.deaths:
+  en: Deaths
+  fr: Décès
+viz.col.month:
+  en: Month
+  fr: Mois
+viz.col.index:
+  en: Index
+  fr: Indice
 viz.col.generation:
   en: Generation
   fr: Génération
@@ -181,3 +196,15 @@ viz.col.same_place:
 viz.col.occupation:
   en: Occupation
   fr: Métier
+viz.seasons.events:
+  en: "%{n} dated to the month"
+  fr: "%{n} datés au mois"
+viz.seasons_caption:
+  en: "Monthly index, corrected for the length of the months: 100 is an average month"
+  fr: "Indice mensuel corrigé de la longueur des mois : 100 correspond à un mois moyen"
+viz.months:
+  en: "January, February, March, April, May, June, July, August, September, October, November, December"
+  fr: "janvier, février, mars, avril, mai, juin, juillet, août, septembre, octobre, novembre, décembre"
+viz.months_initial:
+  en: "J, F, M, A, M, J, J, A, S, O, N, D"
+  fr: "J, F, M, A, M, J, J, A, S, O, N, D"
