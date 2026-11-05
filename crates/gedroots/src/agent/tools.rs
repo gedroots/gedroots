@@ -1,10 +1,12 @@
 //! GEDRoots' MCP tools and the HTTP server that serves them. They read the file; the writing tools,
-//! `propose_act` and `propose_change`, only add a proposal to review in the app, and `plan_research`
-//! / `log_search` write only the research log (`_GR_TASK`), with an undo point.
+//! `propose_act`, `propose_change` and `propose_chapter`, only add a proposal to review in the app
+//! (kept in the file until decided), and `note_research` writes only the research log
+//! (`_GR_TASK`), with an undo point. What the file keeps is the agents' shared memory:
+//! `resume_research` gives any agent the state of the research where the last one left it.
 
 use super::book::{self, Books, ProposeChapterParams, ReadBookParams};
 use super::change::{self, ChangeParams, ChangeProposed};
-use super::propose::{self, Decision, Hypothesis, MatchParams, Pending, ProposeParams};
+use super::propose::{self, Decision, MatchParams, ProposeParams};
 use super::viz::{self as visual, ListVizParams, ReadVizParams, Visualization, Visualizations};
 use super::{Ask, Request, Snapshot};
 use axum::extract::State;
@@ -12,8 +14,9 @@ use axum::http::{StatusCode, header};
 use axum::middleware::Next;
 use axum::response::Response;
 use gedcom::RecordKind;
+use gedcom::agent_proposals::{Outcome, ProposalKind};
 use gedcom::context::FileContext;
-use gedcom::leads::{Goal, Lead, LogEntry, Years};
+use gedcom::leads::{Goal, Lead, LogKind, Years};
 use gedcom::research::{PersonRef, PersonSheet, QualityFilter, QualityReport, current_year};
 use gedcom::research_log::{NewEntry, SearchResult, TaskState, UNKNOWN_AGENT};
 use rmcp::handler::server::wrapper::{Json, Parameters};
@@ -29,14 +32,9 @@ pub struct GedrootsMcp {
     bridge: async_channel::Sender<Ask>,
     /// Decisions of each tree's review page already told to this session's agent.
     told: std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, usize>>>,
+    /// Name the session's agent gave when it connected (`clientInfo`).
+    agent: std::sync::Arc<std::sync::Mutex<String>>,
     prompt_router: rmcp::handler::server::router::prompt::PromptRouter<Self>,
-}
-
-#[derive(Debug, Deserialize, JsonSchema)]
-pub struct TreeParams {
-    /// Tree to work on, as `list_trees` names it, when several are open (default: the one in
-    /// front in GEDRoots).
-    pub tree: Option<String>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -69,77 +67,71 @@ pub struct ContextParams {
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
-pub struct LeadsParams {
+pub struct ResumeParams {
     /// Tree to work on, as `list_trees` names it, when several are open (default: the one in
     /// front in GEDRoots).
     pub tree: Option<String>,
-    /// People to examine, in the syntax of GEDRoots' search: `sosa:1-63` (the root person's
-    /// ancestors over 6 generations, the default), `sosa:1-15 place:manche`, `name:guyot
-    /// born:<1850`, `descendants:@I12@`…
-    pub focus: Option<String>,
-    /// Only this person (id), instead of `focus`.
+    /// One person (id): all their leads and their unions', whatever their state, with their log,
+    /// and the proposals about them. Without it: where the research of the whole tree stands.
     pub person: Option<String>,
-    /// States to return (default: suggested, planned and not_found).
-    pub states: Option<Vec<TaskState>>,
-    /// Maximum number of leads returned (default 50).
+    /// People whose leads to search next, in the syntax of GEDRoots' search: `sosa:1-63` (the root
+    /// person's ancestors over 6 generations, the default), `sosa:1-15 place:manche`,
+    /// `name:guyot born:<1850`, `descendants:@I12@`…
+    pub focus: Option<String>,
+    /// Maximum number of leads to search next (default 20, at most 200).
     pub limit: Option<usize>,
 }
 
+/// What an entry of the research log is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum NoteKind {
+    /// A lead you are about to search: it becomes `planned`, with `text` as the reason.
+    Plan,
+    /// A register, index or database searched, whatever its result.
+    Search,
+    /// A record that may be the one, not tied to the person yet.
+    Clue,
+    /// Where the lead stands as you stop, for whoever takes it up next.
+    Handoff,
+}
+
 #[derive(Debug, Deserialize, JsonSchema)]
-pub struct PlanItem {
+pub struct NoteParams {
+    /// Tree to work on, as `list_trees` names it, when several are open (default: the one in
+    /// front in GEDRoots).
+    pub tree: Option<String>,
+    pub kind: NoteKind,
     /// Person id (for a marriage, either spouse).
     pub person: String,
     pub goal: Goal,
     /// For a marriage of someone with several unions: the spouse's id.
     pub spouse: Option<String>,
-    /// Why this lead, in one sentence (shown to the user).
-    pub reason: String,
-}
-
-#[derive(Debug, Deserialize, JsonSchema)]
-pub struct PlanParams {
-    /// Tree to work on, as `list_trees` names it, when several are open (default: the one in
-    /// front in GEDRoots).
-    pub tree: Option<String>,
-    /// Leads to search, in the order you will search them.
-    pub items: Vec<PlanItem>,
-}
-
-#[derive(Debug, Deserialize, JsonSchema)]
-pub struct LogParams {
-    /// Tree to work on, as `list_trees` names it, when several are open (default: the one in
-    /// front in GEDRoots).
-    pub tree: Option<String>,
-    /// Person id (for a marriage, either spouse).
-    pub person: String,
-    pub goal: Goal,
-    /// For a marriage of someone with several unions: the spouse's id.
-    pub spouse: Option<String>,
-    /// What was searched: archive, register or index, place, and the names tried with their
-    /// spellings (“Decennial tables of Saint-Lô, deaths 1853–1862, MARCHAND, MARCHANT”).
-    pub searched: String,
-    pub result: SearchResult,
+    /// plan: why this lead, in one sentence. search: what was searched, archive, register or index,
+    /// place and the names tried with their spellings (“Decennial tables of Saint-Lô, deaths
+    /// 1853–1862, MARCHAND, MARCHANT”). clue: the record (“Burial of Jean MARCHAND, 4 May 1858,
+    /// Carentan”). handoff: where the lead stands.
+    pub text: String,
+    /// search: found, nothing or partial (a mention or an index entry without the act).
+    pub result: Option<SearchResult>,
     /// First and last year searched.
     pub from_year: Option<i32>,
     pub to_year: Option<i32>,
     /// Place searched, as the tree names it.
     pub place: Option<String>,
-    /// Page of the register or of the act in the archive's viewer.
+    /// Page of the register or of the record in the archive's viewer.
     pub url: Option<String>,
-    /// What you saw: a clue, a person with the same name ruled out, a gap in the registers… For
-    /// a `partial` result, the record found and what speaks for and against it being this person.
+    /// What else you saw: a person of the same name ruled out, a gap in the registers…
     pub note: Option<String>,
+    /// clue: what speaks for it being this person (names, ages, places, relatives).
+    #[serde(rename = "for")]
+    pub evidence_for: Option<String>,
+    /// clue: what speaks against it.
+    pub against: Option<String>,
+    /// handoff: the next search to make, precise enough to make it without asking.
+    pub next: Option<String>,
     /// Nothing left to search for this lead for now: it becomes `not_found`.
     pub finished: Option<bool>,
-}
-
-#[derive(Debug, Deserialize, JsonSchema)]
-pub struct LogReadParams {
-    /// Tree to work on, as `list_trees` names it, when several are open (default: the one in
-    /// front in GEDRoots).
-    pub tree: Option<String>,
-    /// Person id.
-    pub person: String,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -291,7 +283,7 @@ pub struct ProposalId {
     /// Tree to work on, as `list_trees` names it, when several are open (default: the one in
     /// front in GEDRoots).
     pub tree: Option<String>,
-    /// Id of a waiting proposal (`P3`), from `propose_act` or `list_proposals`.
+    /// Id of a waiting proposal (`P3`), from `propose_act` or `resume_research`.
     pub id: String,
 }
 
@@ -308,24 +300,34 @@ pub struct ProposalPerson {
 #[derive(Debug, Serialize, JsonSchema)]
 pub struct WaitingProposal {
     pub id: String,
-    /// What is proposed: "act" (a record found in the archives).
-    pub kind: String,
-    /// GEDCOM tag of the act's event, and its date.
-    pub event: String,
+    pub kind: ProposalKind,
+    /// “Marriage · Johann SCHANDL & Maria RIEDAUER”.
+    pub title: String,
+    pub agent: String,
+    /// When it was sent (GEDCOM date, UTC time).
     pub date: String,
-    /// Reference of the act in its source.
-    pub page: String,
+    /// An act: its people, with the temporary id of those it creates (link it to name them).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub people: Vec<ProposalPerson>,
-    /// What saving it will write, as `propose_act` answered.
+    /// An act: what saving it will write.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub will_write: Vec<String>,
 }
 
+/// A proposal no longer waiting, as the file keeps it.
 #[derive(Debug, Serialize, JsonSchema)]
-pub struct Proposals {
-    /// Waiting for the user in the review page, in its order.
-    pub waiting: Vec<WaitingProposal>,
-    /// What became of the others since GEDRoots started, most recent first.
-    pub decided: Vec<Decision>,
+pub struct DecidedProposal {
+    pub id: String,
+    pub kind: ProposalKind,
+    pub title: String,
+    pub agent: String,
+    pub date: String,
+    pub outcome: Outcome,
+    /// The user's reason, the proposal that replaced it, or why it could not be queued again.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub note: String,
+    /// The people (or families) it is about; once saved, those it created too.
+    pub about: Vec<PersonRef>,
 }
 
 #[derive(Debug, Serialize, JsonSchema)]
@@ -390,38 +392,18 @@ pub struct People {
 }
 
 #[derive(Debug, Serialize, JsonSchema)]
-pub struct Leads {
-    /// Focus used.
-    pub focus: String,
-    pub leads: Vec<Lead>,
-    /// Total number of leads, before the limit.
-    pub total: usize,
-}
-
-#[derive(Debug, Serialize, JsonSchema)]
-pub struct Planned {
-    /// The leads planned, in your order, as saved in the file.
-    pub planned: Vec<Lead>,
-}
-
-#[derive(Debug, Serialize, JsonSchema)]
-pub struct TaskLog {
-    /// “Death of Jean MARCHAND”.
-    pub title: String,
-    pub goal: Goal,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub spouse: Option<PersonRef>,
-    pub state: TaskState,
-    #[serde(skip_serializing_if = "String::is_empty")]
-    pub note: String,
-    pub log: Vec<LogEntry>,
-}
-
-#[derive(Debug, Serialize, JsonSchema)]
-pub struct ResearchLog {
-    pub person: PersonRef,
-    /// Everything noted for this person and their unions, records found included.
-    pub log: Vec<TaskLog>,
+pub struct Resume {
+    /// Leads being worked on, by you or another agent or the user (planned, or with a clue or a
+    /// handoff), last worked on first, each with its whole log: carry on from there.
+    pub in_progress: Vec<Lead>,
+    /// Other leads: for `focus`, those still to search, best first; for a person, all of them.
+    pub other_leads: Vec<Lead>,
+    /// Number of other leads before the limit.
+    pub other_total: usize,
+    /// Proposals waiting for the user in GEDRoots' review page, in its order.
+    pub waiting: Vec<WaitingProposal>,
+    /// What became of the others, most recent first.
+    pub decided: Vec<DecidedProposal>,
 }
 
 /// A lead's owner: the person, or the family for a marriage.
@@ -489,9 +471,26 @@ fn person_opt(s: &Snapshot, id: Option<&str>) -> Result<Option<String>, String> 
     id.map(|x| person_id(s, x)).transpose()
 }
 
-fn capitalize(s: &str) -> String {
-    let mut c = s.chars();
-    c.next().map(|f| f.to_uppercase().chain(c).collect()).unwrap_or_default()
+/// The people of a waiting act, with the temporary id of those it creates.
+fn proposal_people(w: &propose::Waiting) -> Vec<ProposalPerson> {
+    let act = &w.proposal.act;
+    act.participants
+        .iter()
+        .enumerate()
+        .map(|(i, x)| {
+            let (identity, id) = match &x.choice {
+                gedcom::PersonChoice::Link(id) => ("link", Some(id.clone())),
+                gedcom::PersonChoice::Create => ("create", w.temps.get(i).cloned().flatten()),
+                gedcom::PersonChoice::Mention => ("mention", None),
+            };
+            ProposalPerson {
+                role: act.role_label(i).into_owned(),
+                name: x.display_name(),
+                identity: identity.into(),
+                id,
+            }
+        })
+        .collect()
 }
 
 /// A tool's answer, with what the user decided about the proposals since the agent's last call.
@@ -515,7 +514,13 @@ const NEWS: usize = 20;
 #[tool_router]
 impl GedrootsMcp {
     pub fn new(bridge: async_channel::Sender<Ask>) -> Self {
-        Self { bridge, told: Default::default(), prompt_router: Self::prompt_router() }
+        Self { bridge, told: Default::default(), agent: Default::default(), prompt_router: Self::prompt_router() }
+    }
+
+    /// The session's agent, as it named itself, written with what it notes and proposes.
+    fn agent_name(&self) -> String {
+        let name = self.agent.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        if name.trim().is_empty() { UNKNOWN_AGENT.to_string() } else { name }
     }
 
     /// The answer, with the decisions this session has not been told yet.
@@ -616,128 +621,97 @@ impl GedrootsMcp {
     }
 
     #[tool(
-        name = "research_leads",
-        description = "Records still to find, for the people of a focus (default: the root person's ancestors over 6 generations): births, marriages and deaths missing or without a source, and the parents of ancestors at the end of a line. Each lead gives the estimated years and why, the places to search first, where to look (kinds of registers for that country and period, with the registers of that place the file already cites, their archive and call number), its state (suggested, planned, not_found, found, ignored) and the searches already noted, so that you never search the same register twice.",
+        name = "resume_research",
+        description = "Where the research stands, as GEDRoots' file keeps it for every agent: start every session with it, so that you carry on from where you, another agent or the user stopped, without searching anything twice. `in_progress`: the leads being worked on, each with its whole log (registers searched and what they gave, clues with what speaks for and against, the last handoff and its `next` search). `other_leads`: records still to find for the people of `focus` (births, marriages and deaths missing or without a source, parents at the end of a line), each with the estimated years and why, the places to search first, where to look (kinds of registers for that country and period, with the registers of that place the file already cites, their archive and call number). `waiting`: your proposals and other agents' waiting for the user, with the temporary ids of the people they create. `decided`: what became of the others (saved, rejected with the user's reason, opened in record entry, withdrawn, replaced). With `person`: everything about that person instead.",
         annotations(read_only_hint = true, open_world_hint = false)
     )]
-    async fn leads(&self, Parameters(p): Parameters<LeadsParams>) -> Res<Leads> {
-        let tree = p.tree.clone();
-        let s = self.snapshot(tree.as_deref()).await?;
-        let year = current_year();
-        let focus = p.focus.as_deref().map(str::trim).filter(|f| !f.is_empty()).unwrap_or(gedcom::leads::DEFAULT_FOCUS);
-        let all = match person_opt(&s, p.person.as_deref())? {
-            Some(x) => {
-                owner(&s.ged, &x, Goal::Birth, None)?;
-                s.ged.leads_of(&x, year)
-            }
-            None => {
-                if focus.contains("sosa") && s.ged.root().is_none() {
-                    return Err("no root person: choose one in GEDRoots, or give another focus".into());
-                }
-                s.ged.research_leads(focus, year)
-            }
-        };
-        let states = p.states.unwrap_or_else(|| vec![TaskState::Suggested, TaskState::Planned, TaskState::NotFound]);
-        let all: Vec<Lead> = all.into_iter().filter(|l| states.contains(&l.state)).collect();
-        let total = all.len();
-        self.answer(
-            &s,
-            Leads {
-                focus: if p.person.is_some() { String::new() } else { focus.to_string() },
-                leads: all.into_iter().take(p.limit.unwrap_or(50).min(500)).collect(),
-                total,
-            },
-        )
-    }
-
-    #[tool(
-        name = "research_log",
-        description = "Everything noted in the research log of a person and of their unions: planned leads, searches made (found, nothing, partial), records found, ignored leads.",
-        annotations(read_only_hint = true, open_world_hint = false)
-    )]
-    async fn research_log(&self, Parameters(p): Parameters<LogReadParams>) -> Res<ResearchLog> {
+    async fn resume_research(&self, Parameters(p): Parameters<ResumeParams>) -> Res<Resume> {
         let tree = p.tree.clone();
         let s = self.snapshot(tree.as_deref()).await?;
         let g = &s.ged;
-        let x = &person_id(&s, &p.person)?;
-        owner(g, x, Goal::Birth, None)?;
-        let person = g.person_ref(x);
-        let mut log = Vec::new();
-        let mut add = |owner: &str, spouse: Option<PersonRef>| {
-            for t in g.research_tasks(owner) {
-                let title = match (t.goal, &spouse) {
-                    (Goal::Marriage, Some(sp)) => format!("Marriage of {} and {}", person.name, sp.name),
-                    (goal, _) => format!("{} of {}", capitalize(goal.name()), person.name),
+        let year = current_year();
+        let limit = p.limit.unwrap_or(20).min(200);
+        let person = person_opt(&s, p.person.as_deref())?;
+        let mut in_progress = g.leads_in_progress(year);
+        let same = |a: &Lead, b: &Lead| a.goal == b.goal && a.owner() == b.owner();
+        let (other, proposals) = match &person {
+            Some(x) => {
+                owner(g, x, Goal::Birth, None)?;
+                let of = |l: &Lead| &l.person.id == x || l.spouse.as_ref().is_some_and(|sp| &sp.id == x);
+                in_progress.retain(of);
+                // The leads already closed keep their log.
+                let mut all = g.leads_of(x, year);
+                for t in g.research_tasks(x) {
+                    if !all.iter().any(|l| l.goal == t.goal && l.family_id.is_none()) {
+                        let mut l = gedcom::leads::closed_lead(g, x, t.goal, None);
+                        (l.state, l.note, l.log) = (t.state, t.note, t.log);
+                        all.push(l);
+                    }
+                }
+                let mut about: Vec<String> = vec![x.clone()];
+                about.extend(g.individual(x).map(|i| i.fams()).unwrap_or_default().into_iter().map(str::to_string));
+                let proposals: Vec<_> =
+                    g.agent_proposals().into_iter().filter(|pr| pr.about.iter().any(|a| about.contains(a))).collect();
+                (all, proposals)
+            }
+            None => {
+                let focus =
+                    p.focus.as_deref().map(str::trim).filter(|f| !f.is_empty()).unwrap_or(gedcom::leads::DEFAULT_FOCUS);
+                let leads = if focus.contains("sosa") && g.root().is_none() {
+                    Vec::new()
+                } else {
+                    g.research_leads(focus, year)
+                        .into_iter()
+                        .filter(|l| matches!(l.state, TaskState::Suggested | TaskState::NotFound))
+                        .collect()
                 };
-                log.push(TaskLog {
-                    title,
-                    goal: t.goal,
-                    spouse: spouse.clone(),
-                    state: t.state,
-                    note: t.note,
-                    log: t.log,
-                });
+                in_progress.truncate(50);
+                (leads, g.agent_proposals())
             }
         };
-        add(x, None);
-        for f in g.individual(x).map(|i| i.fams()).unwrap_or_default() {
-            let spouse =
-                g.family(f).and_then(|fam| [fam.husband(), fam.wife()].into_iter().flatten().find(|s| *s != x));
-            add(f, spouse.map(|s| g.person_ref(s)));
-        }
-        self.answer(&s, ResearchLog { person, log })
-    }
-
-    #[tool(
-        name = "plan_research",
-        description = "Saves your research plan: the leads you are about to search, in order, each with its reason. They become `planned` in GEDRoots' research log (shown to the user, written at once with an undo point; the tree's data is not changed). Each item must be a current lead of `research_leads`. Then search them one by one and note each search with `log_search`.",
-        annotations(read_only_hint = false, destructive_hint = false, idempotent_hint = true, open_world_hint = false)
-    )]
-    async fn plan_research(&self, Parameters(p): Parameters<PlanParams>) -> Res<Planned> {
-        let tree = p.tree.clone();
-        let s = self.snapshot(tree.as_deref()).await?;
-        let year = current_year();
-        if p.items.is_empty() {
-            return Err("give at least one lead".into());
-        }
-        let mut todo: Vec<(String, Goal, String)> = Vec::new();
-        let mut planned = Vec::new();
-        for (i, item) in p.items.iter().enumerate() {
-            let at = |e: String| format!("item {i}: {e}");
-            let x = &person_id(&s, &item.person).map_err(at)?;
-            let spouse = person_opt(&s, item.spouse.as_deref()).map_err(at)?;
-            let (_, family) = owner(&s.ged, x, item.goal, spouse.as_deref()).map_err(at)?;
-            if item.reason.trim().is_empty() {
-                return Err(format!("item {i}: give the reason of this lead"));
-            }
-            let lead = s.ged.lead(x, item.goal, family.as_deref(), year).map_err(|e| format!("item {i}: {e}"))?;
-            if lead.state == TaskState::Ignored {
-                return Err(format!("item {i}: the user chose to ignore this lead"));
-            }
-            todo.push((lead.owner().to_string(), item.goal, item.reason.trim().to_string()));
-            planned.push((x.to_string(), item.goal, family));
-        }
-        let n = todo.len();
-        self.edit(
-            tree.as_deref(),
-            Box::new(move |g| {
-                for (owner, goal, reason) in &todo {
-                    g.set_research_state(owner, *goal, TaskState::Planned, reason);
+        let other: Vec<Lead> = other.into_iter().filter(|l| !in_progress.iter().any(|i| same(i, l))).collect();
+        let other_total = other.len();
+        let waiting = proposals
+            .iter()
+            .filter(|pr| pr.outcome == Outcome::Waiting)
+            .map(|pr| {
+                let act = s.queue.waiting.iter().find(|w| w.id == pr.id);
+                WaitingProposal {
+                    id: pr.id.clone(),
+                    kind: pr.kind,
+                    title: pr.title.clone(),
+                    agent: pr.agent.clone(),
+                    date: format!("{} {}", pr.date, pr.time).trim().to_string(),
+                    people: act.map(proposal_people).unwrap_or_default(),
+                    will_write: act.map(|w| propose::effects(&w.proposal, g)).unwrap_or_default(),
                 }
-                Ok(())
-            }),
-            crate::tn!("agent.planned", n).into_owned(),
+            })
+            .collect();
+        let decided = proposals
+            .iter()
+            .rev()
+            .filter(|pr| pr.outcome != Outcome::Waiting)
+            .take(30)
+            .map(|pr| DecidedProposal {
+                id: pr.id.clone(),
+                kind: pr.kind,
+                title: pr.title.clone(),
+                agent: pr.agent.clone(),
+                date: format!("{} {}", pr.date, pr.time).trim().to_string(),
+                outcome: pr.outcome,
+                note: pr.note.clone(),
+                about: pr.about.iter().filter(|a| g.individual(a).is_some()).map(|a| g.person_ref(a)).collect(),
+            })
+            .collect();
+        self.answer(
+            &s,
+            Resume { in_progress, other_leads: other.into_iter().take(limit).collect(), other_total, waiting, decided },
         )
-        .await?;
-        let s = self.snapshot(tree.as_deref()).await?;
-        let planned =
-            planned.iter().filter_map(|(x, goal, family)| s.ged.lead(x, *goal, family.as_deref(), year).ok()).collect();
-        self.answer(&s, Planned { planned })
     }
 
     #[tool(
-        name = "log_search",
-        description = "Notes a search you just made for a lead, whatever its result: what you searched (archive, register or index, years, names tried), `found`, `nothing` or `partial`, the years, place and viewer page. `partial` is a lead: a mention, an index entry without the act, or a record that may be about this person but that you cannot tie to them (say in `note` what speaks for and against); it stays in the Research page, never in the tree, until another record settles it. Note every register you looked at, even in vain: the next search (yours or the user's) starts from there, and the estimated years narrow. Written at once in GEDRoots' research log (with an undo point); the tree's data is not changed: a record found is still proposed with `propose_act`. Returns the lead as it is now.",
+        name = "note_research",
+        description = "Writes in the research log of a lead, which GEDRoots keeps in the file for the user and every agent (shown in its Research page; written at once, with an undo point; the tree's data is not changed). `plan`: a lead you are about to search, with why in `text`. `search`: every register, index or database you looked at, whatever its result (`found`, `nothing`, `partial` for a mention or an index entry without the act), with the years, place and viewer page: the next search, yours or anyone's, starts from there and the estimated years narrow. `clue`: a record that may be the one but that you cannot tie to the person (an age that contradicts the tree, two people of the same name): give its viewer page and what speaks `for` and `against`; it waits here until another record settles it, and is never written to the tree. `handoff`: before you stop, where the lead stands and the `next` search to make, so that another agent carries on without asking. A record found is still proposed with `propose_act`. Returns the lead as it is now.",
         annotations(
             read_only_hint = false,
             destructive_hint = false,
@@ -745,52 +719,87 @@ impl GedrootsMcp {
             open_world_hint = false
         )
     )]
-    async fn log_search(&self, Parameters(p): Parameters<LogParams>) -> Res<Lead> {
+    async fn note_research(&self, Parameters(p): Parameters<NoteParams>) -> Res<Lead> {
         let tree = p.tree.clone();
         let s = self.snapshot(tree.as_deref()).await?;
         let year = current_year();
         let x = person_id(&s, &p.person)?;
         let spouse = person_opt(&s, p.spouse.as_deref())?;
         let (own, family) = owner(&s.ged, &x, p.goal, spouse.as_deref())?;
-        let searched = p.searched.trim().to_string();
-        if searched.is_empty() {
-            return Err("say what you searched (register, place, years, names)".into());
+        let text = p.text.trim().to_string();
+        if text.is_empty() {
+            return Err(match p.kind {
+                NoteKind::Plan => "give the reason of this lead in `text`",
+                NoteKind::Search => "say in `text` what you searched (register, place, years, names)",
+                NoteKind::Clue => "describe the record in `text`",
+                NoteKind::Handoff => "say in `text` where the lead stands",
+            }
+            .into());
         }
-        let years = match (p.from_year, p.to_year) {
-            (Some(a), Some(b)) => Some(Years::new(a, b)),
-            (Some(a), None) | (None, Some(a)) => Some(Years::new(a, a)),
-            (None, None) => None,
+        let goal = p.goal;
+        let (apply, message): (super::Apply, String) = match p.kind {
+            NoteKind::Plan => {
+                let lead = s.ged.lead(&x, goal, family.as_deref(), year)?;
+                if lead.state == TaskState::Ignored {
+                    return Err("the user chose to ignore this lead".into());
+                }
+                let own = lead.owner().to_string();
+                (
+                    Box::new(move |g| match g.set_research_state(&own, goal, TaskState::Planned, &text) {
+                        true => Ok(()),
+                        false => Err("could not plan this lead".into()),
+                    }),
+                    crate::tn!("agent.planned", 1).into_owned(),
+                )
+            }
+            kind => {
+                let result = match (kind, p.result) {
+                    (NoteKind::Search, None) => {
+                        return Err("give the search's `result`: found, nothing or partial".into());
+                    }
+                    (_, r) => r,
+                };
+                let years = match (p.from_year, p.to_year) {
+                    (Some(a), Some(b)) => Some(Years::new(a, b)),
+                    (Some(a), None) | (None, Some(a)) => Some(Years::new(a, a)),
+                    (None, None) => None,
+                };
+                let entry = NewEntry {
+                    kind: match kind {
+                        NoteKind::Clue => LogKind::Clue,
+                        NoteKind::Handoff => LogKind::Handoff,
+                        _ => LogKind::Search,
+                    },
+                    text: text.clone(),
+                    result,
+                    years,
+                    place: p.place.unwrap_or_default(),
+                    url: p.url.unwrap_or_default(),
+                    note: p.note.unwrap_or_default(),
+                    evidence_for: p.evidence_for.unwrap_or_default(),
+                    against: p.against.unwrap_or_default(),
+                    next: p.next.unwrap_or_default(),
+                    agent: self.agent_name(),
+                };
+                let finished = p.finished.unwrap_or(false);
+                (
+                    Box::new(move |g| match g.log_research(&own, goal, &entry, finished) {
+                        true => Ok(()),
+                        false => Err("could not note this".into()),
+                    }),
+                    crate::t!("agent.logged", what = text).into_owned(),
+                )
+            }
         };
-        let search = NewEntry {
-            text: searched.clone(),
-            result: Some(p.result),
-            years,
-            place: p.place.unwrap_or_default(),
-            url: p.url.unwrap_or_default(),
-            note: p.note.unwrap_or_default(),
-            agent: super::last_client().map(|(n, _)| n).unwrap_or_else(|| UNKNOWN_AGENT.to_string()),
-            ..Default::default()
-        };
-        let (goal, finished) = (p.goal, p.finished.unwrap_or(false));
-        self.edit(
-            tree.as_deref(),
-            Box::new(move |g| match g.log_research(&own, goal, &search, finished) {
-                true => Ok(()),
-                false => Err("could not note this search".into()),
-            }),
-            crate::t!("agent.logged", what = searched).into_owned(),
-        )
-        .await?;
+        self.edit(tree.as_deref(), apply, message).await?;
         let s = self.snapshot(tree.as_deref()).await?;
-        match s.ged.lead(&x, p.goal, family.as_deref(), year) {
+        match s.ged.lead(&x, goal, family.as_deref(), year) {
             Ok(lead) => self.answer(&s, lead),
             // The record is already cited: the lead is closed, its log stays.
             Err(_) => {
-                let mut lead = gedcom::leads::closed_lead(&s.ged, &x, p.goal, family.as_deref());
-                if let Some(t) = s.ged.research_task(lead.owner(), p.goal) {
-                    lead.state = t.state;
-                    lead.note = t.note;
-                    lead.log = t.log;
+                let mut lead = gedcom::leads::closed_lead(&s.ged, &x, goal, family.as_deref());
+                if let Some(t) = s.ged.research_task(lead.owner(), goal) {
+                    (lead.state, lead.note, lead.log) = (t.state, t.note, t.log);
                 }
                 self.answer(&s, lead)
             }
@@ -979,65 +988,20 @@ impl GedrootsMcp {
     async fn propose(&self, Parameters(p): Parameters<ProposeParams>) -> Res<Proposed> {
         let tree = p.tree.clone();
         let s = self.snapshot(tree.as_deref()).await?;
-        let replaces = p.replaces.as_deref().map(str::trim).filter(|r| !r.is_empty()).map(str::to_string);
-        if let Some(r) = &replaces
-            && !s.queue.waiting.iter().any(|w| &w.id == r)
-        {
-            return Err(match s.queue.decided.iter().rev().find(|d| &d.id == r) {
-                Some(_) => format!("proposal {r} is no longer waiting for review: call list_proposals"),
-                None => format!("no proposal {r}: call list_proposals"),
-            });
-        }
-        // Checked against the tree with the other waiting proposals saved.
-        let h = Hypothesis::new(&s.ged, &s.queue, replaces.as_deref());
-        let mut proposal = propose::to_proposal(&p)?;
-        let temps = h.resolve(&mut proposal, &s.ged)?;
-        proposal.complete(&h.ged);
-        proposal.check(&h.ged)?;
-        propose::check_identities(&proposal, &propose::ruled_out(&p), &h)?;
-        // As the review page will show it: against the tree, a person another proposal creates is
-        // created by this one too.
-        h.unresolve(&mut proposal, &temps);
-        let will_write = propose::effects(&proposal, &s.ged);
-        let original =
-            p.file.as_ref().map(|f| std::path::PathBuf::from(f.trim())).filter(|f| !f.as_os_str().is_empty());
-        // An act found online is kept twice: its image (downloaded file) and its web page.
-        if original.is_none() && p.url.as_deref().is_some_and(|u| !u.trim().is_empty()) {
-            return Err("give the downloaded image or PDF of the act in `file` too: GEDRoots keeps both \
-                        the act's image and its web page (`url`)"
-                .to_string());
-        }
-        let prepared = match &original {
-            Some(path) => {
-                let (path, page, images) = (path.clone(), p.pdf_page, propose::prefers_images(&s.ged));
-                let prepared = tokio::task::spawn_blocking(move || {
-                    propose::prepare_file(&path, page, images, &propose::cache_dir())
-                })
-                .await
-                .map_err(|e| e.to_string())??;
-                Some(prepared)
-            }
-            None => None,
-        };
-        let (image, preview) = match prepared {
-            Some(p) => (Some(p.file), Some(p.preview)),
-            None => (None, None),
-        };
-        propose::attach(&mut proposal, image.as_deref());
-        let people: Vec<(String, String)> = (0..proposal.act.participants.len())
-            .map(|i| (proposal.act.role_label(i).into_owned(), proposal.act.participants[i].display_name()))
-            .collect();
-        let remarks = p.remarks.as_deref().unwrap_or("").trim().to_string();
-        let pending = Pending { proposal, original, pdf_page: p.pdf_page, image, preview, temps, replaces, remarks };
+        let agent = self.agent_name();
+        let (ged, queue) = (s.ged.clone(), s.queue.clone());
+        let built = tokio::task::spawn_blocking(move || propose::build(&p, &ged, &queue, &agent))
+            .await
+            .map_err(|e| e.to_string())??;
         let (tx, rx) = tokio::sync::oneshot::channel();
-        self.send(tree.as_deref(), Request::Propose(Box::new(pending), tx))
+        self.send(tree.as_deref(), Request::Propose(Box::new(built.pending), tx))
             .await
             .map_err(|_| "GEDRoots is closing".to_string())?;
         let queued = rx.await.map_err(|_| "GEDRoots is closing".to_string())??;
         let new_people = queued
             .temps
             .iter()
-            .zip(people)
+            .zip(built.people)
             .filter_map(|(t, (role, name))| Some(NewPerson { id: t.clone()?, role, name }))
             .collect();
         self.answer(
@@ -1046,57 +1010,10 @@ impl GedrootsMcp {
                 id: queued.id,
                 status: "waiting for review".into(),
                 waiting: queued.waiting,
-                will_write,
+                will_write: built.will_write,
                 new_people,
             },
         )
-    }
-
-    #[tool(
-        name = "list_proposals",
-        description = "The proposals waiting in GEDRoots' review page (id, act, people with their temporary ids, what each will write) and what became of the others: saved, rejected, opened in record entry by the user, withdrawn or replaced. Call it before proposing again, to correct a waiting proposal (propose_act with `replaces`) rather than send it twice.",
-        annotations(read_only_hint = true, open_world_hint = false)
-    )]
-    async fn list_proposals(&self, Parameters(p): Parameters<TreeParams>) -> Res<Proposals> {
-        let tree = p.tree.clone();
-        let s = self.snapshot(tree.as_deref()).await?;
-        let waiting = s
-            .queue
-            .waiting
-            .iter()
-            .map(|w| {
-                let act = &w.proposal.act;
-                let people = act
-                    .participants
-                    .iter()
-                    .enumerate()
-                    .map(|(i, x)| {
-                        let (identity, id) = match &x.choice {
-                            gedcom::PersonChoice::Link(id) => ("link", Some(id.clone())),
-                            gedcom::PersonChoice::Create => ("create", w.temps.get(i).cloned().flatten()),
-                            gedcom::PersonChoice::Mention => ("mention", None),
-                        };
-                        ProposalPerson {
-                            role: act.role_label(i).into_owned(),
-                            name: x.display_name(),
-                            identity: identity.into(),
-                            id,
-                        }
-                    })
-                    .collect();
-                WaitingProposal {
-                    id: w.id.clone(),
-                    kind: "act".into(),
-                    event: act.event.clone(),
-                    date: act.date.clone(),
-                    page: act.page.clone(),
-                    people,
-                    will_write: propose::effects(&w.proposal, &s.ged),
-                }
-            })
-            .collect();
-        let decided = s.queue.decided.iter().rev().take(50).cloned().collect();
-        self.answer(&s, Proposals { waiting, decided })
     }
 
     #[tool(
@@ -1115,7 +1032,7 @@ impl GedrootsMcp {
 
     #[tool(
         name = "propose_change",
-        description = "Proposes a change for a Data Quality issue (`quality_issues`), or a correction you read in a document. Nothing is written: it waits in GEDRoots' review page, where the user saves or rejects it. `fix` applies the Quality page's own fix (issues with `automatic_fix`). `edit` changes the records the issue is about, with the edits the issue lists in `edits` (a date read in the act, the sex of a spouse, a place's coordinates, a citation of an existing source…). `hide` keeps the issue as right, for instance a marriage really celebrated very young, and saves the reason with it. For a `possible_duplicate`: `merge` when the two records are the same person (read both with `read_record` first; `choices` says, for each fact of the issue's `merge.conflicts`, whose value is right), `hide` when they are two people. For a `possible_duplicate_place`: `merge` when the two names are one place (`choices` gives, for each level of `merge.conflicts` and `MAP` for coordinates, the place, `merge.keep` or `merge.other`, whose value is right; the merged place replaces both everywhere, with their localities), `hide` when they are two places. The user reviews a merge in GEDRoots' merge window. Give `reason` (what you read) and, when you can, `evidence`. Never hide an issue only to clear the list. It is refused, with the reason, if the edit is not one the issue allows, touches another record, or does not make the issue go away: GEDRoots applies it to a copy first. The answer lists the issues the change would create. Without `issue`, it is a correction of any record: a given name or surname misread in an earlier proposal or wrong in the tree (`set_name`; `add_name` keeps a variant spelling as another name), an occupation or other fact, its value, date, place or street address (`set_event` on an existing one, `add_event` for a new one), a place's name everywhere it is used or its coordinates (`rename_place`, `set_coordinates`, choosing with `locate_place`), the repository of a source (`set_repository`: an existing one, or one to create), a sex, a citation, a wrong family link (`unlink_relative`, then `link_relative` to the right person; `set_pedigree` for an adoption), a note on a person or an event (`add_note`, `set_note`: a comment on facts already in the tree, never a research lead, which goes to `log_search`), the age at an event, its cause and its witnesses or godparents (`set_age`, `cause` in `set_event`, `add_associate`, `remove_associate`), a media on a record or an event (`attach_media`, `detach_media`); `edit` only, with `reason` and `evidence` (the source, the viewer page or a quote of the document).",
+        description = "Proposes a change for a Data Quality issue (`quality_issues`), or a correction you read in a document. Nothing is written: it waits in GEDRoots' review page, where the user saves or rejects it. `fix` applies the Quality page's own fix (issues with `automatic_fix`). `edit` changes the records the issue is about, with the edits the issue lists in `edits` (a date read in the act, the sex of a spouse, a place's coordinates, a citation of an existing source…). `hide` keeps the issue as right, for instance a marriage really celebrated very young, and saves the reason with it. For a `possible_duplicate`: `merge` when the two records are the same person (read both with `read_record` first; `choices` says, for each fact of the issue's `merge.conflicts`, whose value is right), `hide` when they are two people. For a `possible_duplicate_place`: `merge` when the two names are one place (`choices` gives, for each level of `merge.conflicts` and `MAP` for coordinates, the place, `merge.keep` or `merge.other`, whose value is right; the merged place replaces both everywhere, with their localities), `hide` when they are two places. The user reviews a merge in GEDRoots' merge window. Give `reason` (what you read) and, when you can, `evidence`. Never hide an issue only to clear the list. It is refused, with the reason, if the edit is not one the issue allows, touches another record, or does not make the issue go away: GEDRoots applies it to a copy first. The answer lists the issues the change would create. Without `issue`, it is a correction of any record: a given name or surname misread in an earlier proposal or wrong in the tree (`set_name`; `add_name` keeps a variant spelling as another name), an occupation or other fact, its value, date, place or street address (`set_event` on an existing one, `add_event` for a new one), a place's name everywhere it is used or its coordinates (`rename_place`, `set_coordinates`, choosing with `locate_place`), the repository of a source (`set_repository`: an existing one, or one to create), a sex, a citation, a wrong family link (`unlink_relative`, then `link_relative` to the right person; `set_pedigree` for an adoption), a note on a person or an event (`add_note`, `set_note`: a comment on facts already in the tree, never a research lead, which goes to `note_research`), the age at an event, its cause and its witnesses or godparents (`set_age`, `cause` in `set_event`, `add_associate`, `remove_associate`), a media on a record or an event (`attach_media`, `detach_media`); `edit` only, with `reason` and `evidence` (the source, the viewer page or a quote of the document).",
         annotations(
             read_only_hint = false,
             destructive_hint = false,
@@ -1125,14 +1042,15 @@ impl GedrootsMcp {
     )]
     async fn propose_change(&self, Parameters(p): Parameters<ChangeParams>) -> Res<ChangeProposed> {
         let tree = p.tree.clone();
-        let req = change::to_request(&p)?;
+        let mut req = change::to_request(&p)?;
+        req.agent = self.agent_name();
         let (tx, rx) = tokio::sync::oneshot::channel();
         self.send(tree.as_deref(), Request::ProposeChange(Box::new(req), tx))
             .await
             .map_err(|_| "GEDRoots is closing".to_string())?;
-        let (waiting, new_issues) = rx.await.map_err(|_| "GEDRoots is closing".to_string())??;
+        let (id, waiting, new_issues) = rx.await.map_err(|_| "GEDRoots is closing".to_string())??;
         let s = self.snapshot(tree.as_deref()).await?;
-        self.answer(&s, ChangeProposed { status: "waiting for review".into(), waiting, new_issues })
+        self.answer(&s, ChangeProposed { id, status: "waiting for review".into(), waiting, new_issues })
     }
 
     #[tool(
@@ -1154,14 +1072,15 @@ impl GedrootsMcp {
     async fn propose_chapter(&self, Parameters(p): Parameters<ProposeChapterParams>) -> Res<ChapterProposed> {
         let tree = p.tree.clone();
         let s = self.snapshot(tree.as_deref()).await?;
-        let req = book::to_request(&p, &s.ged)?;
+        let mut req = book::to_request(&p, &s.ged)?;
+        req.agent = self.agent_name();
         let (tx, rx) = tokio::sync::oneshot::channel();
         self.send(tree.as_deref(), Request::ProposeChapter(Box::new(req), tx))
             .await
             .map_err(|_| "GEDRoots is closing".to_string())?;
-        let waiting = rx.await.map_err(|_| "GEDRoots is closing".to_string())??;
+        let (id, waiting) = rx.await.map_err(|_| "GEDRoots is closing".to_string())??;
         let s = self.snapshot(tree.as_deref()).await?;
-        self.answer(&s, ChapterProposed { status: "waiting for review".into(), waiting })
+        self.answer(&s, ChapterProposed { id, status: "waiting for review".into(), waiting })
     }
 
     #[tool(
@@ -1187,45 +1106,24 @@ impl GedrootsMcp {
 }
 
 /// Instructions given to the agent on connection.
-const INSTRUCTIONS: &str = "GEDRoots is a genealogy app. These tools read the GEDCOM 7 family tree open in \
-the app. Each window shows one tree: the tools work on the window in front, or on the tree given as \
-`tree` (`list_trees` lists the open trees; use it when the user names a tree). They never change its data: `propose_act` and `propose_change` only add \
-a proposal to the app's review page, where the user compares it with the tree before saving it. Only \
-the research log (`plan_research`, `log_search`: what you plan and search, even in vain) is written \
-at once. \
-Start with `file_context`: it shows how this file is written (the user's own conventions, source \
-titles, names, event types), so that what you propose looks like the rest of the file: write in its language, even when the act \
-is in another one, and reuse its wording (only the transcription keeps the act's language and spelling). \
-As genealogists do, a woman is recorded under her maiden name, even when an act names her by her \
-husband's: look for her under both, never create her again under her married name. Ids (I12, F3, S4…) are \
-only for passing between tools: never show them to the user. To look for records (birth, marriage, \
-death acts), call `research_leads`: each lead gives the estimated years, the places, where to look \
-and the searches already made; `person_sheet` gives the person's dates, places and sources. Note \
-every search with `log_search`, found or not. When you find an act, read it, check it matches the person, \
-call `match_people` to know who each person named is in the tree (link them, create them or only \
-mention them), `search_sources` to reuse the source or repository (a new source may create its \
-repository when the tree has none for that archive), `locate_place` for a place the tree has not \
-located (choose the homonym close to the family's other events), then `propose_act`. Propose each \
-act as soon as you have read it, without waiting to be sure or gathering several: give your honest \
-`quality` (the GEDCOM quality of the evidence, 0 to 3) and your doubts in `remarks`; the user decides. \
-A record you cannot tie to the person (an age that contradicts the tree, two people of the same name) \
-is a lead, not an act: note it with `log_search` as `partial`, with its viewer page and what speaks for \
-and against in `note`; it waits in GEDRoots' Research page and nothing is written to the tree. Never \
-write a lead as a note in the tree. A person \
-that a waiting proposal creates has a temporary id (new-3): link it to name them again. To correct a \
-waiting act, propose it again with `replaces`; `list_proposals` says which are still waiting. \
-Every answer carries `news` when the user saved, rejected or edited a proposal since your last call: \
-a saved proposal gives the ids its new people now have in the tree, to link from then on. \
-The prompts `research_session`, `find_record` and `read_record` give the full method. To improve the data, `quality_issues` lists \
-the tree's Data Quality issues and `propose_change` fixes, edits or hides one; the prompt \
-`review_quality` gives the method. A mistake in the tree that no issue reports (a given name you \
-misread in a proposal the user has saved, a name the act spells otherwise, a wrong date) is \
-corrected with `propose_change` without `issue`: never leave it for the user to fix by hand. \
-Family books (`read_book`) are typeset by GEDRoots from the tree; you write their narratives, \
-historical context and hypotheses with `propose_chapter`, one chapter at a time; the prompt \
-`write_book` gives the method. `list_visualizations` and `read_visualization` give the data of the \
-charts GEDRoots draws (origins, migrations, lifespans, longevity, occupations), which you can place \
-in a chapter with `propose_chapter`.";
+const INSTRUCTIONS: &str = "GEDRoots is a genealogy app; these tools read the GEDCOM 7 family tree open in \
+it (the window in front, or `tree`, from `list_trees`). They never change its data: what you find becomes \
+a proposal (`propose_act`, `propose_change`, `propose_chapter`) that the user reviews in GEDRoots before \
+saving. Only the research log (`note_research`) is written at once. \
+The file is the research's memory, shared by every agent and the user: you need no memory of your own. \
+Start each session with `resume_research`: the leads in progress with everything searched, the clues \
+and the last handoff, the records still to find, and what became of every proposal (saved, rejected \
+with the user's reason). Carry on from there, never search a register twice, and before you stop, note \
+a `handoff` on each lead you worked on, with the `next` search. \
+Call `file_context` before proposing, and write like the rest of the file (its language, source titles, \
+name forms, event types). Note every search with `note_research`, found or not. A record you cannot tie \
+to the person is a `clue` (with what speaks for and against), never a note in the tree. Propose each act \
+as soon as you have read it, with your honest `quality` and your doubts in `remarks`: the user decides. \
+Ids (I12, F3…) are only for passing between tools: never show them to the user. A person a waiting \
+proposal creates has a temporary id (new-3): link it to name them again. Every answer carries `news` \
+when the user decided on a proposal since your last call. The prompts give the method: `research` \
+(find records), `read_record` (one record), `review_quality` (Data Quality issues), `write_book` \
+(family books).";
 
 /// The file's context, also offered as a resource for clients that let the user attach one.
 const CONTEXT_URI: &str = "gedroots://file/context";
@@ -1233,6 +1131,8 @@ const CONTEXT_URI: &str = "gedroots://file/context";
 /// A chapter sent for review.
 #[derive(Debug, Serialize, JsonSchema)]
 pub struct ChapterProposed {
+    /// Id of the proposal (`P3`), as `resume_research` lists it.
+    pub id: String,
     pub status: String,
     /// Proposals waiting for review.
     pub waiting: usize,
@@ -1286,7 +1186,9 @@ impl ServerHandler for GedrootsMcp {
     ) -> Result<rmcp::model::InitializeResult, rmcp::ErrorData> {
         // The “AI Agents” window shows the last agent connected.
         let info = &request.client_info;
-        super::note_client(info.title.as_deref().filter(|t| !t.is_empty()).unwrap_or(&info.name));
+        let name = info.title.as_deref().filter(|t| !t.is_empty()).unwrap_or(&info.name);
+        super::note_client(name);
+        *self.agent.lock().unwrap_or_else(|e| e.into_inner()) = name.to_string();
         context.peer.set_peer_info(request.clone());
         self.negotiate_initialize(&request)
     }
@@ -1436,7 +1338,7 @@ mod tests {
         let (_, _, list) =
             post(port, "secret", Some(&sid), serde_json::json!({"jsonrpc":"2.0","id":2,"method":"tools/list"}));
         let tools = list["result"]["tools"].as_array().expect("tools");
-        assert_eq!(tools.len(), 20);
+        assert_eq!(tools.len(), 17);
         // The proposals only queue a proposal; the research tools write the research log only.
         let mut writers: Vec<String> = tools
             .iter()
@@ -1444,10 +1346,7 @@ mod tests {
             .map(|t| t["name"].as_str().unwrap_or_default().to_string())
             .collect();
         writers.sort();
-        assert_eq!(
-            writers,
-            ["log_search", "plan_research", "propose_act", "propose_change", "propose_chapter", "withdraw_proposal"]
-        );
+        assert_eq!(writers, ["note_research", "propose_act", "propose_change", "propose_chapter", "withdraw_proposal"]);
         let (_, _, call) = post(
             port,
             "secret",
@@ -1490,48 +1389,84 @@ mod tests {
             )
             .2
         };
-        let leads = call(20, "research_leads", serde_json::json!({}));
-        let goals: Vec<_> = leads["result"]["structuredContent"]["leads"]
+        let resumed = call(20, "resume_research", serde_json::json!({}));
+        let goals: Vec<_> = resumed["result"]["structuredContent"]["other_leads"]
             .as_array()
             .expect("leads")
             .iter()
             .map(|l| l["goal"].as_str().unwrap_or_default().to_string())
             .collect();
-        assert_eq!(goals, ["birth", "death", "parents"], "{leads}");
+        assert_eq!(goals, ["birth", "death", "parents"], "{resumed}");
         let plan = call(
             21,
-            "plan_research",
-            serde_json::json!({"items":[{"person":"I1","goal":"death","reason":"Born in 1850 in Rennes"}]}),
+            "note_research",
+            serde_json::json!({"kind":"plan","person":"I1","goal":"death","text":"Born in 1850 in Rennes"}),
         );
-        assert_eq!(plan["result"]["structuredContent"]["planned"][0]["state"], "planned", "{plan}");
+        assert_eq!(plan["result"]["structuredContent"]["state"], "planned", "{plan}");
         let logged = call(
             22,
-            "log_search",
-            serde_json::json!({"person":"I1","goal":"death",
-            "searched":"Decennial tables of Rennes, deaths, MARCHAND","result":"nothing","from_year":1863,"to_year":1872}),
+            "note_research",
+            serde_json::json!({"kind":"search","person":"I1","goal":"death",
+            "text":"Decennial tables of Rennes, deaths, MARCHAND","result":"nothing","from_year":1863,"to_year":1872}),
         );
         let lead = &logged["result"]["structuredContent"];
         assert_eq!(lead["log"][0]["result"], "nothing", "{logged}");
-        assert!(lead["log"][0]["agent"].is_string());
-        let log = call(23, "research_log", serde_json::json!({"person":"I1"}));
-        assert_eq!(log["result"]["structuredContent"]["log"][0]["title"], "Death of Jean MARCHAND", "{log}");
-        // A sourced or unknown record cannot be planned.
+        assert_eq!(lead["log"][0]["agent"], "test");
+        let handoff = call(
+            23,
+            "note_research",
+            serde_json::json!({"kind":"handoff","person":"I1","goal":"death",
+            "text":"Rennes tables searched in vain","next":"Saint-Malo deaths 1863-1872"}),
+        );
+        assert_eq!(handoff["result"]["structuredContent"]["log"][1]["kind"], "handoff", "{handoff}");
+        // A search needs its result; a sourced or unknown record cannot be planned.
         let refused =
-            call(24, "plan_research", serde_json::json!({"items":[{"person":"I1","goal":"marriage","reason":"x"}]}));
+            call(24, "note_research", serde_json::json!({"kind":"search","person":"I1","goal":"death","text":"x"}));
         assert_eq!(refused["result"]["isError"], true, "{refused}");
+        let refused =
+            call(25, "note_research", serde_json::json!({"kind":"plan","person":"I1","goal":"marriage","text":"x"}));
+        assert_eq!(refused["result"]["isError"], true, "{refused}");
+        // Another agent, in a session of its own, carries on from the file alone.
+        let init = serde_json::json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{
+            "protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"codex","version":"1"}}});
+        let (_, other, _) = post(port, "secret", None, init);
+        let other = other.expect("session");
+        post(port, "secret", Some(&other), serde_json::json!({"jsonrpc":"2.0","method":"notifications/initialized"}));
+        let (_, _, resumed) = post(
+            port,
+            "secret",
+            Some(&other),
+            serde_json::json!({"jsonrpc":"2.0","id":26,"method":"tools/call",
+            "params":{"name":"resume_research","arguments":{}}}),
+        );
+        let state = &resumed["result"]["structuredContent"];
+        assert_eq!(state["in_progress"][0]["goal"], "death", "{resumed}");
+        assert_eq!(state["in_progress"][0]["log"][1]["next"], "Saint-Malo deaths 1863-1872");
+        assert!(state["other_leads"].as_array().is_some_and(|l| l.iter().all(|l| l["goal"] != "death")));
+        let (_, _, clue) = post(
+            port,
+            "secret",
+            Some(&other),
+            serde_json::json!({"jsonrpc":"2.0","id":27,"method":"tools/call",
+            "params":{"name":"note_research","arguments":{"kind":"clue","person":"I1","goal":"death",
+            "text":"Burial of Jean MARCHAND, 1868, Saint-Malo","for":"Same name","against":"Aged 30"}}}),
+        );
+        let entry = &clue["result"]["structuredContent"]["log"][2];
+        assert_eq!((entry["kind"].as_str(), entry["agent"].as_str()), (Some("clue"), Some("codex")), "{clue}");
+        assert_eq!(entry["for"], "Same name");
         // The working methods are served as prompts, with or without an argument.
         let (_, _, prompts) =
             post(port, "secret", Some(&sid), serde_json::json!({"jsonrpc":"2.0","id":4,"method":"prompts/list"}));
         let names: Vec<_> =
             prompts["result"]["prompts"].as_array().expect("prompts").iter().map(|p| p["name"].clone()).collect();
-        assert_eq!(names.len(), 5, "{prompts}");
-        assert!(names.contains(&"find_record".into()) && names.contains(&"read_record".into()));
+        assert_eq!(names.len(), 4, "{prompts}");
+        assert!(names.contains(&"research".into()) && names.contains(&"read_record".into()));
         let (_, _, got) = post(
             port,
             "secret",
             Some(&sid),
             serde_json::json!({"jsonrpc":"2.0","id":5,"method":"prompts/get",
-            "params":{"name":"find_record","arguments":{"person":"Jean MARCHAND","event":"birth"}}}),
+            "params":{"name":"research","arguments":{"person":"Jean MARCHAND","event":"birth"}}}),
         );
         let body = got["result"]["messages"][0]["content"]["text"].as_str().expect("text");
         assert!(body.contains("the birth of Jean MARCHAND") && !body.contains("{target}"), "{got}");

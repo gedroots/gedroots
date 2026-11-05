@@ -278,6 +278,11 @@ impl LogEntry {
     pub fn by_agent(&self) -> bool {
         !self.agent.is_empty()
     }
+
+    /// The entry's day, sortable.
+    pub fn date_key(&self) -> (i32, u8, u8) {
+        crate::Date::parse(&self.date).sort_key()
+    }
 }
 
 /// How a person was seen alive, for [`Reason::Seen`].
@@ -954,6 +959,37 @@ impl Gedcom {
             )),
             _ => Err("this person has several unions: give the spouse".to_string()),
         }
+    }
+
+    /// The leads being worked on, anywhere in the tree, last worked on first: planned, or with a
+    /// clue or a handoff, neither found nor ignored, and whose record is not cited yet. Their log
+    /// tells where each one stands.
+    pub fn leads_in_progress(&self, this_year: i32) -> Vec<Lead> {
+        let mut out: Vec<Lead> = Vec::new();
+        for r in &self.records {
+            let Some(owner) = r.xref.as_deref() else { continue };
+            for task in self.research_tasks(owner) {
+                let open = !matches!(task.state, TaskState::Found | TaskState::Ignored);
+                let worked = task.state == TaskState::Planned
+                    || task.log.iter().any(|e| matches!(e.kind, LogKind::Clue | LogKind::Handoff));
+                if !open || !worked {
+                    continue;
+                }
+                let (person, family) = match self.family(owner) {
+                    Some(f) => match f.husband().or(f.wife()) {
+                        Some(p) => (p.to_string(), Some(owner.to_string())),
+                        None => continue,
+                    },
+                    None => (owner.to_string(), None),
+                };
+                let Ok(mut lead) = self.lead(&person, task.goal, family.as_deref(), this_year) else { continue };
+                (lead.state, lead.note, lead.log) = (task.state, task.note, task.log);
+                out.push(lead);
+            }
+        }
+        let last = |l: &Lead| l.log.last().map(|e| (e.date_key(), e.time.clone())).unwrap_or_default();
+        out.sort_by_key(|l| std::cmp::Reverse(last(l)));
+        out
     }
 
     fn person_leads(&self, ctx: &Context, x: &str, families_done: &mut std::collections::HashSet<String>) -> Vec<Lead> {

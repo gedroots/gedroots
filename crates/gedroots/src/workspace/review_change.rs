@@ -17,6 +17,8 @@ use std::collections::BTreeSet;
 
 /// A change and the issues it would create.
 pub(super) struct ChangeItem {
+    /// Given to the agent (`P3`), kept in the file with what became of it.
+    pub(super) id: String,
     pub(super) change: QualityChange,
     new_issues: Vec<String>,
 }
@@ -93,7 +95,7 @@ impl Workspace {
         &mut self,
         req: ChangeRequest,
         cx: &mut Context<Self>,
-    ) -> Result<(usize, Vec<String>), String> {
+    ) -> Result<(String, usize, Vec<String>), String> {
         if self.doc.is_none() {
             return Err("no file is open in GEDRoots".into());
         }
@@ -126,17 +128,45 @@ impl Workspace {
             change.check(&self.doc.as_ref().unwrap().ged, &rerun)?
         };
         let new_issues: Vec<String> = new.into_iter().map(|i| i.message).collect();
-        let item = ChangeItem { change, new_issues: new_issues.clone() };
+        let requeued = req.id.is_some();
+        let id = match req.id {
+            Some(id) => id,
+            None => self.next_proposal_id(),
+        };
+        let mut about: Vec<String> =
+            change.issue.iter().flat_map(|i| [i.xref.clone()].into_iter().chain(i.related.clone())).collect();
+        if let Action::Edit(edits) = &change.action {
+            about.extend(edits.iter().filter_map(|e| e.record()).map(str::to_string));
+        }
+        about.dedup();
+        let title = change.title(&self.doc.as_ref().unwrap().ged);
+        let data = serde_json::json!({
+            "tool": "propose_change",
+            "params": serde_json::from_str::<serde_json::Value>(&req.request).unwrap_or_default(),
+        });
+        let kept = self.doc.as_ref().and_then(|d| d.ged.agent_proposal(&id)).unwrap_or_default();
+        self.keep_proposal(gedcom::agent_proposals::StoredProposal {
+            id: id.clone(),
+            kind: gedcom::agent_proposals::ProposalKind::Change,
+            title,
+            about,
+            agent: req.agent,
+            data: data.to_string(),
+            ..kept
+        });
+        let item = ChangeItem { id: id.clone(), change, new_issues: new_issues.clone() };
         let single = ChangeGroup { items: vec![item], excluded: BTreeSet::new() };
         match single.batch().and_then(|code| self.review.changes.iter_mut().find(|g| g.batch() == Some(code))) {
             Some(group) => group.items.extend(single.items),
             None => self.review.changes.push(single),
         }
         let n = self.review_count();
-        self.set_status(crate::tn!("review.change_received", n), false);
+        if !requeued {
+            self.set_status(crate::tn!("review.change_received", n), false);
+        }
         self.quality.stale = true;
         cx.notify();
-        Ok((n, new_issues))
+        Ok((id, n, new_issues))
     }
 
     /// The displayed change group, when the selection is past the acts.
@@ -145,8 +175,15 @@ impl Workspace {
         (i < self.review.changes.len()).then_some(i)
     }
 
-    pub(super) fn take_change(&mut self, i: usize) -> ChangeGroup {
+    /// Removes a row, recording in the file what became of its changes (the unchecked fixes of a
+    /// saved group are rejected).
+    pub(super) fn take_change(&mut self, i: usize, outcome: gedcom::agent_proposals::Outcome) -> ChangeGroup {
         let group = self.review.changes.remove(i);
+        for (k, item) in group.items.iter().enumerate() {
+            let rejected = outcome == gedcom::agent_proposals::Outcome::Saved && group.excluded.contains(&k);
+            let o = if rejected { gedcom::agent_proposals::Outcome::Rejected } else { outcome };
+            self.decide_proposal(&item.id, o, "");
+        }
         let total = self.review.total();
         self.review.sel = self.review.sel.min(total.saturating_sub(1));
         if total == 0 {
@@ -161,7 +198,7 @@ impl Workspace {
         let same =
             |c: &ChangeItem| c.change.merge_pair().is_some_and(|(x, y)| (x == a && y == b) || (x == b && y == a));
         while let Some(i) = self.review.changes.iter().position(|g| g.items.iter().any(same)) {
-            self.take_change(i);
+            self.take_change(i, gedcom::agent_proposals::Outcome::Saved);
         }
     }
 
@@ -171,12 +208,12 @@ impl Workspace {
         let same =
             |c: &ChangeItem| c.change.place_pair().is_some_and(|(x, y)| (x == a && y == b) || (x == b && y == a));
         while let Some(i) = self.review.changes.iter().position(|g| g.items.iter().any(same)) {
-            self.take_change(i);
+            self.take_change(i, gedcom::agent_proposals::Outcome::Saved);
         }
     }
 
     pub(super) fn reject_change(&mut self, i: usize, cx: &mut Context<Self>) {
-        self.take_change(i);
+        self.take_change(i, gedcom::agent_proposals::Outcome::Rejected);
         self.set_status(t!("review.rejected"), false);
         cx.notify();
     }
@@ -212,11 +249,13 @@ impl Workspace {
             cx.notify();
             return;
         }
-        self.take_change(i);
+        self.take_change(i, gedcom::agent_proposals::Outcome::Saved);
         let msg = t!("review.change_saved", title = title).into_owned();
         self.before_agent_change();
         self.edit_ged(
             move |g| {
+                // The decision just recorded is kept.
+                copy.carry_agent_proposals(g);
                 *g = copy;
                 true
             },

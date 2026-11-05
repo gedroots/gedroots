@@ -383,6 +383,8 @@ impl Workspace {
         }
         self.checkpoint();
         if let Some(doc) = &mut self.doc {
+            let mut ged = ged;
+            ged.carry_agent_proposals(&doc.ged);
             doc.ged = ged;
         }
         self.write_to(path, versioning, cx);

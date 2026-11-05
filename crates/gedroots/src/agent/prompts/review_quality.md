@@ -27,7 +27,7 @@ How to work:
      neighbouring villages with close names): `action: "hide"`, with the reason;
    - you cannot tell: leave it, and list it for the user at the end.
 4. An event without a source can only cite a source already in the tree (`search_sources`). If
-   the record has to be found in the archives first, use the `find_record` prompt instead.
+   the record has to be found in the archives first, use the `research` prompt instead.
 5. Never hide an issue only to clear the list, never guess a date or a sex, and never change who
    a person's parents are: say so to the user instead.
 6. Read the answer of each proposal: if it is refused, read the reason and correct it; if it

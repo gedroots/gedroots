@@ -828,6 +828,7 @@ impl Workspace {
         });
         self.view = View::Individuals;
         self.selected = None;
+        self.review = review::Review::default();
         self.reset_history();
         self.rescan_media();
         self.rebuild_rows(cx);
@@ -835,6 +836,8 @@ impl Workspace {
             self.select(x, window, cx);
         }
         self.mobile_publish(cx);
+        // The agents' proposals still waiting come back in To Review.
+        self.requeue_proposals(cx);
     }
 
     /// Shows the sample tree (in a window of its own, see `main.rs`).
@@ -998,6 +1001,8 @@ impl Workspace {
             self.set_status(t!("ws.outside_kept"), false);
         } else {
             // Undo goes back to the tree before the reload.
+            let mut theirs = theirs;
+            theirs.carry_agent_proposals(&doc.ged);
             doc.history.push(std::mem::replace(&mut doc.ged, theirs));
             doc.future.clear();
             doc.saved = doc.ged.clone();
@@ -1013,7 +1018,9 @@ impl Workspace {
     fn undo(&mut self, _: &Undo, window: &mut Window, cx: &mut Context<Self>) {
         let Some(doc) = &mut self.doc else { return };
         let depth = doc.history.len();
-        if let Some(prev) = doc.history.pop() {
+        if let Some(mut prev) = doc.history.pop() {
+            // Agents' proposals are not part of the tree's history.
+            prev.carry_agent_proposals(&doc.ged);
             doc.future.push(std::mem::replace(&mut doc.ged, prev));
             doc.dirty = true;
             self.rebuild_rows(cx);
@@ -1029,7 +1036,8 @@ impl Workspace {
 
     fn redo(&mut self, _: &Redo, window: &mut Window, cx: &mut Context<Self>) {
         let Some(doc) = &mut self.doc else { return };
-        if let Some(next) = doc.future.pop() {
+        if let Some(mut next) = doc.future.pop() {
+            next.carry_agent_proposals(&doc.ged);
             doc.history.push(std::mem::replace(&mut doc.ged, next));
             doc.dirty = true;
             self.rebuild_rows(cx);
@@ -3227,8 +3235,9 @@ impl Workspace {
             && self.selected.as_deref() == Some(f.xref.as_str())
             && let Some(doc) = self.doc.as_mut()
             && doc.checkpoints == f.checkpoints
-            && let Some(prev) = doc.history.pop()
+            && let Some(mut prev) = doc.history.pop()
         {
+            prev.carry_agent_proposals(&doc.ged);
             doc.ged = prev;
             doc.checkpoints -= 1;
             doc.future = std::mem::take(&mut doc.future_before_checkpoint);

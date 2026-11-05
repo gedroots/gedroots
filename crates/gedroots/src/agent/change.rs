@@ -6,7 +6,7 @@ use gedcom::change::{Action, Edit, Evidence};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct ChangeParams {
     /// Tree to work on, as `list_trees` names it, when several are open (default: the one in
     /// front in GEDRoots).
@@ -46,7 +46,7 @@ pub struct ChangeParams {
 /// `add_associate` (record, event, person, role, phrase), `remove_associate` (record, event,
 /// person), `attach_media` (record, event or not, media or file), `detach_media` (record, event or
 /// not, media). Without an issue: every edit but set_media_file, set_value and delete_structure.
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct EditParams {
     pub kind: String,
     /// Person or family id.
@@ -125,7 +125,7 @@ pub struct EditParams {
     pub media: Option<String>,
 }
 
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct EvidenceParams {
     /// Source of the tree that supports it.
     pub source: Option<String>,
@@ -139,6 +139,8 @@ pub struct EvidenceParams {
 
 #[derive(Debug, Serialize, JsonSchema)]
 pub struct ChangeProposed {
+    /// Id of the proposal (`P3`), as `resume_research` lists it.
+    pub id: String,
     /// Always "waiting for review": the user compares and saves it in GEDRoots.
     pub status: String,
     /// Proposals waiting for review in GEDRoots.
@@ -155,6 +157,12 @@ pub struct ChangeRequest {
     pub action: Action,
     pub reason: String,
     pub evidence: Evidence,
+    /// Its id when it is queued again as the file opens (`P3`); a new one is given otherwise.
+    pub id: Option<String>,
+    /// The agent that sent it.
+    pub agent: String,
+    /// The parameters as the agent sent them (JSON), kept in the file while the proposal waits.
+    pub request: String,
 }
 
 fn id(v: &Option<String>) -> Option<String> {
@@ -340,6 +348,9 @@ pub fn to_request(p: &ChangeParams) -> Result<ChangeRequest, String> {
         action,
         reason: p.reason.clone().unwrap_or_default().trim().to_string(),
         evidence,
+        id: None,
+        agent: String::new(),
+        request: super::propose::stored_request(p).to_string(),
     })
 }
 

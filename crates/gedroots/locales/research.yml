@@ -136,8 +136,8 @@ research.request_copied:
   en: Request copied, paste it in your agent’s conversation
   fr: Demande copiée, colle-la dans la conversation de ton agent
 research.agent_request:
-  en: "Find the record of this lead in GEDRoots: %{lead} (person %{person}, goal %{goal}). Read it with research_leads, follow the research_session method, note every search with log_search and propose the record you find with propose_act."
-  fr: "Trouve l’acte de cette piste dans GEDRoots : %{lead} (personne %{person}, objectif %{goal}). Lis-la avec research_leads, suis la méthode research_session, note chaque recherche avec log_search et propose l’acte trouvé avec propose_act."
+  en: "Find the record of this lead in GEDRoots: %{lead} (person %{person}, goal %{goal}). Read where it stands with resume_research, follow the research method, note every search with note_research and propose the record you find with propose_act."
+  fr: "Trouve l’acte de cette piste dans GEDRoots : %{lead} (personne %{person}, objectif %{goal}). Lis où elle en est avec resume_research, suis la méthode research, note chaque recherche avec note_research et propose l’acte trouvé avec propose_act."
 research.open_person:
   en: Open Person
   fr: Ouvrir l’individu
