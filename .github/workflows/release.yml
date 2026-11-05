@@ -50,6 +50,7 @@ jobs:
         with:
           version: 2026.10.25
           install_args: git-cliff rust
+          cache: false
       - name: Release pull request
         if: "!startsWith(github.event.head_commit.message, 'chore: release')"
         run: mise run release:pr
@@ -64,6 +65,8 @@ jobs:
     if: ${{ always() && (needs.prepare.outputs.version || github.event_name == 'pull_request') }}
     permissions:
       contents: write
+      # Deletes the previous release's caches of build outputs.
+      actions: write
     strategy:
       fail-fast: false
       matrix:
@@ -81,19 +84,17 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-dev libfontconfig-dev libwayland-dev libxcb1-dev libvulkan-dev squashfs-tools
-      - name: Rust toolchain in mise's folder
-        shell: bash
-        run: echo "MISE_RUSTUP_HOME=$HOME/.local/share/mise/rustup" >> "$GITHUB_ENV"
+      # No cache of the tools: they install in under a minute, and their 0.7–0.9 GB per system
+      # took the room of the build outputs below.
       - uses: jdx/mise-action@v5
         with:
           version: 2026.10.25
           install_args: rust dotnet dotnet:vpk
-          # Saved by releases only, like the build outputs below.
-          cache_save: ${{ github.event_name != 'pull_request' }}
+          cache: false
       # Downloaded crates and release build outputs, per system: the next release only
-      # recompiles what changed. Unused caches are dropped after 7 days. Only releases save them:
-      # a pull request's copy could only be read by that pull request, and three of them per push
-      # filled the repository's 10 GB, evicting the caches of main.
+      # recompiles what changed (4 minutes instead of 16 to 20). Only releases save them: a pull
+      # request's copy could only be read by that pull request. Each release keeps only its own
+      # copy (cache:prune), so that the repository stays under its 10 GB.
       - name: Restore the crates and build outputs
         id: cache
         uses: actions/cache/restore@v6
@@ -104,10 +105,8 @@ jobs:
             ~/.cargo/git/db
             target
             !target/dist
-          key: release-${{ runner.os }}-${{ hashFiles('mise.lock', 'Cargo.lock') }}-${{ github.sha }}
-          restore-keys: |
-            release-${{ runner.os }}-${{ hashFiles('mise.lock', 'Cargo.lock') }}-
-            release-${{ runner.os }}-
+          key: release-${{ runner.os }}-${{ hashFiles('mise.lock', 'Cargo.lock') }}
+          restore-keys: release-${{ runner.os }}-
       # Pull requests without the secret (forks) test the signature with a throwaway certificate,
       # masked in the logs.
       - name: Throwaway signing certificate
@@ -129,6 +128,7 @@ jobs:
           MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE || env.MACOS_CERTIFICATE }}
           MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD || env.MACOS_CERTIFICATE_PASSWORD }}
       - name: Save the crates and build outputs
+        id: save
         if: github.event_name != 'pull_request' && steps.cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
         with:
@@ -139,6 +139,10 @@ jobs:
             target
             !target/dist
           key: ${{ steps.cache.outputs.cache-primary-key }}
+      - name: Delete the previous releases' build outputs
+        if: steps.save.outcome == 'success'
+        shell: bash
+        run: mise run cache:prune "release-${{ runner.os }}-" "${{ steps.cache.outputs.cache-primary-key }}"
       - if: github.event_name == 'pull_request'
         uses: actions/upload-artifact@v7
         with:
@@ -164,6 +168,7 @@ jobs:
         with:
           version: 2026.10.25
           install_args: github:jdx/communique
+          cache: false
       - name: Release notes and publication
         run: mise run release:publish
         env:

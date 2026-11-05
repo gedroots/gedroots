@@ -20,6 +20,10 @@ env:
 jobs:
   test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Deletes main's older caches of build outputs.
+      actions: write
     steps:
       # With the Atlas (crates/gedcom/atlas), embedded at build time.
       - uses: actions/checkout@v7
@@ -29,18 +33,15 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-dev libfontconfig-dev libwayland-dev libxcb1-dev libvulkan-dev
-      # mise installs Rust with rustup: the toolchain goes into mise's data
-      # folder, so that the mise-action cache keeps it.
-      - name: Rust toolchain in the mise folder
-        run: echo "MISE_RUSTUP_HOME=$HOME/.local/share/mise/rustup" >> "$GITHUB_ENV"
+      # No cache of the tools: Rust installs in about ten seconds, and its 0.7 GB took the room
+      # of the build outputs below.
       - uses: jdx/mise-action@v5
         with:
           version: 2026.10.25
-          # Saved by main only, like the build outputs below.
-          cache_save: ${{ github.ref == 'refs/heads/main' }}
+          cache: false
       # Downloaded crates and build outputs: they follow Cargo.lock. Only main saves them: a
       # pull request's copy could only be read by that pull request, and those copies filled the
-      # repository's 10 GB, evicting main's cache.
+      # repository's 10 GB, evicting main's cache. Main keeps only its latest copy (cache:prune).
       - name: Restore the crates and build outputs
         id: cache
         uses: actions/cache/restore@v6
@@ -54,6 +55,7 @@ jobs:
           restore-keys: rust-${{ runner.os }}-
       - run: mise run ci
       - name: Save the crates and build outputs
+        id: save
         if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
         with:
@@ -63,3 +65,8 @@ jobs:
             ~/.cargo/git/db
             target
           key: ${{ steps.cache.outputs.cache-primary-key }}
+      - name: Delete the older build outputs
+        if: steps.save.outcome == 'success'
+        run: mise run cache:prune "rust-${{ runner.os }}-" "${{ steps.cache.outputs.cache-primary-key }}"
+        env:
+          GH_TOKEN: ${{ github.token }}
