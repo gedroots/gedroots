@@ -26,7 +26,7 @@ jobs:
     runs-on: macos-latest
     permissions:
       contents: read
-      # Deletes main's older caches of build outputs.
+      # Replaces main's cache of build outputs.
       actions: write
     steps:
       - uses: actions/checkout@v7
@@ -49,14 +49,18 @@ jobs:
             ~/.cargo/registry/cache
             ~/.cargo/git/db
             target
-          key: ${{ github.job }}-ios-${{ hashFiles('mise.lock', 'Cargo.lock') }}
-          restore-keys: ${{ github.job }}-ios-
+          key: ios
       - name: XcodeGen
         run: brew install xcodegen
       - run: mise run ios:build
+      # A cache cannot be overwritten: main's previous copy goes first.
+      - name: Delete the previous build outputs
+        if: github.ref == 'refs/heads/main'
+        run: gh cache delete ios || true
+        env:
+          GH_TOKEN: ${{ github.token }}
       - name: Save the crates and build outputs
-        id: save
-        if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
+        if: github.ref == 'refs/heads/main'
         uses: actions/cache/save@v6
         with:
           path: |
@@ -64,9 +68,4 @@ jobs:
             ~/.cargo/registry/cache
             ~/.cargo/git/db
             target
-          key: ${{ steps.cache.outputs.cache-primary-key }}
-      - name: Delete the older build outputs
-        if: steps.save.outcome == 'success'
-        run: mise run cache:prune "${{ github.job }}-ios-" "${{ steps.cache.outputs.cache-primary-key }}"
-        env:
-          GH_TOKEN: ${{ github.token }}
+          key: ios

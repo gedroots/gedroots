@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      # Deletes main's older caches of build outputs.
+      # Replaces main's cache of build outputs.
       actions: write
     steps:
       # With the Atlas (crates/gedcom/atlas), embedded at build time.
@@ -39,9 +39,9 @@ jobs:
         with:
           version: 2026.10.25
           cache: false
-      # Downloaded crates and build outputs: they follow Cargo.lock. Only main saves them: a
-      # pull request's copy could only be read by that pull request, and those copies filled the
-      # repository's 10 GB, evicting main's cache. Main keeps only its latest copy (cache:prune).
+      # Downloaded crates and build outputs, one copy, replaced after each merge. Only main saves
+      # it: a pull request's copy could only be read by that pull request, and those copies filled
+      # the repository's 10 GB, evicting main's cache.
       - name: Restore the crates and build outputs
         id: cache
         uses: actions/cache/restore@v6
@@ -51,12 +51,16 @@ jobs:
             ~/.cargo/registry/cache
             ~/.cargo/git/db
             target
-          key: rust-${{ runner.os }}-${{ hashFiles('mise.lock', 'Cargo.lock') }}
-          restore-keys: rust-${{ runner.os }}-
+          key: rust-${{ runner.os }}
       - run: mise run ci
+      # A cache cannot be overwritten: main's previous copy goes first.
+      - name: Delete the previous build outputs
+        if: github.ref == 'refs/heads/main'
+        run: gh cache delete "rust-${{ runner.os }}" || true
+        env:
+          GH_TOKEN: ${{ github.token }}
       - name: Save the crates and build outputs
-        id: save
-        if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
+        if: github.ref == 'refs/heads/main'
         uses: actions/cache/save@v6
         with:
           path: |
@@ -64,9 +68,4 @@ jobs:
             ~/.cargo/registry/cache
             ~/.cargo/git/db
             target
-          key: ${{ steps.cache.outputs.cache-primary-key }}
-      - name: Delete the older build outputs
-        if: steps.save.outcome == 'success'
-        run: mise run cache:prune "rust-${{ runner.os }}-" "${{ steps.cache.outputs.cache-primary-key }}"
-        env:
-          GH_TOKEN: ${{ github.token }}
+          key: rust-${{ runner.os }}

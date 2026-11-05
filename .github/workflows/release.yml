@@ -65,7 +65,7 @@ jobs:
     if: ${{ always() && (needs.prepare.outputs.version || github.event_name == 'pull_request') }}
     permissions:
       contents: write
-      # Deletes the previous release's caches of build outputs.
+      # Replaces the previous release's cache of build outputs.
       actions: write
     strategy:
       fail-fast: false
@@ -91,10 +91,9 @@ jobs:
           version: 2026.10.25
           install_args: rust dotnet dotnet:vpk
           cache: false
-      # Downloaded crates and release build outputs, per system: the next release only
+      # Downloaded crates and release build outputs, one copy per system: the next release only
       # recompiles what changed (4 minutes instead of 16 to 20). Only releases save them: a pull
-      # request's copy could only be read by that pull request. Each release keeps only its own
-      # copy (cache:prune), so that the repository stays under its 10 GB.
+      # request's copy could only be read by that pull request.
       - name: Restore the crates and build outputs
         id: cache
         uses: actions/cache/restore@v6
@@ -105,8 +104,7 @@ jobs:
             ~/.cargo/git/db
             target
             !target/dist
-          key: release-${{ runner.os }}-${{ hashFiles('mise.lock', 'Cargo.lock') }}
-          restore-keys: release-${{ runner.os }}-
+          key: release-${{ runner.os }}
       # Pull requests without the secret (forks) test the signature with a throwaway certificate,
       # masked in the logs.
       - name: Throwaway signing certificate
@@ -127,9 +125,13 @@ jobs:
           # macOS keeps the app's permissions after an update.
           MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE || env.MACOS_CERTIFICATE }}
           MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD || env.MACOS_CERTIFICATE_PASSWORD }}
+      # A cache cannot be overwritten: the previous release's copy goes first.
+      - name: Delete the previous release's build outputs
+        if: github.event_name != 'pull_request'
+        shell: bash
+        run: gh cache delete "release-${{ runner.os }}" || true
       - name: Save the crates and build outputs
-        id: save
-        if: github.event_name != 'pull_request' && steps.cache.outputs.cache-hit != 'true'
+        if: github.event_name != 'pull_request'
         uses: actions/cache/save@v6
         with:
           path: |
@@ -138,11 +140,7 @@ jobs:
             ~/.cargo/git/db
             target
             !target/dist
-          key: ${{ steps.cache.outputs.cache-primary-key }}
-      - name: Delete the previous releases' build outputs
-        if: steps.save.outcome == 'success'
-        shell: bash
-        run: mise run cache:prune "release-${{ runner.os }}-" "${{ steps.cache.outputs.cache-primary-key }}"
+          key: release-${{ runner.os }}
       - if: github.event_name == 'pull_request'
         uses: actions/upload-artifact@v7
         with:

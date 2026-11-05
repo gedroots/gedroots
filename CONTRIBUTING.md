@@ -63,11 +63,11 @@ git. Never commit a `.ged` file that contains living people.
 The Test workflow ([`.github/workflows/test.yml`](.github/workflows/test.yml)) runs the same
 task as a local machine, `mise run ci`, on Linux. The installers are built by the Release
 workflow (see Releases), also on pull requests that touch packaging, whose packages can be
-downloaded from the artifacts. A cache keyed on `Cargo.lock` keeps the crates and `target/`
-(the tools themselves are not cached: they install in under a minute). Only main saves it, after
-each merge, since a pull request can only read caches saved on main, and each save deletes the
-older copy of the same kind (`mise run cache:prune`): the repository's caches stay under GitHub's
-10 GB, past which it drops the least recently used, often the release's.
+downloaded from the artifacts. One cache per workflow and system keeps the crates and `target/`
+(the tools themselves are not cached: they install in under a minute). Only main replaces it,
+after each merge (and each release for the packages), since a pull request can only read caches
+saved on main. A cache cannot be overwritten, so the previous copy is deleted just before: the
+repository's caches stay under GitHub's 10 GB, past which it drops the least recently used.
 
 ## Packaging
 
