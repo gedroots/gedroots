@@ -1,5 +1,14 @@
 # Changelog
 
+## [2026.11.9](https://github.com/gedroots/gedroots/releases/tag/v2026.11.9) - 2026-11-05
+
+### 🔄 Changed
+
+- Send records an agent cannot tie to a person to the research log, not the tree by @antoninguyot in [#170](https://github.com/gedroots/gedroots/pull/170)
+- Keep the agents' shared knowledge in the file: typed research log and stored proposals by @antoninguyot in [#171](https://github.com/gedroots/gedroots/pull/171)
+- Let any agent resume the research from the file: resume_research, note_research, stored proposals by @antoninguyot in [#172](https://github.com/gedroots/gedroots/pull/172)
+- Show live on the Research page what the agents work on: In Progress, clues, handoff by @antoninguyot in [#173](https://github.com/gedroots/gedroots/pull/173)
+
 ## [2026.11.8](https://github.com/gedroots/gedroots/releases/tag/v2026.11.8) - 2026-11-05
 
 ### 🔄 Changed
