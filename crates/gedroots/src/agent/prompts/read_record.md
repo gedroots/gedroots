@@ -62,7 +62,8 @@ How to work:
 7. If GEDRoots refuses the proposal, read the reason, fix the proposal and propose it again.
    Nothing is written until the user compares and saves it: tell them it is waiting in GEDRoots'
    To Review page, and list the facts you left out and why. Give the same remarks in
-   `remarks` of `propose_act`: the user reads them beside the act while reviewing it.
+   `remarks` of `propose_act`: the user reads them beside the act while reviewing it, and they stay
+   with the act in the tree as the note of its citation.
 8. The answer gives the proposal's id and the temporary id of each new person (`new_people`). A
    person found in another act before the user saved the first one (a father in two baptisms) is
    linked with that temporary id, never created twice. If you find a mistake in a proposal still

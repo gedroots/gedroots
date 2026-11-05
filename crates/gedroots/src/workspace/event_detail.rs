@@ -66,9 +66,14 @@ impl Workspace {
             t!("ws.ev_person")
         };
         let associates = g.event_associates(&d.owner, d.ix);
-        let sources: Vec<(String, Option<String>)> = node
+        // Each cited source with its reference and the note of the citation (people only mentioned
+        // in the act, remarks on its reading).
+        let sources: Vec<(String, Option<String>, Vec<String>)> = node
             .children_with("SOUR")
-            .filter_map(|s| Some((s.pointer()?.to_string(), s.child_val("PAGE").map(str::to_string))))
+            .filter_map(|s| {
+                let notes = s.children_with("NOTE").map(|n| n.text().trim().to_string()).filter(|t| !t.is_empty());
+                Some((s.pointer()?.to_string(), s.child_val("PAGE").map(str::to_string), notes.collect()))
+            })
             .collect();
         let notes: Vec<String> = node.children_with("NOTE").map(|n| n.text()).filter(|t| !t.is_empty()).collect();
         let place = e.place().filter(|p| !p.is_empty()).map(str::to_string);
@@ -131,10 +136,20 @@ impl Workspace {
                 t!("ws.ev_sources"),
                 v_flex()
                     .gap_1()
-                    .children(sources.iter().enumerate().map(|(n, (s, page))| {
-                        v_flex().child(self.detail_link(("ev-d-s", n), s, cx)).when_some(page.clone(), |d, p| {
-                            d.child(div().text_xs().text_color(theme::muted()).child(p))
-                        })
+                    .children(sources.iter().enumerate().map(|(n, (s, page, notes))| {
+                        v_flex()
+                            .child(self.detail_link(("ev-d-s", n), s, cx))
+                            .when_some(page.clone(), |d, p| {
+                                d.child(div().text_xs().text_color(theme::muted()).child(p))
+                            })
+                            .children(
+                                notes
+                                    .iter()
+                                    .flat_map(|t| t.lines())
+                                    // One line per part: the app joins them with “; ”.
+                                    .flat_map(|l| l.split("; "))
+                                    .map(|l| div().text_xs().text_color(theme::muted()).child(l.to_string())),
+                            )
                     }))
                     .into_any_element(),
             ));

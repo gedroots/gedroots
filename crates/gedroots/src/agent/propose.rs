@@ -155,9 +155,9 @@ pub struct ProposeParams {
     /// a line break between its parts (body, marginal mentions, signatures). Only the act: your
     /// remarks go in `remarks`.
     pub transcription: Option<String>,
-    /// Your remarks for the user who reviews the proposal: doubtful readings, facts left out and
-    /// why, a correction to make by hand. Shown in the review page only, never written to the
-    /// tree.
+    /// Your remarks on the act: doubtful readings, facts left out and why, a correction to make by
+    /// hand. Shown beside the act in the review page, then kept with it in the tree as the note
+    /// of its citation.
     pub remarks: Option<String>,
     pub people: Vec<PersonParams>,
     /// Absolute path of the downloaded image or PDF of the act (required with `url`).
@@ -193,7 +193,7 @@ pub struct Pending {
     pub temps: Vec<Option<String>>,
     /// Waiting proposal this one corrects.
     pub replaces: Option<String>,
-    /// The agent's remarks for the reviewer, never written to the tree.
+    /// The agent's remarks, shown beside the act (also in `proposal.act.note`, written with it).
     pub remarks: String,
 }
 
@@ -547,6 +547,8 @@ pub fn to_proposal(p: &ProposeParams) -> Result<Proposal, String> {
     act.address = opt(&p.address).to_string();
     act.page = opt(&p.page).to_string();
     act.transcription = opt(&p.transcription).to_string();
+    // Kept with the act: the note of its citation.
+    act.note = opt(&p.remarks).replace("\r\n", "\n");
     act.participants = Vec::new();
     for person in &p.people {
         let mut part = Participant::new(role(&person.role)?).of(person.of.unwrap_or(0));
@@ -953,6 +955,33 @@ mod tests {
         let unknown = serde_json::json!({"role": "father", "identity": "link", "id": "new-9"});
         let mut bad = to_proposal(&params("CONF", "1812", unknown)).unwrap();
         assert!(h.resolve(&mut bad, &saved).unwrap_err().contains("new-9"));
+    }
+
+    #[test]
+    fn remarks_are_kept_as_the_note_of_the_citation() {
+        let mut ged = gedcom::Gedcom::parse(
+            "0 HEAD\n1 GEDC\n2 VERS 7.0\n0 @I1@ INDI\n1 NAME Jean /BLANC/\n1 SEX M\n0 @S1@ SOUR\n1 TITL Rennes\n0 TRLR\n",
+        )
+        .unwrap();
+        let p: ProposeParams = serde_json::from_value(serde_json::json!({
+            "event": "BAPM", "date": "2 MAR 1800", "source": {"id": "S1"},
+            "remarks": "Godfather's age unreadable.\r\nCheck the margin by hand.",
+            "people": [{"role": "principal", "identity": "link", "id": "I1"},
+                       {"role": "godfather", "identity": "mention", "given": "Joseph", "surname": "MARTIN"}]
+        }))
+        .unwrap();
+        let mut prop = to_proposal(&p).unwrap();
+        prop.complete(&ged);
+        prop.apply(&mut ged).unwrap();
+        let bapm = ged.get("I1").unwrap().children_with("BAPM").next().unwrap();
+        let note = bapm.child("SOUR").unwrap().child("NOTE").unwrap();
+        let text = note.text();
+        assert!(text.contains("MARTIN"), "{text}");
+        assert!(text.ends_with("Godfather's age unreadable.\nCheck the margin by hand."), "{text}");
+        // One line per line of the remarks: the file stays valid GEDCOM.
+        let out = ged.to_gedcom_string();
+        assert!(out.contains("CONT Check the margin by hand."), "{out}");
+        assert!(gedcom::Gedcom::parse(&out).is_ok());
     }
 
     #[test]
