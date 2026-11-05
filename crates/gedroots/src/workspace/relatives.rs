@@ -1,8 +1,8 @@
 //! Adding and linking relatives, person picker, attaching media.
 
 use super::*;
+use crate::t;
 use gpui_kit::component::IconName;
-use rust_i18n::t;
 
 /// What the choice in the picker will do.
 #[derive(Debug, Clone, PartialEq, Eq)]

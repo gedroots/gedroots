@@ -5,8 +5,8 @@ use super::add::AddDialog;
 use super::*;
 use crate::agent::clients::{Client, Kind, Setup, mask};
 use crate::agent::{self, Status};
+use crate::t;
 use gpui_kit::component::switch::Switch;
-use rust_i18n::t;
 
 /// “AI Agents” window.
 pub(super) struct AgentDialog {

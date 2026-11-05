@@ -6,9 +6,9 @@
 //! of the settings, otherwise GEDCOM medium) restricts the list.
 
 use super::*;
+use crate::t;
 use gedcom::query::{Group, Suggestion, words};
 use gpui_kit::component::input::{InlineToken, InputContent};
-use rust_i18n::t;
 
 /// Maximum number of suggestions shown.
 const MAX_SUGGESTIONS: usize = 8;
@@ -469,7 +469,7 @@ impl Workspace {
             .top(px(46.))
             .left_3()
             .right_3()
-            .p_1p5()
+            .p_2()
             .gap_0p5()
             .bg(theme::bg())
             .border_1()

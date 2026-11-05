@@ -15,8 +15,8 @@ use super::add::AddDialog;
 use super::*;
 use crate::gedzip::{self, Entry};
 use crate::save_dialog;
+use crate::t;
 use gedcom::gedcom551::Flavor;
-use rust_i18n::t;
 use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 

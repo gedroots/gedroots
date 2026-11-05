@@ -533,7 +533,7 @@ fn minimap(zoom: &Zoom, path: &Path, natural: (f32, f32), f: Frame) -> Option<An
                     .bg(theme::image_label_bg())
                     .text_xs()
                     .text_color(theme::image_text())
-                    .child(rust_i18n::t!("stats.percent", value = format!("{:.0}", f.scale * 100.)).into_owned()),
+                    .child(crate::t!("stats.percent", value = format!("{:.0}", f.scale * 100.)).into_owned()),
             )
             .on_mouse_down(MouseButton::Left, move |ev: &MouseDownEvent, window, cx| {
                 let mut s = jump.0.borrow_mut();

@@ -11,7 +11,7 @@
 
 use super::add::AddDialog;
 use super::*;
-use rust_i18n::t;
+use crate::t;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 

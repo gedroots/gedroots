@@ -557,7 +557,7 @@ impl Workspace {
                     .border_color(theme::border())
                     .bg(theme::surface())
                     .shadow_lg()
-                    .child(div().text_lg().font_weight(FontWeight::SEMIBOLD).child(t!("tour.title").into_owned()))
+                    .child(div().text_xl().font_weight(FontWeight::SEMIBOLD).child(t!("tour.title").into_owned()))
                     .children(Chapter::ALL.map(row))
                     .child(h_flex().pt_2().gap_2().justify_end().map(|d| match mac {
                         true => d.child(later).child(start),

@@ -1143,7 +1143,11 @@ impl Gedcom {
         let last = ctx.seen(x).iter().max_by_key(|s| s.year);
         let lo = match (last, birth) {
             (Some(s), _) => {
-                reasons.push(Reason::Seen(s.what.clone(), s.shown));
+                // Last seen at their own birth: the birth reason below already says so.
+                let own_birth = matches!(&s.what, Sighting::Event(tag) if tag == "BIRT");
+                if !(own_birth && birth.is_some()) {
+                    reasons.push(Reason::Seen(s.what.clone(), s.shown));
+                }
                 s.year
             }
             (None, Some(b)) => b.from,

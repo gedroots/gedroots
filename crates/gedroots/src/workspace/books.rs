@@ -526,11 +526,12 @@ impl Workspace {
     pub(super) fn render_books(&self, cx: &mut Context<Self>) -> AnyElement {
         let center = v_flex().flex_1().min_w_0().bg(theme::surface());
         let Some(spec) = self.selected_book() else {
-            return center
-                .items_center()
-                .justify_center()
-                .text_color(theme::muted())
-                .child(if self.rows.is_empty() { t!("books.empty") } else { t!("books.none") })
+            let title = if self.rows.is_empty() { t!("books.empty") } else { t!("books.none") };
+            return v_flex()
+                .flex_1()
+                .min_w_0()
+                .bg(theme::bg())
+                .child(empty_state(View::Books.icon(), title))
                 .into_any_element();
         };
         let g = &self.doc.as_ref().expect("a file is open").ged;

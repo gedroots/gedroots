@@ -5,8 +5,8 @@ use super::relatives::PickPurpose;
 use super::*;
 use crate::date_field::{DateField, date_field};
 use crate::editor::{PickerState, choice, choice_with_search, picker};
+use crate::t;
 use gpui_kit::component::input::TextareaState;
-use rust_i18n::t;
 
 pub(super) enum AddDialog {
     Event(Box<EventDialog>),
@@ -313,8 +313,8 @@ impl Workspace {
                 (t!("cmd.rename_media_files").trim_end_matches('…').to_string(), self.rename_body(d, cx))
             }
             AddDialog::Gedzip(d) => (self.gedzip_title(d), self.gedzip_body(d, cx)),
-            AddDialog::Agent(d) => (rust_i18n::t!("agent.title").into(), self.agent_body(d, cx)),
-            AddDialog::Mobile(d) => (rust_i18n::t!("mobile.title").into(), self.mobile_body(d, cx)),
+            AddDialog::Agent(d) => (crate::t!("agent.title").into(), self.agent_body(d, cx)),
+            AddDialog::Mobile(d) => (crate::t!("mobile.title").into(), self.mobile_body(d, cx)),
             AddDialog::SaveVersion(input) => {
                 (t!("cmd.save_version").trim_end_matches('…').to_string(), self.save_version_body(input, cx))
             }

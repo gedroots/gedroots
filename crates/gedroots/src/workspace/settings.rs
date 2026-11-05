@@ -11,9 +11,9 @@
 use super::add::{AddDialog, plus_button};
 use super::*;
 use crate::editor::{PickerState, choice, picker};
+use crate::t;
 use gpui_kit::component::input::TextareaState;
 use gpui_kit::component::menu::{DropdownMenu, PopupMenuItem};
-use rust_i18n::t;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum SettingsPage {

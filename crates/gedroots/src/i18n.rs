@@ -43,6 +43,21 @@ pub fn is_one(n: usize) -> bool {
     }
 }
 
+/// A translation in the interface language: `rust_i18n::t!`, with French elision before the
+/// values put in it (« Décès d’Antonin GUYOT », see `gedcom::i18n::elide`).
+#[macro_export]
+macro_rules! t {
+    ($key:expr) => {
+        rust_i18n::t!($key)
+    };
+    ($key:expr, $($name:ident = $value:expr),+ $(,)?) => {
+        gedcom::i18n::elide(
+            rust_i18n::t!($key, $($name = gedcom::i18n::Marked(&($value))),+),
+            &rust_i18n::locale(),
+        )
+    };
+}
+
 /// A string that depends on a number: `tn!(key, n)` reads `key.one` or `key.other`, with the
 /// number as `%{n}` and any other named values, like `t!`.
 #[macro_export]
@@ -50,9 +65,9 @@ macro_rules! tn {
     ($key:literal, $n:expr $(, $name:ident = $value:expr)* $(,)?) => {{
         let n: usize = $n;
         if $crate::i18n::is_one(n) {
-            rust_i18n::t!(concat!($key, ".one"), n = n $(, $name = $value)*)
+            $crate::t!(concat!($key, ".one"), n = n $(, $name = $value)*)
         } else {
-            rust_i18n::t!(concat!($key, ".other"), n = n $(, $name = $value)*)
+            $crate::t!(concat!($key, ".other"), n = n $(, $name = $value)*)
         }
     }};
 }

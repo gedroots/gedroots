@@ -8,9 +8,9 @@
 //!
 //! Labels are translation keys (`crates/gedroots/locales/commands.yml`).
 
+use crate::t;
 use gpui_kit::component::input;
 use gpui_kit::*;
-use rust_i18n::t;
 
 actions!(
     gedroots,
@@ -314,8 +314,8 @@ pub fn bind_keys(cx: &mut App) {
 /// Labels shared by the menu bar and context menus (right click): a command has the
 /// same name wherever it appears.
 pub mod label {
+    use crate::t;
     use gpui_kit::SharedString;
-    use rust_i18n::t;
 
     pub fn new_individual() -> SharedString {
         t!("cmd.new_individual").into()
@@ -909,7 +909,7 @@ mod tests {
         for (menu, items) in model_with(&recents, &sites) {
             let n = items.iter().filter(|i| !matches!(i, Item::Separator)).count();
             // Window: the open trees fill it (the system, on macOS).
-            if menu.as_ref() == rust_i18n::t!("menu.window").as_ref() {
+            if menu.as_ref() == crate::t!("menu.window").as_ref() {
                 continue;
             }
             assert!((3..=12).contains(&n), "{menu} has {n} items");

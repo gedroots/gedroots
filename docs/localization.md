@@ -43,15 +43,19 @@ the system's list of preferred languages, and falls back to English:
        fr: Ajouter un événement…
    ```
 
-2. Use it with `t!`, which returns a `Cow<str>` that converts to `SharedString`:
+2. Use it with the crate's `t!` (`rust_i18n::t!` plus French elision, see 3), which returns a
+   `Cow<str>` that converts to `SharedString`:
 
    ```rust
-   use rust_i18n::t;
+   use crate::t;
    menu.item(act(&ws, t!("cmd.add_event"), …))
    ```
 
 3. Values go in named placeholders, never by concatenation, so each language can order the
    sentence its own way: `t!("person.age", years = n)` with `en: "%{years} years old"`.
+   In French, a “de” written just before a placeholder is elided when the value starts with a
+   vowel: `"Décès de %{name}"` gives « Décès d’Antonin GUYOT » (`gedcom::i18n::elide`). Write
+   “de”, never “d’”, in front of a placeholder.
 
 `mise run test` checks that every key exists in every language with the same placeholders,
 that every key used in the code exists, and that no key is left unused.

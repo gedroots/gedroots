@@ -10,11 +10,11 @@
 
 use super::*;
 use crate::agent::propose::{self, Outcome, Pending, Queued};
+use crate::t;
 use gedcom::Conflict;
 use gedcom::proposal::{Change, Field, Proposal, SourceChoice};
 use gpui_kit::component::checkbox::Checkbox;
 use gpui_kit::component::menu::{DropdownMenu, PopupMenuItem};
-use rust_i18n::t;
 use std::collections::BTreeSet;
 
 /// A person, or one of their facts, that the user can uncheck.
@@ -579,7 +579,7 @@ impl Workspace {
                     .cursor_pointer()
                     .border_b_1()
                     .border_color(theme::border())
-                    .when(sel, |d| d.bg(theme::accent_soft()).border_l_2().border_color(theme::accent()))
+                    .when(sel, |d| d.bg(theme::accent_soft()))
                     .when(!sel, |d| d.hover(|d| d.bg(theme::hover())))
                     .child(div().font_weight(FontWeight::MEDIUM).child(title(g, &p)))
                     .when(!meta.is_empty(), |d| d.child(div().text_xs().text_color(theme::muted()).child(meta)))
@@ -704,7 +704,7 @@ impl Workspace {
         let sub = [sosa, Some(by.into_owned())].into_iter().flatten().collect::<Vec<_>>().join(" · ");
 
         // Comparison. Columns: check box, field, “In the tree”, “Proposed”.
-        let line = || h_flex().items_start().gap_2().px_2().py_1p5().border_t_1().border_color(theme::border());
+        let line = || h_flex().items_start().gap_2().px_2().py_2().border_t_1().border_color(theme::border());
         let header = || {
             h_flex()
                 .gap_2()
@@ -872,7 +872,7 @@ impl Workspace {
                     }))
                     .child(div().flex_none().text_xs().font_weight(FontWeight::SEMIBOLD).text_color(color).child(tag))
             };
-        let mut links = v_flex().gap_1p5().pl_3().border_l_2().border_color(theme::border_strong()).text_sm();
+        let mut links = v_flex().gap_2().pl_3().border_l_1().border_color(theme::border_strong()).text_sm();
         if let Some(r) = &chain.repository {
             links = links.child(link_row(
                 t!("review.repository").into_owned(),
@@ -983,7 +983,7 @@ impl Workspace {
                     .pt_4()
                     .pb_2()
                     .gap_0p5()
-                    .child(div().text_lg().font_weight(FontWeight::SEMIBOLD).child(title(g, full)))
+                    .child(div().text_xl().font_weight(FontWeight::SEMIBOLD).child(title(g, full)))
                     .child(div().text_sm().text_color(theme::muted()).child(sub)),
             )
             .child(

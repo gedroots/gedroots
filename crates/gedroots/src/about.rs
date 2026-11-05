@@ -2,12 +2,12 @@
 //! from GEDRoots › About GEDRoots on macOS and Help › About GEDRoots elsewhere, even without a
 //! window, and only once: the command brings an open one to the front.
 
+use crate::t;
 use crate::theme;
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::{Sizable, v_flex};
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
-use rust_i18n::t;
 use std::time::Duration;
 
 /// The open About window, if any.

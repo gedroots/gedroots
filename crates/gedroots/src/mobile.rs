@@ -185,7 +185,7 @@ fn on_event(event: Event, cx: &mut App) {
                 DeviceKind::Phone => Kind::Phone,
                 DeviceKind::Tablet => Kind::Tablet,
             };
-            let name = if name.is_empty() { rust_i18n::t!("mobile.unnamed").into_owned() } else { name };
+            let name = if name.is_empty() { crate::t!("mobile.unnamed").into_owned() } else { name };
             update(|s| {
                 let devices = &mut s.shares.entry(share.clone()).or_default().devices;
                 let paired = Device {
@@ -327,7 +327,7 @@ fn set_status(s: Status) {
 
 fn start() -> Option<tokio::sync::mpsc::UnboundedSender<Cmd>> {
     let Some(dir) = data_dir() else {
-        set_status(Status::Failed(rust_i18n::t!("mobile.no_config").into_owned()));
+        set_status(Status::Failed(crate::t!("mobile.no_config").into_owned()));
         return None;
     };
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<Cmd>();

@@ -120,7 +120,7 @@ pub fn extract(archive: &Path, dest: &Path) -> Result<(String, usize), String> {
         io::copy(&mut entry, &mut out).map_err(|e| at(&path, &e))?;
         count += 1;
     }
-    let dataset = dataset.ok_or_else(|| rust_i18n::t!("import.no_dataset").into_owned())?;
+    let dataset = dataset.ok_or_else(|| crate::t!("import.no_dataset").into_owned())?;
     Ok((dataset, count))
 }
 

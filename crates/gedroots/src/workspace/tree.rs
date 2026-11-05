@@ -1,8 +1,8 @@
 //! Tree views: free tree (see `chart`) and fan chart.
 
 use super::*;
+use crate::t;
 use gpui_kit::component::menu::ContextMenuExt;
-use rust_i18n::t;
 use std::cell::{Cell, RefCell};
 use std::f32::consts::PI;
 

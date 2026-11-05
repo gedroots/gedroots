@@ -5,11 +5,11 @@
 //! the right-click allows hiding the issue (`_GR_IGNORE`).
 
 use super::*;
+use crate::t;
 use gedcom::analysis::check::{self, Issue, Severity};
 use gedcom::quality::{self, Category};
 use gpui::PathPromptOptions;
 use gpui_kit::component::menu::PopupMenu;
-use rust_i18n::t;
 use std::cell::RefCell;
 
 /// State of the page.
@@ -325,11 +325,14 @@ impl Workspace {
                                                         .text_xs()
                                                         .text_color(theme::muted())
                                                         .whitespace_nowrap()
-                                                        .child(if i.detail.is_empty() {
-                                                            check::code_label(i.code).to_string()
-                                                        } else {
-                                                            i.detail.clone()
-                                                        })
+                                                        .overflow_hidden()
+                                                        .child(div().min_w_0().overflow_hidden().text_ellipsis().child(
+                                                            if i.detail.is_empty() {
+                                                                check::code_label(i.code).to_string()
+                                                            } else {
+                                                                i.detail.clone()
+                                                            },
+                                                        ))
                                                         .when_some(notes[n].clone(), |d, (note, pending)| {
                                                             d.child("·").child(
                                                                 div()

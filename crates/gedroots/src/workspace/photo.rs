@@ -9,7 +9,7 @@ use super::relatives::PickPurpose;
 use super::*;
 pub(super) use crate::images::image_size;
 use crate::images::{picture, picture_region};
-use rust_i18n::t;
+use crate::t;
 use std::cell::Cell;
 use std::path::Path;
 

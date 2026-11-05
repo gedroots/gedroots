@@ -5,8 +5,8 @@
 
 use super::add::{AddDialog, plus_button};
 use super::*;
+use crate::t;
 use gpui_kit::component::tooltip::Tooltip;
-use rust_i18n::t;
 
 pub(super) struct WebLinkDialog {
     owner: String,

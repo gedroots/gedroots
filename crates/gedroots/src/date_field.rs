@@ -10,6 +10,7 @@
 //!
 //! The stored value is only rewritten if the user edits the field.
 
+use crate::t;
 use crate::theme;
 use gedcom::date::{Calendar, Date, DateKind, Parsed, parse_input};
 use gedcom::sort_key;
@@ -20,7 +21,6 @@ use gpui_kit::component::popover::Popover;
 use gpui_kit::component::{Sizable, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
-use rust_i18n::t;
 
 pub struct DateField {
     input: Entity<InputState>,

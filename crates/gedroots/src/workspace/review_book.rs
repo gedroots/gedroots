@@ -4,9 +4,9 @@
 
 use super::*;
 use crate::agent::book::ChapterRequest;
+use crate::t;
 use gedroots_book::Block;
 use gpui_kit::component::checkbox::Checkbox;
-use rust_i18n::t;
 use std::collections::BTreeSet;
 
 /// A chapter waiting for review.
@@ -120,7 +120,7 @@ impl Workspace {
             .cursor_pointer()
             .border_b_1()
             .border_color(theme::border())
-            .when(sel, |d| d.bg(theme::accent_soft()).border_l_2().border_color(theme::accent()))
+            .when(sel, |d| d.bg(theme::accent_soft()))
             .when(!sel, |d| d.hover(|d| d.bg(theme::hover())))
             .child(div().font_weight(FontWeight::MEDIUM).child(chapter))
             .child(div().text_xs().text_color(theme::muted()).truncate().child(meta))
@@ -163,8 +163,6 @@ impl Workspace {
                 .items_start()
                 .p_3()
                 .bg(theme::panel())
-                .border_l_2()
-                .border_color(theme::warn())
                 .rounded(theme::RADIUS_SM)
                 .child(tick())
                 .child(
@@ -197,10 +195,10 @@ impl Workspace {
             Block::Hypothesis { text, basis } => h_flex()
                 .gap_2()
                 .items_start()
-                .px_3()
-                .py_2()
-                .border_l_2()
-                .border_color(theme::accent())
+                .p_3()
+                .border_1()
+                .border_color(theme::border())
+                .rounded(theme::RADIUS_SM)
                 .child(tick())
                 .child(
                     v_flex()
@@ -272,7 +270,7 @@ impl Workspace {
                             .pt_4()
                             .pb_2()
                             .gap_0p5()
-                            .child(div().text_lg().font_weight(FontWeight::SEMIBOLD).child(chapter))
+                            .child(div().text_xl().font_weight(FontWeight::SEMIBOLD).child(chapter))
                             .child(
                                 div()
                                     .text_sm()

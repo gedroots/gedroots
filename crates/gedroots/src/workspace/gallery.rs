@@ -14,8 +14,8 @@
 use super::media_files::{free_name, planned_paths, store_act_media, store_imported};
 use super::settings::SettingsPage;
 use super::*;
+use crate::t;
 use gpui_kit::component::checkbox::Checkbox;
-use rust_i18n::t;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
