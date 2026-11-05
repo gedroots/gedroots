@@ -505,3 +505,36 @@ fn other_facts_are_written_with_the_citation_and_reread() {
     assert_eq!(n.children_with("OCCU").count(), 1);
     assert_eq!(g.acts(&s).pop().unwrap().participants[0].facts.len(), 3);
 }
+
+#[test]
+fn quality_is_written_on_the_citations_and_reread_per_fact() {
+    french();
+    let mut g = Gedcom::parse(SAMPLE).unwrap();
+    let s = new_source(&mut g);
+    let mut e = Act::new(&s, "DEAT");
+    e.date = "12 MAR 1870".into();
+    e.place = "Saint-Lô".into();
+    e.quality = Some(3);
+    // The death record gives the birth: secondary evidence.
+    let mut birth = Fact::new("BIRT");
+    birth.date = "19 APR 1796".into();
+    birth.quality = Some(2);
+    let mut trade = Fact::new("OCCU");
+    trade.value = "Tisserand".into();
+    let mut p = person(ActRole::Principal, "MARCHAND", "Émile").with(PersonField::Sex, "M");
+    p.facts = vec![birth.clone(), trade.clone()];
+    e.participants = vec![p];
+    let res = e.save(&mut g).unwrap();
+    let n = g.get(res.persons[0].as_deref().unwrap()).unwrap();
+    let quay = |tag: &str| {
+        n.children_with(tag).next().and_then(|e| e.child("SOUR")).and_then(|c| c.child_val("QUAY")).map(str::to_string)
+    };
+    assert_eq!(quay("DEAT").as_deref(), Some("3"));
+    assert_eq!(quay("BIRT").as_deref(), Some("2"));
+    assert_eq!(quay("OCCU").as_deref(), Some("3"), "a fact without its own quality takes the record's");
+
+    let a = g.acts(&s).pop().unwrap();
+    assert_eq!(a.quality, Some(3));
+    assert_eq!(a.participants[0].facts, vec![birth, trade], "{:?}", a.participants[0]);
+    assert_eq!(act::quality_label(Some(2)), "Qualité : Indirecte");
+}

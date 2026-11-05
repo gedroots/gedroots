@@ -48,7 +48,7 @@ tree's data.
 | `search_sources` | Sources (register, repository, call number, number of acts) and repositories, to cite an existing one |
 | `locate_place` | For one place of an act: the tree's places of that name, the located places of the events of the act's people and their relatives (closest in time first), and the gazetteer's candidates (OpenStreetMap, through Photon, biased towards those places) in the file's place format, each with its distance to the closest of those events |
 | `match_people` | For the people named in an act (role, names, sex, age, act date), the people of the tree who could be them, with the reason and whether the match is likely |
-| `propose_act` | Adds an act to the To Review page: event, date, place, street address, source, reference, transcription (plain text, only the act), people with their role, downloaded file, and the agent's remarks on the act (shown beside it, then kept as the note of its citation). Answers its id, what it will write and the temporary id of each new person; with `replaces`, corrects a waiting proposal |
+| `propose_act` | Adds an act to the To Review page: event, date, place, street address, source, reference, quality of the evidence (`QUAY`), transcription (plain text, only the act), people with their role, downloaded file, and the agent's remarks on the act (shown beside it, then kept as the note of its citation). Answers its id, what it will write and the temporary id of each new person; with `replaces`, corrects a waiting proposal |
 | `list_proposals` | Proposals waiting for review (id, `kind`, people with their ids, what each will write), and what became of the others: saved, rejected, edited in record entry, withdrawn, replaced |
 | `withdraw_proposal` | Takes back a waiting proposal |
 | `propose_change` | Adds a change for one Data Quality issue to the To Review page: the page's own fix (`fix`), edits among those the issue allows (`edit`), merging a possible duplicate (`merge`), or hiding a correct issue (`hide`), with the reason and the evidence. Without an issue, it proposes a correction read in a document (a name, a date, a sex, a citation). The answer lists the issues the change would create |
@@ -127,7 +127,12 @@ event (any event without its own tag, such as military service, is `EVEN` with i
 `event_type`), the people with their standard GEDCOM 7 role and their `identity`, always given
 explicitly: `link` (an existing person, with `id`), `create` or `mention`, and the other facts the act
 gives about each person (`facts`: a birth date in a baptism, a death in a marginal mention, an
-undated occupation…, each written with the act's citation), the reference (`PAGE`), the transcription and the source. Nothing raw goes
+undated occupation…, each written with the act's citation), the reference (`PAGE`), the transcription and the source.
+The agent also gives its confidence as `quality`, the standard GEDCOM 7 quality of the evidence
+(`QUAY` 0 to 3, the Quality pop-up of record entry), written on every citation of the act; a fact
+the act supports less than its event (a birth date in a death act) carries its own `quality`.
+Agents are asked to propose each act as soon as they have read it, even when unsure, with an
+honest quality and their doubts in `remarks`, rather than holding back what is not certain. Nothing raw goes
 into the file: GEDRoots writes the whole chain itself, repository → source → file → event →
 people (`crates/gedcom/src/proposal.rs`).
 
@@ -174,7 +179,8 @@ separate media: the source shows the image and a link button, and a web link is 
 as an act's image. A proposal with a `url` must also give the `file`.
 
 The **To Review** page (sidebar) shows, for each proposal,
-the act's image, a comparison of what the tree holds and what is proposed (each person can be
+the act's image, its quality next to the agent's name (a questionable or unreliable proposal is
+also flagged in the list), a comparison of what the tree holds and what is proposed (each person can be
 unchecked), the **Facts** it gives (each one can be unchecked; the occupations, residences and
 estimated births deduced from the act are listed there too, so nothing is written unseen; the
 answer of `propose_act` lists the same lines in `will_write`), the attachment (repository, source, file, web link, event), the agent's remarks (saved with the act as the note of its citation, shown under the source in the event's sheet), the transcription line by line and, on demand,

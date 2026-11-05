@@ -25,12 +25,15 @@ How to work:
    the act or the tree gives it; the married name stays in the transcription and is never a
    reason to create another person. Inventory every fact the document gives,
    not only its main event: birth, baptism, marriage, death, occupations, residences, parents,
-   marginal mentions. For each, decide: proposed, already in the tree, kept in the transcription
-   only (say why in `remarks`: uncertain reading, contradiction…), or blocked. Something
-   certain must never stay only in the transcription without a reason. Do not give every fact the act's date: an
-   occupation or residence may be current, former or undated.
+   marginal mentions. For each, decide: proposed, already in the tree, or blocked. Propose
+   what you are unsure of too (a doubtful reading, a probable identity), with its honest
+   `quality` and your doubt in `remarks`: the user decides when reviewing. Keep a fact only in the
+   transcription when it is illegible, and say why in `remarks`. Do not give every fact the act's
+   date: an occupation or residence may be current, former or undated.
 3. Check that the act is about the person in the tree: call `person_sheet` and compare names,
-   dates, places and parents. If it does not match, stop and tell the user why.
+   dates, places and parents. If it clearly does not match, stop and tell the user why. If it
+   probably matches but something is uncertain (a parent's name missing, a date a few years
+   off), propose it anyway with a lower `quality` and say what is uncertain in `remarks`.
 4. Call `file_context` if you have not yet: read the user's description of the file and the
    latest sources and people. Then call `search_sources` with the register or the archive's name.
    Reuse the repository, and write the source the way this file does: reuse a register's source
@@ -45,9 +48,14 @@ How to work:
    already in the tree from another act: never create anyone before resolving who they are, and
    never take an empty search for an absent person (try other spellings, `search_people`).
 6. Call `propose_act` with that `identity` for each person (and `not` for the candidates you
-   checked and found to be someone else), and every other certain fact in that person's `facts`
+   checked and found to be someone else), and every other fact in that person's `facts`
    (birth date in a baptism, marginal mention, earlier residence…), each with its own date or
-   none. Check the `will_write` list of the answer against your inventory: when it says the tree
+   none. Give the act's `quality`, honestly: 3 when the act itself records the event at the
+   time, clearly read and about the right person; 2 for secondary evidence (written later or
+   second-hand: a table, an index, a death act for the birth); 1 when the reading or the identity
+   is doubtful; 0 for a guess. A fact the act supports less than its event (the birth date or
+   birthplace in a marriage or death act, an age) gets its own `quality`. GEDRoots writes it on
+   the citation (GEDCOM `QUAY`) and shows it to the user. Check the `will_write` list of the answer against your inventory: when it says the tree
    writes a close occupation another way, and it is the same one, propose again with `replaces`
    and the tree's wording. Give the place as
    the tree names it. A place the tree does not have yet (or has without coordinates) is located

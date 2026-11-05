@@ -310,6 +310,9 @@ pub struct Fact {
     pub place: String,
     /// Street address within the place (`ADDR`).
     pub address: String,
+    /// Quality of the evidence for this fact (`QUAY` 0 to 3) when it differs from the record's:
+    /// a birth date given by a death record is secondary evidence.
+    pub quality: Option<u8>,
 }
 
 impl Fact {
@@ -1253,7 +1256,11 @@ impl Act {
             // Other facts of the record, with its citation.
             for (k, f) in p.facts.iter().enumerate().filter(|(_, f)| !f.is_blank()) {
                 let mut n = f.node();
-                n.children.push(self.citation(media.as_deref(), role.clone(), false));
+                let mut cite = self.citation(media.as_deref(), role.clone(), false);
+                if let Some(q) = f.quality.filter(|q| Some(*q) != self.quality) {
+                    set_quality(&mut cite, Some(q));
+                }
+                n.children.push(cite);
                 let conflict = conflicts.fact(i, k);
                 if f.has_value() || f.tag == "RESI" {
                     w.add_fact_with(x, n, conflict);
@@ -1867,6 +1874,31 @@ impl Writer<'_> {
 
 /// Adds a citation, or completes an existing citation of the same source (without a reference, or
 /// with the same one) rather than duplicating it.
+/// Name of a `QUAY` level (0 to 3), empty for none.
+pub fn quality_name(q: u8) -> String {
+    match q {
+        0 => t!("act.quality_0"),
+        1 => t!("act.quality_1"),
+        2 => t!("act.quality_2"),
+        _ => t!("act.quality_3"),
+    }
+    .into_owned()
+}
+
+/// “Quality: Secondary”, empty for none.
+pub fn quality_label(q: Option<u8>) -> String {
+    q.map(|q| t!("act.quality_of", level = quality_name(q)).into_owned()).unwrap_or_default()
+}
+
+/// Sets (or removes) the `QUAY` of a citation.
+pub fn set_quality(cite: &mut Node, quality: Option<u8>) {
+    cite.children.retain(|c| c.tag != "QUAY");
+    if let Some(q) = quality {
+        let at = cite.children.iter().position(|c| c.tag == "OBJE").unwrap_or(cite.children.len());
+        cite.children.insert(at, Node::with_value("QUAY", q.min(3).to_string()));
+    }
+}
+
 fn merge_citation(children: &mut Vec<Node>, cite: Node) {
     let page = cite.child_val("PAGE").map(str::to_string);
     let same = children.iter_mut().find(|c| {
@@ -2175,6 +2207,11 @@ impl Gedcom {
                         date: e.child_val("DATE").unwrap_or("").to_string(),
                         place: e.child_val("PLAC").unwrap_or("").to_string(),
                         address: crate::address::address_of(e).unwrap_or_default(),
+                        quality: h
+                            .cite
+                            .child_val("QUAY")
+                            .and_then(|q| q.trim().parse().ok())
+                            .filter(|q| Some(*q) != act.quality),
                     };
                     if !p.facts.contains(&fact) {
                         p.facts.push(fact);

@@ -23,7 +23,8 @@ How to work:
    Downloads folder (if the viewer offers no download, save a screenshot of the act there), and
    note the address of the act's page (the viewer's permanent link, ark or permalink, when there
    is one), the register's call number and the image or page number. Then read the act and
-   propose it, following the `read_record` prompt.
+   propose it at once, following the `read_record` prompt, even when you are not sure it is the
+   right one: give your honest `quality` and say what is uncertain in `remarks`.
 5. Note every search with `log_search` as soon as it is done, found or not (archive, register,
    years, names tried, viewer page): the next search starts from there. If nothing is left to
    search online, set `finished` and tell me where you looked.

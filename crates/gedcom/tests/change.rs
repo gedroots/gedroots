@@ -140,8 +140,13 @@ fn automatic_fix_sex_and_citation() {
     let c = change(&g, "wife_not_female", Action::Edit(vec![sex]), "Marie, wife in the marriage act");
     c.check(&g, &rerun).unwrap();
     // Marie's birth without a source: cite an existing source only.
-    let cite =
-        |s: &str| Edit::CiteSource { record: "I2".into(), index: 2, source: s.into(), page: "1800, view 31".into() };
+    let cite = |s: &str| Edit::CiteSource {
+        record: "I2".into(),
+        index: 2,
+        source: s.into(),
+        page: "1800, view 31".into(),
+        quality: None,
+    };
     let issues = rerun(&g);
     let ids = issue_ids(&issues);
     let i = issues.iter().position(|i| i.code == "unsourced" && i.xref == "I2").expect("unsourced birth");

@@ -85,6 +85,10 @@ pub struct FactParams {
     /// Street address within the place, as written ("43, rue de la République", "Hôtel-Dieu"):
     /// number, street, building, hamlet of a town. Kept apart from the place.
     pub address: Option<String>,
+    /// How much the act supports this fact, as GEDCOM 7 `QUAY`, when it differs from the act's
+    /// `quality`: 2 for a birth date or birthplace given by a marriage or death act, 0 for an
+    /// age-based guess, 1 for a doubtful reading.
+    pub quality: Option<u8>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -151,6 +155,13 @@ pub struct ProposeParams {
     pub source: SourceParams,
     /// Reference of the act in its source: act number, page, image ("act 27, image 45").
     pub page: Option<String>,
+    /// Your honest confidence in what you propose, as the GEDCOM 7 quality of the evidence
+    /// (`QUAY`, written on the citation and shown to the user): 3 the act itself, read clearly,
+    /// recorded at the time of the event and about the right person; 2 secondary evidence (written
+    /// later, second-hand: a death act for the birth, a decennial table, an index); 1 questionable
+    /// (a doubtful reading, an uncertain identity, a census, a family tree); 0 unreliable or a
+    /// guess. Propose a probable act with a low quality rather than holding it back.
+    pub quality: Option<u8>,
     /// Text of the act as written, in plain text: no Markdown or other markup, ordinary spaces,
     /// a line break between its parts (body, marginal mentions, signatures). Only the act: your
     /// remarks go in `remarks`.
@@ -416,6 +427,14 @@ fn role(s: &str) -> Result<ActRole, String> {
     })
 }
 
+/// A `QUAY` value, 0 to 3.
+pub fn quality(q: Option<u8>, field: &str) -> Result<Option<u8>, String> {
+    match q {
+        Some(q) if q > 3 => Err(format!("`{field}` is the GEDCOM quality of the evidence, 0 to 3 (not {q})")),
+        q => Ok(q),
+    }
+}
+
 fn clean_id(s: &str) -> String {
     s.trim().trim_matches('@').to_string()
 }
@@ -547,6 +566,7 @@ pub fn to_proposal(p: &ProposeParams) -> Result<Proposal, String> {
     act.address = opt(&p.address).to_string();
     act.page = opt(&p.page).to_string();
     act.transcription = opt(&p.transcription).to_string();
+    act.quality = quality(p.quality, "quality")?;
     // Kept with the act: the note of its citation.
     act.note = opt(&p.remarks).replace("\r\n", "\n");
     act.participants = Vec::new();
@@ -574,6 +594,7 @@ pub fn to_proposal(p: &ProposeParams) -> Result<Proposal, String> {
                 date: opt(&f.date).to_string(),
                 place: opt(&f.place).to_string(),
                 address: opt(&f.address).to_string(),
+                quality: quality(f.quality, "facts quality")?,
             });
         }
         let id = person.id.as_deref().map(clean_id).filter(|x| !x.is_empty());

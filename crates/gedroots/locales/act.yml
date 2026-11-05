@@ -1,17 +1,5 @@
 _version: 2
 # Record entry (crates/gedroots/src/act_editor.rs).
-act.quality_0:
-  en: Unreliable
-  fr: Peu fiable
-act.quality_1:
-  en: Questionable
-  fr: Douteuse
-act.quality_2:
-  en: Secondary
-  fr: Indirecte
-act.quality_3:
-  en: Primary
-  fr: Directe
 act.other_event:
   en: Other Event…
   fr: Autre événement…

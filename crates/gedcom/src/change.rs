@@ -11,6 +11,7 @@
 //! some of them ([`edits_for`]). A possible duplicate is merged (`Action::Merge`), with the value
 //! to keep for each contradictory fact, which the user reviews in the merge window.
 
+use crate::act::quality_label;
 use crate::analysis::check::{IGNORE_TAG, Issue, code_label};
 use crate::date::Date;
 use crate::document::Gedcom;
@@ -98,6 +99,8 @@ pub enum Edit {
         index: usize,
         source: String,
         page: String,
+        /// Quality of the evidence (`QUAY` 0 to 3).
+        quality: Option<u8>,
     },
     /// New value of the structure the issue designates.
     SetValue {
@@ -932,7 +935,7 @@ impl QualityChange {
                 let i = self.the_issue()?;
                 if g.set_media_file(&i.xref, &i.path, file.trim()) { Ok(()) } else { Err(outdated()) }
             }
-            Edit::CiteSource { record, index, source, page } => {
+            Edit::CiteSource { record, index, source, page, quality } => {
                 let node = g
                     .get_mut(record)
                     .and_then(|n| n.children.get_mut(*index))
@@ -942,6 +945,7 @@ impl QualityChange {
                 if !page.trim().is_empty() {
                     cit.children.push(Node::with_value("PAGE", page.trim()));
                 }
+                crate::act::set_quality(&mut cit, *quality);
                 node.insert_child(cit);
                 Ok(())
             }
@@ -1445,11 +1449,13 @@ impl QualityChange {
                             .unwrap_or_default();
                         row(t!("change.file").into(), or_dash(current), file.clone(), Change::Differs)
                     }
-                    Edit::CiteSource { record, index, source, page } => {
+                    Edit::CiteSource { record, index, source, page, quality } => {
                         let label = g.event_title(record, *index).unwrap_or_default();
-                        let title = g.record_label(source);
-                        let proposed =
-                            if page.trim().is_empty() { title } else { format!("{title} · {}", page.trim()) };
+                        let proposed = [g.record_label(source), page.trim().to_string(), quality_label(*quality)]
+                            .into_iter()
+                            .filter(|s| !s.is_empty())
+                            .collect::<Vec<_>>()
+                            .join(" · ");
                         row(label, t!("change.no_source").into(), proposed, Change::Added)
                     }
                     Edit::SetValue { value } => {

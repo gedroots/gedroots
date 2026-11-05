@@ -26,8 +26,11 @@ How to work:
    page of the viewer. When a lead has nothing left to search online, set `finished`. The lead
    returned gives the narrowed years: use them for the next search.
 5. **When you find the act,** download its image or the PDF of the register into my Downloads
-   folder, read it and propose it following the `read_record` prompt (`match_people`, then
-   `propose_act`), and note the search as `found`. A new question raised by the act (a parent
+   folder, read it and propose it right away following the `read_record` prompt
+   (`match_people`, then `propose_act`), before searching the next lead, and note the search as
+   `found`. Never hold acts back to propose them together at the end, and never wait to be sure:
+   a probable act is proposed with its honest `quality` and your doubts in `remarks`, and I
+   decide while you go on searching. Each proposal I save makes the next ones more accurate. A new question raised by the act (a parent
    named for the first time, a widow, a remarriage) is a new lead: it appears in `research_leads`
    once the act is saved.
 6. **Stop** after the leads of the plan, or earlier if I ask, and give me a summary: records

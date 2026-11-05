@@ -1,5 +1,20 @@
 _version: 2
 # Records entered in a source (crates/gedcom/src/act.rs).
+act.quality_0:
+  en: Unreliable
+  fr: Peu fiable
+act.quality_1:
+  en: Questionable
+  fr: Douteuse
+act.quality_2:
+  en: Secondary
+  fr: Indirecte
+act.quality_3:
+  en: Primary
+  fr: Directe
+act.quality_of:
+  en: "Quality: %{level}"
+  fr: "Qualité : %{level}"
 act.field.surname:
   en: "Surname"
   fr: "Nom"
