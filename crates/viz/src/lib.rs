@@ -5,7 +5,7 @@
 //!
 //! - [`scope`]: whose ancestors or descendants, over how many generations;
 //! - [`places`]: where people come from, grouped for the colours;
-//! - [`fan`], [`map`], [`moves`], [`lives`], [`figures`]: the visualizations;
+//! - [`fan`], [`map`], [`moves`], [`lives`], [`figures`], [`seasons`]: the visualizations;
 //! - [`palette`]: their colours on paper and in the app's themes;
 //! - [`raster`]: a drawing as pixels, for the app.
 
@@ -35,6 +35,7 @@ pub mod palette;
 pub mod places;
 pub mod raster;
 pub mod scope;
+pub mod seasons;
 pub mod svg;
 
 pub use palette::Palette;
@@ -55,10 +56,11 @@ pub enum Kind {
     Generations,
     Longevity,
     Occupations,
+    Seasons,
 }
 
 impl Kind {
-    pub const ALL: [Kind; 8] = [
+    pub const ALL: [Kind; 9] = [
         Kind::Fan,
         Kind::Places,
         Kind::Migrations,
@@ -67,6 +69,7 @@ impl Kind {
         Kind::Generations,
         Kind::Longevity,
         Kind::Occupations,
+        Kind::Seasons,
     ];
 
     /// Its name for agents and in the `.ged` (`fan`, `places`…).
@@ -80,6 +83,7 @@ impl Kind {
             Kind::Generations => "generations",
             Kind::Longevity => "longevity",
             Kind::Occupations => "occupations",
+            Kind::Seasons => "seasons",
         }
     }
 
@@ -98,6 +102,7 @@ impl Kind {
             Kind::Generations => t!("viz.generations.title"),
             Kind::Longevity => t!("viz.longevity.title"),
             Kind::Occupations => t!("viz.occupations.title"),
+            Kind::Seasons => t!("viz.seasons.title"),
         }
         .into_owned()
     }
@@ -113,6 +118,7 @@ impl Kind {
             Kind::Generations => t!("viz.generations.summary"),
             Kind::Longevity => t!("viz.longevity.summary"),
             Kind::Occupations => t!("viz.occupations.summary"),
+            Kind::Seasons => t!("viz.seasons.summary"),
         }
         .into_owned()
     }
@@ -142,6 +148,9 @@ impl Kind {
                 "Age at death by year of birth, men and women, with the median per half-century: how long people lived over the centuries."
             }
             Kind::Occupations => "The most frequent occupations: the family's trades and social world.",
+            Kind::Seasons => {
+                "Births, marriages and deaths by month (index corrected for the length of the months, 100 = an average month): the rhythm of the year, such as marriages avoided in Lent and Advent or during the harvest, conceptions in spring, deaths at the end of winter or in summer epidemics."
+            }
         }
     }
 
@@ -225,6 +234,7 @@ impl<'a> Tree<'a> {
             Kind::Generations => self.generations(p),
             Kind::Longevity => self.longevity(p),
             Kind::Occupations => self.occupations(p),
+            Kind::Seasons => self.seasons(p),
         }
     }
 }
@@ -277,7 +287,7 @@ mod tests {
             assert!(!k.title().is_empty() && !k.summary().is_empty());
         }
         assert_eq!(Kind::from_slug(" Places "), Some(Kind::Places));
-        assert_eq!(Kind::from_slug("seasons"), None);
+        assert_eq!(Kind::from_slug("weather"), None);
     }
 
     #[test]

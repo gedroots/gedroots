@@ -1164,7 +1164,7 @@ impl GedrootsMcp {
 
     #[tool(
         name = "list_visualizations",
-        description = "The visualizations GEDRoots draws from the tree (fan chart coloured by origin, map of the birthplaces, map of the migrations from one generation to the next, horizon of the distances each generation moved, lifespans, ancestors found per generation, longevity, occupations): what each one shows, and when it is worth placing in a family book. Read one with `read_visualization`.",
+        description = "The visualizations GEDRoots draws from the tree (fan chart coloured by origin, map of the birthplaces, map of the migrations from one generation to the next, horizon of the distances each generation moved, lifespans, ancestors found per generation, longevity, occupations, births, marriages and deaths by month): what each one shows, and when it is worth placing in a family book. Read one with `read_visualization`.",
         annotations(read_only_hint = true, open_world_hint = false)
     )]
     async fn list_visualizations(&self, Parameters(p): Parameters<ListVizParams>) -> Res<Visualizations> {

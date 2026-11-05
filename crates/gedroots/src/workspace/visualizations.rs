@@ -96,6 +96,7 @@ fn icon_of(kind: Kind) -> IconName {
         Kind::Generations => IconName::Layers,
         Kind::Longevity => IconName::Hourglass,
         Kind::Occupations => IconName::Briefcase,
+        Kind::Seasons => IconName::SunSnow,
     }
 }
 
