@@ -6,7 +6,7 @@ import UniformTypeIdentifiers
 
 /// The app's tabs.
 enum AppTab: Hashable {
-    case tree, people, places, sources, media
+    case tree, places, sources, media, books
 }
 
 /// A tree followed on this device: paired with the computer that shares it, kept in its own folder
@@ -36,6 +36,10 @@ final class TreeModel {
     var people: [PersonRow] = []
     var places: [PlacePin] = []
     var sources: [SourceRow] = []
+    var books: [BookRow] = []
+    /// The people whose record was opened last, the latest first: what the Tree's search shows
+    /// before anything is typed.
+    private(set) var recent: [String] = []
     /// Changes each time a tree is opened: views key their cached view models on it.
     var revision = 0
     var pairing = false
@@ -46,7 +50,7 @@ final class TreeModel {
     var tab = AppTab.tree
     /// The person the Tree tab is centred on; the root person when `nil`.
     var treeFocus: String?
-    /// A record to open in the People tab (from Spotlight).
+    /// A record to open in the Tree tab (from Spotlight).
     var personToOpen: String?
     /// Changes when the app goes to another tab: open sheets and viewers close.
     var jumps = 0
@@ -169,6 +173,8 @@ final class TreeModel {
         trees.removeAll { $0.id == id }
         try? FileManager.default.removeItem(at: folder(id))
         CSSearchableIndex.default().deleteSearchableItems(withDomainIdentifiers: [Self.domain(id)]) { _ in }
+        UserDefaults.standard.removeObject(forKey: "recent.\(id)")
+        BookFiles.forget(tree: id)
         if currentID == id {
             currentID = trees.first?.id
             treeFocus = nil
@@ -209,12 +215,23 @@ final class TreeModel {
         jumps += 1
     }
 
-    /// Opens the person's record in the People tab.
+    /// Opens the person's record in the Tree tab.
     func openPerson(_ id: String) {
         personToOpen = id
-        tab = .people
+        tab = .tree
         jumps += 1
     }
+
+    /// A record was opened: it leads the recent people of the shown tree.
+    func viewed(_ id: String) {
+        guard let tree = currentID else { return }
+        recent.removeAll { $0 == id }
+        recent.insert(id, at: 0)
+        if recent.count > Self.recentCount { recent.removeLast(recent.count - Self.recentCount) }
+        UserDefaults.standard.set(recent, forKey: "recent.\(tree)")
+    }
+
+    private static let recentCount = 20
 
     /// Opens a Spotlight result: the person, in their tree.
     func openSearchResult(_ identifier: String) {
@@ -231,6 +248,8 @@ final class TreeModel {
             people = []
             places = []
             sources = []
+            books = []
+            recent = []
             revision += 1
             return
         }
@@ -239,6 +258,9 @@ final class TreeModel {
         people = tree?.individuals() ?? []
         places = tree?.places() ?? []
         sources = tree?.sources() ?? []
+        books = tree?.books() ?? []
+        let ids = Set(people.map(\.id))
+        recent = (UserDefaults.standard.stringArray(forKey: "recent.\(paired.id)") ?? []).filter { ids.contains($0) }
         revision += 1
         if let tree {
             let name = tree.name()

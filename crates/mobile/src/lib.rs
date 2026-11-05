@@ -428,6 +428,18 @@ fn rejoin(words: &[&str], spaced: bool) -> String {
     out
 }
 
+/// A book of the tree (made in GEDRoots on the computer), in the list of the Books tab.
+#[derive(uniffi::Record)]
+pub struct BookRow {
+    pub id: String,
+    pub title: String,
+    /// Name of the person the book starts from; empty once that person is deleted.
+    pub subject: String,
+    /// The book follows the person's descendants, not their ancestors.
+    pub descendants: bool,
+    pub generations: u32,
+}
+
 /// Sort key of a date ([`gedcom::Date::sort_key`]).
 type SortKey = (i32, u8, u8);
 
@@ -620,6 +632,39 @@ impl Tree {
     /// Every individual, sorted by surname then given name.
     pub fn individuals(&self) -> Vec<PersonRow> {
         self.search(String::new(), Scope::All)
+    }
+
+    /// The books of the tree, in the order of the file.
+    pub fn books(&self) -> Vec<BookRow> {
+        gedroots_book::spec::books(&self.ged)
+            .into_iter()
+            .filter_map(|spec| {
+                let title = if spec.title.trim().is_empty() {
+                    gedroots_book::default_title(&self.ged, &spec)
+                } else {
+                    spec.title.clone()
+                };
+                Some(BookRow {
+                    id: spec.xref.clone()?,
+                    title,
+                    subject: self.ged.individual(&spec.subject).map(|i| i.display_name()).unwrap_or_default(),
+                    descendants: spec.line == gedroots_book::Line::Descendants,
+                    generations: spec.generations,
+                })
+            })
+            .collect()
+    }
+
+    /// A book typeset as PDF, as the computer shows it (one file, without a printer's bleed),
+    /// in the tree's language. `year`, `month`, `day`: today, for the colophon. Takes a few
+    /// seconds for a long book: call it off the main thread.
+    pub fn book_pdf(&self, id: String, year: i32, month: u8, day: u8) -> Result<Vec<u8>, MobileError> {
+        let spec =
+            gedroots_book::spec::book(&self.ged, &id).ok_or_else(|| MobileError::Failed(format!("no book {id}")))?;
+        let file = self.ged.shared_name().unwrap_or("GEDRoots").to_string();
+        let book = gedroots_book::compose(&self.ged, &spec, &file, Some(&self.dir), (year, month, day))
+            .map_err(MobileError::Failed)?;
+        book.pdf().map_err(MobileError::Failed)
     }
 
     /// People matching `query` (names, places and the advanced keywords: `born:1850-1900`,
@@ -1181,5 +1226,19 @@ mod tests {
         let place = b.place.unwrap();
         assert!((place.latitude.unwrap() - 49.1157).abs() < 1e-6);
         assert!((place.longitude.unwrap() + 1.0906).abs() < 1e-6);
+    }
+
+    #[test]
+    fn books_list_and_typeset() {
+        let mut ged = Gedcom::parse(GED).unwrap();
+        gedroots_book::spec::save(&mut ged, &gedroots_book::BookSpec::new("I1", ""));
+        let t = Tree::from_gedcom(ged, std::env::temp_dir());
+        let books = t.books();
+        assert_eq!(books.len(), 1);
+        assert_eq!(books[0].subject, "Marcel Henri Lemaire");
+        assert!(!books[0].title.is_empty() && !books[0].descendants);
+        let pdf = t.book_pdf(books[0].id.clone(), 2026, 11, 5).unwrap();
+        assert!(pdf.starts_with(b"%PDF"));
+        assert!(t.book_pdf("X9".into(), 2026, 11, 5).is_err());
     }
 }

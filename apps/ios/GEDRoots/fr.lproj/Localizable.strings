@@ -70,3 +70,13 @@
 "Remove" = "Retirer";
 "Remove This Tree" = "Retirer cet arbre";
 "Cancel" = "Annuler";
+"Books" = "Livres";
+"No Books" = "Aucun livre";
+"Books are made in GEDRoots on your computer." = "Les livres se créent dans GEDRoots sur l’ordinateur.";
+"Recent" = "Récents";
+"%lld generations" = "%lld générations";
+"Ancestors of %@ · %lld generations" = "Ascendance de %@ · %lld générations";
+"Descendants of %@ · %lld generations" = "Descendance de %@ · %lld générations";
+"%lld pages" = "%lld pages";
+"Typesetting…" = "Mise en page…";
+"Can't Typeset This Book" = "Impossible de mettre ce livre en page";

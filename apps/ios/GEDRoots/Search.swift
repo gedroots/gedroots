@@ -12,9 +12,12 @@ extension View {
     /// `onClose`: the search was closed (Cancel), e.g. to clear a scope that only shows while
     /// searching.
     /// `scoped`: a search scope narrows the results.
+    /// `listed`: the tab shows a list of its own on an empty field (e.g. the recent people), which
+    /// the criteria would cover.
     func treeSearch(model: TreeModel, zone: SearchZone, prompt: LocalizedStringKey, query: Binding<String>,
-                    scoped: Bool = false, onClose: @escaping () -> Void = {}) -> some View {
-        modifier(TreeSearch(model: model, zone: zone, prompt: prompt, query: query, scoped: scoped, onClose: onClose))
+                    scoped: Bool = false, listed: Bool = false, onClose: @escaping () -> Void = {}) -> some View {
+        modifier(TreeSearch(model: model, zone: zone, prompt: prompt, query: query, scoped: scoped, listed: listed,
+                            onClose: onClose))
     }
 }
 
@@ -24,6 +27,7 @@ private struct TreeSearch: ViewModifier {
     let prompt: LocalizedStringKey
     @Binding var query: String
     let scoped: Bool
+    let listed: Bool
     let onClose: () -> Void
     @State private var presented = false
     @State private var text = ""
@@ -58,7 +62,7 @@ private struct TreeSearch: ViewModifier {
                 text = ""
                 onClose()
             }
-            .task(id: "\(text)#\(tokens.map(\.criterion))#\(scoped)#\(model.revision)") { await suggest() }
+            .task(id: "\(text)#\(tokens.map(\.criterion))#\(scoped)#\(listed)#\(model.revision)") { await suggest() }
     }
 
     /// Suggestions under their headings, in the order they come.
@@ -101,8 +105,8 @@ private struct TreeSearch: ViewModifier {
         let criteria = tokens.map(\.criterion)
         let text = text
         // The zone's criteria show on an empty field only before anything narrows the results:
-        // afterwards, the results show.
-        if text.isEmpty && (!criteria.isEmpty || scoped) {
+        // afterwards, the results show, as does the tab's own list.
+        if text.isEmpty && (!criteria.isEmpty || scoped || listed) {
             suggestions = []
             return
         }

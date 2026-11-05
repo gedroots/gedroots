@@ -17,6 +17,7 @@ path = "src/bin/uniffi-bindgen.rs"
 
 [dependencies]
 gedcom = { path = "../gedcom" }
+gedroots-book = { path = "../book" }
 gedroots-sync = { path = "../sync" }
 uniffi = { version = "0.32.2", features = ["tokio", "cli"] }
 tokio = { version = "1", features = ["rt-multi-thread", "sync"] }

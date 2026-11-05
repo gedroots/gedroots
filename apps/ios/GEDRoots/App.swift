@@ -20,9 +20,6 @@ struct GEDRootsApp: App {
                         TreeView(model: model)
                             .tabItem { Label("Tree", systemImage: "point.3.connected.trianglepath.dotted") }
                             .tag(AppTab.tree)
-                        PeopleView(model: model)
-                            .tabItem { Label("People", systemImage: "person.2") }
-                            .tag(AppTab.people)
                         PlacesView(model: model)
                             .tabItem { Label("Places", systemImage: "mappin.and.ellipse") }
                             .tag(AppTab.places)
@@ -32,6 +29,9 @@ struct GEDRootsApp: App {
                         MediaView(model: model)
                             .tabItem { Label("Media", systemImage: "photo.on.rectangle") }
                             .tag(AppTab.media)
+                        BooksView(model: model)
+                            .tabItem { Label("Books", systemImage: "books.vertical") }
+                            .tag(AppTab.books)
                     }
                     .tint(Theme.accent)
                     .sheet(isPresented: $model.adding) { PairView(model: model) }

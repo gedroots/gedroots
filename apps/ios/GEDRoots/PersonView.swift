@@ -18,9 +18,10 @@ struct PersonView: View {
             .task(id: "\(id)#\(model.revision)") {
                 detail = model.tree?.person(id: id)
                 loaded = true
+                if detail != nil { model.viewed(id) }
             }
             .toolbar {
-                // The tree is another tab here, unlike the desktop.
+                // The chart is under the record here, unlike the desktop.
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Show in Tree", systemImage: "point.3.connected.trianglepath.dotted") {
                         model.showInTree(id)
