@@ -581,15 +581,22 @@ impl Workspace {
         let dropped = self.books.dropped.clone();
         let p = preview.clone();
         uniform_list("book-pages", preview.rows(), move |range, _window, cx| {
-            // Pages around the visible ones stay decoded; the others are released.
+            // Pages around the visible ones stay decoded; the others are released. Every frame,
+            // the list also asks for its first row alone, to measure it: that row is not where the
+            // reader is, so nothing is released then (else every page past the twentieth was
+            // released as soon as it was rendered, and stayed blank).
+            let measuring = range == (0..1);
             let (lo, hi) = (2 * range.start, 2 * range.end + 1);
-            let far: Vec<usize> = p
-                .pages
-                .borrow()
-                .keys()
-                .copied()
-                .filter(|&i| i + KEPT_PAGES / 2 < lo || i > hi + KEPT_PAGES / 2)
-                .collect();
+            let far: Vec<usize> = if measuring {
+                Vec::new()
+            } else {
+                p.pages
+                    .borrow()
+                    .keys()
+                    .copied()
+                    .filter(|&i| i + KEPT_PAGES / 2 < lo || i > hi + KEPT_PAGES / 2)
+                    .collect()
+            };
             for i in far {
                 if let Some(img) = p.pages.borrow_mut().remove(&i) {
                     dropped.borrow_mut().push(img);
