@@ -1,5 +1,20 @@
 # Changelog
 
+## [2026.11.8](https://github.com/gedroots/gedroots/releases/tag/v2026.11.8) - 2026-11-05
+
+### 🔄 Changed
+
+- Keep the agent's remarks in the tree as the note of the act's citation by @antoninguyot in [#159](https://github.com/gedroots/gedroots/pull/159)
+- Let agents give the quality of their evidence and propose as they go by @antoninguyot in [#158](https://github.com/gedroots/gedroots/pull/158)
+- Polish the interface after an Impeccable and Unslop review by @antoninguyot in [#162](https://github.com/gedroots/gedroots/pull/162)
+- Delete the same way everywhere: one named command, no confirmation, Undo by @antoninguyot in [#163](https://github.com/gedroots/gedroots/pull/163)
+- Move visualizations into their own crate and add a Visualizations page by @antoninguyot in [#164](https://github.com/gedroots/gedroots/pull/164)
+- Keep the book preview's pages past the twentieth from staying blank by @antoninguyot in [#161](https://github.com/gedroots/gedroots/pull/161)
+- Place visualizations in book chapters by @antoninguyot in [#165](https://github.com/gedroots/gedroots/pull/165)
+- Add Migrations and Horizon visualizations by @antoninguyot in [#167](https://github.com/gedroots/gedroots/pull/167)
+- Add Seasons visualization by @antoninguyot in [#168](https://github.com/gedroots/gedroots/pull/168)
+- Read the tree's books, and find people from the Tree tab by @antoninguyot in [#166](https://github.com/gedroots/gedroots/pull/166)
+
 ## [2026.11.7](https://github.com/gedroots/gedroots/releases/tag/v2026.11.7) - 2026-11-04
 
 ### 🔄 Changed
