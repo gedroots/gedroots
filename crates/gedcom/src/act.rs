@@ -527,6 +527,13 @@ pub struct Suggestion {
     pub reason: String,
 }
 
+/// `NOTE` of a citation; a text of several lines continues in `CONT`.
+fn note_node(text: &str) -> Node {
+    let mut n = Node::new("NOTE");
+    n.set_text(text);
+    n
+}
+
 /// Title of a source just created (see [`Gedcom::create`]), in one of the app's languages.
 fn is_new_source_title(title: &str) -> bool {
     crate::i18n::LANGUAGES.iter().any(|l| t!("record.new_source", locale = l) == title)
@@ -1154,7 +1161,7 @@ impl Act {
             let mut ev = self.event_node(None);
             let mut cite = self.citation(media.as_deref(), None, true);
             if !note.is_empty() {
-                cite.children.push(Node::with_value("NOTE", &note));
+                cite.children.push(note_node(&note));
             }
             ev.children.push(cite);
             for (i, (p, id)) in people.iter().zip(&ids).enumerate() {
@@ -1180,7 +1187,7 @@ impl Act {
                 let mut ev = self.event_node(gedcom_age(age));
                 let mut cite = self.citation(media.as_deref(), role.clone(), first_principal);
                 if first_principal && !note.is_empty() {
-                    cite.children.push(Node::with_value("NOTE", &note));
+                    cite.children.push(note_node(&note));
                 }
                 ev.children.push(cite);
                 let at = w.add_event(x, ev, conflicts.event);
