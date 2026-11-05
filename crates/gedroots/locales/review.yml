@@ -232,9 +232,12 @@ review:
   basis:
     en: "Based on: %{list}"
     fr: "Indices : %{list}"
+  visualization:
+    en: Visualization
+    fr: Visualisation
   levels_note:
-    en: Untick the context and hypotheses to leave out of the book.
-    fr: Décochez le contexte et les hypothèses à laisser hors du livre.
+    en: Untick the context, hypotheses and visualizations to leave out of the book.
+    fr: Décochez le contexte, les hypothèses et les visualisations à laisser hors du livre.
   save_chapter:
     en: Save to Book
     fr: Enregistrer dans le livre

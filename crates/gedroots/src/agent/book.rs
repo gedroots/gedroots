@@ -5,6 +5,7 @@
 
 use gedcom::Gedcom;
 use gedroots_book::content::Record;
+use gedroots_book::writing::Figure;
 use gedroots_book::{Block, BookSpec, Cite, Line, Writing};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -28,6 +29,9 @@ pub enum Kind {
     Context,
     /// What the records do not say (why a family moved): `basis` required.
     Hypothesis,
+    /// A visualization GEDRoots draws from the tree (`list_visualizations`): `visualization`
+    /// required, `text` an optional comment shown under it.
+    Visualization,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
@@ -54,6 +58,41 @@ pub struct BlockParams {
     /// Hypothesis: the clues it rests on, at least one ("born on the coast near Alicante").
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub basis: Vec<String>,
+    /// Visualization: its name (`places`, `fan`, `lives`…, from `list_visualizations`).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub visualization: String,
+    /// Visualization: whose ancestors or descendants (`I12`). Default: the book's person.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub person: Option<String>,
+    /// Visualization: `ancestors` or `descendants`. Default: the book's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub line: Option<String>,
+    /// Visualization: how many generations, 2 to 12. Default: the book's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub generations: Option<u32>,
+}
+
+impl BlockParams {
+    fn new(kind: Kind, text: &str) -> BlockParams {
+        BlockParams {
+            kind,
+            text: text.to_string(),
+            title: String::new(),
+            sources: vec![],
+            basis: vec![],
+            visualization: String::new(),
+            person: None,
+            line: None,
+            generations: None,
+        }
+    }
+}
+
+fn line_name(line: Line) -> &'static str {
+    match line {
+        Line::Ancestors => "ancestors",
+        Line::Descendants => "descendants",
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
@@ -97,8 +136,27 @@ fn clean(id: &str) -> String {
     id.trim().trim_matches('@').to_string()
 }
 
-fn block(p: &BlockParams) -> Block {
-    match p.kind {
+fn block(p: &BlockParams) -> Result<Block, String> {
+    Ok(match p.kind {
+        Kind::Visualization => {
+            let kind = gedroots_viz::Kind::from_slug(&p.visualization).ok_or_else(|| {
+                let names: Vec<&str> = gedroots_viz::Kind::ALL.iter().map(|k| k.slug()).collect();
+                format!("no visualization `{}`: one of {}", p.visualization, names.join(", "))
+            })?;
+            let line = match p.line.as_deref().map(|l| l.trim().to_ascii_lowercase()).as_deref() {
+                None | Some("") => None,
+                Some("ancestors") => Some(Line::Ancestors),
+                Some("descendants") => Some(Line::Descendants),
+                Some(other) => return Err(format!("no line `{other}`: ancestors or descendants")),
+            };
+            Block::Figure(Figure {
+                kind,
+                subject: p.person.as_deref().map(clean).filter(|x| !x.is_empty()),
+                line,
+                generations: p.generations,
+                text: p.text.clone(),
+            })
+        }
         Kind::Text => Block::Text(p.text.clone()),
         Kind::Context => Block::Context {
             title: p.title.trim().to_string(),
@@ -110,27 +168,26 @@ fn block(p: &BlockParams) -> Block {
                 .collect(),
         },
         Kind::Hypothesis => Block::Hypothesis { text: p.text.clone(), basis: p.basis.clone() },
-    }
+    })
 }
 
 fn params(b: &Block) -> BlockParams {
     match b {
-        Block::Text(t) => {
-            BlockParams { kind: Kind::Text, text: t.clone(), title: String::new(), sources: vec![], basis: vec![] }
-        }
+        Block::Text(t) => BlockParams::new(Kind::Text, t),
         Block::Context { title, text, sources } => BlockParams {
-            kind: Kind::Context,
-            text: text.clone(),
             title: title.clone(),
             sources: sources.iter().map(|s| SourceRef { title: s.title.clone(), url: s.url.clone() }).collect(),
-            basis: vec![],
+            ..BlockParams::new(Kind::Context, text)
         },
-        Block::Hypothesis { text, basis } => BlockParams {
-            kind: Kind::Hypothesis,
-            text: text.clone(),
-            title: String::new(),
-            sources: vec![],
-            basis: basis.clone(),
+        Block::Hypothesis { text, basis } => {
+            BlockParams { basis: basis.clone(), ..BlockParams::new(Kind::Hypothesis, text) }
+        }
+        Block::Figure(f) => BlockParams {
+            visualization: f.kind.slug().into(),
+            person: f.subject.clone(),
+            line: f.line.map(|l| line_name(l).into()),
+            generations: f.generations,
+            ..BlockParams::new(Kind::Visualization, &f.text)
         },
     }
 }
@@ -146,8 +203,12 @@ pub fn to_request(p: &ProposeChapterParams, g: &Gedcom) -> Result<ChapterRequest
         .find(|c| c.generation == p.generation)
         .ok_or_else(|| format!("the book has no chapter {}: its chapters are 1 to {}", p.generation, outline.len()))?;
     let writing = Writing {
-        intro: p.intro.iter().map(block).collect(),
-        people: p.people.iter().map(|w| (clean(&w.id), w.blocks.iter().map(block).collect())).collect(),
+        intro: p.intro.iter().map(block).collect::<Result<_, _>>()?,
+        people: p
+            .people
+            .iter()
+            .map(|w| Ok((clean(&w.id), w.blocks.iter().map(block).collect::<Result<_, String>>()?)))
+            .collect::<Result<_, String>>()?,
     };
     if writing.is_empty() {
         return Err("nothing to propose: give `intro` or `people`".into());
@@ -159,6 +220,13 @@ pub fn to_request(p: &ProposeChapterParams, g: &Gedcom) -> Result<ChapterRequest
     }
     if let Some(problem) = writing.blocks().find_map(|b| b.problem(g)) {
         return Err(problem);
+    }
+    for b in writing.blocks() {
+        if let Block::Figure(f) = b
+            && !f.kind.supports(f.line.unwrap_or(spec.line))
+        {
+            return Err(format!("`{}` is drawn for ancestors only, and this book is of descendants", f.kind.slug()));
+        }
     }
     Ok(ChapterRequest {
         book: id,
@@ -232,11 +300,7 @@ fn summary(g: &Gedcom, spec: &BookSpec) -> BookSummary {
             t => t.to_string(),
         },
         person: g.individual(&spec.subject).map(|i| i.display_name()).unwrap_or_default(),
-        line: match spec.line {
-            Line::Ancestors => "ancestors",
-            Line::Descendants => "descendants",
-        }
-        .into(),
+        line: line_name(spec.line).into(),
         generations: spec.generations,
         language: gedroots_book::language(g),
     }
@@ -305,7 +369,7 @@ mod tests {
     }
 
     fn text(t: &str) -> BlockParams {
-        BlockParams { kind: Kind::Text, text: t.into(), title: String::new(), sources: vec![], basis: vec![] }
+        BlockParams::new(Kind::Text, t)
     }
 
     #[test]
@@ -325,6 +389,17 @@ mod tests {
         assert!(to_request(&chapter(vec![], vec![no_source]), &g).unwrap_err().contains("source"));
         let no_basis = BlockParams { kind: Kind::Hypothesis, ..text("Maybe.") };
         assert!(to_request(&chapter(vec![], vec![no_basis]), &g).unwrap_err().contains("basis"));
+        let viz = |name: &str, line: Option<&str>| BlockParams {
+            visualization: name.into(),
+            line: line.map(Into::into),
+            person: Some("@I2@".into()),
+            ..BlockParams::new(Kind::Visualization, "")
+        };
+        let placed = to_request(&chapter(vec![], vec![viz("Places", None)]), &g).expect("visualization");
+        assert_eq!(params(&placed.writing.intro[0]).person.as_deref(), Some("I2"));
+        assert!(to_request(&chapter(vec![], vec![viz("seasons", None)]), &g).unwrap_err().contains("one of fan"));
+        let found = viz("generations", Some("descendants"));
+        assert!(to_request(&chapter(vec![], vec![found]), &g).unwrap_err().contains("ancestors only"));
         let mut far = chapter(vec![], vec![text("x")]);
         far.generation = 9;
         assert!(to_request(&far, &g).unwrap_err().contains("no chapter 9"));

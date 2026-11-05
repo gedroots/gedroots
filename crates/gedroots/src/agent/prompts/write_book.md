@@ -28,6 +28,12 @@ How to work:
      you have read);
    - `hypothesis`: what the records do not say (why they moved, why a child was born far from
      home), with its `basis`: the clues, and what would confirm it (a register to consult).
+   - `visualization`: a chart GEDRoots draws from the tree (`list_visualizations`), placed where
+     it tells the story: the map of the places when a generation migrates, the lives when a
+     generation is decimated, the occupations when a family changes trade. It can show another
+     person's ancestors or descendants (`person`, `line`, `generations`), such as a maternal
+     branch that came from elsewhere. Add a short comment in `text` that says what to see in it,
+     with the figures `read_visualization` gives. Place few, where they say something.
 5. Send the chapter with `propose_chapter`: an `intro` for the generation (where it lived, what it
    went through), and the `people` you wrote about. Put in `remarks` what you could not check.
 6. Go on with the next chapter. The user reviews each one in GEDRoots, leaves out what they do not

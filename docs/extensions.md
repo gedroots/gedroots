@@ -521,7 +521,8 @@ pages are computed from the tree each time, so the book follows the changes. See
     place of the cover, and the cover as a file of its own (back, spine, front); absent: for
     reading and printing at home.
   - `_GR_CHAP <n>`: what an AI agent wrote for chapter *n* (the generation, 1 = the person),
-    saved from To Review. Its substructures, in the order the book shows them:
+    saved from To Review, and the visualizations placed in it (by the agent, or with Add to Book
+    on the Visualizations page). Its substructures, in the order the book shows them:
     - the chapter's introduction, as blocks;
     - `_GR_INDI @<INDI>@`: a person's narrative, as blocks, in place of the sentences GEDRoots
       writes from the facts.
@@ -532,7 +533,13 @@ pages are computed from the tree each time, so the book follows the changes. See
     - `_GR_CTXT <title>`: historical context, with `_GR_TEXT` and one `_GR_CITE <source>` or more
       (author and title), each with an optional `_GR_URL <url>`;
     - `_GR_HYPO <text>` (with `CONT`): what the records do not say, with one `_GR_BASE <clue>` or
-      more.
+      more;
+    - `_GR_VIZ <kind>`: a visualization, drawn from the tree when the book is typeset: `FAN`,
+      `PLACES`, `LIVES`, `GENERATIONS`, `LONGEVITY` or `OCCUPATIONS`. By default it shows the
+      book's people; `_GR_SUBJ @<INDI>@`, `_GR_LINE` and `_GR_GENS` give another scope. An
+      optional `_GR_TEXT` is a comment shown under it. One of the book's own people is shown
+      there instead of in the book's opening pages or figures; one the tree has too little for
+      is left out.
 
 ```
 0 HEAD
@@ -556,6 +563,8 @@ pages are computed from the tree each time, so the book follows the changes. See
 3 _GR_TEXT {I6} is born in 1864 in Troyes, the son of a winegrower…
 3 _GR_HYPO He left the vines for the railway when the phylloxera reached the Aube.
 4 _GR_BASE occupation changes between 1888 and 1895
+2 _GR_VIZ PLACES
+3 _GR_TEXT Every branch of this generation still lives within a day's walk of Troyes.
 ```
 
 Deleting the person leaves the book without a subject: it stays in the list, empty, until it is

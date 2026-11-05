@@ -4,7 +4,7 @@
 
 use crate::prose;
 use crate::spec::{BookSpec, Line};
-use crate::writing::{Block, Writing};
+use crate::writing::{Block, Figure, Writing};
 use gedcom::document::Gedcom;
 use gedcom::model::{Individual, sort_key};
 use gedroots_viz::{Kind, Member, Palette, Scope, Tree};
@@ -88,14 +88,17 @@ pub struct FanPage {
     pub subtitle: String,
 }
 
-/// A block an agent wrote: text, context or hypothesis.
-#[derive(Serialize)]
+/// A block an agent wrote: text, context, hypothesis or figure.
+#[derive(Serialize, Default)]
 pub struct BlockData {
     pub kind: &'static str,
     pub title: String,
     pub paragraphs: Vec<String>,
-    /// The sources of a context, the clues of a hypothesis.
+    /// The sources of a context, the clues of a hypothesis, a figure's caption.
     pub notes: Vec<String>,
+    /// A figure's drawing, and the legend of its colours.
+    pub image: Option<String>,
+    pub legend: Vec<Legend>,
 }
 
 #[derive(Serialize)]
@@ -311,6 +314,13 @@ pub fn build(
 
     let palette = Palette::PRINT;
     let mut all_places = tree.origins.all.clone();
+    // A visualization of the book's own people placed in a chapter is shown there, not again in
+    // the opening pages or the figures.
+    let placed = |kind: Kind| {
+        spec.chapters.values().flat_map(Writing::blocks).any(|b| {
+            matches!(b, Block::Figure(f) if f.kind == kind && f.of_book(&spec.subject, spec.line, spec.generations))
+        })
+    };
 
     // Fan, of ancestors or descendants, and the same without its names for the cover.
     let fan = tree.fan(&palette, true);
@@ -322,7 +332,7 @@ pub fn build(
         .into_iter()
         .map(|l| Legend { label: l.label, color: l.color, count: l.count, unknown: l.unknown })
         .collect();
-    if part.opening {
+    if part.opening && !placed(Kind::Fan) {
         data.fan_page = Some(match spec.line {
             Line::Ancestors => {
                 FanPage { title: t!("book.origins").into_owned(), subtitle: t!("book.origins_sub").into_owned() }
@@ -335,6 +345,7 @@ pub fn build(
 
     // Map of the places of origin.
     if part.opening
+        && !placed(Kind::Places)
         && let Some(map) = tree.places(&palette)
     {
         assets.push(Asset { path: "map.svg".into(), bytes: map.svg.into_bytes() });
@@ -345,6 +356,7 @@ pub fn build(
 
     // Lifespans: the first generations after the subject.
     if part.opening
+        && !placed(Kind::Lives)
         && let Some(lives) = tree.lives(&palette, today.0)
     {
         assets.push(Asset { path: "lifespans.svg".into(), bytes: lives.svg.into_bytes() });
@@ -353,6 +365,7 @@ pub fn build(
 
     // Chapters, one per generation.
     let name_of = |x: &str| g.individual(x).map(|i| i.display_name());
+    let figures = Blocks { g, spec, year: today.0, name: &name_of, drawn: std::cell::Cell::new(0) };
     let generations = members.iter().map(|m| m.generation).max().unwrap_or(1);
     for n in 1..=generations {
         let here: Vec<&Member> = members.iter().filter(|m| m.generation == n).collect();
@@ -363,7 +376,7 @@ pub fn build(
         let mut ch = Chapter {
             title: generation_title(spec.line, n),
             subtitle: format!("{} · {}", t!("book.generation", n = n), people_count(here.len())),
-            intro: writing.map(|w| blocks(&w.intro, &name_of)).unwrap_or_default(),
+            intro: writing.map(|w| figures.blocks(&w.intro, &mut assets)).unwrap_or_default(),
             ..Default::default()
         };
         for m in here {
@@ -403,25 +416,31 @@ pub fn build(
                 if written.iter().any(|b| matches!(b, Block::Text(_))) {
                     sheet.paragraphs.clear();
                 }
-                sheet.blocks = blocks(written, &name_of);
+                sheet.blocks = figures.blocks(written, &mut assets);
             }
             if full { ch.full.push(sheet) } else { ch.short.push(sheet) }
         }
         data.chapters.push(ch);
     }
-    data.levels = spec.chapters.values().flat_map(Writing::blocks).any(Block::optional);
+    data.levels = spec.chapters.values().flat_map(Writing::blocks).any(Block::level);
 
     // Figures, in the last volume.
     if part.figures {
-        if let Some(found) = tree.figure(Kind::Generations, &palette, today.0) {
+        if !placed(Kind::Generations)
+            && let Some(found) = tree.figure(Kind::Generations, &palette, today.0)
+        {
             assets.push(Asset { path: "completeness.svg".into(), bytes: found.svg.into_bytes() });
             data.completeness = true;
         }
-        if let Some(ages) = tree.longevity(&palette) {
+        if !placed(Kind::Longevity)
+            && let Some(ages) = tree.longevity(&palette)
+        {
             assets.push(Asset { path: "longevity.svg".into(), bytes: ages.svg.into_bytes() });
             data.longevity = Some(ages.caption);
         }
-        data.occupations = tree.jobs();
+        if !placed(Kind::Occupations) {
+            data.occupations = tree.jobs();
+        }
     }
 
     // Index of the people in this part.
@@ -476,34 +495,94 @@ fn record_of(facts: usize, generation: u32, written: bool) -> Record {
     }
 }
 
-/// The agent's blocks, with the people's names in place of their ids.
-fn blocks(blocks: &[Block], name: &impl Fn(&str) -> Option<String>) -> Vec<BlockData> {
-    let paragraphs = |t: &str| -> Vec<String> {
-        crate::writing::expand(t, name).split('\n').map(str::trim).filter(|p| !p.is_empty()).map(String::from).collect()
-    };
-    blocks
-        .iter()
-        .map(|b| match b {
-            Block::Text(t) => {
-                BlockData { kind: "text", title: String::new(), paragraphs: paragraphs(t), notes: vec![] }
-            }
-            Block::Context { title, text, sources } => BlockData {
-                kind: "context",
-                title: title.clone(),
-                paragraphs: paragraphs(text),
-                notes: sources
-                    .iter()
-                    .map(|s| if s.url.is_empty() { s.title.clone() } else { format!("{} — {}", s.title, s.url) })
-                    .collect(),
-            },
-            Block::Hypothesis { text, basis } => BlockData {
-                kind: "hypothesis",
-                title: String::new(),
-                paragraphs: paragraphs(text),
-                notes: basis.clone(),
-            },
+/// What turns the agent's blocks into the template's: the people's names in place of their ids,
+/// and the figures drawn.
+struct Blocks<'a, N: Fn(&str) -> Option<String>> {
+    g: &'a Gedcom,
+    spec: &'a BookSpec,
+    /// This year, which ends the lives still open.
+    year: i32,
+    name: &'a N,
+    /// Figures drawn so far, which name their files.
+    drawn: std::cell::Cell<usize>,
+}
+
+impl<N: Fn(&str) -> Option<String>> Blocks<'_, N> {
+    fn paragraphs(&self, t: &str) -> Vec<String> {
+        crate::writing::expand(t, self.name)
+            .split('\n')
+            .map(str::trim)
+            .filter(|p| !p.is_empty())
+            .map(String::from)
+            .collect()
+    }
+
+    /// The blocks, in order; a figure the tree has too little for is left out.
+    fn blocks(&self, blocks: &[Block], assets: &mut Vec<Asset>) -> Vec<BlockData> {
+        blocks
+            .iter()
+            .filter_map(|b| match b {
+                Block::Text(t) => {
+                    Some(BlockData { kind: "text", paragraphs: self.paragraphs(t), ..Default::default() })
+                }
+                Block::Context { title, text, sources } => Some(BlockData {
+                    kind: "context",
+                    title: title.clone(),
+                    paragraphs: self.paragraphs(text),
+                    notes: sources
+                        .iter()
+                        .map(|s| if s.url.is_empty() { s.title.clone() } else { format!("{} — {}", s.title, s.url) })
+                        .collect(),
+                    ..Default::default()
+                }),
+                Block::Hypothesis { text, basis } => Some(BlockData {
+                    kind: "hypothesis",
+                    paragraphs: self.paragraphs(text),
+                    notes: basis.clone(),
+                    ..Default::default()
+                }),
+                Block::Figure(f) => self.figure(f, assets),
+            })
+            .collect()
+    }
+
+    fn figure(&self, f: &Figure, assets: &mut Vec<Asset>) -> Option<BlockData> {
+        let spec = self.spec;
+        let subject = f.subject.clone().unwrap_or_else(|| spec.subject.clone());
+        let scope = Scope::new(&subject, f.line.unwrap_or(spec.line), f.generations.unwrap_or(spec.generations));
+        if !f.kind.supports(scope.line) {
+            return None;
+        }
+        let tree = Tree::new(self.g, scope).ok()?;
+        let drawn = tree.figure(f.kind, &Palette::PRINT, self.year)?;
+        let n = self.drawn.get() + 1;
+        self.drawn.set(n);
+        let path = format!("figure-{n}.svg");
+        assets.push(Asset { path: path.clone(), bytes: drawn.svg.into_bytes() });
+        // Another person's: the title says whose.
+        let title = if f.of_book(&spec.subject, spec.line, spec.generations) {
+            f.kind.title()
+        } else {
+            let name = (self.name)(&subject).unwrap_or_default();
+            let whose = match tree.scope.line {
+                Line::Ancestors => t!("book.ancestors_of", name = name),
+                Line::Descendants => t!("book.descendants_of", name = name),
+            };
+            format!("{} · {whose}", f.kind.title())
+        };
+        Some(BlockData {
+            kind: "figure",
+            title,
+            paragraphs: self.paragraphs(&f.text),
+            notes: [drawn.caption].into_iter().filter(|c| !c.is_empty()).collect(),
+            image: Some(path),
+            legend: drawn
+                .legend
+                .into_iter()
+                .map(|l| Legend { label: l.label, color: l.color, count: l.count, unknown: l.unknown })
+                .collect(),
         })
-        .collect()
+    }
 }
 
 /// A person of a chapter, for the agent.

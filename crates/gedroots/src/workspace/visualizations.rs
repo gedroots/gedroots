@@ -6,7 +6,10 @@
 
 use super::relatives::PickPurpose;
 use super::*;
+use gedroots_book::writing::Figure as Placed;
+use gedroots_book::{Block, BookSpec};
 use gedroots_viz::{Figure, Kind, Line, Palette, Scope, Tree};
+use gpui_kit::component::menu::{DropdownMenu, PopupMenuItem};
 use std::cell::RefCell;
 use std::sync::Arc;
 
@@ -63,6 +66,9 @@ struct Shown {
     /// Height of the drawing for a width of 1.
     ratio: f32,
 }
+
+/// A book in the Add to Book menu: its id, title and chapters (generation, title).
+type BookEntry = (String, String, Vec<(u32, String)>);
 
 fn icon_of(kind: Kind) -> IconName {
     match kind {
@@ -179,6 +185,80 @@ impl Workspace {
         f(&mut self.viz);
         self.refresh_viz(cx);
         cx.notify();
+    }
+
+    /// Places the visualization shown at the end of a chapter's introduction (one undo point).
+    /// What it shares with the book (person, line, generations) is left to the book, so that it
+    /// follows the book's settings.
+    fn add_viz_to_book(&mut self, book: String, generation: u32, window: &mut Window, cx: &mut Context<Self>) {
+        let (Some(doc), Some(key)) = (&self.doc, self.viz_key()) else { return };
+        let Some(mut spec) = gedroots_book::spec::book(&doc.ged, &book) else { return };
+        let scope = key.scope;
+        let figure = Placed {
+            kind: key.kind,
+            subject: (scope.subject != spec.subject).then(|| scope.subject.clone()),
+            line: (scope.line != spec.line).then_some(scope.line),
+            generations: (scope.generations != spec.generations).then_some(scope.generations),
+            text: String::new(),
+        };
+        let chapter = gedroots_book::outline(&doc.ged, &spec)
+            .ok()
+            .and_then(|o| o.into_iter().find(|c| c.generation == generation))
+            .map(|c| c.title)
+            .unwrap_or_default();
+        let msg = t!("viz.added", chapter = chapter, book = self.book_title(&spec)).into_owned();
+        spec.chapters.entry(generation).or_default().intro.push(Block::Figure(figure));
+        self.edit_ged(
+            move |g| {
+                gedroots_book::spec::save(g, &spec);
+                true
+            },
+            msg,
+            window,
+            cx,
+        );
+    }
+
+    /// “Add to Book”: each book, then its chapters.
+    fn add_to_book_button(&self, books: Vec<BookSpec>, cx: &mut Context<Self>) -> impl IntoElement {
+        let me = cx.entity().downgrade();
+        Button::new("viz-add-to-book")
+            .small()
+            .ghost()
+            .icon(IconName::BookMarked)
+            .label(t!("viz.add_to_book"))
+            .dropdown_menu(move |mut menu, window, cx| {
+                let Some(ws) = me.upgrade() else { return menu };
+                let entries: Vec<BookEntry> = {
+                    let this = ws.read(cx);
+                    let Some(doc) = &this.doc else { return menu };
+                    books
+                        .iter()
+                        .map(|b| {
+                            let chapters = gedroots_book::outline(&doc.ged, b)
+                                .map(|o| o.into_iter().map(|c| (c.generation, c.title)).collect())
+                                .unwrap_or_default();
+                            (b.xref.clone().unwrap_or_default(), this.book_title(b), chapters)
+                        })
+                        .collect()
+                };
+                for (id, title, chapters) in entries {
+                    let me = me.clone();
+                    menu = menu.submenu(title, window, cx, move |mut sub, _, _| {
+                        for (n, chapter) in &chapters {
+                            let (me, id, n) = (me.clone(), id.clone(), *n);
+                            sub = sub.item(PopupMenuItem::new(chapter.clone()).on_click(move |_, window, cx| {
+                                let (me, id) = (me.clone(), id.clone());
+                                window.defer(cx, move |window, cx| {
+                                    let _ = me.update(cx, |this, cx| this.add_viz_to_book(id, n, window, cx));
+                                });
+                            }));
+                        }
+                        sub
+                    });
+                }
+                menu
+            })
     }
 
     // ------------------------------------------------------------------
@@ -317,6 +397,15 @@ impl Workspace {
             .when(kind.supports(Line::Descendants), |d| d.child(switch(lines)))
             .child(generations)
             .child(switch(views));
+        let books = gedroots_book::spec::books(g);
+        let title = h_flex()
+            .gap_3()
+            .items_center()
+            .child(div().flex_1().min_w_0().text_xl().font_weight(FontWeight::SEMIBOLD).child(kind.title()))
+            // Only when the tree has a book and the visualization something to show.
+            .when(!books.is_empty() && self.viz.shown.as_ref().is_some_and(|s| s.figure.is_some()), |d| {
+                d.child(self.add_to_book_button(books, cx))
+            });
         let header = v_flex()
             .px_6()
             .pt_4()
@@ -324,7 +413,7 @@ impl Workspace {
             .gap_3()
             .border_b_1()
             .border_color(theme::border())
-            .child(div().text_xl().font_weight(FontWeight::SEMIBOLD).child(kind.title()))
+            .child(title)
             .child(controls);
         let shown = self.viz.shown.clone().filter(|s| s.key.kind == kind);
         let body: AnyElement = match shown {
