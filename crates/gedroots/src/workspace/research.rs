@@ -1,9 +1,11 @@
 //! “Research” page: the records still to find (`gedcom::leads`), with where to look and the research
 //! log (`gedcom::research_log`).
 //!
-//! Leads are computed, never typed: the list groups them by state (to find, searched without a
-//! result, ignored), the centre shows the chosen lead (estimated period and why, what is known,
-//! where to look with the registers the file already cites, the log). The field above the list is
+//! Leads are computed, never typed: the list groups them by state (in progress, to find, searched
+//! without a result, ignored), the centre shows the chosen lead (the agent working on it, its
+//! clues, where it was handed over, estimated period and why, what is known, where to look with the
+//! registers the file already cites, the log). What agents do is shown as they do it (`Live`, from
+//! their tool calls, never kept); what they note is in the file, for the next one. The field above the list is
 //! the focus, a search of individuals (`sosa:1-63` by default), kept while the file is open. What
 //! the user or an agent notes goes in the file with an undo point.
 
@@ -32,7 +34,21 @@ pub(super) struct ResearchState {
     pub show_ignored: bool,
     /// Row targeted by the last right-click (lead key).
     pub menu_lead: Rc<RefCell<Option<String>>>,
+    /// What each connected agent is doing, by its name.
+    pub live: std::collections::HashMap<String, Live>,
 }
+
+/// An agent's last tool call: shown while it is recent.
+pub(super) struct Live {
+    /// The lead it last noted something on (key).
+    pub lead: Option<String>,
+    /// What it did, in the interface's language.
+    pub text: String,
+    pub at: std::time::Instant,
+}
+
+/// How long an agent counts as working after its last tool call.
+const LIVE: std::time::Duration = std::time::Duration::from_secs(120);
 
 impl Default for ResearchState {
     fn default() -> Self {
@@ -42,6 +58,7 @@ impl Default for ResearchState {
             show_not_found: false,
             show_ignored: false,
             menu_lead: Rc::default(),
+            live: Default::default(),
         }
     }
 }
@@ -62,14 +79,17 @@ pub(super) struct SearchDialog {
 /// Group of the list.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Group {
+    InProgress,
     ToFind,
     NotFound,
     Ignored,
 }
 
 impl Group {
-    fn of(state: TaskState) -> Group {
-        match state {
+    /// `live`: an agent is working on it now.
+    fn of(l: &Lead, live: bool) -> Group {
+        match l.state {
+            _ if live || l.in_progress() => Group::InProgress,
             TaskState::NotFound => Group::NotFound,
             TaskState::Ignored => Group::Ignored,
             TaskState::Suggested | TaskState::Planned | TaskState::Found => Group::ToFind,
@@ -78,6 +98,7 @@ impl Group {
 
     fn label(self) -> std::borrow::Cow<'static, str> {
         match self {
+            Group::InProgress => t!("research.group.in_progress"),
             Group::ToFind => t!("research.group.to_find"),
             Group::NotFound => t!("research.group.not_found"),
             Group::Ignored => t!("research.group.ignored"),
@@ -107,6 +128,14 @@ fn result_icon(r: SearchResult) -> (IconName, Hsla) {
         SearchResult::Found => (IconName::CircleCheck, theme::ok()),
         SearchResult::Nothing => (IconName::CircleSlash, theme::muted()),
         SearchResult::Partial => (IconName::CircleDot, theme::warn()),
+    }
+}
+
+/// The agent's name, as it gave it (“AI agent” when it did not).
+fn agent_label(agent: &str) -> String {
+    match agent {
+        gedcom::research_log::UNKNOWN_AGENT => t!("research.by_agent").into_owned(),
+        name => name.to_string(),
     }
 }
 
@@ -176,13 +205,83 @@ impl Workspace {
             }
             _ => Vec::new(),
         };
+        // The leads being worked on show whatever the focus.
+        let mut leads = leads;
+        if let Some(doc) = &self.doc {
+            for l in doc.ged.leads_in_progress(current_year()) {
+                if !leads.iter().any(|m| lead_key(m) == lead_key(&l)) {
+                    leads.push(l);
+                }
+            }
+        }
         self.research.leads = Rc::new(leads);
     }
 
-    /// Leads still to find, for the sidebar.
+    /// Leads still to find or in progress, for the sidebar.
     pub(super) fn research_count(&self) -> Option<usize> {
         self.doc.as_ref()?;
-        Some(self.research.leads.iter().filter(|l| Group::of(l.state) == Group::ToFind).count())
+        let open = |l: &&Lead| matches!(self.group(l), Group::ToFind | Group::InProgress);
+        Some(self.research.leads.iter().filter(open).count())
+    }
+
+    fn group(&self, l: &Lead) -> Group {
+        Group::of(l, self.live_on(&lead_key(l)).is_some())
+    }
+
+    /// The agent working on a lead now, and what it last did.
+    fn live_on(&self, key: &str) -> Option<(&str, &Live)> {
+        self.research
+            .live
+            .iter()
+            .filter(|(_, l)| l.lead.as_deref() == Some(key) && l.at.elapsed() < LIVE)
+            .max_by_key(|(_, l)| l.at)
+            .map(|(a, l)| (a.as_str(), l))
+    }
+
+    /// An agent is working on this tree now.
+    pub(super) fn agent_working(&self) -> bool {
+        self.research.live.values().any(|l| l.at.elapsed() < LIVE)
+    }
+
+    /// An agent called a tool: the Research page shows it while it works.
+    pub(crate) fn agent_activity(&mut self, a: crate::agent::Activity, cx: &mut Context<Self>) {
+        use crate::agent::{Doing, NoteKind};
+        let name = |x: &str| self.doc.as_ref().map(|d| d.ged.person_ref(x).name).unwrap_or_default();
+        let (text, lead) = match a.doing {
+            Doing::Resume => (t!("research.activity.resume"), None),
+            Doing::ReadsPerson(x) => (t!("research.activity.person", name = name(&x)), None),
+            Doing::SearchesSources(q) => (t!("research.activity.sources", query = q), None),
+            Doing::MatchesPeople => (t!("research.activity.match"), None),
+            Doing::LocatesPlace(p) => (t!("research.activity.place", place = p), None),
+            Doing::Notes { lead, kind, text } => (
+                match kind {
+                    NoteKind::Plan => t!("research.activity.plan", text = text),
+                    NoteKind::Search => t!("research.activity.search", text = text),
+                    NoteKind::Clue => t!("research.activity.clue", text = text),
+                    NoteKind::Handoff => t!("research.activity.handoff", text = text),
+                },
+                Some(lead),
+            ),
+            Doing::ProposesAct => (t!("research.activity.act"), None),
+            Doing::ProposesChange => (t!("research.activity.change"), None),
+            Doing::ProposesChapter => (t!("research.activity.chapter"), None),
+            Doing::ReadsQuality => (t!("research.activity.quality"), None),
+        };
+        let at = std::time::Instant::now();
+        let entry = self.research.live.entry(a.agent).or_insert(Live { lead: None, text: String::new(), at });
+        entry.text = text.into_owned();
+        entry.at = at;
+        // It stays on its lead until it notes something on another one.
+        if lead.is_some() {
+            entry.lead = lead;
+        }
+        cx.notify();
+        // Shown as stopped once it has been quiet for a while.
+        cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(LIVE + std::time::Duration::from_secs(1)).await;
+            let _ = this.update(cx, |_, cx| cx.notify());
+        })
+        .detach();
     }
 
     /// Rows of the list (used for the selection and the history; the list draws the leads).
@@ -357,7 +456,7 @@ impl Workspace {
         match g {
             Group::NotFound => self.research.show_not_found = !self.research.show_not_found,
             Group::Ignored => self.research.show_ignored = !self.research.show_ignored,
-            Group::ToFind => {}
+            Group::ToFind | Group::InProgress => {}
         }
         cx.notify();
     }
@@ -367,17 +466,21 @@ impl Workspace {
         let leads = self.research.leads.clone();
         let selected = self.selected.clone();
         let mut body = v_flex().w_full().pb_2();
-        for g in [Group::ToFind, Group::NotFound, Group::Ignored] {
-            let of: Vec<&Lead> = leads.iter().filter(|l| Group::of(l.state) == g).collect();
+        for g in [Group::InProgress, Group::ToFind, Group::NotFound, Group::Ignored] {
+            let mut of: Vec<&Lead> = leads.iter().filter(|l| self.group(l) == g).collect();
             if of.is_empty() {
                 continue;
             }
+            // Last worked on first.
+            if g == Group::InProgress {
+                of.sort_by_key(|l| std::cmp::Reverse(l.log.last().map(|e| (e.date_key(), e.time.clone()))));
+            }
             let open = match g {
-                Group::ToFind => true,
+                Group::ToFind | Group::InProgress => true,
                 Group::NotFound => self.research.show_not_found,
                 Group::Ignored => self.research.show_ignored,
             };
-            let foldable = g != Group::ToFind;
+            let foldable = !matches!(g, Group::ToFind | Group::InProgress);
             body = body.child(
                 h_flex()
                     .id(SharedString::from(format!("lead-group-{}", g as u8)))
@@ -404,7 +507,12 @@ impl Workspace {
             for l in of {
                 let key = lead_key(l);
                 let on = selected.as_deref() == Some(key.as_str());
-                let (shape, color) = state_icon(l.state);
+                let live = self.live_on(&key);
+                let (shape, color) = match (g, live) {
+                    (_, Some(_)) => (IconName::LoaderCircle, theme::ok()),
+                    (Group::InProgress, None) => (IconName::CircleDot, theme::accent()),
+                    _ => state_icon(l.state),
+                };
                 let mut meta: Vec<String> = Vec::new();
                 if let Some(n) = l.sosa {
                     meta.push(t!("research.sosa", n = n).into_owned());
@@ -412,8 +520,20 @@ impl Workspace {
                 if let Some(p) = l.places.first() {
                     meta.push(short_place(p));
                 }
-                if l.state == TaskState::Planned {
-                    meta.push(t!("research.planned").into_owned());
+                // Who works on it: the agent now, or the last one that noted something.
+                let worker = live.map(|(a, _)| a.to_string()).or_else(|| {
+                    (g == Group::InProgress)
+                        .then(|| l.log.iter().rev().find(|e| e.by_agent()).map(|e| agent_label(&e.agent)))
+                        .flatten()
+                });
+                match worker {
+                    Some(w) => meta.push(w),
+                    None if l.state == TaskState::Planned => meta.push(t!("research.planned").into_owned()),
+                    None => {}
+                }
+                let clues = l.log.iter().filter(|e| e.kind == LogKind::Clue).count();
+                if clues > 0 && g != Group::InProgress {
+                    meta.push(crate::tn!("research.clue_count", clues).into_owned());
                 }
                 let (k1, k2) = (key.clone(), key.clone());
                 let menu_lead = self.research.menu_lead.clone();
@@ -524,6 +644,118 @@ impl Workspace {
             .child(h_flex().flex_wrap().gap_1().text_sm().children(sub))
             .when(!l.note.is_empty(), |d| d.child(div().text_sm().text_color(theme::muted()).child(l.note.clone())));
         let section = |title: std::borrow::Cow<'static, str>| v_flex().gap_2().child(label_caps(title));
+        // The agent working on it now, and what it last did.
+        let live = self.live_on(&key).map(|(agent, now)| {
+            h_flex()
+                .gap_2()
+                .px_3()
+                .py_2()
+                .items_center()
+                .rounded(theme::RADIUS_SM)
+                .border_1()
+                .border_color(theme::border())
+                .bg(theme::surface())
+                .text_sm()
+                .child(dot(theme::ok()))
+                .child(div().flex_none().font_weight(FontWeight::SEMIBOLD).child(agent_label(agent)))
+                .child(div().min_w_0().truncate().text_color(theme::muted()).child(now.text.clone()))
+        });
+        // Records that may be the one, with what speaks for and against: newest first.
+        let clue_cards: Vec<Div> = l
+            .log
+            .iter()
+            .rev()
+            .filter(|e| e.kind == LogKind::Clue)
+            .enumerate()
+            .map(|(i, e)| {
+                let side = |title: std::borrow::Cow<'static, str>, text: &str| {
+                    (!text.is_empty()).then(|| {
+                        v_flex()
+                            .flex_1()
+                            .min_w_0()
+                            .gap_0p5()
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(theme::muted())
+                                    .child(title),
+                            )
+                            .child(div().text_sm().child(text.to_string()))
+                    })
+                };
+                let url = e.url.clone();
+                v_flex()
+                    .gap_2()
+                    .px_3()
+                    .py_2()
+                    .rounded(theme::RADIUS_SM)
+                    .border_1()
+                    .border_color(theme::border())
+                    .child(
+                        h_flex()
+                            .gap_2()
+                            .items_start()
+                            .child(
+                                div()
+                                    .pt_0p5()
+                                    .child(Icon::new(IconName::Diamond).size(px(14.)).text_color(theme::warn())),
+                            )
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .text_sm()
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .child(e.text.clone()),
+                            )
+                            .when(!url.is_empty(), |d| {
+                                let href = url.clone();
+                                d.child(
+                                    div()
+                                        .id(SharedString::from(format!("clue-link-{i}")))
+                                        .flex_none()
+                                        .text_xs()
+                                        .text_color(theme::accent())
+                                        .cursor_pointer()
+                                        .child(host(&url).to_string())
+                                        .on_click(move |_, _, cx| cx.open_url(&href)),
+                                )
+                            }),
+                    )
+                    .when(!e.note.is_empty(), |d| {
+                        d.child(div().text_xs().text_color(theme::muted()).child(e.note.clone()))
+                    })
+                    .child(
+                        h_flex()
+                            .gap_4()
+                            .items_start()
+                            .children(side(t!("research.for"), &e.evidence_for))
+                            .children(side(t!("research.against"), &e.against)),
+                    )
+            })
+            .collect();
+        let clues = (!clue_cards.is_empty()).then(|| section(t!("research.clues")).children(clue_cards));
+        // Where the last one stopped, and the search to make next.
+        let handoff = l.log.iter().rev().find(|e| e.kind == LogKind::Handoff).map(|e| {
+            let by = e.by_agent().then(|| agent_label(&e.agent));
+            section(t!("research.handoff"))
+                .child(div().text_sm().child(e.text.clone()))
+                .when(!e.next.is_empty(), |d| {
+                    d.child(
+                        h_flex()
+                            .gap_1()
+                            .flex_wrap()
+                            .text_sm()
+                            .child(div().font_weight(FontWeight::SEMIBOLD).child(t!("research.next_search")))
+                            .child(e.next.clone()),
+                    )
+                })
+                .children(by.map(|b| {
+                    let date = Date::parse(&e.date).display();
+                    div().text_xs().text_color(theme::muted()).child(format!("{b} · {date}"))
+                }))
+        });
         // Estimated period and why.
         let period = l.years.map(|y| {
             section(t!("research.period")).child(
@@ -682,6 +914,9 @@ impl Workspace {
             .py_6()
             .gap_6()
             .child(header)
+            .children(live)
+            .children(clues)
+            .children(handoff)
             .children(period)
             .child(known)
             .children(where_)
@@ -697,7 +932,7 @@ impl Workspace {
     fn render_log_entry(&self, s: &LogEntry) -> Div {
         let (shape, color) = match s.kind {
             LogKind::Search => result_icon(s.result),
-            LogKind::Clue => (IconName::CircleDot, theme::warn()),
+            LogKind::Clue => (IconName::Diamond, theme::warn()),
             LogKind::Handoff => (IconName::ArrowRight, theme::muted()),
         };
         let date = if s.date.is_empty() { String::new() } else { Date::parse(&s.date).display() };
@@ -751,11 +986,7 @@ impl Workspace {
                     }),
             )
             .when(s.by_agent(), |d| {
-                let who = match s.agent.as_str() {
-                    gedcom::research_log::UNKNOWN_AGENT => t!("research.by_agent").into_owned(),
-                    name => name.to_string(),
-                };
-                d.child(div().flex_none().text_xs().text_color(theme::muted()).child(who))
+                d.child(div().flex_none().text_xs().text_color(theme::muted()).child(agent_label(&s.agent)))
             })
     }
 

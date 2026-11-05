@@ -118,8 +118,12 @@ change is one undo step, and the top bar says what the agent noted. A found reco
 proposed with `propose_act` and reviewed.
 
 The same leads and log are on the app's Research page (sidebar): the list of the focus by
-state (to find, no result, ignored), and for each lead its period and why, what is known, where to
-look and the log, the agent's entries marked with its name. Copy Request for the Agent (the lead's context
+state (in progress, to find, no result, ignored; the leads in progress show whatever the focus),
+and for each lead the agent working on it now with its last action, its clues with what speaks for
+and against, the last handoff and its next search, its period and why, what is known, where to
+look and the log, each agent's entries marked with its name. What agents do live comes from their
+tool calls and is never kept (a green dot on Research while one is at work, gone two minutes after
+its last call); what they note is in the file. Copy Request for the Agent (the lead's context
 menu) puts a request for one lead on the clipboard, to paste in the agent's conversation.
 
 ## Proposals and review

@@ -62,6 +62,51 @@ pub enum Request {
     Trees(tokio::sync::oneshot::Sender<Vec<Tree>>),
     /// An agent has just opened a session: the “AI Agents” window updates.
     Connected,
+    /// What an agent is doing, for the Research page (not kept: shown while it works).
+    Activity(Activity),
+}
+
+/// A tool an agent just called, as the Research page tells it.
+#[derive(Clone, Debug)]
+pub struct Activity {
+    /// The name the agent gave when it connected.
+    pub agent: String,
+    pub doing: Doing,
+}
+
+#[derive(Clone, Debug)]
+pub enum Doing {
+    /// Reads where the research stands.
+    Resume,
+    /// Reads a person's sheet (id).
+    ReadsPerson(String),
+    /// Searches the tree's sources.
+    SearchesSources(String),
+    /// Looks for who the people of an act are.
+    MatchesPeople,
+    /// Locates a place.
+    LocatesPlace(String),
+    /// Notes in a lead's log: its key (`owner|GOAL`), the kind of entry and its text.
+    Notes {
+        lead: String,
+        kind: NoteKind,
+        text: String,
+    },
+    /// Proposes an act, a correction or a chapter.
+    ProposesAct,
+    ProposesChange,
+    ProposesChapter,
+    /// Reads the Data Quality issues.
+    ReadsQuality,
+}
+
+/// What an agent notes in a lead's log.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NoteKind {
+    Plan,
+    Search,
+    Clue,
+    Handoff,
 }
 
 /// A request for the tree named `tree` (as `list_trees` names it), or for the window in front.
@@ -228,6 +273,10 @@ pub fn install(cx: &mut App) {
                     let _ = reply.send(trees);
                 }
                 Request::Connected => cx.update(|cx| cx.refresh_windows()),
+                Request::Activity(a) => {
+                    let _ =
+                        cx.update(|cx| workspace(tree, cx).map(|ws| ws.update(cx, |ws, cx| ws.agent_activity(a, cx))));
+                }
             }
         }
     })

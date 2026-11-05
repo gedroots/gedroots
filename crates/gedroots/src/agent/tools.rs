@@ -517,6 +517,12 @@ impl GedrootsMcp {
         Self { bridge, told: Default::default(), agent: Default::default(), prompt_router: Self::prompt_router() }
     }
 
+    /// Tells the window what the agent is doing, for its Research page; never waits.
+    fn report(&self, tree: Option<&str>, doing: super::Doing) {
+        let activity = super::Activity { agent: self.agent_name(), doing };
+        let _ = self.bridge.try_send(Ask { tree: tree.map(str::to_string), request: Request::Activity(activity) });
+    }
+
     /// The session's agent, as it named itself, written with what it notes and proposes.
     fn agent_name(&self) -> String {
         let name = self.agent.lock().unwrap_or_else(|e| e.into_inner()).clone();
@@ -613,6 +619,7 @@ impl GedrootsMcp {
         let tree = p.tree.clone();
         let s = self.snapshot(tree.as_deref()).await?;
         let id = &person_id(&s, &p.id)?;
+        self.report(tree.as_deref(), super::Doing::ReadsPerson(id.clone()));
         if s.ged.individual(id).is_none() {
             return Err(format!("no person with id {id}"));
         }
@@ -627,6 +634,7 @@ impl GedrootsMcp {
     )]
     async fn resume_research(&self, Parameters(p): Parameters<ResumeParams>) -> Res<Resume> {
         let tree = p.tree.clone();
+        self.report(tree.as_deref(), super::Doing::Resume);
         let s = self.snapshot(tree.as_deref()).await?;
         let g = &s.ged;
         let year = current_year();
@@ -737,6 +745,7 @@ impl GedrootsMcp {
             .into());
         }
         let goal = p.goal;
+        let lead_owner = own.clone();
         let (apply, message): (super::Apply, String) = match p.kind {
             NoteKind::Plan => {
                 let lead = s.ged.lead(&x, goal, family.as_deref(), year)?;
@@ -787,11 +796,26 @@ impl GedrootsMcp {
                         true => Ok(()),
                         false => Err("could not note this".into()),
                     }),
-                    crate::t!("agent.logged", what = text).into_owned(),
+                    match kind {
+                        NoteKind::Clue => crate::t!("agent.clue", what = text),
+                        NoteKind::Handoff => crate::t!("agent.handoff", what = text),
+                        _ => crate::t!("agent.logged", what = text),
+                    }
+                    .into_owned(),
                 )
             }
         };
         self.edit(tree.as_deref(), apply, message).await?;
+        let kind = match p.kind {
+            NoteKind::Plan => super::NoteKind::Plan,
+            NoteKind::Search => super::NoteKind::Search,
+            NoteKind::Clue => super::NoteKind::Clue,
+            NoteKind::Handoff => super::NoteKind::Handoff,
+        };
+        self.report(
+            tree.as_deref(),
+            super::Doing::Notes { lead: format!("{lead_owner}|{}", goal.tag()), kind, text: p.text.trim().to_string() },
+        );
         let s = self.snapshot(tree.as_deref()).await?;
         match s.ged.lead(&x, goal, family.as_deref(), year) {
             Ok(lead) => self.answer(&s, lead),
@@ -813,6 +837,7 @@ impl GedrootsMcp {
     )]
     async fn quality(&self, Parameters(p): Parameters<QualityParams>) -> Res<QualityReport> {
         let tree = p.tree.clone();
+        self.report(tree.as_deref(), super::Doing::ReadsQuality);
         let (tx, rx) = tokio::sync::oneshot::channel();
         self.send(tree.as_deref(), Request::Quality(tx)).await.map_err(|_| "GEDRoots is closing".to_string())?;
         let (s, issues) = rx.await.ok().flatten().ok_or_else(|| "no file is open in GEDRoots".to_string())?;
@@ -835,6 +860,7 @@ impl GedrootsMcp {
     )]
     async fn sources(&self, Parameters(p): Parameters<SourceSearch>) -> Res<Sources> {
         let tree = p.tree.clone();
+        self.report(tree.as_deref(), super::Doing::SearchesSources(p.query.trim().to_string()));
         let s = self.snapshot(tree.as_deref()).await?;
         let g = &s.ged;
         let words: Vec<String> = p.query.split_whitespace().map(str::to_lowercase).collect();
@@ -887,6 +913,7 @@ impl GedrootsMcp {
     )]
     async fn match_people(&self, Parameters(p): Parameters<MatchParams>) -> Res<Matches> {
         let tree = p.tree.clone();
+        self.report(tree.as_deref(), super::Doing::MatchesPeople);
         let s = self.snapshot(tree.as_deref()).await?;
         let act = propose::match_act(&p)?;
         let people = act
@@ -923,6 +950,7 @@ impl GedrootsMcp {
         if query.is_empty() {
             return Err("give the `place` to locate".into());
         }
+        self.report(p.tree.as_deref(), super::Doing::LocatesPlace(query.clone()));
         let g = &s.ged;
         let in_tree = g
             .places_named(&query)
@@ -987,6 +1015,7 @@ impl GedrootsMcp {
     )]
     async fn propose(&self, Parameters(p): Parameters<ProposeParams>) -> Res<Proposed> {
         let tree = p.tree.clone();
+        self.report(tree.as_deref(), super::Doing::ProposesAct);
         let s = self.snapshot(tree.as_deref()).await?;
         let agent = self.agent_name();
         let (ged, queue) = (s.ged.clone(), s.queue.clone());
@@ -1042,6 +1071,7 @@ impl GedrootsMcp {
     )]
     async fn propose_change(&self, Parameters(p): Parameters<ChangeParams>) -> Res<ChangeProposed> {
         let tree = p.tree.clone();
+        self.report(tree.as_deref(), super::Doing::ProposesChange);
         let mut req = change::to_request(&p)?;
         req.agent = self.agent_name();
         let (tx, rx) = tokio::sync::oneshot::channel();
@@ -1071,6 +1101,7 @@ impl GedrootsMcp {
     )]
     async fn propose_chapter(&self, Parameters(p): Parameters<ProposeChapterParams>) -> Res<ChapterProposed> {
         let tree = p.tree.clone();
+        self.report(tree.as_deref(), super::Doing::ProposesChapter);
         let s = self.snapshot(tree.as_deref()).await?;
         let mut req = book::to_request(&p, &s.ged)?;
         req.agent = self.agent_name();
@@ -1310,6 +1341,7 @@ mod tests {
                             in_front: true,
                         }]);
                     }
+                    Request::Activity(_) => {}
                     _ => break,
                 }
             }
