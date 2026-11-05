@@ -163,9 +163,6 @@ book.places.other:
 book.places_sub:
   en: Places of birth; the lines join each child to their parents.
   fr: Lieux de naissance ; les traits relient chaque enfant à ses parents.
-book.places_caption:
-  en: "Dot size: number of people born in the place. Places known for %{known} of %{total} people."
-  fr: "Taille du point : nombre de personnes nées dans le lieu. Lieux connus pour %{known} des %{total} personnes."
 book.lives:
   en: Lives
   fr: Des vies
@@ -175,9 +172,6 @@ book.lives_sub:
 book.marriage:
   en: Marriage
   fr: Mariage
-book.ongoing:
-  en: Living, or death unknown
-  fr: Vie en cours ou décès inconnu
 book.age_years:
   en: "%{n} y"
   fr: "%{n} ans"
@@ -250,9 +244,6 @@ book.found:
 book.longevity:
   en: Age at death by year of birth
   fr: Âge au décès selon l’année de naissance
-book.longevity_caption:
-  en: "■ men  ○ women · median age per half-century · %{n} people"
-  fr: "■ hommes  ○ femmes · âge médian par demi-siècle · %{n} personnes"
 book.occupations:
   en: Occupations
   fr: Métiers
@@ -274,12 +265,6 @@ book.levels:
 book.index_note:
   en: Numbers refer to pages
   fr: Les nombres renvoient aux pages
-book.unknown_place:
-  en: Place unknown
-  fr: Lieu inconnu
-book.other:
-  en: Other
-  fr: Autres
 book.generation_short:
   en: Generation
   fr: Génération

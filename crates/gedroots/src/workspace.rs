@@ -58,6 +58,7 @@ mod settings;
 pub(crate) mod tour;
 mod tree;
 mod version_history;
+mod visualizations;
 mod weblinks;
 
 /// Window widths below which a column folds away (like libadwaita's breakpoints and Mail's
@@ -90,7 +91,7 @@ pub enum View {
     Notes,
     Research,
     Quality,
-    Stats,
+    Visualizations,
     Books,
 }
 
@@ -99,7 +100,7 @@ impl View {
     const SIDEBAR: [View; 4] = [View::Individuals, View::Sources, View::Places, View::Media];
     /// The secondary group of the sidebar, under a separator.
     const SECONDARY: [View; 6] =
-        [View::Repositories, View::Notes, View::Research, View::Quality, View::Stats, View::Books];
+        [View::Repositories, View::Notes, View::Research, View::Quality, View::Visualizations, View::Books];
 
     fn label(self) -> SharedString {
         match self {
@@ -111,7 +112,7 @@ impl View {
             View::Notes => t!("cmd.notes"),
             View::Research => t!("ws.research"),
             View::Quality => t!("ws.quality"),
-            View::Stats => t!("ws.stats"),
+            View::Visualizations => t!("ws.visualizations"),
             View::Books => t!("books.view"),
         }
         .into()
@@ -127,7 +128,7 @@ impl View {
             View::Notes => IconName::StickyNote,
             View::Research => IconName::Compass,
             View::Quality => IconName::CircleCheck,
-            View::Stats => IconName::ChartPie,
+            View::Visualizations => IconName::ChartColumn,
             View::Books => IconName::BookMarked,
         }
     }
@@ -138,9 +139,9 @@ impl View {
         matches!(self, View::Individuals | View::Places)
     }
 
-    /// Pages without a record page (Research, Quality, Statistics, Books).
+    /// Pages without a record page (Research, Quality, Visualizations, Books).
     fn page(self) -> Option<View> {
-        matches!(self, View::Research | View::Quality | View::Stats | View::Books).then_some(self)
+        matches!(self, View::Research | View::Quality | View::Visualizations | View::Books).then_some(self)
     }
 
     /// Zone with search by criteria (the other lists filter the text).
@@ -163,7 +164,7 @@ impl View {
             View::Media => RecordKind::Media,
             View::Repositories => RecordKind::Repository,
             View::Notes => RecordKind::SharedNote,
-            View::Places | View::Research | View::Quality | View::Stats | View::Books => return None,
+            View::Places | View::Research | View::Quality | View::Visualizations | View::Books => return None,
         })
     }
 
@@ -577,6 +578,8 @@ pub struct Workspace {
     research: research::ResearchState,
     /// Books page: the selected book's preview, the New Book window.
     books: books::BooksState,
+    /// Visualizations page.
+    viz: visualizations::VizState,
     /// Relationship shown in a modal window (A, B).
     kinship: Option<(String, String)>,
     /// Merge window (possible duplicates, or two people chosen by the user).
@@ -600,7 +603,7 @@ pub struct Workspace {
     fresh: Option<Fresh>,
     /// Record page: also show the relatives' events (View › Relatives' Events).
     show_relative_events: bool,
-    /// Statistics of the file (Statistics page).
+    /// Statistics of the file (the first item of the Visualizations page).
     stats: Option<Rc<gedcom::analysis::stats::Stats>>,
     /// Versions of the recent files and search sites known to the window's menu bar.
     recent_gen: (u64, u64),
@@ -706,6 +709,7 @@ impl Workspace {
             quality: quality::QualityState { stale: true, ..Default::default() },
             research: research::ResearchState::default(),
             books: books::BooksState::default(),
+            viz: visualizations::VizState::default(),
             kinship: None,
             merge: None,
             place_merge: None,
@@ -1096,7 +1100,7 @@ impl Workspace {
             View::Notes => t!("ws.search_notes"),
             View::Quality => t!("ws.search_quality"),
             View::Research => t!("research.focus_placeholder"),
-            View::Individuals | View::Stats | View::Books => t!("ws.search_people"),
+            View::Individuals | View::Visualizations | View::Books => t!("ws.search_people"),
         };
         // Research: the field holds the focus of the leads, kept while the file is open.
         // A trailing space makes its last criterion a token.
@@ -1146,6 +1150,9 @@ impl Workspace {
         self.refresh_editor(window, cx);
         if self.view == View::Books {
             self.typeset_book(cx);
+        }
+        if self.view == View::Visualizations {
+            self.refresh_viz(cx);
         }
         cx.notify();
     }
@@ -1675,18 +1682,10 @@ impl Workspace {
             self.typeset_book(cx);
             return;
         }
-        if self.view == View::Stats {
-            // A single “row”, never shown: it is used for the history (⌘[).
+        if self.view == View::Visualizations {
             self.refresh_stats();
-            let row = Row {
-                key: "stats".into(),
-                title: String::new(),
-                strong: String::new(),
-                meta: String::new(),
-                dot: None,
-                flagged: false,
-            };
-            self.rows = Rc::new(vec![row]);
+            self.rows = Rc::new(self.viz_rows());
+            self.refresh_viz(cx);
             return;
         }
         if self.view == View::Media {
@@ -1797,7 +1796,7 @@ impl Workspace {
                     }
                 })
                 .collect(),
-            View::Research | View::Quality | View::Stats | View::Books => Vec::new(),
+            View::Research | View::Quality | View::Visualizations | View::Books => Vec::new(),
             View::Notes => g
                 .records_of(RecordKind::SharedNote)
                 .map(|r| {
@@ -2244,7 +2243,7 @@ impl Workspace {
                 // Only once the checks have run: a stale count would mislead.
                 View::Quality if self.quality.stale => return None,
                 View::Quality => self.quality.issues.iter().filter(|i| !i.ignored).count(),
-                View::Stats => return None,
+                View::Visualizations => return None,
                 View::Books => self.book_count(),
                 v => d.ged.count(v.kind()?),
             })
@@ -2527,8 +2526,8 @@ impl Workspace {
         if self.view == View::Research {
             return v_flex().flex_1().min_w_0().bg(theme::bg()).child(self.render_research(cx)).into_any_element();
         }
-        if self.view == View::Stats {
-            return self.render_stats(cx);
+        if self.view == View::Visualizations {
+            return self.render_visualizations(cx);
         }
         if self.view == View::Books {
             return self.render_books(cx);
@@ -4160,6 +4159,7 @@ impl Render for Workspace {
             self.drawer = None;
         }
         self.release_book_pages(window);
+        self.release_viz_images(window);
         // Shortcuts (Save…) go through this node: keep it in the focus chain.
         if window.focused(cx).is_none() {
             window.focus(&self.focus, cx);
@@ -4192,7 +4192,8 @@ impl Render for Workspace {
                 .when(self.sidebar && !self.compact.sidebar, |d| d.child(self.render_sidebar(cx)))
                 .when(self.view == View::Research, |d| d.child(self.render_research_list(cx)))
                 .when(self.view == View::Books && !self.rows.is_empty(), |d| d.child(self.render_books_list(cx)))
-                .when(!matches!(self.view, View::Stats | View::Research | View::Books), |d| {
+                .when(self.view == View::Visualizations, |d| d.child(self.render_viz_list(cx)))
+                .when(!matches!(self.view, View::Visualizations | View::Research | View::Books), |d| {
                     d.child(self.render_list(cx))
                 })
                 .child(self.render_center(cx))

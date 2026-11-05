@@ -6,9 +6,9 @@ ws.research:
 ws.quality:
   en: Quality
   fr: Qualité
-ws.stats:
-  en: Stats
-  fr: Stats
+ws.visualizations:
+  en: Visualizations
+  fr: Visualisations
 ws.map:
   en: Map
   fr: Carte

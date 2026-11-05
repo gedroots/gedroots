@@ -2797,6 +2797,7 @@ dependencies = [
  "gedcom",
  "gedroots-book",
  "gedroots-sync",
+ "gedroots-viz",
  "gpui-kit",
  "hayro 0.8.0",
  "image",
@@ -2830,6 +2831,7 @@ name = "gedroots-book"
 version = "0.1.0"
 dependencies = [
  "gedcom",
+ "gedroots-viz",
  "rust-i18n",
  "serde",
  "serde_json",
@@ -2864,6 +2866,16 @@ dependencies = [
  "iroh-tickets",
  "n0-future",
  "tokio",
+]
+
+[[package]]
+name = "gedroots-viz"
+version = "0.1.0"
+dependencies = [
+ "gedcom",
+ "resvg 0.47.0",
+ "rust-i18n",
+ "serde",
 ]
 
 [[package]]

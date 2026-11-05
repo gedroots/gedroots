@@ -1,0 +1,27 @@
+_version: 2
+# Visualizations page (crates/gedroots/src/workspace/visualizations.rs). The texts of the drawings
+# themselves are in crates/viz/locales.
+viz.overview:
+  en: Overview
+  fr: Vue d’ensemble
+viz.overview_summary:
+  en: The tree in figures
+  fr: L’arbre en chiffres
+viz.fewer:
+  en: Fewer Generations
+  fr: Moins de générations
+viz.more:
+  en: More Generations
+  fr: Plus de générations
+viz.chart:
+  en: Chart
+  fr: Graphique
+viz.table:
+  en: Table
+  fr: Tableau
+viz.change_person:
+  en: Change Person
+  fr: Changer de personne
+viz.empty:
+  en: Not enough data in the tree for this visualization
+  fr: Pas assez de données dans l’arbre pour cette visualisation

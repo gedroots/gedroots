@@ -89,6 +89,13 @@ gpui_kit::assets::icon_assets!(
         CircleMinus,
         BookMarked,
         Minus,
+        ChartColumn,
+        Gauge,
+        Route,
+        ChartGantt,
+        Layers,
+        Hourglass,
+        Briefcase,
     ]
 );
 

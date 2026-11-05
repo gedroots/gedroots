@@ -60,7 +60,7 @@ A proposal without this research is not ready to show.
   is Create.
 - **Create**: on the right of the top bar, a small primary "+" button named after what the page
   lists ("New Source", "New Book"), `⌘N`, like Notes, Contacts or Gramps' contextual Add. It is
-  hidden where nothing is created (Places, Research, Quality, Statistics). A new window is
+  hidden where nothing is created (Places, Research, Quality, Visualizations). A new window is
   `⌥⌘N`, like Mail.
 - **No explanatory text**: one title per element; format examples go in the field
   placeholder; empty sections are hidden.
@@ -207,7 +207,7 @@ Rules shared by the three guidelines, to apply everywhere.
   links, links, then "Used by".
 - Sidebar: the four areas (Individuals, Sources, Places, Media), then a secondary group under
   a separator, like Mail's or Finder's sections: Repositories and Notes when the file has some,
-  Research and Quality (with their counts) and Statistics. `⌘1`–`⌘9` go to the same places
+  Research and Quality (with their counts) and Visualizations. `⌘1`–`⌘9` go to the same places
   (palette only: the sidebar shows them).
 - **Narrow window**: below 1200 px the sidebar folds away, below 1100 px the details panel does
   too (like libadwaita's breakpoints or Mail's columns); the list and the centre never shrink

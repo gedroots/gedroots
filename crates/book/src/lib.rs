@@ -5,7 +5,7 @@
 //! - [`writing`]: what an AI agent wrote in it (narratives, context, hypotheses);
 //! - [`content`]: the people, their records and the charts, computed from the tree;
 //! - [`prose`]: the simple sentences written from the facts;
-//! - [`charts`]: the charts, as SVG;
+//! - the charts come from `gedroots-viz`, drawn with its print colours;
 //! - [`render`]: typesetting with Typst, embedded, to PDF and page previews.
 
 rust_i18n::i18n!("locales", fallback = "en");
@@ -25,7 +25,6 @@ macro_rules! t {
     }};
 }
 
-pub mod charts;
 pub mod content;
 pub mod prose;
 pub mod render;

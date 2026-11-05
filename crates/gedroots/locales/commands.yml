@@ -369,9 +369,9 @@ cmd:
   quality:
     en: Data Quality
     fr: Qualité des données
-  stats:
-    en: Statistics
-    fr: Statistiques
+  visualizations:
+    en: Visualizations
+    fr: Visualisations
   show_tree:
     en: Tree
     fr: Arbre

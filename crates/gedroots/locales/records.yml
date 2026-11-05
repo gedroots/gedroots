@@ -264,6 +264,9 @@ picker.act_person:
 picker.book_person:
   en: Choose the Book's Person
   fr: Choisir la personne du livre
+picker.viz_person:
+  en: Choose Whose Visualizations
+  fr: Choisir la personne des visualisations
 picker.act_media:
   en: Choose the Record Image
   fr: Choisir l’image de l’acte

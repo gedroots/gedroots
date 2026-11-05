@@ -112,7 +112,7 @@ actions!(
         ShowNotes,
         ShowResearch,
         ShowQuality,
-        ShowStats,
+        ShowVisualizations,
         KinshipWith,
         MergeWithPerson,
         FindDuplicates,
@@ -287,7 +287,7 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new(shortcut!("6"), ShowNotes, WS),
         KeyBinding::new(shortcut!("7"), ShowResearch, WS),
         KeyBinding::new(shortcut!("8"), ShowQuality, WS),
-        KeyBinding::new(shortcut!("9"), ShowStats, WS),
+        KeyBinding::new(shortcut!("9"), ShowVisualizations, WS),
         KeyBinding::new(shortcut!("shift-l"), NoteSearch, WS),
         // Like Finder and Mail: ⌃⌘S (Ctrl+Alt+S elsewhere).
         KeyBinding::new(if cfg!(target_os = "macos") { "ctrl-cmd-s" } else { "ctrl-alt-s" }, ToggleSidebar, WS),
@@ -791,7 +791,7 @@ fn palette_only() -> Vec<(SharedString, Vec<Item>)> {
                 a(t!("cmd.notes"), ShowNotes),
                 a(t!("cmd.research"), ShowResearch),
                 a(t!("cmd.quality"), ShowQuality),
-                a(t!("cmd.stats"), ShowStats),
+                a(t!("cmd.visualizations"), ShowVisualizations),
             ],
         ),
     ]
