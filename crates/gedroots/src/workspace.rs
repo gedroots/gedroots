@@ -486,6 +486,11 @@ pub struct Workspace {
     selected: Option<String>,
     editor: Option<RecordEditor>,
     status: Option<(SharedString, bool)>,
+    /// The status message follows a deletion: the status bar offers Undo.
+    status_undo: bool,
+    /// After a deletion: the depth of the undo history it made, and where the deleted item was,
+    /// to show it again when that deletion is undone.
+    undo_select: Option<(usize, View, String)>,
     map: Entity<MapView>,
     tree_mode: tree::TreeMode,
     tree_gens: u32,
@@ -504,8 +509,6 @@ pub struct Workspace {
     picker: Option<relatives::Picker>,
     /// Image/PDF files of the `.ged` folder, for the attachment suggestions.
     media_files: Rc<Vec<String>>,
-    /// Deletion waiting for confirmation (key of the item).
-    pending_delete: Option<String>,
     /// Search: types and context of the media, recomputed when the file changes.
     media_index: Option<Rc<MediaIndex>>,
     /// Type chosen in the type bar of the Media zone (`None`: all).
@@ -680,7 +683,8 @@ impl Workspace {
             chart: Default::default(),
             picker: None,
             media_files: Rc::new(Vec::new()),
-            pending_delete: None,
+            status_undo: false,
+            undo_select: None,
             media_index: None,
             media_type: None,
             suggestions: Vec::new(),
@@ -1004,11 +1008,16 @@ impl Workspace {
 
     fn undo(&mut self, _: &Undo, window: &mut Window, cx: &mut Context<Self>) {
         let Some(doc) = &mut self.doc else { return };
+        let depth = doc.history.len();
         if let Some(prev) = doc.history.pop() {
             doc.future.push(std::mem::replace(&mut doc.ged, prev));
             doc.dirty = true;
             self.rebuild_rows(cx);
             self.refresh_editor(window, cx);
+            // Undoing a deletion shows the deleted item again.
+            if let Some((_, view, key)) = self.undo_select.take().filter(|(d, ..)| *d == depth) {
+                self.open_location(view, Some(key), window, cx);
+            }
             self.set_status(t!("ws.undone"), false);
         }
         cx.notify();
@@ -1051,6 +1060,23 @@ impl Workspace {
 
     fn set_status(&mut self, msg: impl Into<SharedString>, error: bool) {
         self.status = Some((msg.into(), error));
+        self.status_undo = false;
+    }
+
+    /// After a deletion done through `mutate` (an event, an act, a saved search…): its message
+    /// is in the status bar, which now offers Undo.
+    pub(super) fn offer_undo(&mut self) {
+        self.status_undo = true;
+        self.undo_select = None;
+    }
+
+    /// After a deletion: says what went and offers Undo in the status bar (design.md, “Undo
+    /// rather than confirm”). Undoing it shows `shown` again (list and key).
+    pub(super) fn set_deleted(&mut self, msg: impl Into<SharedString>, shown: Option<(View, String)>) {
+        self.set_status(msg, false);
+        self.status_undo = true;
+        let depth = self.doc.as_ref().map_or(0, |d| d.history.len());
+        self.undo_select = shown.map(|(view, key)| (depth, view, key));
     }
 
     /// Shows an error. `key` names it in the context of Help › Report an Issue, which never
@@ -1140,7 +1166,6 @@ impl Workspace {
             self.list_scroll.scroll_to_item(ix, ScrollStrategy::Center);
         }
         self.selected = Some(key);
-        self.pending_delete = None;
         self.photo_draw = None;
         self.photo_hover = None;
         self.refresh_editor(window, cx);
@@ -1294,40 +1319,70 @@ impl Workspace {
         self.set_status(t!("ws.created", kind = crate::i18n::record_kind(kind)), false);
     }
 
-    /// Premier clic : demande confirmation ; second clic : supprime.
+    /// What Edit › Delete removes here, which names the command: the selected record, place or
+    /// book.
+    pub(super) fn deletable(&self) -> Option<crate::commands::Deletable> {
+        use crate::commands::Deletable;
+        let key = self.selected.as_ref()?;
+        match self.view {
+            View::Books => self.selected_book().map(|_| Deletable::Book),
+            View::Places => Some(Deletable::Place),
+            v if v.page().is_none() => {
+                let node = self.doc.as_ref()?.ged.get(key)?;
+                RecordKind::from_tag(&node.tag).and_then(Deletable::from_kind)
+            }
+            _ => None,
+        }
+    }
+
+    /// Edit › Delete: the selection goes at once, the next item is selected and the status bar
+    /// offers Undo (no confirmation: design.md, “Undo rather than confirm”).
     fn delete_selected(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.view == View::Books {
             return self.delete_book(window, cx);
         }
-        let Some(key) = self.selected.clone().filter(|_| self.view.page().is_none()) else { return };
-        if self.pending_delete.as_ref() != Some(&key) {
-            self.pending_delete = Some(key);
-            cx.notify();
+        let Some(key) = self.selected.clone() else { return };
+        self.delete_item(key, window, cx);
+    }
+
+    /// Deletes an item of the current list, selected or not (context menu of a row or of a card of
+    /// the tree). A place is removed from every event that names it.
+    pub(super) fn delete_item(&mut self, key: String, window: &mut Window, cx: &mut Context<Self>) {
+        if self.view.page().is_some() {
             return;
         }
-        self.pending_delete = None;
+        let place = self.view == View::Places;
+        let was_selected = self.selected.as_ref() == Some(&key);
         self.checkpoint();
         let Some(doc) = &mut self.doc else { return };
-        let msg = match self.view.kind() {
-            Some(_) => {
-                let label = doc.ged.record_label(&key);
-                doc.ged.delete_record(&key);
-                t!("ws.deleted", label = label)
+        let msg = if place {
+            let n = doc.ged.delete_place(&key);
+            crate::tn!("ws.place_removed", n)
+        } else {
+            let label = doc.ged.record_label(&key);
+            if doc.ged.delete_record(&key).is_none() {
+                self.drop_checkpoint();
+                return;
             }
-            None => {
-                let n = doc.ged.delete_place(&key);
-                crate::tn!("ws.place_removed", n)
-            }
+            t!("ws.deleted", label = label)
         };
         let pos = self.rows.iter().position(|r| r.key == key).unwrap_or(0);
-        self.selected = None;
-        self.editor = None;
-        self.rebuild_rows(cx);
-        // Select the neighbouring item to carry on.
-        if let Some(next) = self.rows.get(pos.min(self.rows.len().saturating_sub(1))).map(|r| r.key.clone()) {
-            self.select(next, window, cx);
+        if was_selected {
+            self.selected = None;
+            self.editor = None;
+            self.editing = false;
         }
-        self.set_status(msg, false);
+        self.rebuild_rows(cx);
+        if was_selected {
+            // Select the neighbouring item to carry on.
+            if let Some(next) = self.rows.get(pos.min(self.rows.len().saturating_sub(1))).map(|r| r.key.clone()) {
+                self.select(next, window, cx);
+            }
+        } else {
+            self.refresh_editor(window, cx);
+        }
+        let shown = was_selected.then_some((self.view, key));
+        self.set_deleted(msg, shown);
         cx.notify();
     }
 
@@ -1588,11 +1643,13 @@ impl Workspace {
 
     /// Deletes a record: its citations (events and people stay).
     pub(super) fn delete_act(&mut self, source: String, key: ActKey, window: &mut Window, cx: &mut Context<Self>) {
-        self.mutate(window, cx, |g| {
+        if self.mutate(window, cx, |g| {
             let title = g.act(&source, &key).map(|a| a.title()).unwrap_or_default();
             g.remove_act(&source, &key);
             Ok((t!("ws.act_deleted", title = title).into_owned(), None))
-        });
+        }) {
+            self.offer_undo();
+        }
     }
 
     /// “Records” section of a source's page, with its “+”.
@@ -2142,7 +2199,7 @@ impl Workspace {
 
     /// The status bar, at the bottom of the window: the last message (in `danger()` for an
     /// error) and where the update stands. It stays when empty, so the layout does not jump.
-    fn render_status_bar(&self) -> impl IntoElement {
+    fn render_status_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
         h_flex()
             .flex_none()
             .h(px(24.))
@@ -2153,9 +2210,31 @@ impl Workspace {
             .border_color(theme::border())
             .bg(theme::panel())
             .text_xs()
-            .child(div().flex_1().min_w_0().children(self.status.clone().map(|(msg, err)| {
-                div().truncate().text_color(if err { theme::danger() } else { theme::muted() }).child(msg)
-            })))
+            .child(
+                h_flex()
+                    .flex_1()
+                    .min_w_0()
+                    .gap_2()
+                    .items_center()
+                    .children(self.status.clone().map(|(msg, err)| {
+                        div()
+                            .min_w_0()
+                            .truncate()
+                            .text_color(if err { theme::danger() } else { theme::muted() })
+                            .child(msg)
+                    }))
+                    // After a deletion: Undo, like the toasts of GNOME, Mail or Gmail.
+                    .when(self.status_undo, |d| {
+                        d.child(
+                            Button::new("status-undo")
+                                .ghost()
+                                .xsmall()
+                                .label(t!("cmd.undo"))
+                                .tooltip_with_action(t!("cmd.undo"), &Undo, Some("Workspace"))
+                                .on_click(cx.listener(|this, _, w, cx| this.undo(&Undo, w, cx))),
+                        )
+                    }),
+            )
             .children(self.render_update_notice())
     }
 
@@ -2639,11 +2718,8 @@ impl Workspace {
 
     fn render_form(&self, ed: &RecordEditor, cx: &mut Context<Self>) -> impl IntoElement {
         let preview = self.media_preview(ed, cx);
-        let confirm = self.pending_delete.is_some() && self.pending_delete == self.selected;
         let editable = !ed.fields.is_empty() || !ed.pickers.is_empty() || ed.long_text.is_some();
         let editing = self.editing && editable;
-        // Deletion: Edit › Delete Item, then confirmation here.
-        let confirm_buttons = confirm.then(|| self.delete_buttons(matches!(ed.target, Target::Place(_)), cx));
         // Sources, media, repositories and notes are read whole in the centre, with no side panel:
         // their images, web links and links follow the record.
         let record = match &ed.target {
@@ -2661,7 +2737,6 @@ impl Workspace {
             .when(editing, |d| d.child(self.render_form_fields(ed, cx)))
             .when(!editing && editable, |d| d.child(self.render_form_read(ed, cx)))
             .when(editing, |d| d.child(self.edit_buttons(cx).justify_start()))
-            .children(confirm_buttons)
             .when_some(
                 match &ed.target {
                     Target::Record { xref, kind: RecordKind::Source } => Some(xref.clone()),
@@ -2794,27 +2869,6 @@ impl Workspace {
                     .icon(IconName::Check)
                     .label(t!("ws.done"))
                     .on_click(cx.listener(|this, _, w, cx| this.apply_form(w, cx))),
-            )
-    }
-
-    /// Keep and Delete, after Edit › Delete Item.
-    fn delete_buttons(&self, place: bool, cx: &mut Context<Self>) -> Div {
-        h_flex()
-            .gap_2()
-            .justify_end()
-            .child(Button::new("cancel-delete").ghost().small().label(t!("ws.keep")).on_click(cx.listener(
-                |this, _, _, cx| {
-                    this.pending_delete = None;
-                    cx.notify();
-                },
-            )))
-            .child(
-                Button::new("delete")
-                    .danger()
-                    .small()
-                    .icon(IconName::Trash)
-                    .label(if place { t!("ws.confirm_remove_place") } else { t!("ws.confirm_delete") })
-                    .on_click(cx.listener(|this, _, w, cx| this.delete_selected(w, cx))),
             )
     }
 
@@ -3438,7 +3492,6 @@ impl Workspace {
             View::Places => {
                 let place = g.places().into_iter().find(|p| &p.name == key);
                 let refs = place.as_ref().map(|p| p.records.clone()).unwrap_or_default();
-                let confirm = self.pending_delete.as_ref() == Some(key);
                 // Edit › Edit Record: one field per jurisdiction, then the coordinates, in place.
                 let fields = self.panel_editor(key).filter(|_| self.editing).map(|ed| {
                     v_flex()
@@ -3488,8 +3541,7 @@ impl Workspace {
                                         t!("ws.place_no_coords", uses = crate::tn!("places.uses", p.uses)).into_owned()
                                     }
                                 })
-                            }))
-                            .when(confirm, |d| d.child(self.delete_buttons(true, cx).pt_2())),
+                            })),
                     )
                     .child(self.edit_pencil(cx));
                 panel
@@ -3792,7 +3844,6 @@ impl Workspace {
             .panel_editor(&xref)
             .filter(|ed| self.editing && ed.fields.len() >= 3)
             .map(|ed| self.render_individual_fields(ed, cx));
-        let confirm = self.pending_delete.as_deref() == Some(xref.as_str());
         let names = i.names();
         let main_name = names.first().cloned().unwrap_or_default();
         let names_line = names_line(&names, i.sex() == "F");
@@ -3859,8 +3910,7 @@ impl Workspace {
                                     .child(div().h_full().rounded_full().bg(theme::ok()).w(px(120. * pct))),
                             )
                             .child(mono(t!("ws.sourced", sourced = sourced, total = total))),
-                    )
-                    .when(confirm, |d| d.child(self.delete_buttons(false, cx).pt_2())),
+                    ),
             )
             .child(self.edit_pencil(cx));
 
@@ -4118,7 +4168,9 @@ impl Render for Workspace {
                 .as_ref()
                 .map(|d| d.ged.search_sites().into_iter().map(|s| s.name).collect())
                 .unwrap_or_default();
-            if crate::commands::set_search_sites(names) {
+            let changed = crate::commands::set_search_sites(names);
+            // Edit › Delete is named after the selection (“Delete Person”, “Delete Place”…).
+            if crate::commands::set_deletable(self.deletable()) || changed {
                 crate::commands::install_menus(cx);
             }
         }
@@ -4274,7 +4326,7 @@ impl Render for Workspace {
             .text_sm()
             .child(self.render_header(cx))
             .child(div().flex_1().min_h_0().flex().relative().child(body).children(self.render_drawer(cx)))
-            .when(self.doc.is_some(), |d| d.child(self.render_status_bar()))
+            .when(self.doc.is_some(), |d| d.child(self.render_status_bar(cx)))
             .children(self.render_kinship(cx))
             .children(self.render_merge(cx))
             .children(self.render_place_merge(cx))

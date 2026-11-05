@@ -75,6 +75,11 @@ A proposal without this research is not ready to show.
   "Edit…"; a double-click edits it directly.
 - **Undo rather than confirm**: every change goes through an undo point; confirmation is only
   asked for what cannot be undone (a file overwritten on disk…).
+- **Deleting**: one command, Edit › Delete *Kind* (“Delete Person”, “Delete Place”…, named
+  after the selection, no “…”), `⌘⌫` on macOS and `Delete` on Windows and Linux, with the same
+  label in the context menus. No Delete button in a record and no confirmation: the item goes,
+  the next one is selected, and the status bar says what went with an **Undo** button. An item
+  of a record (event, act…) is deleted from its context menu, the same way.
 - **A single bar at the top**: on macOS the title bar is merged with the app's bar (traffic
   lights on the left, window dragging). The file name appears only once, centred, followed by
   "•" while it is unsaved. Messages show in a thin status bar at the bottom (24 px), which

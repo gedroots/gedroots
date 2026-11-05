@@ -166,11 +166,11 @@ gallery.title_changed:
   en: Media title changed
   fr: Titre du média modifié
 gallery.detached:
-  en: "“%{what}” detached from %{from} (Undo to go back)"
-  fr: "« %{what} » détaché de %{from} (Annuler pour revenir en arrière)"
+  en: "“%{what}” detached from %{from}"
+  fr: "« %{what} » détaché de %{from}"
 gallery.deleted:
-  en: "Media “%{what}” deleted, files kept (Undo to go back)"
-  fr: "Média « %{what} » supprimé, fichiers gardés (Annuler pour revenir en arrière)"
+  en: "Media “%{what}” deleted, files kept"
+  fr: "Média « %{what} » supprimé, fichiers gardés"
 gallery.linked.one:
   en: "%{n} item linked · %{to}%{note}"
   fr: "%{n} élément lié · %{to}%{note}"

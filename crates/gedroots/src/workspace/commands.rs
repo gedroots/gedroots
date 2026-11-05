@@ -69,7 +69,8 @@ impl Workspace {
         let d = on!(d, cx, OpenFileSettings, |this, w, cx| this.open_settings(w, cx));
         let d = on!(d, cx, ReviewProposals, |this, w, cx| this.open_review(cx));
         let d = on!(d, cx, AcceptProposal, |this, w, cx| this.accept_proposal(w, cx));
-        let d = on!(d, cx, RejectProposal, |this, w, cx| this.reject_proposal(cx));
+        // Only in the review: elsewhere ⌘⌫ is Edit › Delete.
+        let d = if self.review.open { on!(d, cx, RejectProposal, |this, w, cx| this.reject_proposal(cx)) } else { d };
         let d = on!(d, cx, ConnectAgent, |this, w, cx| this.open_agent_dialog(cx));
         let d = on!(d, cx, MobileDevices, |this, w, cx| this.open_mobile_dialog(w, cx));
         let d = if sample { d } else { on!(d, cx, SaveFileAs, |this, w, cx| this.save_file_as(w, cx)) };
@@ -191,13 +192,9 @@ impl Workspace {
                 }),
                 |d| on!(d, cx, EditRecord, |this, w, cx| this.start_edit(w, cx)),
             )
-            .when(sel.is_some(), |d| {
-                on!(d, cx, DeleteRecord, |this, w, cx| {
-                    if !this.view.has_panel() {
-                        this.tab = CenterTab::Form;
-                    }
-                    this.delete_selected(w, cx);
-                })
+            // Not in the review, where ⌘⌫ rejects a proposal.
+            .when(self.deletable().is_some() && !self.review.open, |d| {
+                on!(d, cx, DeleteRecord, |this, w, cx| this.delete_selected(w, cx))
             })
             .when(sel_kind.is_some(), |d| {
                 on!(d, cx, CopyId, |this, w, cx| {

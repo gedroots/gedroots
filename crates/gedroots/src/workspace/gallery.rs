@@ -405,12 +405,15 @@ impl Workspace {
     }
 
     fn gallery_detach(&mut self, media: String, host: MediaHost, window: &mut Window, cx: &mut Context<Self>) {
-        self.mutate(window, cx, |g| {
+        let done = self.mutate(window, cx, |g| {
             let what = g.record_label(&media);
             let from = host_label(g, &host);
             g.unlink_media(&host, &media)?;
             Ok((t!("gallery.detached", what = what, from = from).into(), None))
         });
+        if done {
+            self.offer_undo();
+        }
         if let Some(gal) = &mut self.gallery {
             gal.selected = None;
             gal.title = None;
@@ -419,11 +422,14 @@ impl Workspace {
     }
 
     fn gallery_delete(&mut self, media: String, window: &mut Window, cx: &mut Context<Self>) {
-        self.mutate(window, cx, |g| {
+        let done = self.mutate(window, cx, |g| {
             let what = g.record_label(&media);
             g.delete_record(&media).ok_or(t!("gallery.not_found"))?;
             Ok((t!("gallery.deleted", what = what).into(), None))
         });
+        if done {
+            self.offer_undo();
+        }
         if let Some(gal) = &mut self.gallery {
             gal.selected = None;
             gal.title = None;

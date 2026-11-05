@@ -201,6 +201,65 @@ pub fn search_sites_generation() -> u64 {
     SEARCH_SITES_GEN.load(std::sync::atomic::Ordering::Relaxed)
 }
 
+/// What Edit › Delete removes: the menu item is named after it (“Delete Person”, “Delete
+/// Place”…), like the same command in the context menus.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Deletable {
+    Person,
+    Family,
+    Source,
+    Media,
+    Repository,
+    Note,
+    Place,
+    Book,
+}
+
+impl Deletable {
+    /// `None` for what the interface does not delete (the submitter).
+    pub fn from_kind(kind: gedcom::RecordKind) -> Option<Self> {
+        use gedcom::RecordKind as K;
+        Some(match kind {
+            K::Individual => Self::Person,
+            K::Family => Self::Family,
+            K::Source => Self::Source,
+            K::Media => Self::Media,
+            K::Repository => Self::Repository,
+            K::SharedNote => Self::Note,
+            K::Submitter => return None,
+        })
+    }
+
+    pub fn label(self) -> SharedString {
+        match self {
+            Self::Person => t!("cmd.delete_person"),
+            Self::Family => t!("cmd.delete_family"),
+            Self::Source => t!("cmd.delete_source"),
+            Self::Media => t!("cmd.delete_media"),
+            Self::Repository => t!("cmd.delete_repository"),
+            Self::Note => t!("cmd.delete_note"),
+            Self::Place => t!("cmd.delete_place"),
+            Self::Book => t!("cmd.delete_book"),
+        }
+        .into()
+    }
+}
+
+/// What the active window would delete (see [`Deletable`]).
+static DELETABLE: std::sync::Mutex<Option<Deletable>> = std::sync::Mutex::new(None);
+
+/// Records what Edit › Delete removes in the active window. Returns `true` if it changed: the
+/// menus then need to be installed again.
+pub fn set_deletable(what: Option<Deletable>) -> bool {
+    let mut current = DELETABLE.lock().unwrap_or_else(|e| e.into_inner());
+    if *current == what {
+        return false;
+    }
+    *current = what;
+    SEARCH_SITES_GEN.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    true
+}
+
 /// Commands that do not apply right now, by action name, for the menu bar drawn in the window
 /// (Linux, Windows). macOS asks the window itself each time a menu opens.
 static UNAVAILABLE: std::sync::Mutex<Vec<&'static str>> = std::sync::Mutex::new(Vec::new());
@@ -271,6 +330,10 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new(shortcut!("l"), EditRecord, WS),
         KeyBinding::new(shortcut!("enter"), AcceptProposal, WS),
         KeyBinding::new(shortcut!("backspace"), RejectProposal, WS),
+        // Like Finder, Mail and Notes: ⌘⌫ deletes the selection; Delete on Windows and Linux.
+        // Inside a text field the field takes the key first. In the review, ⌘⌫ rejects (Delete
+        // Record is not available there).
+        KeyBinding::new(if cfg!(target_os = "macos") { "cmd-backspace" } else { "delete" }, DeleteRecord, WS),
         KeyBinding::new(shortcut!("shift-m"), MediaGallery, WS),
         KeyBinding::new(shortcut!("shift-h"), GoToRoot, WS),
         KeyBinding::new(shortcut!("shift-p"), CommandPalette, WS),
@@ -344,8 +407,12 @@ pub mod label {
     pub fn copy_name() -> SharedString {
         t!("cmd.copy_name").into()
     }
+    /// Edit › Delete, named after what the active window would delete.
     pub fn delete() -> SharedString {
-        t!("cmd.delete").into()
+        match *super::DELETABLE.lock().unwrap_or_else(|e| e.into_inner()) {
+            Some(what) => what.label(),
+            None => t!("cmd.delete").into(),
+        }
     }
     pub fn add_relative() -> SharedString {
         t!("cmd.add_relative").into()

@@ -73,14 +73,14 @@ ws.creation_cancelled:
   en: Creation cancelled
   fr: Création annulée
 ws.deleted:
-  en: "“%{label}” deleted (Undo to go back)"
-  fr: "« %{label} » supprimé (Annuler pour revenir en arrière)"
+  en: "“%{label}” deleted"
+  fr: "« %{label} » supprimé"
 ws.place_removed.one:
-  en: "Place removed from %{n} event (Undo to go back)"
-  fr: "Lieu retiré de %{n} événement (Annuler pour revenir en arrière)"
+  en: "Place removed from %{n} event"
+  fr: "Lieu retiré de %{n} événement"
 ws.place_removed.other:
-  en: "Place removed from %{n} events (Undo to go back)"
-  fr: "Lieu retiré de %{n} événements (Annuler pour revenir en arrière)"
+  en: "Place removed from %{n} events"
+  fr: "Lieu retiré de %{n} événements"
 ws.no_change:
   en: No changes
   fr: Aucune modification
@@ -117,15 +117,6 @@ ws.cancel_edit_tip:
 ws.revert:
   en: Revert
   fr: Rétablir
-ws.keep:
-  en: Keep
-  fr: Garder
-ws.confirm_remove_place:
-  en: Remove Everywhere
-  fr: Retirer partout
-ws.confirm_delete:
-  en: Delete
-  fr: Supprimer
 ws.images_count:
   en: "Images · %{n}"
   fr: "Images · %{n}"

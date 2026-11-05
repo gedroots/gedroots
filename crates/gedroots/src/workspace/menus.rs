@@ -10,6 +10,7 @@
 
 use super::relatives::PickPurpose;
 use super::*;
+use crate::commands::Deletable;
 use crate::commands::label;
 use crate::t;
 use gpui_kit::component::menu::{ContextMenu, ContextMenuExt, PopupMenu, PopupMenuItem};
@@ -80,11 +81,10 @@ impl Workspace {
         cx.notify();
     }
 
-    /// Delete from the list: the item and its confirmation are shown.
-    fn delete_from_list(&mut self, key: String, window: &mut Window, cx: &mut Context<Self>) {
-        self.select(key, window, cx);
-        self.tab = CenterTab::Form;
-        self.delete_selected(window, cx);
+    /// Delete from a context menu: the item goes at once, Undo brings it back. A card of the
+    /// tree is a person of the Individuals list.
+    fn delete_from_menu(&mut self, key: String, window: &mut Window, cx: &mut Context<Self>) {
+        self.delete_item(key, window, cx);
     }
 
     fn ws(cx: &Context<Self>) -> Ws {
@@ -240,7 +240,7 @@ pub(super) fn place_menu(ws: Ws, name: String, from: From) -> MenuBuilder {
         .separator()
         .item(act(&ws, label::copy_name(), move |this, _, cx| this.copy_name(&n3, cx)))
         .when(matches!(from, From::List), |m| {
-            m.item(act(&ws, label::delete(), move |this, w, cx| this.delete_from_list(n4.clone(), w, cx)))
+            m.item(act(&ws, Deletable::Place.label(), move |this, w, cx| this.delete_from_menu(n4.clone(), w, cx)))
         })
     })
 }
@@ -270,14 +270,17 @@ fn ellipsize(s: &str, n: usize) -> String {
 fn tail(menu: PopupMenu, ws: &Ws, xref: &str, from: &From, cx: &App) -> PopupMenu {
     let (a, b, c, d) = (xref.to_string(), xref.to_string(), xref.to_string(), xref.to_string());
     let history = read(ws, cx, |this, _| this.has_version_history()).unwrap_or(false);
+    let deletable = read(ws, cx, |_, g| g.get(xref).and_then(|n| RecordKind::from_tag(&n.tag)))
+        .flatten()
+        .and_then(Deletable::from_kind);
     menu.separator()
         .when(history, |m| {
             m.item(act(ws, label::record_history(), move |this, w, cx| this.open_record_history(d.clone(), w, cx)))
         })
         .item(act(ws, label::copy_name(), move |this, _, cx| this.copy_name(&c, cx)))
         .item(act(ws, label::copy_id(), move |this, _, cx| this.copy_id(&a, cx)))
-        .when(matches!(from, From::List), |m| {
-            m.item(act(ws, label::delete(), move |this, w, cx| this.delete_from_list(b.clone(), w, cx)))
+        .when_some(deletable.filter(|_| matches!(from, From::List | From::Tree)), |m, what| {
+            m.item(act(ws, what.label(), move |this, w, cx| this.delete_from_menu(b.clone(), w, cx)))
         })
 }
 
@@ -449,7 +452,7 @@ fn other_menu(ws: Ws, x: String, kind: RecordKind, from: From) -> MenuBuilder {
                 this.mutate(w, cx, move |g| {
                     g.set_portrait(&owner, &media);
                     Ok((t!("context.portrait_set", name = g.record_label(&owner)).to_string(), None))
-                })
+                });
             }))
         })
         .when_some(
@@ -466,7 +469,7 @@ fn other_menu(ws: Ws, x: String, kind: RecordKind, from: From) -> MenuBuilder {
                         let from = g.event_title(&owner, ix).unwrap_or_default().to_lowercase();
                         g.detach_media_from_event(&owner, ix, &media)?;
                         Ok((t!("context.detached_event", what = what, from = from).to_string(), None))
-                    })
+                    });
                 }))
             },
         )
@@ -483,7 +486,7 @@ fn other_menu(ws: Ws, x: String, kind: RecordKind, from: From) -> MenuBuilder {
                         let (what, from) = (g.record_label(&media), g.record_label(&owner));
                         g.detach_media(&owner, &media);
                         Ok((t!("context.detached", what = what, from = from).to_string(), None))
-                    })
+                    });
                 }))
             },
         )

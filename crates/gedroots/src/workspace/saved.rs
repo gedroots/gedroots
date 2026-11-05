@@ -132,10 +132,12 @@ impl Workspace {
 
     pub(super) fn delete_saved(&mut self, i: usize, window: &mut Window, cx: &mut Context<Self>) {
         self.saved_rename = None;
-        self.mutate(window, cx, |g| {
+        if self.mutate(window, cx, |g| {
             let s = g.delete_search(i).ok_or_else(|| t!("saved.not_found").to_string())?;
             Ok((t!("saved.deleted", name = s.name).to_string(), None))
-        });
+        }) {
+            self.offer_undo();
+        }
         self.refresh_saved();
         cx.notify();
     }

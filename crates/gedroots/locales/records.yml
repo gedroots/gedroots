@@ -352,8 +352,8 @@ event_dialog.added:
   en: "%{label} added to %{who}"
   fr: "%{label} ajouté(e) à %{who}"
 event_dialog.deleted:
-  en: "%{label} removed from %{who} (Undo to go back)"
-  fr: "%{label} retiré(e) de %{who} (Annuler pour revenir en arrière)"
+  en: "%{label} of %{who} deleted"
+  fr: "%{label} de %{who} supprimé(e)"
 event_dialog.new:
   en: New Event
   fr: Nouvel événement

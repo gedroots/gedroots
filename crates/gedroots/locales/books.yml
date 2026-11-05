@@ -65,8 +65,8 @@ books.saved:
   en: Book settings saved
   fr: Réglages du livre enregistrés
 books.deleted:
-  en: "“%{title}” deleted (Undo to go back)"
-  fr: "« %{title} » supprimé (Annuler pour revenir en arrière)"
+  en: "“%{title}” deleted"
+  fr: "« %{title} » supprimé"
 books.choose_person:
   en: Select a person first, or choose a root person for the tree
   fr: Sélectionnez d’abord une personne, ou choisissez la personne de référence de l’arbre

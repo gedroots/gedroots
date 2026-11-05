@@ -175,9 +175,34 @@ cmd:
   copy_id:
     en: Copy ID
     fr: Copier l'ID
+  # Edit › Delete: named after what is selected, no “…” (nothing opens, Undo brings it back).
   delete:
-    en: Delete…
-    fr: Supprimer l'élément…
+    en: Delete
+    fr: Supprimer
+  delete_person:
+    en: Delete Person
+    fr: Supprimer la personne
+  delete_family:
+    en: Delete Family
+    fr: Supprimer la famille
+  delete_source:
+    en: Delete Source
+    fr: Supprimer la source
+  delete_media:
+    en: Delete Media
+    fr: Supprimer le média
+  delete_repository:
+    en: Delete Repository
+    fr: Supprimer le dépôt
+  delete_note:
+    en: Delete Note
+    fr: Supprimer la note
+  delete_place:
+    en: Delete Place
+    fr: Supprimer le lieu
+  delete_book:
+    en: Delete Book
+    fr: Supprimer le livre
   find:
     en: Find
     fr: Rechercher
