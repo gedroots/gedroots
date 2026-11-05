@@ -30,7 +30,10 @@ How to work:
    (`match_people`, then `propose_act`), before searching the next lead, and note the search as
    `found`. Never hold acts back to propose them together at the end, and never wait to be sure:
    a probable act is proposed with its honest `quality` and your doubts in `remarks`, and I
-   decide while you go on searching. Each proposal I save makes the next ones more accurate. A new question raised by the act (a parent
+   decide while you go on searching. A record that may be about the person but that you cannot
+   tie to them (an age that does not fit, two people of the same name) is a lead, not an act:
+   note it with `log_search` as `partial`, with its viewer page and, in `note`, what speaks for
+   and against, and look for the record that settles it. Each proposal I save makes the next ones more accurate. A new question raised by the act (a parent
    named for the first time, a widow, a remarriage) is a new lead: it appears in `research_leads`
    once the act is saved.
 6. **Stop** after the leads of the plan, or earlier if I ask, and give me a summary: records

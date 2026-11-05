@@ -33,7 +33,12 @@ How to work:
 3. Check that the act is about the person in the tree: call `person_sheet` and compare names,
    dates, places and parents. If it clearly does not match, stop and tell the user why. If it
    probably matches but something is uncertain (a parent's name missing, a date a few years
-   off), propose it anyway with a lower `quality` and say what is uncertain in `remarks`.
+   off), propose it anyway with a lower `quality` and say what is uncertain in `remarks`. If you
+   cannot tell whether it is about this person at all (an age that contradicts the tree, two
+   people of the same name in the parish), do not propose it and never write it as a note in the
+   tree: it is a research lead. Note it with `log_search` as `partial` on the person's lead (the
+   event it would be, the viewer page, and in `note` what speaks for and against), and tell the
+   user. It waits in GEDRoots' Research page until another record proves or rules it out.
 4. Call `file_context` if you have not yet: read the user's description of the file and the
    latest sources and people. Then call `search_sources` with the register or the archive's name.
    Reuse the repository, and write the source the way this file does: reuse a register's source
@@ -79,7 +84,8 @@ How to work:
    If the proposal is already saved, or the act shows the tree is wrong (a given name misread, a
    name the act spells otherwise, a wrong date), propose the correction with `propose_change`
    without `issue` (`set_name`, `add_name` for a variant spelling, `set_event`, `unlink_relative`
-   and `link_relative` for a wrong parent, `add_note` when two acts disagree…), with the reason
+   and `link_relative` for a wrong parent, `add_note` when two acts already in the tree
+   disagree…), with the reason
    and the evidence: never leave it for the user to fix by hand. `will_write` tells you when a
    person you link is named otherwise in the act.
 9. Every answer of GEDRoots carries `news` when the user saved, rejected or edited one of your
