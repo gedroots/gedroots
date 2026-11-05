@@ -328,6 +328,46 @@ mod tests {
     }
 
     #[test]
+    fn places_visualizations_in_chapters() {
+        use gedroots_viz::Kind;
+        let g = Gedcom::parse(TREE).expect("valid tree");
+        let mut spec = BookSpec::new("I1", "");
+        let figure = |kind, subject: Option<&str>, line| {
+            Block::Figure(writing::Figure {
+                kind,
+                subject: subject.map(Into::into),
+                line,
+                generations: None,
+                text: "Where {I1} comes from.".into(),
+            })
+        };
+        spec.chapters.insert(
+            1,
+            Writing {
+                intro: vec![
+                    figure(Kind::Fan, None, None),
+                    figure(Kind::Generations, None, None),
+                    // Not drawn for descendants: left out.
+                    figure(Kind::Generations, Some("I2"), Some(Line::Descendants)),
+                    figure(Kind::Fan, Some("I2"), Some(Line::Descendants)),
+                ],
+                people: vec![],
+            },
+        );
+        let (data, assets) =
+            content::build(&g, &spec, "test.ged", None, (2026, String::new()), &Part::whole()).expect("data");
+        let intro = &data.chapters[0].intro;
+        assert_eq!(intro.iter().map(|b| b.kind).collect::<Vec<_>>(), ["figure"; 3]);
+        assert_eq!(intro[0].paragraphs, ["Where Louis MARCHAND comes from."]);
+        assert_eq!(intro[2].title, "Fan Chart · Descendants of Jean MARCHAND");
+        assert!(assets.iter().any(|a| a.path == "figure-3.svg"));
+        // Shown in the chapter, not again in the opening pages or the figures.
+        assert!(data.fan_page.is_none() && !data.completeness);
+        assert!(!data.levels);
+        assert!(compose(&g, &spec, "test.ged", None, (2026, 11, 4)).is_ok());
+    }
+
+    #[test]
     fn exports_for_a_printer() {
         let g = Gedcom::parse(TREE).expect("valid tree");
         let mut spec = BookSpec::new("I1", "");

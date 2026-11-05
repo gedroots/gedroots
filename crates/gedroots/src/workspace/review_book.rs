@@ -192,6 +192,44 @@ impl Workspace {
                         })),
                 )
                 .into_any_element(),
+            Block::Figure(f) => {
+                // Whose, when it is not the book's people.
+                let scope = [
+                    f.subject.as_deref().and_then(|x| g.individual(x)).map(|p| p.display_name()),
+                    f.line.map(|l| match l {
+                        gedroots_viz::Line::Ancestors => t!("books.ancestors").into_owned(),
+                        gedroots_viz::Line::Descendants => t!("books.descendants").into_owned(),
+                    }),
+                    f.generations.map(|n| crate::tn!("books.generations", n as usize).into_owned()),
+                ]
+                .into_iter()
+                .flatten()
+                .collect::<Vec<_>>()
+                .join(" · ");
+                h_flex()
+                    .gap_2()
+                    .items_start()
+                    .p_3()
+                    .border_1()
+                    .border_color(theme::border())
+                    .rounded(theme::RADIUS_SM)
+                    .child(tick())
+                    .child(
+                        v_flex()
+                            .flex_1()
+                            .min_w_0()
+                            .gap_1()
+                            .text_sm()
+                            .when(!on, |d| d.opacity(0.45))
+                            .child(label_caps(t!("review.visualization").into_owned()))
+                            .child(div().font_weight(FontWeight::SEMIBOLD).child(f.kind.title()))
+                            .when(!scope.is_empty(), |d| {
+                                d.child(div().text_xs().text_color(theme::muted()).child(scope))
+                            })
+                            .children(paragraphs(&f.text)),
+                    )
+                    .into_any_element()
+            }
             Block::Hypothesis { text, basis } => h_flex()
                 .gap_2()
                 .items_start()

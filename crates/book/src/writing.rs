@@ -8,7 +8,9 @@
 //!   shows their name, and the id is checked to be in the tree;
 //! - **context**: history that explains the facts (a war, a migration, a crisis), with at least one
 //!   source;
-//! - **hypothesis**: what the records do not say (why a family moved), with the clues it rests on.
+//! - **hypothesis**: what the records do not say (why a family moved), with the clues it rests on;
+//! - **figure**: a visualization (`gedroots-viz`) placed in the chapter, computed from the tree when
+//!   the book is typeset, for the book's people or another scope, with a comment under it.
 //!
 //! ```text
 //! 1 _GR_CHAP 3
@@ -21,10 +23,15 @@
 //! 3 _GR_TEXT Vincente is born in 1839…
 //! 3 _GR_HYPO She probably followed her neighbours to Oran.
 //! 4 _GR_BASE born on the coast near Alicante
+//! 2 _GR_VIZ PLACES
+//! 3 _GR_SUBJ @I48@
+//! 3 _GR_GENS 4
+//! 3 _GR_TEXT Her ancestors all come from the coast between Alicante and Cartagena.
 //! ```
 
 use gedcom::document::Gedcom;
 use gedcom::node::Node;
+use gedroots_viz::{Kind, Line};
 use std::collections::BTreeMap;
 
 pub(crate) const CHAPTER_TAG: &str = "_GR_CHAP";
@@ -35,9 +42,14 @@ const URL_TAG: &str = "_GR_URL";
 const HYPOTHESIS_TAG: &str = "_GR_HYPO";
 const BASIS_TAG: &str = "_GR_BASE";
 const PERSON_TAG: &str = "_GR_INDI";
+const FIGURE_TAG: &str = "_GR_VIZ";
+// A figure's scope, with the tags of the book's own.
+const SUBJECT_TAG: &str = "_GR_SUBJ";
+const LINE_TAG: &str = "_GR_LINE";
+const GENERATIONS_TAG: &str = "_GR_GENS";
 /// The tags of the agent's writing, declared with the book's.
-pub(crate) const TAGS: [&str; 8] =
-    [CHAPTER_TAG, TEXT_TAG, CONTEXT_TAG, CITE_TAG, URL_TAG, HYPOTHESIS_TAG, BASIS_TAG, PERSON_TAG];
+pub(crate) const TAGS: [&str; 9] =
+    [CHAPTER_TAG, TEXT_TAG, CONTEXT_TAG, CITE_TAG, URL_TAG, HYPOTHESIS_TAG, BASIS_TAG, PERSON_TAG, FIGURE_TAG];
 
 /// A source of a context box: a book, an article, a web page.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -51,6 +63,28 @@ pub enum Block {
     Text(String),
     Context { title: String, text: String, sources: Vec<Cite> },
     Hypothesis { text: String, basis: Vec<String> },
+    Figure(Figure),
+}
+
+/// A visualization placed in a chapter. What is not given is the book's: its person, line and
+/// generations.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Figure {
+    pub kind: Kind,
+    pub subject: Option<String>,
+    pub line: Option<Line>,
+    pub generations: Option<u32>,
+    /// A comment under it, which may cite people (`{I12}`); can be empty.
+    pub text: String,
+}
+
+impl Figure {
+    /// Whether it shows the book's own people (no other person, line or generations).
+    pub fn of_book(&self, subject: &str, line: Line, generations: u32) -> bool {
+        self.subject.as_deref().is_none_or(|s| s == subject)
+            && self.line.is_none_or(|l| l == line)
+            && self.generations.is_none_or(|n| n == generations)
+    }
 }
 
 impl Block {
@@ -59,12 +93,19 @@ impl Block {
         !matches!(self, Block::Text(_))
     }
 
+    /// Context or hypothesis: the blocks the book tells apart from the facts (the contents page
+    /// says how to read them).
+    pub fn level(&self) -> bool {
+        matches!(self, Block::Context { .. } | Block::Hypothesis { .. })
+    }
+
     /// Why the block cannot go into a book, if it cannot.
     pub fn problem(&self, g: &Gedcom) -> Option<String> {
         let (text, what) = match self {
             Block::Text(t) => (t, "text"),
             Block::Context { text, .. } => (text, "context"),
             Block::Hypothesis { text, .. } => (text, "hypothesis"),
+            Block::Figure(f) => return f.problem(g),
         };
         if text.trim().is_empty() {
             return Some(format!("a {what} block has no text"));
@@ -86,6 +127,15 @@ impl Block {
     }
 
     fn read(node: &Node) -> Option<Block> {
+        if node.tag == FIGURE_TAG {
+            return Some(Block::Figure(Figure {
+                kind: Kind::from_slug(node.val())?,
+                subject: node.child(SUBJECT_TAG).and_then(Node::pointer).map(str::to_string),
+                line: node.child_val(LINE_TAG).filter(|l| !l.trim().is_empty()).map(Line::from_tag),
+                generations: node.child_val(GENERATIONS_TAG).and_then(|n| n.trim().parse().ok()),
+                text: node.child(TEXT_TAG).map(Node::text).unwrap_or_default(),
+            }));
+        }
         let sub = |n: &Node| n.child(TEXT_TAG).map(Node::text).unwrap_or_default();
         match node.tag.as_str() {
             TEXT_TAG => Some(Block::Text(node.text())),
@@ -125,6 +175,22 @@ impl Block {
                 }
                 n
             }
+            Block::Figure(f) => {
+                let mut n = Node::with_value(FIGURE_TAG, f.kind.slug().to_ascii_uppercase());
+                if let Some(x) = &f.subject {
+                    n.children.push(Node::with_value(SUBJECT_TAG, format!("@{x}@")));
+                }
+                if let Some(l) = f.line {
+                    n.children.push(Node::with_value(LINE_TAG, l.tag()));
+                }
+                if let Some(g) = f.generations {
+                    n.children.push(Node::with_value(GENERATIONS_TAG, g.to_string()));
+                }
+                if !f.text.trim().is_empty() {
+                    n.children.push(text(TEXT_TAG, &f.text));
+                }
+                n
+            }
             Block::Hypothesis { text: t, basis } => {
                 let mut n = text(HYPOTHESIS_TAG, t);
                 n.children.extend(
@@ -133,6 +199,25 @@ impl Block {
                 n
             }
         }
+    }
+}
+
+impl Figure {
+    /// Why it cannot go into a book, if it cannot (the line is checked against the book's when
+    /// the book is typeset: a figure it cannot draw is left out).
+    pub fn problem(&self, g: &Gedcom) -> Option<String> {
+        if let Some(x) = &self.subject
+            && g.individual(x).is_none()
+        {
+            return Some(format!("no person {x} in the tree"));
+        }
+        if let Some(l) = self.line
+            && !self.kind.supports(l)
+        {
+            return Some(format!("`{}` is drawn for ancestors only", self.kind.slug()));
+        }
+        let unknown: Vec<String> = cited(&self.text).into_iter().filter(|x| g.individual(x).is_none()).collect();
+        (!unknown.is_empty()).then(|| format!("no person {} in the tree", unknown.join(", ")))
     }
 }
 
@@ -277,6 +362,28 @@ mod tests {
         let named = expand(t, |x| (x == "I1").then(|| "Jean MARCHAND".to_string()));
         assert_eq!(named, "Jean MARCHAND marries {@I2@} in {a place}, {}.");
         assert_eq!(expand("open { brace", |_| None), "open { brace");
+    }
+
+    #[test]
+    fn reads_back_a_figure() {
+        let fig = Block::Figure(Figure {
+            kind: Kind::Places,
+            subject: Some("I48".into()),
+            line: None,
+            generations: Some(4),
+            text: "From the coast.".into(),
+        });
+        let node = fig.node();
+        assert_eq!(node.val(), "PLACES");
+        assert_eq!(Block::read(&node), Some(fig));
+        let bare = Block::Figure(Figure {
+            kind: Kind::Fan,
+            subject: None,
+            line: None,
+            generations: None,
+            text: String::new(),
+        });
+        assert_eq!(Block::read(&bare.node()), Some(bare));
     }
 
     #[test]

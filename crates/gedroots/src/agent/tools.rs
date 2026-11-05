@@ -1135,7 +1135,7 @@ impl GedrootsMcp {
 
     #[tool(
         name = "read_book",
-        description = "The family books of the tree (without `book`), or the chapters of one: each chapter is a generation, with its people (id, name, years, number, how much of a record the book gives them, how many facts the tree knows) and what the book already has from you. Read it before `propose_chapter`. The book's dates, places, charts and index are computed by GEDRoots from the tree: you only write the narrative, the context and the hypotheses.",
+        description = "The family books of the tree (without `book`), or the chapters of one: each chapter is a generation, with its people (id, name, years, number, how much of a record the book gives them, how many facts the tree knows) and what the book already has from you. Read it before `propose_chapter`. The book's dates, places, charts and index are computed by GEDRoots from the tree: you write the narrative, the context and the hypotheses, and choose where to place visualizations.",
         annotations(read_only_hint = true, open_world_hint = false)
     )]
     async fn read_book(&self, Parameters(p): Parameters<ReadBookParams>) -> Res<Books> {
@@ -1146,7 +1146,7 @@ impl GedrootsMcp {
 
     #[tool(
         name = "propose_chapter",
-        description = "Proposes what you wrote for one chapter of a family book (`read_book`): an introduction (`intro`) and the narratives of some of its people (`people`). Each block is `text` (the facts as a narrative, people named by id in braces, `{I12}`, checked to be in the tree), `context` (history that explains the facts: a war, a migration, a crisis, a law; `title` and at least one of `sources` required: search them, never cite from memory alone) or `hypothesis` (what the records do not say, such as why a family moved; the `basis` it rests on required, with what would check it). Never present a hypothesis as a fact. Nothing is written: the chapter waits in GEDRoots' review page, where the user leaves out the context and hypotheses they do not want, then saves it into the book. A new proposal for the same chapter takes the place of the waiting one. Write in the book's `language` (`read_book`). Work one chapter at a time.",
+        description = "Proposes what you wrote for one chapter of a family book (`read_book`): an introduction (`intro`) and the narratives of some of its people (`people`). Each block is `text` (the facts as a narrative, people named by id in braces, `{I12}`, checked to be in the tree), `context` (history that explains the facts: a war, a migration, a crisis, a law; `title` and at least one of `sources` required: search them, never cite from memory alone) or `hypothesis` (what the records do not say, such as why a family moved; the `basis` it rests on required, with what would check it), or `visualization` (a chart GEDRoots draws from the tree when it typesets the book, `list_visualizations`: `visualization` required, with `person`, `line` and `generations` when it is not about the book's people, and an optional comment in `text`; choose the ones that tell the chapter's story, such as the map of the places a generation left, and read them with `read_visualization` first; one about the book's own people is then shown there instead of in the book's opening pages or figures). Never present a hypothesis as a fact. Nothing is written: the chapter waits in GEDRoots' review page, where the user leaves out the context, hypotheses and visualizations they do not want, then saves it into the book. A new proposal for the same chapter takes the place of the waiting one. Write in the book's `language` (`read_book`). Work one chapter at a time.",
         annotations(read_only_hint = false, destructive_hint = false, idempotent_hint = true, open_world_hint = false)
     )]
     async fn propose_chapter(&self, Parameters(p): Parameters<ProposeChapterParams>) -> Res<ChapterProposed> {
@@ -1218,7 +1218,8 @@ corrected with `propose_change` without `issue`: never leave it for the user to 
 Family books (`read_book`) are typeset by GEDRoots from the tree; you write their narratives, \
 historical context and hypotheses with `propose_chapter`, one chapter at a time; the prompt \
 `write_book` gives the method. `list_visualizations` and `read_visualization` give the data of the \
-charts GEDRoots draws (origins, migrations, lifespans, longevity, occupations).";
+charts GEDRoots draws (origins, migrations, lifespans, longevity, occupations), which you can place \
+in a chapter with `propose_chapter`.";
 
 /// The file's context, also offered as a resource for clients that let the user attach one.
 const CONTEXT_URI: &str = "gedroots://file/context";

@@ -25,3 +25,9 @@ viz.change_person:
 viz.empty:
   en: Not enough data in the tree for this visualization
   fr: Pas assez de données dans l’arbre pour cette visualisation
+viz.add_to_book:
+  en: Add to Book
+  fr: Ajouter au livre
+viz.added:
+  en: "Added to “%{chapter}” in %{book}"
+  fr: "Ajoutée à « %{chapter} » dans %{book}"

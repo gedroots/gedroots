@@ -132,6 +132,27 @@
 #let written(blocks) = for b in blocks {
   if b.kind == "text" {
     for p in b.paragraphs [#par(p)]
+  } else if b.kind == "figure" {
+    block(width: 100%, above: 6mm, below: 6mm, breakable: false)[
+      #text(font: sans, size: 8pt, weight: 600, b.title)
+      #v(2mm)
+      #image(b.image, width: 100%)
+      #if b.legend.len() > 0 {
+        v(2mm)
+        grid(columns: (1fr, 1fr, 1fr), row-gutter: 2mm, column-gutter: 3mm,
+          ..b.legend.map(l => box[
+            #box(width: 2.5mm, height: 2.5mm, radius: 0.5mm, fill: rgb(l.color), stroke: if l.unknown { (paint: rule, dash: "dashed") } else { none }, baseline: 0.3mm)
+            #h(1.2mm) #text(font: sans, size: 7pt, l.label) #h(0.8mm) #text(font: sans, size: 7pt, fill: muted, str(l.count))
+          ])
+        )
+      }
+      #for n in b.notes { v(1.5mm); caption(n) }
+      #if b.paragraphs.len() > 0 {
+        v(2mm)
+        set text(style: "italic")
+        for p in b.paragraphs [#par(p)]
+      }
+    ]
   } else if b.kind == "context" {
     block(width: 100%, fill: paper2, inset: (x: 4mm, y: 3mm), stroke: (left: 2pt + ochre), above: 4mm, below: 4mm, breakable: true)[
       #kicker(L.context)
