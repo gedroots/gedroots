@@ -7,8 +7,8 @@ use super::relatives::PickPurpose;
 use super::tree::TreeMode;
 use super::*;
 use crate::editor::NamePart;
+use crate::t;
 use gpui_kit::component::command::{Command, CommandItem, CommandState};
-use rust_i18n::t;
 
 /// Declares an action handler on the root element.
 macro_rules! on {

@@ -1,9 +1,9 @@
 //! “Statistics” page and relationship between two individuals (formerly the Analyses window).
 
 use super::*;
+use crate::t;
 use gedcom::analysis::kinship;
 use gedcom::analysis::stats::{self, Stats};
-use rust_i18n::t;
 
 fn card() -> Div {
     v_flex().p_4().gap_2().rounded(theme::RADIUS_SM).border_1().border_color(theme::border()).bg(theme::panel())

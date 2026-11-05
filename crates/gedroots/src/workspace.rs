@@ -6,6 +6,7 @@ use crate::commands::*;
 use crate::editor::{FieldState, NamePart, NamesEditor, RecordEditor, Slot, Target, name_type_label};
 use crate::images::picture;
 use crate::map::{MapEvent, MapView};
+use crate::t;
 use crate::theme;
 use gedcom::analysis::timeline::{self, EntryKind};
 use gedcom::query::Scope;
@@ -20,7 +21,6 @@ use gpui_kit::component::{Disableable, Icon, Sizable, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 use menus::{From as MenuFrom, WithMenu};
-use rust_i18n::t;
 use std::path::PathBuf;
 use std::rc::Rc;
 
@@ -2012,6 +2012,19 @@ fn icon(name: IconName) -> Icon {
     Icon::new(name).size(px(14.))
 }
 
+/// Empty state of a whole view (design.md › Feedback and states): the view's icon and a short
+/// title, centred, no paragraph.
+fn empty_state(name: IconName, title: impl Into<SharedString>) -> Div {
+    v_flex()
+        .size_full()
+        .items_center()
+        .justify_center()
+        .gap_3()
+        .text_color(theme::muted())
+        .child(Icon::new(name).size(px(32.)))
+        .child(div().text_sm().font_weight(FontWeight::MEDIUM).child(title.into()))
+}
+
 /// Portrait of the individual (first linked image media), or their initials.
 fn avatar(doc: &Document, i: &Individual<'_>, size: f32, ring: Hsla) -> Div {
     let base = div()
@@ -2365,6 +2378,9 @@ impl Workspace {
         let selected = self.selected.clone();
         let marked: Rc<Vec<String>> = Rc::new(self.media_marked.clone());
         let multi = self.view == View::Media;
+        // Sources and repositories: their detail (publication, website) is text, too long to share
+        // the line with the title, so it goes under it, like a message in Mail.
+        let two_lines = matches!(self.view, View::Sources | View::Repositories);
         let entity = cx.entity().downgrade();
         let menu_row = self.menu_row.clone();
         let flag = self.flag_label();
@@ -2409,10 +2425,11 @@ impl Workspace {
                                     let key = r.key.clone();
                                     let entity = entity.clone();
                                     let menu_row = menu_row.clone();
+                                    let meta = r.meta_display().to_string();
                                     h_flex()
                                         .id(i)
                                         .w_full()
-                                        .h(px(30.))
+                                        .h(px(if two_lines { 48. } else { 30. }))
                                         .px_3()
                                         .gap_2()
                                         .items_center()
@@ -2420,32 +2437,52 @@ impl Workspace {
                                         .when(on, |d| d.bg(theme::hover()))
                                         .hover(|d| d.bg(theme::surface()))
                                         .when(dotted, |d| d.child(dot(r.dot.unwrap_or(transparent_black()))))
-                                        .child(
-                                            h_flex()
-                                                .flex_1()
-                                                .min_w_0()
-                                                .gap_1()
-                                                .overflow_hidden()
-                                                .whitespace_nowrap()
-                                                .text_ellipsis()
-                                                .when(!r.strong.is_empty(), |d| {
-                                                    d.child(
-                                                        div()
-                                                            .flex_none()
-                                                            .font_weight(FontWeight::SEMIBOLD)
-                                                            .child(r.strong.clone()),
-                                                    )
-                                                })
-                                                .child(div().min_w_0().truncate().child(r.title.clone())),
-                                        )
-                                        .child(
-                                            mono(r.meta_display().to_string())
-                                                .flex_none()
-                                                .max_w(px(96.))
-                                                .overflow_hidden()
-                                                .whitespace_nowrap()
-                                                .text_ellipsis(),
-                                        )
+                                        .when(two_lines, |d| {
+                                            d.child(
+                                                v_flex()
+                                                    .flex_1()
+                                                    .min_w_0()
+                                                    .gap_0p5()
+                                                    .child(div().truncate().child(r.title.clone()))
+                                                    .when(!meta.is_empty(), |d| {
+                                                        d.child(
+                                                            div()
+                                                                .truncate()
+                                                                .text_xs()
+                                                                .text_color(theme::muted())
+                                                                .child(meta.clone()),
+                                                        )
+                                                    }),
+                                            )
+                                        })
+                                        .when(!two_lines, |d| {
+                                            d.child(
+                                                h_flex()
+                                                    .flex_1()
+                                                    .min_w_0()
+                                                    .gap_1()
+                                                    .overflow_hidden()
+                                                    .whitespace_nowrap()
+                                                    .text_ellipsis()
+                                                    .when(!r.strong.is_empty(), |d| {
+                                                        d.child(
+                                                            div()
+                                                                .flex_none()
+                                                                .font_weight(FontWeight::SEMIBOLD)
+                                                                .child(r.strong.clone()),
+                                                        )
+                                                    })
+                                                    .child(div().min_w_0().truncate().child(r.title.clone())),
+                                            )
+                                            .child(
+                                                mono(meta)
+                                                    .flex_none()
+                                                    .max_w(px(96.))
+                                                    .overflow_hidden()
+                                                    .whitespace_nowrap()
+                                                    .text_ellipsis(),
+                                            )
+                                        })
                                         .on_click({
                                             let (key, entity) = (key.clone(), entity.clone());
                                             move |ev: &ClickEvent, window, cx| {

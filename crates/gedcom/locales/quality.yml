@@ -94,8 +94,8 @@ quality.tag_not_allowed:
   en: "%{who}: “%{what}” does not belong in “%{here}”"
   fr: "%{who} : « %{what} » n’a pas sa place dans « %{here} »"
 quality.bad_value:
-  en: "%{who}: %{what} — %{problem}"
-  fr: "%{who} : %{what} — %{problem}"
+  en: "%{who}: %{what}, %{problem}"
+  fr: "%{who} : %{what}, %{problem}"
 quality.missing_required:
   en: "%{who}: “%{here}” without %{what} (%{tag})"
   fr: "%{who} : « %{here} » sans %{what} (%{tag})"

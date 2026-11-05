@@ -5,8 +5,8 @@
 //! `.ged` (`HEAD._GR_FIND`) and shows its number of results.
 
 use super::*;
+use crate::t;
 use gedcom::saved::{SavedSearch, default_name};
-use rust_i18n::t;
 
 /// Renaming in progress in the sidebar.
 pub(super) struct SavedRename {

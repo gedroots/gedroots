@@ -414,13 +414,13 @@ impl Workspace {
         let sync = match dev.last_sync {
             None => h_flex().child(t!("mobile.never").into_owned()),
             Some(at) if up_to_date => h_flex()
-                .gap_1p5()
+                .gap_2()
                 .items_center()
                 .child(Icon::new(IconName::Check).size(px(14.)).text_color(theme::ok()))
                 .child(t!("mobile.up_to_date", when = ago(at)).into_owned()),
             Some(at) => h_flex().child(ago(at)),
         };
-        let mut rows = v_flex().gap_1p5().child(row(t!("mobile.last_sync").into_owned(), sync));
+        let mut rows = v_flex().gap_2().child(row(t!("mobile.last_sync").into_owned(), sync));
         if dev.last_sync.is_some() {
             let link = if dev.direct { t!("mobile.direct") } else { t!("mobile.relay") };
             rows = rows.child(row(t!("mobile.connection").into_owned(), h_flex().child(link.into_owned())));

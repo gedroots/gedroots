@@ -775,7 +775,7 @@ impl GedrootsMcp {
                 true => Ok(()),
                 false => Err("could not note this search".into()),
             }),
-            rust_i18n::t!("agent.logged", what = searched).into_owned(),
+            crate::t!("agent.logged", what = searched).into_owned(),
         )
         .await?;
         let s = self.snapshot(tree.as_deref()).await?;
@@ -1294,7 +1294,7 @@ pub async fn serve(
         .layer(axum::middleware::from_fn_with_state(token, check_token));
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", port))
         .await
-        .map_err(|e| rust_i18n::t!("agent.port_unavailable", port = port, error = e.to_string()).into_owned())?;
+        .map_err(|e| crate::t!("agent.port_unavailable", port = port, error = e.to_string()).into_owned())?;
     axum::serve(listener, app)
         .with_graceful_shutdown(async move { cancel.cancelled().await })
         .await

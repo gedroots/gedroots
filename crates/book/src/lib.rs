@@ -16,9 +16,13 @@ macro_rules! t {
     ($key:expr) => {
         rust_i18n::t!($key, locale = &*gedcom::i18n::language())
     };
-    ($key:expr, $($rest:tt)*) => {
-        rust_i18n::t!($key, locale = &*gedcom::i18n::language(), $($rest)*)
-    };
+    ($key:expr, $($name:ident = $value:expr),+ $(,)?) => {{
+        let lang = gedcom::i18n::language();
+        gedcom::i18n::elide(
+            rust_i18n::t!($key, locale = &*lang, $($name = gedcom::i18n::Marked(&($value))),+),
+            &lang,
+        )
+    }};
 }
 
 pub mod charts;

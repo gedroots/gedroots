@@ -7,8 +7,8 @@ media_files.file_error:
   en: "%{path}: %{error}"
   fr: "%{path} : %{error}"
 media_files.outside:
-  en: " — warning: file outside the .ged folder, absolute path saved"
-  fr: " — attention : fichier hors du dossier du .ged, chemin absolu enregistré"
+  en: " · file outside the tree’s folder, saved with its full path"
+  fr: " · fichier hors du dossier de l’arbre, enregistré avec son chemin complet"
 media_files.copied.one:
   en: " · %{n} copied to the file’s folder"
   fr: " · %{n} copié dans le dossier du fichier"
@@ -16,8 +16,8 @@ media_files.copied.other:
   en: " · %{n} copied to the file’s folder"
   fr: " · %{n} copiés dans le dossier du fichier"
 media_files.copy_failed:
-  en: " — could not copy: %{error}"
-  fr: " — copie impossible : %{error}"
+  en: " · could not copy: %{error}"
+  fr: " · copie impossible : %{error}"
 media_files.placed_moved.one:
   en: " · %{n} file moved and named from the template"
   fr: " · %{n} fichier rangé selon le modèle"
@@ -31,8 +31,8 @@ media_files.placed_copied.other:
   en: " · %{n} files copied and named from the template"
   fr: " · %{n} fichiers copiés selon le modèle"
 media_files.store_failed:
-  en: " — could not file it: %{error}"
-  fr: " — rangement impossible : %{error}"
+  en: " · could not file it: %{error}"
+  fr: " · rangement impossible : %{error}"
 media_files.already_named:
   en: This media’s files already follow the template
   fr: Les fichiers de ce média portent déjà le nom du modèle
@@ -79,11 +79,11 @@ photo.cancel_draw:
   en: Cancel Drawing
   fr: Annuler le tracé
 photo.draw_for:
-  en: "Draw the area for %{name} — Esc to cancel"
-  fr: "Tracez la zone pour %{name} — Échap pour annuler"
+  en: "Draw the area for %{name} (Esc to cancel)"
+  fr: "Tracez la zone pour %{name} (Échap pour annuler)"
 photo.draw_face:
-  en: Draw a frame around the face, then choose the person — Esc to cancel
-  fr: Tracez un cadre autour du visage, puis choisissez la personne — Échap pour annuler
+  en: Draw a frame around the face, then choose the person (Esc to cancel)
+  fr: Tracez un cadre autour du visage, puis choisissez la personne (Échap pour annuler)
 photo.page:
   en: "page %{n}"
   fr: "page %{n}"
@@ -166,10 +166,10 @@ gallery.title_changed:
   en: Media title changed
   fr: Titre du média modifié
 gallery.detached:
-  en: "“%{what}” detached from %{from} (Undo to revert)"
+  en: "“%{what}” detached from %{from} (Undo to go back)"
   fr: "« %{what} » détaché de %{from} (Annuler pour revenir en arrière)"
 gallery.deleted:
-  en: "Media “%{what}” deleted, files kept (Undo to revert)"
+  en: "Media “%{what}” deleted, files kept (Undo to go back)"
   fr: "Média « %{what} » supprimé, fichiers gardés (Annuler pour revenir en arrière)"
 gallery.linked.one:
   en: "%{n} item linked · %{to}%{note}"

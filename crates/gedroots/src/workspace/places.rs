@@ -7,8 +7,8 @@
 
 use super::*;
 use crate::gazetteer;
+use crate::t;
 use gedcom::gazetteer::{Candidate, Level, join_parts, sub_place};
-use rust_i18n::t;
 use std::collections::HashMap;
 
 /// Real places suggested while typing a place.

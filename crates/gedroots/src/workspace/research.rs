@@ -11,6 +11,7 @@ use super::add::{AddDialog, plus_button};
 use super::relatives::PickPurpose;
 use super::*;
 use crate::commands::label;
+use crate::t;
 use gedcom::leads::{DEFAULT_FOCUS, Goal, Lead, PastSearch, RecordType, WhereToLook, Years};
 use gedcom::research::current_year;
 use gedcom::research_log::{NewSearch, SearchResult, TaskState};
@@ -18,7 +19,6 @@ use gpui_kit::component::Selectable;
 use gpui_kit::component::button::ButtonGroup;
 use gpui_kit::component::checkbox::Checkbox;
 use gpui_kit::component::menu::PopupMenu;
-use rust_i18n::t;
 use std::cell::RefCell;
 
 /// State of the page.

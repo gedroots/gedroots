@@ -7,12 +7,12 @@
 
 use super::*;
 use crate::agent::change::ChangeRequest;
+use crate::t;
 use gedcom::analysis::check::Issue;
 use gedcom::change::{Action, QualityChange, find_issue};
 use gedcom::proposal::Change;
 use gedcom::quality;
 use gpui_kit::component::checkbox::Checkbox;
-use rust_i18n::t;
 use std::collections::BTreeSet;
 
 /// A change and the issues it would create.
@@ -264,7 +264,7 @@ impl Workspace {
             .cursor_pointer()
             .border_b_1()
             .border_color(theme::border())
-            .when(sel, |d| d.bg(theme::accent_soft()).border_l_2().border_color(theme::accent()))
+            .when(sel, |d| d.bg(theme::accent_soft()))
             .when(!sel, |d| d.hover(|d| d.bg(theme::hover())))
             .child(div().font_weight(FontWeight::MEDIUM).child(group.title(g)))
             .child(div().text_xs().text_color(theme::muted()).truncate().child(meta))
@@ -296,7 +296,7 @@ impl Workspace {
                     .gap_2()
                     .items_start()
                     .px_2()
-                    .py_1p5()
+                    .py_2()
                     .border_t_1()
                     .border_color(theme::border())
                     .child(Checkbox::new(SharedString::from(format!("change-keep-{k}"))).checked(on).on_click(
@@ -340,7 +340,7 @@ impl Workspace {
                     .gap_2()
                     .items_start()
                     .px_2()
-                    .py_1p5()
+                    .py_2()
                     .border_t_1()
                     .border_color(theme::border())
                     .child(div().w(px(110.)).flex_none().text_color(theme::muted()).child(r.label))
@@ -482,7 +482,7 @@ impl Workspace {
                             .pt_4()
                             .pb_2()
                             .gap_0p5()
-                            .child(div().text_lg().font_weight(FontWeight::SEMIBOLD).child(group.title(g)))
+                            .child(div().text_xl().font_weight(FontWeight::SEMIBOLD).child(group.title(g)))
                             .child(div().text_sm().text_color(theme::muted()).child(sub)),
                     )
                     .child(

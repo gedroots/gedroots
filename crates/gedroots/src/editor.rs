@@ -2,12 +2,12 @@
 
 use crate::completion::GedcomCompletion;
 use crate::date_field::DateField;
+use crate::t;
 use gedcom::complete::Catalog;
 use gedcom::*;
 use gpui_kit::component::input::{EditorState, InputState, TextareaState};
 use gpui_kit::component::select::{SearchableVec, SelectItem, SelectState};
 use gpui_kit::{App, AppContext, Context, Entity, SharedString, Window, px};
-use rust_i18n::t;
 use std::rc::Rc;
 
 /// What is selected in the current view.

@@ -679,5 +679,5 @@ fn download(agent: &ureq::Agent, url: &str, path: &std::path::Path) -> Result<()
     std::fs::rename(tmp, path).map_err(|e| e.to_string())
 }
 
-use rust_i18n::t;
+use crate::t;
 use std::io::Read as _;

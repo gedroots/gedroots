@@ -11,8 +11,8 @@
 use super::relatives::PickPurpose;
 use super::*;
 use crate::commands::label;
+use crate::t;
 use gpui_kit::component::menu::{ContextMenu, ContextMenuExt, PopupMenu, PopupMenuItem};
-use rust_i18n::t;
 
 /// Builder function of a menu, for `.context_menu(…)`.
 pub(super) type MenuBuilder = Rc<dyn Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu>;

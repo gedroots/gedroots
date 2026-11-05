@@ -251,8 +251,8 @@ book.longevity:
   en: Age at death by year of birth
   fr: Âge au décès selon l’année de naissance
 book.longevity_caption:
-  en: "■ men  ○ women  — median age per half-century · %{n} people"
-  fr: "■ hommes  ○ femmes  — âge médian par demi-siècle · %{n} personnes"
+  en: "■ men  ○ women · median age per half-century · %{n} people"
+  fr: "■ hommes  ○ femmes · âge médian par demi-siècle · %{n} personnes"
 book.occupations:
   en: Occupations
   fr: Métiers

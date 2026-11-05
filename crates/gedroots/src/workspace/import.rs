@@ -8,9 +8,9 @@
 use super::add::AddDialog;
 use super::*;
 use crate::editor::{PickerState, picker};
+use crate::t;
 use gedcom::import::{self, Finding};
 use gpui_kit::component::checkbox::Checkbox;
-use rust_i18n::t;
 use std::path::Path;
 
 pub(super) struct ImportDialog {

@@ -5,7 +5,7 @@
 
 use super::relatives::PickPurpose;
 use super::*;
-use rust_i18n::t;
+use crate::t;
 
 /// Size of the page thumbnails.
 const THUMB_W: f32 = 64.;

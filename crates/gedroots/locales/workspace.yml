@@ -121,11 +121,11 @@ ws.keep:
   en: Keep
   fr: Garder
 ws.confirm_remove_place:
-  en: "Confirm: Remove This Place Everywhere"
-  fr: "Confirmer : retirer ce lieu partout"
+  en: Remove Everywhere
+  fr: Retirer partout
 ws.confirm_delete:
-  en: Confirm Deletion
-  fr: Confirmer la suppression
+  en: Delete
+  fr: Supprimer
 ws.images_count:
   en: "Images · %{n}"
   fr: "Images · %{n}"

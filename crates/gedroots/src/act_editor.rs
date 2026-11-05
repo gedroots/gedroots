@@ -8,6 +8,7 @@
 
 use crate::date_field::DateField;
 use crate::editor::{PickerState, choice, choice_with_search};
+use crate::t;
 use crate::theme;
 use gedcom::*;
 use gpui_kit::assets::IconName;
@@ -19,7 +20,6 @@ use gpui_kit::component::select::{Select, SelectEvent};
 use gpui_kit::component::{Disableable, Selectable, Sizable, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
-use rust_i18n::t;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 

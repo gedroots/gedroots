@@ -51,14 +51,93 @@ pub fn translated(lang: &str) -> Option<&'static str> {
     LANGUAGES.iter().copied().find(|l| *l == name)
 }
 
-/// A translation in the current language ([`language`]): `rust_i18n::t!` with its locale.
+/// A translation in the current language ([`language`]), or the one given with `locale = …`
+/// anywhere among the values: `rust_i18n::t!`, with French elision before the values put in it
+/// ([`elide`]).
 macro_rules! t {
     ($key:expr) => {
         rust_i18n::t!($key, locale = &*$crate::i18n::language())
     };
-    ($key:expr, $($rest:tt)*) => {
-        rust_i18n::t!($key, locale = &*$crate::i18n::language(), $($rest)*)
+    ($key:expr, $($args:tt)+) => {
+        t_values!($key; (&*$crate::i18n::language()); []; $($args)+)
     };
+}
+
+/// [`t`]'s values, one at a time: `locale` apart, the others marked.
+macro_rules! t_values {
+    ($key:expr; $lang:expr; [$($n:ident = ($v:expr))*]; locale = $l:expr $(, $($rest:tt)*)?) => {
+        t_values!($key; $l; [$($n = ($v))*]; $($($rest)*)?)
+    };
+    ($key:expr; $lang:expr; [$($n:ident = ($v:expr))*]; $name:ident = $value:expr $(, $($rest:tt)*)?) => {
+        t_values!($key; $lang; [$($n = ($v))* $name = ($value)]; $($($rest)*)?)
+    };
+    ($key:expr; $lang:expr; [$($n:ident = ($v:expr))*];) => {{
+        let lang: String = ($lang).to_string();
+        $crate::i18n::elide(
+            rust_i18n::t!($key, locale = lang.as_str(), $($n = $crate::i18n::Marked(&($v))),*),
+            &lang,
+        )
+    }};
+}
+
+/// Marks where a value starts in a translated string, for [`elide`]. A private-use character:
+/// it never appears in a catalog or a tree.
+const MARK: char = '\u{E000}';
+
+/// A value put in a translation, preceded by [`MARK`].
+#[doc(hidden)]
+pub struct Marked<'a, T: ?Sized>(pub &'a T);
+
+impl<T: std::fmt::Display + ?Sized> std::fmt::Display for Marked<'_, T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{MARK}{}", self.0)
+    }
+}
+
+/// Removes the marks of the values put in a translation (see [`Marked`]), and in French elides
+/// the “de” in front of a value that starts with a vowel: « Décès de %{name} » gives « Décès
+/// d’Antonin GUYOT », « Naissance de Louis GUYOT ». Only the catalog’s own “de” changes, never
+/// the text of a value. A word in “h” keeps its “de” (« de Henri », « de Hugo »: the elision
+/// depends on the word).
+pub fn elide<'a>(text: Cow<'a, str>, lang: &str) -> Cow<'a, str> {
+    if !text.contains(MARK) {
+        return text;
+    }
+    if lang != "fr" {
+        return Cow::Owned(text.replace(MARK, ""));
+    }
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text.as_ref();
+    while let Some(i) = rest.find(MARK) {
+        out.push_str(&rest[..i]);
+        rest = &rest[i + MARK.len_utf8()..];
+        if starts_with_vowel(rest) {
+            for (de, d) in [("de ", "d’"), ("De ", "D’")] {
+                let word_start = out.len() >= de.len()
+                    && out.ends_with(de)
+                    && out[..out.len() - de.len()].chars().next_back().is_none_or(|c| !c.is_alphanumeric());
+                if word_start {
+                    out.truncate(out.len() - de.len());
+                    out.push_str(d);
+                    break;
+                }
+            }
+        }
+    }
+    out.push_str(rest);
+    Cow::Owned(out)
+}
+
+/// Whether a French word starting `text` takes an elision before it: a vowel, or a “y” followed
+/// by a consonant (« d’Yvonne », but « de Yolande »).
+fn starts_with_vowel(text: &str) -> bool {
+    const VOWELS: &str = "aeiouàâäéèêëîïôöùûüæœ";
+    let mut chars = text.chars().flat_map(char::to_lowercase);
+    match chars.next() {
+        Some('y') => chars.next().is_some_and(|c| c.is_alphabetic() && !VOWELS.contains(c) && c != 'y'),
+        Some(c) => VOWELS.contains(c),
+        None => false,
+    }
 }
 
 /// Whether `n` takes the singular in the current language: only 1 in English, 0 and 1 in French.
@@ -95,6 +174,38 @@ macro_rules! tn {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn put(template: &str, value: &str, lang: &str) -> String {
+        let text = template.replace("%{name}", &Marked(value).to_string());
+        elide(Cow::Owned(text), lang).into_owned()
+    }
+
+    #[test]
+    fn french_elides_de_before_a_vowel() {
+        assert_eq!(put("Décès de %{name}", "Antonin GUYOT", "fr"), "Décès d’Antonin GUYOT");
+        assert_eq!(put("Décès de %{name}", "Élisabeth GUÉRAULT", "fr"), "Décès d’Élisabeth GUÉRAULT");
+        assert_eq!(put("De %{name} à Paris", "Alger", "fr"), "D’Alger à Paris");
+        assert_eq!(put("Décès de %{name}", "Yvonne OHL", "fr"), "Décès d’Yvonne OHL");
+        assert_eq!(put("Décès de %{name}", "Yolande", "fr"), "Décès de Yolande");
+        assert_eq!(put("Décès de %{name}", "Louis GUYOT", "fr"), "Décès de Louis GUYOT");
+        assert_eq!(put("Décès de %{name}", "Henri GUYOT", "fr"), "Décès de Henri GUYOT");
+        assert_eq!(put("Décès de %{name}", "1850", "fr"), "Décès de 1850");
+        // Only the catalog's own “de”, as a word.
+        assert_eq!(put("Monde %{name}", "Antonin", "fr"), "Monde Antonin");
+        assert_eq!(put("%{name}", "de Antonin", "fr"), "de Antonin");
+    }
+
+    #[test]
+    fn other_languages_only_lose_the_marks() {
+        assert_eq!(put("Death of %{name}", "Antonin", "en"), "Death of Antonin");
+        assert_eq!(put("Death of %{name}", "Antonin", "fr"), "Death of Antonin");
+    }
+
+    #[test]
+    fn values_go_through_the_macro() {
+        let text = with_language("fr", || t!("leads.reason.born", years = "1850"));
+        assert!(!text.contains(MARK));
+    }
     use std::collections::{BTreeMap, BTreeSet};
     use std::path::Path;
 

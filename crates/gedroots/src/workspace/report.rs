@@ -3,9 +3,9 @@
 
 use super::*;
 use crate::report;
+use crate::t;
 use gpui_kit::component::checkbox::Checkbox;
 use gpui_kit::component::input::TextareaState;
-use rust_i18n::t;
 
 /// The “Report an Issue” window.
 pub struct ReportDialog {
