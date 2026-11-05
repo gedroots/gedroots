@@ -19,6 +19,7 @@ start with `_GR_` and are declared in the header, as GEDCOM 7 requires:
 2 TAG _GR_WEB https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_web
 2 TAG _GR_DISTINCT https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_distinct
 2 TAG _GR_TASK https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_task
+2 TAG _GR_PROP https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_prop
 2 TAG _GR_BOOK https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_book
 ```
 
@@ -455,9 +456,11 @@ and no `_GR_URL`, means no site is wanted.
 ## `_GR_TASK`
 
 Research log of a record still to find (a *lead*: birth, marriage, death, parents): whether it is
-planned, ignored or found, and every search made, including those that found nothing, so that
-nobody searches the same register twice. Written by an AI agent (`plan_research`, `log_search`)
-and, later, by the research page. The leads themselves are computed, not stored.
+planned, ignored or found, every search made, including those that found nothing, the records that
+may be the one but are not proven yet (*clues*), and where the work stands (*handoffs*). It is the
+memory AI agents share: any agent takes over another's work from the file alone, and nobody
+searches the same register twice. Written by the agents and by the Research page. The leads
+themselves are computed, not stored.
 
 - **Under**: the `INDI` concerned, or the `FAM` for a marriage, at level 1. One per lead.
 - **Value**: the record to find: `BIRT` (birth or baptism), `MARR`, `DEAT` (death or burial) or
@@ -466,13 +469,20 @@ and, later, by the research page. The leads themselves are computed, not stored.
   - `_GR_STAT <state>`: `PLANNED`, `NOT_FOUND` (searched in vain for now), `FOUND`, `IGNORED`;
     absent: only suggested;
   - `NOTE <text>`: why it is planned or ignored;
-  - `_GR_LOG`, one per search, oldest first:
-    - `DATE <date>`: day of the search;
-    - `TEXT <text>`: what was searched (archive, register or index, years, names tried);
-    - `_GR_RES <result>`: `FOUND`, `NONE` or `PARTIAL` (a clue, not the record);
+  - `_GR_LOG`, one per entry, oldest first:
+    - `DATE <date>` with `TIME <time>` (UTC): when it was noted;
+    - `_GR_KIND <kind>`: `CLUE` or `HANDOFF`; absent: a search;
+    - `TEXT <text>`: a search: what was searched (archive, register or index, years, names
+      tried); a clue: the record found; a handoff: where the lead stands;
+    - `_GR_RES <result>`, for a search: `FOUND`, `NONE` or `PARTIAL` (part of what was looked
+      for, such as an index entry without the act);
     - `_GR_SPAN <years>`: years searched (`1853`, `FROM 1853 TO 1862`);
     - `PLAC <place>`, `WWW <url>` (page of the archive's viewer), `NOTE <text>`;
-    - `_GR_AGENT`: noted by an AI agent.
+    - `_GR_FOR <text>`, `_GR_AGNST <text>`, for a clue: what speaks for it being this person, and
+      against;
+    - `_GR_NEXT <text>`, for a handoff: the next search to make;
+    - `_GR_AGENT <name>`: noted by an AI agent (its name, such as `Claude Code`); absent: by the
+      user.
 
 ```
 0 HEAD
@@ -483,20 +493,80 @@ and, later, by the research page. The leads themselves are computed, not stored.
 2 TAG _GR_RES https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_task
 2 TAG _GR_SPAN https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_task
 2 TAG _GR_AGENT https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_task
+2 TAG _GR_KIND https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_task
+2 TAG _GR_FOR https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_task
+2 TAG _GR_AGNST https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_task
+2 TAG _GR_NEXT https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_task
 0 @I4@ INDI
 1 _GR_TASK DEAT
 2 _GR_STAT PLANNED
 2 NOTE Last seen in 1852, his widow remarried in 1860
 2 _GR_LOG
 3 DATE 3 NOV 2026
+4 TIME 20:14:52
 3 TEXT Decennial tables of Saint-Lô, deaths, MARCHAND and MARCHANT
 3 _GR_RES NONE
 3 _GR_SPAN FROM 1853 TO 1862
 3 PLAC Saint-Lô, Manche, France
-3 _GR_AGENT
+3 _GR_AGENT Claude Code
+2 _GR_LOG
+3 DATE 3 NOV 2026
+4 TIME 20:31:07
+3 _GR_KIND CLUE
+3 TEXT Burial of Jean MARCHAND, 4 May 1858, Carentan
+3 WWW https://archives.manche.fr/ark:/…
+3 _GR_FOR Same name, widower of a Rose
+3 _GR_AGNST Aged 50, about ten years younger than our Jean
+3 _GR_AGENT Claude Code
+2 _GR_LOG
+3 DATE 3 NOV 2026
+4 TIME 20:40:12
+3 _GR_KIND HANDOFF
+3 TEXT Saint-Lô tables searched 1853–1862; one clue in Carentan
+3 _GR_NEXT Carentan deaths 1858: age and spouse's name
+3 _GR_AGENT Claude Code
 ```
 
 Legacy and RootsMagic keep their to-do items in `_TODO`; GEDRoots does not read or write it.
+
+## `_GR_PROP`
+
+A proposal of an AI agent (a record found in the archives, a correction, a book chapter): kept
+while it waits in To Review, so that it survives a restart and other agents see it, then with what
+the user did with it, so that any agent knows what was saved, rejected or corrected without having
+to remember it.
+
+- **Where**: a record at level 0, with an identifier (`@GRP3@`). One per proposal.
+- **Value**: the proposal's id, as the agents know it (`P3`).
+- **Substructures**:
+  - `_GR_KIND <kind>`: `ACT`, `CHANGE` or `CHAPTER` (`_GR_KIND`, `_GR_RES` and `_GR_AGENT` are
+    the research log's tags, declared with its URI);
+  - `DATE <date>` with `TIME <time>` (UTC): when it was sent;
+  - `TEXT <text>`: what it is, in one line;
+  - `_GR_ABOUT @<INDI or FAM>@`: the people (or families) it is about, one per line;
+  - `_GR_RES <outcome>`: `WAITING`, `SAVED`, `REJECTED`, `EDITED` (opened in record entry by the
+    user), `WITHDRAWN` or `REPLACED`;
+  - `_GR_AGENT <name>`: the agent that sent it;
+  - `NOTE <text>`: the user's reason, or the proposal that replaced it;
+  - `_GR_DATA <json>`: the agent's request as it sent it, only while it waits: GEDRoots queues it
+    again when the file opens.
+
+```
+0 HEAD
+1 SCHMA
+2 TAG _GR_PROP https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_prop
+2 TAG _GR_ABOUT https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_prop
+2 TAG _GR_DATA https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_prop
+0 @GRP3@ _GR_PROP P3
+1 _GR_KIND ACT
+1 DATE 5 NOV 2026
+2 TIME 21:47:03
+1 TEXT Marriage · Johann SCHANDL & Maria RIEDAUER
+1 _GR_ABOUT @I12@
+1 _GR_RES REJECTED
+1 _GR_AGENT Claude Code
+1 NOTE Not our Johann: he was born about 1726
+```
 
 ## `_GR_BOOK`
 
