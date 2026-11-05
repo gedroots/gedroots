@@ -583,6 +583,12 @@ impl Workspace {
                     .when(!sel, |d| d.hover(|d| d.bg(theme::hover())))
                     .child(div().font_weight(FontWeight::MEDIUM).child(title(g, &p)))
                     .when(!meta.is_empty(), |d| d.child(div().text_xs().text_color(theme::muted()).child(meta)))
+                    // A doubtful proposal stands out in the list.
+                    .when(p.act.quality.is_some_and(|q| q <= 1), |d| {
+                        d.child(
+                            div().text_xs().text_color(theme::warn()).child(gedcom::act::quality_label(p.act.quality)),
+                        )
+                    })
                     .on_click(cx.listener(move |this, _, _, cx| this.review_select(i, cx)))
             }))
             .children(self.review.changes.iter().enumerate().map(|(i, group)| self.render_change_row(i, group, g, cx)))
@@ -701,7 +707,9 @@ impl Workspace {
             })
             .map(|s| t!("review.sosa", n = s).into_owned());
         let by = if item.demo { t!("review.demo") } else { t!("review.by_agent") };
-        let sub = [sosa, Some(by.into_owned())].into_iter().flatten().collect::<Vec<_>>().join(" · ");
+        // The agent's confidence: the quality of the evidence written on the citation.
+        let quality = Some(gedcom::act::quality_label(full.act.quality)).filter(|q| !q.is_empty());
+        let sub = [sosa, Some(by.into_owned()), quality].into_iter().flatten().collect::<Vec<_>>().join(" · ");
 
         // Comparison. Columns: check box, field, “In the tree”, “Proposed”.
         let line = || h_flex().items_start().gap_2().px_2().py_1p5().border_t_1().border_color(theme::border());
@@ -731,6 +739,12 @@ impl Workspace {
                 .map(|it| t!("review.quoted", title = title(g, &it.pending.proposal)).into_owned())
                 .collect();
             (!titles.is_empty()).then(|| titles.join(", "))
+        };
+        // A fact the record supports more or less than its event (a birth date in a death record).
+        let fact_quality = |field: &Field| {
+            let Field::Fact { person, fact, .. } = field else { return None };
+            let q = full.act.participants.get(*person)?.facts.get(*fact)?.quality?;
+            Some(gedcom::act::quality_label(Some(q)))
         };
         let (mut people_rows, mut fact_rows): (Vec<AnyElement>, Vec<AnyElement>) = (Vec::new(), Vec::new());
         for row in &rows {
@@ -811,6 +825,9 @@ impl Workspace {
                         .when(!on, |d| d.opacity(0.45))
                         .child(tag)
                         .when(!same, |d| d.child(div().text_color(color).child(proposed)))
+                        .when_some(fact_quality(&row.field), |d, q| {
+                            d.child(div().text_xs().text_color(theme::muted()).child(q))
+                        })
                         .when_some(also_in(&row.field), |d, titles| {
                             d.child(
                                 div()

@@ -37,7 +37,7 @@ pub struct ChangeParams {
 /// value, date, place, address), `rename_place` (place, new_place), `delete_event` (record, event),
 /// `set_sex` (record, sex), `set_coordinates` (place, latitude, longitude, osm),
 /// `set_repository` (record: a source; repository_id or repository, call_number),
-/// `set_media_file` (file), `cite_source` (record, event, source, page),
+/// `set_media_file` (file), `cite_source` (record, event, source, page, quality),
 /// `set_value` (value), `delete_structure` (nothing: the structure the issue designates),
 /// `set_name` (record, given and/or surname, name), `add_name` (record, given and/or surname,
 /// name_type), `set_age` (record, event, age, person on a family event), `link_relative` and
@@ -80,6 +80,9 @@ pub struct EditParams {
     pub source: Option<String>,
     /// Reference in the source (page, act number, view).
     pub page: Option<String>,
+    /// For `cite_source`: how much the source supports the event, as GEDCOM 7 `QUAY` (3 primary
+    /// evidence, 2 secondary, 1 questionable, 0 unreliable or estimated).
+    pub quality: Option<u8>,
     /// For `set_event` and `add_event`: the event's value (an occupation, a custom event's type);
     /// for `set_value`, the structure's new value.
     pub value: Option<String>,
@@ -219,6 +222,7 @@ fn edit(p: &EditParams) -> Result<Edit, String> {
             index: need(p.event, k, "event")?,
             source: need(id(&p.source), k, "source")?,
             page: p.page.clone().unwrap_or_default(),
+            quality: super::propose::quality(p.quality, "quality")?,
         },
         "set_value" => Edit::SetValue { value: need(p.value.clone(), k, "value")? },
         "delete_structure" => Edit::DeleteStructure,

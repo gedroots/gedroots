@@ -1181,7 +1181,9 @@ every search with `log_search`, found or not. When you find an act, read it, che
 call `match_people` to know who each person named is in the tree (link them, create them or only \
 mention them), `search_sources` to reuse the source or repository (a new source may create its \
 repository when the tree has none for that archive), `locate_place` for a place the tree has not \
-located (choose the homonym close to the family's other events), then `propose_act`. A person \
+located (choose the homonym close to the family's other events), then `propose_act`. Propose each \
+act as soon as you have read it, without waiting to be sure or gathering several: give your honest \
+`quality` (the GEDCOM quality of the evidence, 0 to 3) and your doubts in `remarks`; the user decides. A person \
 that a waiting proposal creates has a temporary id (new-3): link it to name them again. To correct a \
 waiting act, propose it again with `replaces`; `list_proposals` says which are still waiting. \
 Every answer carries `news` when the user saved, rejected or edited a proposal since your last call: \

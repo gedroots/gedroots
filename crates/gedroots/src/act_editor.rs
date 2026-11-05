@@ -68,6 +68,8 @@ struct FactRow {
     text: Entity<InputState>,
     /// Street address within the place (facts without a value).
     address: Option<Entity<InputState>>,
+    /// Quality of this fact's evidence when it differs from the record's (kept as proposed).
+    quality: Option<u8>,
 }
 
 struct PersonRow {
@@ -125,8 +127,8 @@ const MENU_MATCHES: usize = 3;
 /// Value of the quality pop-up for “no quality”.
 const NO_QUALITY: &str = "-";
 
-fn quality_labels() -> [std::borrow::Cow<'static, str>; 4] {
-    [t!("act.quality_0"), t!("act.quality_1"), t!("act.quality_2"), t!("act.quality_3")]
+fn quality_labels() -> [String; 4] {
+    [0, 1, 2, 3].map(gedcom::act::quality_name)
 }
 
 /// Individual events offered (family events come from [`gedcom::act::FAMILY_ACT_EVENTS`]).
@@ -375,7 +377,14 @@ impl ActEditor {
                 if let Some(a) = &address {
                     subs.push(self.watch(a, Kind::Plain, window, cx));
                 }
-                facts.push(FactRow { tag: f.tag.clone(), event_type: f.event_type.clone(), date, text, address });
+                facts.push(FactRow {
+                    tag: f.tag.clone(),
+                    event_type: f.event_type.clone(),
+                    date,
+                    text,
+                    address,
+                    quality: f.quality,
+                });
             }
             self.rows.push(PersonRow {
                 role: p.role,
@@ -440,8 +449,13 @@ impl ActEditor {
                     .map(|f| {
                         let field = f.date.read(cx);
                         let date = field.value(cx).map(|(d, _)| d).unwrap_or_else(|_| v(field.input()));
-                        let mut fact =
-                            Fact { tag: f.tag.clone(), event_type: f.event_type.clone(), date, ..Default::default() };
+                        let mut fact = Fact {
+                            tag: f.tag.clone(),
+                            event_type: f.event_type.clone(),
+                            date,
+                            quality: f.quality,
+                            ..Default::default()
+                        };
                         if fact.has_value() {
                             fact.value = v(&f.text);
                         } else {
