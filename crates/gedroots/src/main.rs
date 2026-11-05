@@ -96,6 +96,9 @@ gpui_kit::assets::icon_assets!(
         Layers,
         Hourglass,
         Briefcase,
+        Play,
+        Pause,
+        Target,
     ]
 );
 

@@ -5,7 +5,7 @@
 //!
 //! - [`scope`]: whose ancestors or descendants, over how many generations;
 //! - [`places`]: where people come from, grouped for the colours;
-//! - [`fan`], [`map`], [`lives`], [`figures`]: the visualizations;
+//! - [`fan`], [`map`], [`moves`], [`lives`], [`figures`]: the visualizations;
 //! - [`palette`]: their colours on paper and in the app's themes;
 //! - [`raster`]: a drawing as pixels, for the app.
 
@@ -30,6 +30,7 @@ pub mod fan;
 pub mod figures;
 pub mod lives;
 pub mod map;
+pub mod moves;
 pub mod palette;
 pub mod places;
 pub mod raster;
@@ -48,6 +49,8 @@ use serde::Serialize;
 pub enum Kind {
     Fan,
     Places,
+    Migrations,
+    Horizon,
     Lives,
     Generations,
     Longevity,
@@ -55,14 +58,24 @@ pub enum Kind {
 }
 
 impl Kind {
-    pub const ALL: [Kind; 6] =
-        [Kind::Fan, Kind::Places, Kind::Lives, Kind::Generations, Kind::Longevity, Kind::Occupations];
+    pub const ALL: [Kind; 8] = [
+        Kind::Fan,
+        Kind::Places,
+        Kind::Migrations,
+        Kind::Horizon,
+        Kind::Lives,
+        Kind::Generations,
+        Kind::Longevity,
+        Kind::Occupations,
+    ];
 
     /// Its name for agents and in the `.ged` (`fan`, `places`…).
     pub fn slug(self) -> &'static str {
         match self {
             Kind::Fan => "fan",
             Kind::Places => "places",
+            Kind::Migrations => "migrations",
+            Kind::Horizon => "horizon",
             Kind::Lives => "lives",
             Kind::Generations => "generations",
             Kind::Longevity => "longevity",
@@ -79,6 +92,8 @@ impl Kind {
         match self {
             Kind::Fan => t!("viz.fan.title"),
             Kind::Places => t!("viz.places.title"),
+            Kind::Migrations => t!("viz.migrations.title"),
+            Kind::Horizon => t!("viz.horizon.title"),
             Kind::Lives => t!("viz.lives.title"),
             Kind::Generations => t!("viz.generations.title"),
             Kind::Longevity => t!("viz.longevity.title"),
@@ -92,6 +107,8 @@ impl Kind {
         match self {
             Kind::Fan => t!("viz.fan.summary"),
             Kind::Places => t!("viz.places.summary"),
+            Kind::Migrations => t!("viz.migrations.summary"),
+            Kind::Horizon => t!("viz.horizon.summary"),
             Kind::Lives => t!("viz.lives.summary"),
             Kind::Generations => t!("viz.generations.summary"),
             Kind::Longevity => t!("viz.longevity.summary"),
@@ -107,7 +124,13 @@ impl Kind {
                 "Fan chart of the ancestors (or descendants), coloured by the region or country people come from: shows at a glance which branches come from where."
             }
             Kind::Places => {
-                "Map of the places people come from, with a line from each child's birthplace to their parents': migrations, and how far a family moved."
+                "Map of the places people come from, sized by how many were born there, with a thin line from each child's birthplace to their parents': the family's homelands."
+            }
+            Kind::Migrations => {
+                "Map of the moves from each parent's birthplace to their child's, on the father's side and the mother's, with their years: who left where, when, and how far."
+            }
+            Kind::Horizon => {
+                "How far each generation was born from its parents' birthplace (log scale, median per generation, share born in the same place): when the family stopped living where it always had."
             }
             Kind::Lives => {
                 "Lifespans of the first generations, with their marriages: who lived at the same time, long and short lives."
@@ -196,6 +219,8 @@ impl<'a> Tree<'a> {
         match kind {
             Kind::Fan => Some(self.fan(p, true)),
             Kind::Places => self.places(p),
+            Kind::Migrations => self.migrations(p, None),
+            Kind::Horizon => self.horizon(p),
             Kind::Lives => self.lives(p, now),
             Kind::Generations => self.generations(p),
             Kind::Longevity => self.longevity(p),

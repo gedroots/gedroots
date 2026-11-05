@@ -63,7 +63,7 @@ pub struct Visualization {
     /// What its colours stand for (the fan's and the lives' regions), with how many people.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub legend: Vec<Legend>,
-    /// Its data: one row per person, place, generation or occupation (`record`: the person's id).
+    /// Its data: one row per person, place, move, generation or occupation (`record`: the person's id).
     #[schemars(with = "serde_json::Value")]
     pub table: Table,
 }

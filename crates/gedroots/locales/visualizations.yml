@@ -31,3 +31,12 @@ viz.add_to_book:
 viz.added:
   en: "Added to “%{chapter}” in %{book}"
   fr: "Ajoutée à « %{chapter} » dans %{book}"
+viz.play:
+  en: Play
+  fr: Lire
+viz.pause:
+  en: Pause
+  fr: Pause
+viz.all_years:
+  en: All Years
+  fr: Toutes les années

@@ -19,18 +19,40 @@ pub struct MapPoint {
     pub count: usize,
 }
 
-/// A line between two places: ((lon, lat), (lon, lat)).
-pub type Link = ((f64, f64), (f64, f64));
+/// How a line between two places is drawn.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Stroke {
+    /// A thin grey line (child and parent born in different places).
+    Plain,
+    /// A move, with an arrow at its end: on the father's side, solid; on the mother's, dashed.
+    Paternal,
+    Maternal,
+}
 
-/// Map of the places, fitted to the points, with the lines between them (child → parent).
-pub fn map(points: &[MapPoint], links: &[Link], p: &Palette) -> String {
+/// A line between two places: from (lon, lat) to (lon, lat).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Link {
+    pub from: (f64, f64),
+    pub to: (f64, f64),
+    pub stroke: Stroke,
+}
+
+/// Map of the places with the lines between them, fitted to `frame` (lon, lat) when given, so
+/// that the frame stays the same while the lines shown change, otherwise to the points.
+/// `dot`: colour of the places' circles.
+pub fn map(points: &[MapPoint], links: &[Link], frame: &[(f64, f64)], dot: &str, p: &Palette) -> String {
     let (w, h) = (1000., 820.);
     let (mut lon0, mut lon1, mut lat0, mut lat1) = (f64::MAX, f64::MIN, f64::MAX, f64::MIN);
-    for pt in points {
-        lon0 = lon0.min(pt.lon);
-        lon1 = lon1.max(pt.lon);
-        lat0 = lat0.min(pt.lat);
-        lat1 = lat1.max(pt.lat);
+    let fit: Vec<(f64, f64)> =
+        if frame.is_empty() { points.iter().map(|pt| (pt.lon, pt.lat)).collect() } else { frame.to_vec() };
+    for &(lon, lat) in &fit {
+        lon0 = lon0.min(lon);
+        lon1 = lon1.max(lon);
+        lat0 = lat0.min(lat);
+        lat1 = lat1.max(lat);
+    }
+    if fit.is_empty() {
+        (lon0, lon1, lat0, lat1) = (0., 1., 0., 1.);
     }
     // Margin around the points, and at least a region's width.
     let pad_lon = ((lon1 - lon0) * 0.12).max(1.2);
@@ -71,17 +93,40 @@ pub fn map(points: &[MapPoint], links: &[Link], p: &Palette) -> String {
         }
         let _ = write!(s, r##"Z" fill="{}" stroke="{}" stroke-width="0.8"/>"##, p.land, p.rule);
     }
-    for &((ax, ay), (bx, by)) in links {
-        let (x1, y1) = at(ax, ay);
-        let (x2, y2) = at(bx, by);
+    for l in links {
+        let (x1, y1) = at(l.from.0, l.from.1);
+        let (x2, y2) = at(l.to.0, l.to.1);
         let (mx, my) = ((x1 + x2) / 2., (y1 + y2) / 2.);
         let (dx, dy) = (x2 - x1, y2 - y1);
+        let (cx, cy) = (mx - dy * 0.15, my + dx * 0.15);
+        let (color, style) = match l.stroke {
+            Stroke::Plain => {
+                let _ = write!(
+                    s,
+                    r##"<path d="M{x1:.1},{y1:.1} Q{cx:.1},{cy:.1} {x2:.1},{y2:.1}" fill="none" stroke="{}" stroke-opacity="0.28" stroke-width="0.8"/>"##,
+                    p.ink
+                );
+                continue;
+            }
+            Stroke::Paternal => (p.paternal, ""),
+            Stroke::Maternal => (p.maternal, r##" stroke-dasharray="5 3""##),
+        };
         let _ = write!(
             s,
-            r##"<path d="M{x1:.1},{y1:.1} Q{:.1},{:.1} {x2:.1},{y2:.1}" fill="none" stroke="{}" stroke-opacity="0.28" stroke-width="0.8"/>"##,
-            mx - dy * 0.15,
-            my + dx * 0.15,
-            p.ink
+            r##"<path d="M{x1:.1},{y1:.1} Q{cx:.1},{cy:.1} {x2:.1},{y2:.1}" fill="none" stroke="{color}" stroke-opacity="0.8" stroke-width="1.6"{style}/>"##
+        );
+        // The arrow, along the curve's end.
+        let (tx, ty) = (x2 - cx, y2 - cy);
+        let len = (tx * tx + ty * ty).sqrt().max(0.001);
+        let (ux, uy) = (tx / len, ty / len);
+        let (bx, by) = (x2 - ux * 8., y2 - uy * 8.);
+        let _ = write!(
+            s,
+            r##"<path d="M{x2:.1},{y2:.1} L{:.1},{:.1} L{:.1},{:.1} Z" fill="{color}" fill-opacity="0.9"/>"##,
+            bx - uy * 3.5,
+            by + ux * 3.5,
+            bx + uy * 3.5,
+            by - ux * 3.5
         );
     }
     let mut sorted: Vec<&MapPoint> = points.iter().collect();
@@ -91,8 +136,8 @@ pub fn map(points: &[MapPoint], links: &[Link], p: &Palette) -> String {
         let r = 2.6 + 2.6 * (pt.count as f64).sqrt();
         let _ = write!(
             s,
-            r##"<circle cx="{x:.1}" cy="{y:.1}" r="{r:.1}" fill="{}" fill-opacity="0.78" stroke="{}" stroke-width="1"/>"##,
-            p.accent, p.land
+            r##"<circle cx="{x:.1}" cy="{y:.1}" r="{r:.1}" fill="{dot}" fill-opacity="0.78" stroke="{}" stroke-width="1"/>"##,
+            p.land
         );
     }
     // Labels of the main places, without overlaps.
@@ -131,20 +176,24 @@ pub fn town(raw: &str) -> String {
     }
 }
 
+/// The located places of the tree: name → (lon, lat).
+pub(crate) fn coordinates(g: &gedcom::document::Gedcom) -> HashMap<String, (f64, f64)> {
+    g.places()
+        .into_iter()
+        .filter_map(|pl| {
+            let lat = gedcom::geo::parse_latitude(pl.latitude.as_deref()?)?;
+            let lon = gedcom::geo::parse_longitude(pl.longitude.as_deref()?)?;
+            Some((pl.name, (lon, lat)))
+        })
+        .collect()
+}
+
 impl Tree<'_> {
     /// Map of the places people come from, when at least two are located. The figure's `count`
     /// is the number of places.
     pub fn places(&self, p: &Palette) -> Option<Figure> {
         let g = self.g;
-        let coords: HashMap<String, (f64, f64)> = g
-            .places()
-            .into_iter()
-            .filter_map(|pl| {
-                let lat = gedcom::geo::parse_latitude(pl.latitude.as_deref()?)?;
-                let lon = gedcom::geo::parse_longitude(pl.longitude.as_deref()?)?;
-                Some((pl.name, (lon, lat)))
-            })
-            .collect();
+        let coords = coordinates(g);
         let origin = |x: &str| self.origins.place.get(x);
         let mut points: BTreeMap<String, MapPoint> = BTreeMap::new();
         let mut located = 0;
@@ -167,7 +216,7 @@ impl Tree<'_> {
                     && let Some(b) = origin(parent.xref()).and_then(|pl| coords.get(pl))
                     && a != b
                 {
-                    links.push((*a, *b));
+                    links.push(Link { from: *a, to: *b, stroke: Stroke::Plain });
                 }
             }
         }
@@ -181,7 +230,7 @@ impl Tree<'_> {
         }
         let pts: Vec<MapPoint> = points.into_values().collect();
         Some(Figure {
-            svg: map(&pts, &links, p),
+            svg: map(&pts, &links, &[], p.accent, p),
             legend: Vec::new(),
             caption: t!("viz.places_caption", known = located, total = self.members.len()).into_owned(),
             count: pts.len(),

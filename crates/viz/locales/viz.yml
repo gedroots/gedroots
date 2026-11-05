@@ -16,8 +16,20 @@ viz.places.title:
   en: Places
   fr: Lieux
 viz.places.summary:
-  en: Where they come from, child to parents
-  fr: D’où ils viennent, de l’enfant aux parents
+  en: Where they were born
+  fr: Où ils sont nés
+viz.migrations.title:
+  en: Migrations
+  fr: Migrations
+viz.migrations.summary:
+  en: Birthplaces, from one generation to the next
+  fr: Lieux de naissance, d’une génération à l’autre
+viz.horizon.title:
+  en: Horizon
+  fr: Horizon
+viz.horizon.summary:
+  en: How far from their parents’ birthplace
+  fr: Distance au lieu de naissance des parents
 viz.lives.title:
   en: Lives
   fr: Vies
@@ -65,6 +77,36 @@ viz.age_years:
 viz.longevity_caption:
   en: "■ men  ○ women · median age per half-century · %{n} people"
   fr: "■ hommes  ○ femmes · âge médian par demi-siècle · %{n} personnes"
+viz.km:
+  en: "%{n} km"
+  fr: "%{n} km"
+viz.under_km:
+  en: "< 1 km"
+  fr: "< 1 km"
+viz.paternal_side:
+  en: Father’s side
+  fr: Côté paternel
+viz.maternal_side:
+  en: Mother’s side
+  fr: Côté maternel
+viz.through_father:
+  en: From the father
+  fr: Par le père
+viz.through_mother:
+  en: From the mother
+  fr: Par la mère
+viz.moves.one:
+  en: 1 move
+  fr: 1 déplacement
+viz.moves.other:
+  en: "%{n} moves"
+  fr: "%{n} déplacements"
+viz.same_place:
+  en: Same place
+  fr: Même lieu
+viz.horizon_caption:
+  en: "Distance from each child’s birthplace to each parent’s · median per generation · %{n} links"
+  fr: "Distance du lieu de naissance de chaque enfant à celui de chaque parent · médiane par génération · %{n} liens"
 viz.percent:
   en: "%{n}%"
   fr: "%{n} %"
@@ -76,6 +118,9 @@ viz.col.number:
 viz.col.person:
   en: Person
   fr: Personne
+viz.col.parent:
+  en: Parent
+  fr: Parent
 viz.col.years:
   en: Years
   fr: Années
@@ -112,6 +157,27 @@ viz.col.expected:
 viz.col.share:
   en: Share
   fr: Part
+viz.col.from:
+  en: From
+  fr: De
+viz.col.to:
+  en: To
+  fr: À
+viz.col.distance:
+  en: Distance
+  fr: Distance
+viz.col.births:
+  en: Births
+  fr: Naissances
+viz.col.moves:
+  en: Links
+  fr: Liens
+viz.col.median:
+  en: Median
+  fr: Médiane
+viz.col.same_place:
+  en: Same place
+  fr: Même lieu
 viz.col.occupation:
   en: Occupation
   fr: Métier
