@@ -43,7 +43,7 @@ tree's data.
 | `research_leads` | Records still to find for the people of a focus (search syntax, default `sosa:1-63`) or one person: births, marriages and deaths missing or without a source, parents of ancestors at the end of a line. Each lead has estimated years and why, places to search first, where to look, its state and the searches already noted |
 | `research_log` | Everything noted for a person and their unions: plan, searches, records found, ignored leads |
 | `plan_research` | Saves the agent's plan: the leads it will search, in order, each with a reason (state `planned`) |
-| `log_search` | Notes one search, whatever its result (`found`, `nothing`, `partial`): what was searched, years, place, viewer page; `finished` when nothing is left to search |
+| `log_search` | Notes one search, whatever its result (`found`, `nothing`, `partial`): what was searched, years, place, viewer page; `finished` when nothing is left to search. `partial` is also how an agent keeps a record it cannot tie to the person (with what speaks for and against): a research lead stays in the Research page, never as a note in the tree |
 | `quality_issues` | The Data Quality page's issues, filtered by category, kind or record and paged (`offset`, `limit`): message, records and places involved, whether the page fixes it in one click, whether it can be hidden, counts per category |
 | `search_sources` | Sources (register, repository, call number, number of acts) and repositories, to cite an existing one |
 | `locate_place` | For one place of an act: the tree's places of that name, the located places of the events of the act's people and their relatives (closest in time first), and the gazetteer's candidates (OpenStreetMap, through Photon, biased towards those places) in the file's place format, each with its distance to the closest of those events |
@@ -151,11 +151,7 @@ reason, which the agent reads to fix it:
 - a person to create must not resemble someone of the tree (same names, or a relative of a linked
   person, with compatible dates; `Act::suggestions`, as in record entry): the refusal lists the
   candidates, and the agent links one or lists in `not` those it checked and found to be someone
-  else, or in `maybe` those who may be the same person without proof (an age that does not fit):
-  the act's facts then go on a separate person, nothing is attached to the tree's person, and the
-  two can be merged once another record proves it. The review page still shows “Resembles …”
-  under such a person. An uncertain act is proposed this way, never as a note (`add_note` is for
-  comments on facts already in the tree);
+  else. The review page still shows “Resembles …” under such a person;
 - linked people must exist; dates must be valid, and are rewritten in
   GEDCOM 7 syntax; a place named like a place of the tree becomes that place. The place is the
   municipality and its jurisdictions: a street, number or building goes in `address` (the event's

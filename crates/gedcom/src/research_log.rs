@@ -81,7 +81,8 @@ pub enum SearchResult {
     Found,
     /// Nothing for this person in what was searched.
     Nothing,
-    /// A clue, not the record itself (a mention, an index entry without the act…).
+    /// A clue, not the record itself (a mention, an index entry without the act…), or a record
+    /// that may be about this person without proof.
     Partial,
 }
 
