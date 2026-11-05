@@ -280,11 +280,13 @@ impl Workspace {
         if matches!(&self.add_dialog, Some(AddDialog::Event(d)) if d.owner == owner && d.editing == Some(ix)) {
             self.add_dialog = None;
         }
-        self.mutate(window, cx, move |g| {
+        if self.mutate(window, cx, move |g| {
             let who = g.record_label(&owner);
             let label = g.delete_event(&owner, ix)?;
             Ok((t!("event_dialog.deleted", label = label, who = who).into_owned(), None))
-        });
+        }) {
+            self.offer_undo();
+        }
         window.focus(&self.focus, cx);
     }
 

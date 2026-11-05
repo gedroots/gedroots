@@ -136,11 +136,11 @@ impl Workspace {
         window: &mut Window,
         cx: &mut Context<Self>,
         f: impl FnOnce(&mut Gedcom) -> Result<(String, Option<String>), String>,
-    ) {
+    ) -> bool {
         if self.doc.is_none() {
-            return;
+            return false;
         }
-        self.mutate_then(window, cx, false, f);
+        self.mutate_then(window, cx, false, f)
     }
 
     /// Like `mutate`; with `edit`, the record to open is a new one, opened on its fields (Cancel
@@ -151,9 +151,9 @@ impl Workspace {
         cx: &mut Context<Self>,
         edit: bool,
         f: impl FnOnce(&mut Gedcom) -> Result<(String, Option<String>), String>,
-    ) {
+    ) -> bool {
         if self.doc.is_none() {
-            return;
+            return false;
         }
         let back = self.selected.clone();
         self.checkpoint();
@@ -175,13 +175,16 @@ impl Workspace {
                     None => self.refresh_editor(window, cx),
                 }
                 self.set_status(msg, false);
+                cx.notify();
+                true
             }
             Err(e) => {
                 self.drop_checkpoint();
                 self.set_error("relatives.failed", e);
+                cx.notify();
+                false
             }
         }
-        cx.notify();
     }
 
     /// Creates a relative of `indi` and opens them on their fields.

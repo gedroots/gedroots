@@ -156,7 +156,7 @@ impl Workspace {
         }
     }
 
-    fn selected_book(&self) -> Option<BookSpec> {
+    pub(super) fn selected_book(&self) -> Option<BookSpec> {
         let doc = self.doc.as_ref()?;
         (self.view == View::Books).then_some(())?;
         gedroots_book::spec::book(&doc.ged, self.selected.as_deref()?)
@@ -391,7 +391,7 @@ impl Workspace {
         } else {
             self.typeset_book(cx);
         }
-        self.set_status(t!("books.deleted", title = title), false);
+        self.set_deleted(t!("books.deleted", title = title), Some((View::Books, key)));
         cx.notify();
     }
 
