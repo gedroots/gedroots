@@ -43,7 +43,7 @@ where another stopped (`resume_research`), with no memory of its own.
 | `file_context` | How the file is written: the description the user wrote (File Settings › General, `HEAD.NOTE`, word for word), language, place format, events, custom event types and occupations in use with their counts, media folders and naming, and the latest sources, people, families, media and repositories changed as raw GEDCOM (`examples`). Also served as the resource `gedroots://file/context` |
 | `search_people` | People matching a search, as in the app's search box |
 | `person_sheet` | Events with their position in the record, date, place, street address (`ADDR`), age, cause, cited sources (`PAGE`), media, associates and notes; parents (and how, when not by birth), unions, children, the person's notes and media; Sosa number |
-| `resume_research` | Where the research stands: the leads in progress anywhere in the tree (planned, or with a clue or a handoff) with their whole log, the other leads to search for a focus (search syntax, default `sosa:1-63`), each with estimated years and why, places to search first and where to look, the proposals waiting for review and what became of the others (saved, rejected with the user's reason, edited, withdrawn, replaced). With `person`: everything about that person |
+| `resume_research` | Where the research stands, and the tree's language to write the log in: the leads in progress anywhere in the tree (planned, or with a clue or a handoff) with their whole log, the other leads to search for a focus (search syntax, default `sosa:1-63`), each with estimated years and why, places to search first and where to look, the proposals waiting for review and what became of the others (saved, rejected with the user's reason, edited, withdrawn, replaced). With `person`: everything about that person |
 | `note_research` | Writes in a lead's log: `plan` (a lead about to be searched, with the reason; state `planned`), `search` (what was searched, whatever its result: `found`, `nothing`, `partial`; years, place, viewer page; `finished` when nothing is left), `clue` (a record that may be the one, with what speaks `for` and `against`: it stays in the Research page, never in the tree) or `handoff` (where the lead stands and the `next` search, when the agent stops) |
 | `quality_issues` | The Data Quality page's issues, filtered by category, kind or record and paged (`offset`, `limit`): message, records and places involved, whether the page fixes it in one click, whether it can be hidden, counts per category |
 | `search_sources` | Sources (register, repository, call number, number of acts) and repositories, to cite an existing one |
@@ -118,8 +118,12 @@ change is one undo step, and the top bar says what the agent noted. A found reco
 proposed with `propose_act` and reviewed.
 
 The same leads and log are on the app's Research page (sidebar): the list of the focus by
-state (to find, no result, ignored), and for each lead its period and why, what is known, where to
-look and the log, the agent's entries marked with its name. Copy Request for the Agent (the lead's context
+state (in progress, to find, no result, ignored; the leads in progress show whatever the focus),
+and for each lead the agent working on it now with its last action, its clues with what speaks for
+and against, the last handoff (folded) and its next search, what is known with the record to find,
+its estimated years and why, where to look and the log, each agent's entries marked with its name. What agents do live comes from their
+tool calls and is never kept (a green dot on Research while one is at work, gone two minutes after
+its last call); what they note is in the file. Copy Request for the Agent (the lead's context
 menu) puts a request for one lead on the clipboard, to paste in the agent's conversation.
 
 ## Proposals and review

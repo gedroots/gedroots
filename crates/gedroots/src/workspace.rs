@@ -2337,8 +2337,11 @@ impl Workspace {
             // An empty page shows no counter, unless it is a search with no result.
             .filter(|&n| n > 0 || (v == self.view && filtered))
         };
+        // An agent at work: a dot on the Research page instead of its count.
+        let working = self.agent_working();
         let zone = |v: View, n: Option<usize>, cx: &mut Context<Self>| {
             let active = v == self.view;
+            let live = working && v == View::Research;
             h_flex()
                 .id(SharedString::from(format!("zone-{}", v.label())))
                 .px_2()
@@ -2355,7 +2358,10 @@ impl Workspace {
                     theme::muted()
                 }))
                 .child(div().flex_1().min_w_0().truncate().child(v.label()))
-                .children(n.map(|n| div().text_xs().text_color(theme::muted()).child(group_thousands(n))))
+                .when(live, |d| d.child(dot(theme::ok())))
+                .when(!live, |d| {
+                    d.children(n.map(|n| div().text_xs().text_color(theme::muted()).child(group_thousands(n))))
+                })
                 .on_click(cx.listener(move |this, _, w, cx| this.show_view(v, w, cx)))
         };
         let primary: Vec<_> = View::SIDEBAR.into_iter().map(|v| zone(v, count(v), cx)).collect();

@@ -3,6 +3,9 @@ _version: 2
 research.focus_placeholder:
   en: Focus…
   fr: Focus…
+research.group.in_progress:
+  en: In Progress
+  fr: En cours
 research.group.to_find:
   en: To Find
   fr: À chercher
@@ -54,9 +57,6 @@ research.state.not_found:
 research.state.ignored:
   en: ignored
   fr: ignorée
-research.period:
-  en: Estimated period
-  fr: Période estimée
 research.known:
   en: What is known
   fr: Ce que l’on sait
@@ -204,3 +204,63 @@ research.what.burials:
 research.what.baptisms_marriages:
   en: baptisms and marriages
   fr: baptêmes et mariages
+research.clues:
+  en: Clues
+  fr: Indices
+research.for:
+  en: For
+  fr: Pour
+research.against:
+  en: Against
+  fr: Contre
+research.handoff:
+  en: Handoff
+  fr: Passation
+research.next_search:
+  en: "Next search:"
+  fr: "Prochaine recherche :"
+research.clue_count.one:
+  en: "%{n} clue"
+  fr: "%{n} indice"
+research.clue_count.other:
+  en: "%{n} clues"
+  fr: "%{n} indices"
+research.activity.resume:
+  en: Reads where the research stands
+  fr: Lit où en est la recherche
+research.activity.person:
+  en: "Reads the sheet of %{name}"
+  fr: "Lit la fiche de %{name}"
+research.activity.sources:
+  en: "Searches the sources: %{query}"
+  fr: "Cherche dans les sources : %{query}"
+research.activity.match:
+  en: Identifies the people of a record
+  fr: Identifie les personnes d’un acte
+research.activity.place:
+  en: "Locates %{place}"
+  fr: "Localise %{place}"
+research.activity.plan:
+  en: "Plans: %{text}"
+  fr: "Prévoit : %{text}"
+research.activity.search:
+  en: "Searched: %{text}"
+  fr: "A cherché : %{text}"
+research.activity.clue:
+  en: "Noted a clue: %{text}"
+  fr: "A noté un indice : %{text}"
+research.activity.handoff:
+  en: "Handed over: %{text}"
+  fr: "A passé la main : %{text}"
+research.activity.act:
+  en: Proposes a record
+  fr: Propose un acte
+research.activity.change:
+  en: Proposes a correction
+  fr: Propose une correction
+research.activity.chapter:
+  en: Proposes a chapter
+  fr: Propose un chapitre
+research.activity.quality:
+  en: Reads the Data Quality issues
+  fr: Lit les problèmes de qualité

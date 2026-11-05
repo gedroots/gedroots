@@ -11,6 +11,12 @@ agent:
   logged:
     en: "An AI agent noted a search: %{what}"
     fr: "Un agent IA a noté une recherche : %{what}"
+  clue:
+    en: "An AI agent noted a clue: %{what}"
+    fr: "Un agent IA a noté un indice : %{what}"
+  handoff:
+    en: "An AI agent handed over: %{what}"
+    fr: "Un agent IA a passé la main : %{what}"
   title:
     en: AI Agents
     fr: Agents IA

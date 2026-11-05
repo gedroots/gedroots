@@ -425,6 +425,15 @@ impl Lead {
         self.family_id.as_deref().filter(|_| self.goal == Goal::Marriage).unwrap_or(&self.person.id)
     }
 
+    /// Being worked on: planned with something already noted, or with a clue or a handoff, and
+    /// neither found nor ignored.
+    pub fn in_progress(&self) -> bool {
+        let open = !matches!(self.state, TaskState::Found | TaskState::Ignored);
+        let worked = (self.state == TaskState::Planned && !self.log.is_empty())
+            || self.log.iter().any(|e| matches!(e.kind, LogKind::Clue | LogKind::Handoff));
+        open && worked
+    }
+
     /// “Death of Jean MARCHAND”, “Marriage of Jean MARCHAND and Rose LEFÈVRE”.
     pub fn title(&self) -> String {
         match (self.goal, &self.spouse) {
@@ -961,20 +970,13 @@ impl Gedcom {
         }
     }
 
-    /// The leads being worked on, anywhere in the tree, last worked on first: planned, or with a
-    /// clue or a handoff, neither found nor ignored, and whose record is not cited yet. Their log
-    /// tells where each one stands.
+    /// The leads being worked on ([`Lead::in_progress`]), anywhere in the tree, last worked on
+    /// first, whose record is not cited yet. Their log tells where each one stands.
     pub fn leads_in_progress(&self, this_year: i32) -> Vec<Lead> {
         let mut out: Vec<Lead> = Vec::new();
         for r in &self.records {
             let Some(owner) = r.xref.as_deref() else { continue };
             for task in self.research_tasks(owner) {
-                let open = !matches!(task.state, TaskState::Found | TaskState::Ignored);
-                let worked = task.state == TaskState::Planned
-                    || task.log.iter().any(|e| matches!(e.kind, LogKind::Clue | LogKind::Handoff));
-                if !open || !worked {
-                    continue;
-                }
                 let (person, family) = match self.family(owner) {
                     Some(f) => match f.husband().or(f.wife()) {
                         Some(p) => (p.to_string(), Some(owner.to_string())),
@@ -984,7 +986,9 @@ impl Gedcom {
                 };
                 let Ok(mut lead) = self.lead(&person, task.goal, family.as_deref(), this_year) else { continue };
                 (lead.state, lead.note, lead.log) = (task.state, task.note, task.log);
-                out.push(lead);
+                if lead.in_progress() {
+                    out.push(lead);
+                }
             }
         }
         let last = |l: &Lead| l.log.last().map(|e| (e.date_key(), e.time.clone())).unwrap_or_default();

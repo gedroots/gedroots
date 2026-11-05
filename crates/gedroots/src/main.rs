@@ -100,6 +100,7 @@ gpui_kit::assets::icon_assets!(
         Pause,
         Target,
         SunSnow,
+        Diamond,
     ]
 );
 
