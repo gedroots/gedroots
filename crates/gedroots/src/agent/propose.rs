@@ -60,7 +60,8 @@ pub enum Identity {
     /// A person already in the tree: give their `id`.
     Link,
     /// A new person, created when the act is saved. Refused when someone in the tree resembles
-    /// them, unless their ids are listed in `not`.
+    /// them, unless their ids are listed in `not` (someone else) or `maybe` (perhaps the same
+    /// person, not proven).
     Create,
     /// Only named in the citation (witness, neighbour…), nobody is created.
     Mention,
@@ -108,6 +109,13 @@ pub struct PersonParams {
     /// candidates `match_people` or a refusal gave).
     #[serde(default)]
     pub not: Vec<String>,
+    /// With create: ids of the people of the tree who may be this person, without proof (an age
+    /// that does not fit, a parent's name missing, two men of the same name in the parish). The
+    /// act's facts go on a separate person, so nothing is attached to the tree's person until it
+    /// is proven; the user sees the resemblance while reviewing, and the two can be merged later.
+    /// Say in `remarks` what speaks for and against.
+    #[serde(default)]
+    pub maybe: Vec<String>,
     pub given: Option<String>,
     /// Birth surname: a woman's maiden name, even when the act names her by her husband's.
     pub surname: Option<String>,
@@ -439,9 +447,10 @@ fn clean_id(s: &str) -> String {
     s.trim().trim_matches('@').to_string()
 }
 
-/// Ids the agent checked and ruled out, for each person of the act (same order as `people`).
+/// Ids the agent checked and chose not to link, for each person of the act (same order as
+/// `people`): someone else (`not`), or perhaps the same person without proof (`maybe`).
 pub fn ruled_out(p: &ProposeParams) -> Vec<Vec<String>> {
-    p.people.iter().map(|x| x.not.iter().map(|s| clean_id(s)).collect()).collect()
+    p.people.iter().map(|x| x.not.iter().chain(&x.maybe).map(|s| clean_id(s)).collect()).collect()
 }
 
 /// Refuses a person to create who resembles someone of the tree that the agent did not rule out,
@@ -477,8 +486,9 @@ pub fn check_identities(proposal: &Proposal, ruled_out: &[Vec<String>], h: &Hypo
         return Ok(());
     }
     Err(format!(
-        "{}. Check them with person_sheet: link the same person (identity link with their id), or, if it \
-         is someone else, keep identity create and list their ids in `not`.",
+        "{}. Check them with person_sheet: link the same person (identity link with their id); if it is \
+         someone else, keep identity create and list their ids in `not`; if it may be the same person but \
+         the records do not prove it, keep identity create, list their ids in `maybe` and say why in `remarks`.",
         problems.join(". ")
     ))
 }
@@ -915,6 +925,14 @@ mod tests {
         // Checked and found to be someone else: accepted.
         let p = params(serde_json::json!(["@I2@"]));
         check_identities(&to_proposal(&p).unwrap(), &ruled_out(&p), &h).unwrap();
+        // Perhaps the same man, not proven: created apart, still shown as resembling him.
+        let p: ProposeParams = serde_json::from_value(serde_json::json!({"event": "BAPM", "date": "2 MAR 1800", "source": {},
+            "people": [{"role": "principal", "identity": "link", "id": "I1"},
+                       {"role": "father", "identity": "create", "given": "Pierre", "surname": "BLANC", "maybe": ["I2"]}]}))
+        .unwrap();
+        let proposal = to_proposal(&p).unwrap();
+        check_identities(&proposal, &ruled_out(&p), &h).unwrap();
+        assert!(proposal.duplicates(&ged).iter().any(|(i, found)| *i == 1 && found.iter().any(|s| s.xref == "I2")));
     }
 
     #[test]

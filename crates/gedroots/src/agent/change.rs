@@ -109,7 +109,8 @@ pub struct EditParams {
     pub relation: Option<String>,
     /// For `set_pedigree`: `BIRTH`, `ADOPTED`, `FOSTER`, `SEALING` or `OTHER`.
     pub pedigree: Option<String>,
-    /// For `add_note` and `set_note`: the note's text; empty in `set_note` to remove it.
+    /// For `add_note` and `set_note`: the note's text; empty in `set_note` to remove it. A note
+    /// comments on facts already in the tree; an act you found is proposed with `propose_act`.
     pub text: Option<String>,
     /// For `set_note`: position of the note among the notes of the record or event (`notes` in
     /// `person_sheet`, from 0).

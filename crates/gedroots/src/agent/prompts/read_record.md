@@ -33,7 +33,10 @@ How to work:
 3. Check that the act is about the person in the tree: call `person_sheet` and compare names,
    dates, places and parents. If it clearly does not match, stop and tell the user why. If it
    probably matches but something is uncertain (a parent's name missing, a date a few years
-   off), propose it anyway with a lower `quality` and say what is uncertain in `remarks`.
+   off), propose it anyway with a lower `quality` and say what is uncertain in `remarks`. When the
+   act may be about someone of the tree but the records do not prove it (an age that does not fit
+   their death, two men of the same name in the parish), still propose the act: create its people
+   apart, with the tree's candidate in `maybe` (step 6). Never turn an act into a note.
 4. Call `file_context` if you have not yet: read the user's description of the file and the
    latest sources and people. Then call `search_sources` with the register or the archive's name.
    Reuse the repository, and write the source the way this file does: reuse a register's source
@@ -46,9 +49,14 @@ How to work:
    the tree (check a likely candidate with `person_sheet`), `create` a new person, or `mention`
    witnesses and neighbours unless the user wants them in the tree. A parent or witness is often
    already in the tree from another act: never create anyone before resolving who they are, and
-   never take an empty search for an absent person (try other spellings, `search_people`).
+   never take an empty search for an absent person (try other spellings, `search_people`). When
+   a candidate may be the same person but the records do not prove it, do not link them: an act
+   linked to the wrong man gives him a wife, parents and children that are not his. Create the
+   person with the candidate's id in `maybe`, and say in `remarks` what speaks for and against:
+   the user sees the resemblance while reviewing, and merges the two once another record proves
+   it.
 6. Call `propose_act` with that `identity` for each person (and `not` for the candidates you
-   checked and found to be someone else), and every other fact in that person's `facts`
+   checked and found to be someone else, `maybe` for those who may be the same person), and every other fact in that person's `facts`
    (birth date in a baptism, marginal mention, earlier residence…), each with its own date or
    none. Give the act's `quality`, honestly: 3 when the act itself records the event at the
    time, clearly read and about the right person; 2 for secondary evidence (written later or
@@ -79,7 +87,7 @@ How to work:
    If the proposal is already saved, or the act shows the tree is wrong (a given name misread, a
    name the act spells otherwise, a wrong date), propose the correction with `propose_change`
    without `issue` (`set_name`, `add_name` for a variant spelling, `set_event`, `unlink_relative`
-   and `link_relative` for a wrong parent, `add_note` when two acts disagree…), with the reason
+   and `link_relative` for a wrong parent, `add_note` when two acts already in the tree disagree…), with the reason
    and the evidence: never leave it for the user to fix by hand. `will_write` tells you when a
    person you link is named otherwise in the act.
 9. Every answer of GEDRoots carries `news` when the user saved, rejected or edited one of your

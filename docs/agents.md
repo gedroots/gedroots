@@ -151,7 +151,11 @@ reason, which the agent reads to fix it:
 - a person to create must not resemble someone of the tree (same names, or a relative of a linked
   person, with compatible dates; `Act::suggestions`, as in record entry): the refusal lists the
   candidates, and the agent links one or lists in `not` those it checked and found to be someone
-  else. The review page still shows “Resembles …” under such a person;
+  else, or in `maybe` those who may be the same person without proof (an age that does not fit):
+  the act's facts then go on a separate person, nothing is attached to the tree's person, and the
+  two can be merged once another record proves it. The review page still shows “Resembles …”
+  under such a person. An uncertain act is proposed this way, never as a note (`add_note` is for
+  comments on facts already in the tree);
 - linked people must exist; dates must be valid, and are rewritten in
   GEDCOM 7 syntax; a place named like a place of the tree becomes that place. The place is the
   municipality and its jurisdictions: a street, number or building goes in `address` (the event's
