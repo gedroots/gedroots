@@ -97,7 +97,10 @@ impl Workspace {
         let doc = self.doc.as_ref()?;
         Some(match loc.view {
             View::Places => short_place(&loc.key),
-            View::Quality | View::Stats => loc.view.label().to_string(),
+            View::Quality => loc.view.label().to_string(),
+            View::Visualizations => gedroots_viz::Kind::from_slug(&loc.key)
+                .map(|k| k.title())
+                .unwrap_or_else(|| t!("viz.overview").to_string()),
             View::Research => self.lead_title(&loc.key).unwrap_or_else(|| loc.view.label().to_string()),
             View::Books => gedroots_book::spec::book(&doc.ged, &loc.key).map(|b| self.book_title(&b))?,
             _ => doc.ged.record_label(&loc.key),
@@ -110,7 +113,9 @@ impl Workspace {
         match loc.view {
             View::Places => doc.ged.places().iter().any(|p| p.name == loc.key),
             View::Quality => gedcom::quality::Category::from_id(&loc.key).is_some(),
-            View::Stats => true,
+            View::Visualizations => {
+                loc.key == visualizations::OVERVIEW || gedroots_viz::Kind::from_slug(&loc.key).is_some()
+            }
             View::Research => self.research.leads.iter().any(|l| research::lead_key(l) == loc.key),
             _ => doc.ged.get(&loc.key).is_some(),
         }

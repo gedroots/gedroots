@@ -170,7 +170,7 @@ impl Workspace {
             }
             None => d,
         };
-        let d = on!(d, cx, ShowStats, |this, w, cx| this.show_view(View::Stats, w, cx));
+        let d = on!(d, cx, ShowVisualizations, |this, w, cx| this.show_view(View::Visualizations, w, cx));
         let d = d.when(has_doc, |d| on!(d, cx, NewBook, |this, w, cx| this.new_book(w, cx)));
         let d = d.when(self.create_label().is_some(), |d| on!(d, cx, Create, |this, w, cx| this.create_here(w, cx)));
         let d = d.when(self.view == View::Books && sel.is_some(), |d| {
@@ -415,7 +415,7 @@ impl Workspace {
             View::Repositories => label::new_repository(),
             View::Notes => label::new_note(),
             View::Books => t!("cmd.new_book").trim_end_matches('…').to_string().into(),
-            View::Places | View::Research | View::Quality | View::Stats => return None,
+            View::Places | View::Research | View::Quality | View::Visualizations => return None,
         })
     }
 
@@ -430,7 +430,7 @@ impl Workspace {
             }
             View::Books => self.new_book(window, cx),
             v @ (View::Individuals | View::Media | View::Repositories | View::Notes) => self.create_in(v, window, cx),
-            View::Places | View::Research | View::Quality | View::Stats => {}
+            View::Places | View::Research | View::Quality | View::Visualizations => {}
         }
     }
 

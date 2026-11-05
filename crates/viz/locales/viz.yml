@@ -1,0 +1,117 @@
+_version: 2
+# Texts of the visualizations (crates/viz): in the app's language, or the tree's in a book.
+
+viz.no_subject:
+  en: This person is no longer in the tree
+  fr: Cette personne n’est plus dans l’arbre
+
+# The visualizations: title and what they show.
+viz.fan.title:
+  en: Fan Chart
+  fr: Éventail
+viz.fan.summary:
+  en: Coloured by where people come from
+  fr: Coloré selon l’origine de chacun
+viz.places.title:
+  en: Places
+  fr: Lieux
+viz.places.summary:
+  en: Where they come from, child to parents
+  fr: D’où ils viennent, de l’enfant aux parents
+viz.lives.title:
+  en: Lives
+  fr: Vies
+viz.lives.summary:
+  en: Lifespans of the first generations
+  fr: Les vies des premières générations
+viz.generations.title:
+  en: Ancestors Found
+  fr: Ancêtres retrouvés
+viz.generations.summary:
+  en: How complete each generation is
+  fr: Ce que l’on sait de chaque génération
+viz.longevity.title:
+  en: Longevity
+  fr: Longévité
+viz.longevity.summary:
+  en: Age at death over the centuries
+  fr: L’âge au décès au fil des siècles
+viz.occupations.title:
+  en: Occupations
+  fr: Métiers
+viz.occupations.summary:
+  en: The most frequent trades
+  fr: Les métiers les plus fréquents
+
+# Legends and captions.
+viz.other:
+  en: Other
+  fr: Autres
+viz.unknown_place:
+  en: Place unknown
+  fr: Lieu inconnu
+viz.places_caption:
+  en: "Dot size: number of people born in the place. Places known for %{known} of %{total} people."
+  fr: "Taille du point : nombre de personnes nées dans le lieu. Lieux connus pour %{known} des %{total} personnes."
+viz.marriage:
+  en: Marriage
+  fr: Mariage
+viz.ongoing:
+  en: Living, or death unknown
+  fr: Vie en cours ou décès inconnu
+viz.age_years:
+  en: "%{n} y"
+  fr: "%{n} ans"
+viz.longevity_caption:
+  en: "■ men  ○ women · median age per half-century · %{n} people"
+  fr: "■ hommes  ○ femmes · âge médian par demi-siècle · %{n} personnes"
+viz.percent:
+  en: "%{n}%"
+  fr: "%{n} %"
+
+# Columns of the tables.
+viz.col.number:
+  en: Number
+  fr: Numéro
+viz.col.person:
+  en: Person
+  fr: Personne
+viz.col.years:
+  en: Years
+  fr: Années
+viz.col.origin:
+  en: Origin
+  fr: Origine
+viz.col.place:
+  en: Place
+  fr: Lieu
+viz.col.people:
+  en: People
+  fr: Personnes
+viz.col.birth:
+  en: Birth
+  fr: Naissance
+viz.col.death:
+  en: Death
+  fr: Décès
+viz.col.age:
+  en: Age
+  fr: Âge
+viz.col.marriages:
+  en: Marriages
+  fr: Mariages
+viz.col.generation:
+  en: Generation
+  fr: Génération
+viz.col.found:
+  en: Found
+  fr: Retrouvés
+viz.col.expected:
+  en: Expected
+  fr: Attendus
+viz.col.share:
+  en: Share
+  fr: Part
+viz.col.occupation:
+  en: Occupation
+  fr: Métier

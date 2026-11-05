@@ -8,6 +8,7 @@ license.workspace = true
 
 [dependencies]
 gedcom = { path = "../gedcom" }
+gedroots-viz = { path = "../viz" }
 rust-i18n = "4.2.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

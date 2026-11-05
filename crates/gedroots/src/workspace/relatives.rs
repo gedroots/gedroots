@@ -33,6 +33,8 @@ pub enum PickPurpose {
     ActMedia,
     /// The chosen person is the one the book in the New Book window starts from.
     BookPerson,
+    /// The chosen person is the one the Visualizations page shows.
+    VizPerson,
 }
 
 impl PickPurpose {
@@ -50,6 +52,7 @@ impl PickPurpose {
             PickPurpose::ActPerson { .. } => t!("picker.act_person").into(),
             PickPurpose::ActMedia => t!("picker.act_media").into(),
             PickPurpose::BookPerson => t!("picker.book_person").into(),
+            PickPurpose::VizPerson => t!("picker.viz_person").into(),
         }
     }
 }
@@ -431,6 +434,10 @@ impl Workspace {
             self.set_book_person(chosen, window, cx);
             return;
         }
+        if let PickPurpose::VizPerson = p.purpose {
+            self.set_viz_person(chosen, cx);
+            return;
+        }
         if let PickPurpose::Kinship { indi } = p.purpose {
             self.kinship = Some((indi, chosen));
             cx.notify();
@@ -486,7 +493,8 @@ impl Workspace {
                 | PickPurpose::MergePlaceWith { .. }
                 | PickPurpose::ActPerson { .. }
                 | PickPurpose::ActMedia
-                | PickPurpose::BookPerson => Err(t!("stats.kinship_title").into()),
+                | PickPurpose::BookPerson
+                | PickPurpose::VizPerson => Err(t!("stats.kinship_title").into()),
             }
         });
     }

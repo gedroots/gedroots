@@ -19,6 +19,8 @@ How to work:
    of their trade, the laws that changed their lives. Prefer what explains *their* facts: a
    family that leaves its village the year the phylloxera reaches it, a son born nine months
    after the end of a war.
+   `read_visualization` gives the figures behind the book's charts (where the family came from,
+   how far it moved, how long people lived, their trades): quote them rather than counting.
 4. Write three kinds of blocks, and never mix them:
    - `text`: what the records say, told as a narrative. Name people by id in braces (`{I12}`):
      the book shows their name. Only facts that are in the tree;

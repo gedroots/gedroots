@@ -21,6 +21,7 @@ pub mod clients;
 mod prompts;
 pub mod propose;
 mod tools;
+pub mod viz;
 
 use gedcom::Gedcom;
 use gpui_kit::*;

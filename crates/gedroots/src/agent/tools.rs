@@ -5,6 +5,7 @@
 use super::book::{self, Books, ProposeChapterParams, ReadBookParams};
 use super::change::{self, ChangeParams, ChangeProposed};
 use super::propose::{self, Decision, Hypothesis, MatchParams, Pending, ProposeParams};
+use super::viz::{self as visual, ListVizParams, ReadVizParams, Visualization, Visualizations};
 use super::{Ask, Request, Snapshot};
 use axum::extract::State;
 use axum::http::{StatusCode, header};
@@ -1160,6 +1161,27 @@ impl GedrootsMcp {
         let s = self.snapshot(tree.as_deref()).await?;
         self.answer(&s, ChapterProposed { status: "waiting for review".into(), waiting })
     }
+
+    #[tool(
+        name = "list_visualizations",
+        description = "The visualizations GEDRoots draws from the tree (fan chart coloured by origin, map of the places with the migrations, lifespans, ancestors found per generation, longevity, occupations): what each one shows, and when it is worth placing in a family book. Read one with `read_visualization`.",
+        annotations(read_only_hint = true, open_world_hint = false)
+    )]
+    async fn list_visualizations(&self, Parameters(p): Parameters<ListVizParams>) -> Res<Visualizations> {
+        let s = self.snapshot(p.tree.as_deref()).await?;
+        self.answer(&s, visual::list())
+    }
+
+    #[tool(
+        name = "read_visualization",
+        description = "The data of one visualization (`list_visualizations`) for a person's ancestors or descendants (default: the root person's ancestors over 8 generations), as the table the app shows beside the drawing: one row per person, place, generation or occupation, with the legend of its colours (the regions people come from) and its caption. Use it to write about where a family came from, how far it moved, how long people lived or what trades they had: the figures are computed by GEDRoots, quote them rather than counting yourself.",
+        annotations(read_only_hint = true, open_world_hint = false)
+    )]
+    async fn read_visualization(&self, Parameters(p): Parameters<ReadVizParams>) -> Res<Visualization> {
+        let s = self.snapshot(p.tree.as_deref()).await?;
+        let v = visual::read(&s.ged, &p, current_year())?;
+        self.answer(&s, v)
+    }
 }
 
 /// Instructions given to the agent on connection.
@@ -1195,7 +1217,8 @@ misread in a proposal the user has saved, a name the act spells otherwise, a wro
 corrected with `propose_change` without `issue`: never leave it for the user to fix by hand. \
 Family books (`read_book`) are typeset by GEDRoots from the tree; you write their narratives, \
 historical context and hypotheses with `propose_chapter`, one chapter at a time; the prompt \
-`write_book` gives the method.";
+`write_book` gives the method. `list_visualizations` and `read_visualization` give the data of the \
+charts GEDRoots draws (origins, migrations, lifespans, longevity, occupations).";
 
 /// The file's context, also offered as a resource for clients that let the user attach one.
 const CONTEXT_URI: &str = "gedroots://file/context";
@@ -1406,7 +1429,7 @@ mod tests {
         let (_, _, list) =
             post(port, "secret", Some(&sid), serde_json::json!({"jsonrpc":"2.0","id":2,"method":"tools/list"}));
         let tools = list["result"]["tools"].as_array().expect("tools");
-        assert_eq!(tools.len(), 18);
+        assert_eq!(tools.len(), 20);
         // The proposals only queue a proposal; the research tools write the research log only.
         let mut writers: Vec<String> = tools
             .iter()

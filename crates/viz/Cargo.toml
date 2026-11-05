@@ -1,0 +1,14 @@
+[package]
+name = "gedroots-viz"
+version = "0.1.0"
+edition = "2024"
+description = "Visualizations of a GEDCOM 7 tree for GEDRoots: computed from the data, drawn as SVG, shown in the app and in family books"
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+gedcom = { path = "../gedcom" }
+rust-i18n = "4.2.4"
+serde = { version = "1", features = ["derive"] }
+# The version Typst already uses for the books: one SVG renderer in the app.
+resvg = "0.47.0"

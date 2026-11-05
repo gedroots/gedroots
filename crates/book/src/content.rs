@@ -2,14 +2,14 @@
 //! (complete, short or a line in a table, depending on what the tree knows about them), the charts
 //! and the index. The result is data for the Typst template, plus the files it shows.
 
-use crate::charts::{self, DescCell, FanCell, Life, MapPoint};
 use crate::prose;
 use crate::spec::{BookSpec, Line};
 use crate::writing::{Block, Writing};
 use gedcom::document::Gedcom;
 use gedcom::model::{Individual, sort_key};
+use gedroots_viz::{Kind, Member, Palette, Scope, Tree};
 use serde::Serialize;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 
 /// From this many facts (dated or placed events, marriages), a person gets a complete record.
@@ -179,68 +179,10 @@ pub struct IndexEntry {
     pub key: String,
 }
 
-/// A person of the book, with their number and generation (1 = the subject).
-struct Member {
-    xref: String,
-    number: String,
-    generation: u32,
-    /// Other Sosa numbers of an ancestor found several times (pedigree collapse).
-    also: Vec<usize>,
-    sosa: Option<usize>,
-}
-
 /// Label of a person's record in the template: Typst labels only take letters, digits, `-`, `_`.
 pub fn key_of(xref: &str) -> String {
     let clean: String = xref.chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '_' }).collect();
     format!("p-{clean}")
-}
-
-fn ancestors(g: &Gedcom, subject: &str, generations: u32) -> Vec<Member> {
-    let tree = g.ancestry(subject, generations);
-    let mut seen: HashMap<String, usize> = HashMap::new();
-    let mut out: Vec<Member> = Vec::new();
-    for (sosa, x) in tree.iter().enumerate() {
-        let Some(x) = x else { continue };
-        if let Some(&i) = seen.get(x) {
-            out[i].also.push(sosa);
-            continue;
-        }
-        seen.insert(x.clone(), out.len());
-        out.push(Member {
-            xref: x.clone(),
-            number: sosa.to_string(),
-            generation: usize::BITS - sosa.leading_zeros(),
-            also: vec![],
-            sosa: Some(sosa),
-        });
-    }
-    out
-}
-
-fn descendants(g: &Gedcom, subject: &str, generations: u32) -> Vec<Member> {
-    let mut out = Vec::new();
-    let mut seen = HashSet::new();
-    let mut queue = vec![(subject.to_string(), "1".to_string(), 1u32)];
-    while !queue.is_empty() {
-        let mut next = Vec::new();
-        for (x, number, gen_) in queue {
-            if !seen.insert(x.clone()) {
-                continue;
-            }
-            if gen_ < generations {
-                let mut k = 0;
-                for (_, kids) in g.spouses_and_children(&x) {
-                    for c in kids {
-                        k += 1;
-                        next.push((c.xref().to_string(), format!("{number}.{k}"), gen_ + 1));
-                    }
-                }
-            }
-            out.push(Member { xref: x, number, generation: gen_, also: vec![], sosa: None });
-        }
-        queue = next;
-    }
-    out
 }
 
 /// Number of facts the tree knows about a person.
@@ -253,80 +195,6 @@ fn facts(g: &Gedcom, ind: &Individual) -> usize {
         .filter(|f| f.events().iter().any(|e| e.date_raw().is_some() || e.place().is_some()))
         .count();
     own + unions
-}
-
-/// The place that says where a person comes from: birth, baptism, then marriage or death.
-fn origin_place(g: &Gedcom, ind: &Individual) -> Option<String> {
-    let own = ["BIRT", "CHR", "BAPM"].iter().filter_map(|t| ind.event(t)).find_map(|e| e.place().map(str::to_string));
-    own.or_else(|| {
-        ind.fams()
-            .into_iter()
-            .filter_map(|f| g.family(f))
-            .find_map(|f| f.marriage().and_then(|m| m.place().map(str::to_string)))
-    })
-    .or_else(|| ["DEAT", "BURI"].iter().filter_map(|t| ind.event(t)).find_map(|e| e.place().map(str::to_string)))
-}
-
-/// Jurisdictions of a place from the broadest (country) to the most precise, empty ones kept so
-/// that the levels stay aligned (“, Troyes, 10000, Aube, Grand Est, France”).
-fn levels(place: &str) -> Vec<String> {
-    // Postcodes and other codes name no region: a legend shows names.
-    place
-        .split(',')
-        .rev()
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.chars().any(|c| c.is_ascii_digit()) || s.chars().any(char::is_alphabetic))
-        .collect()
-}
-
-/// Groups of places for the colours: the broadest level where no group holds more than 70 % of
-/// the people (countries, then regions…), the six largest groups and “Other”.
-fn place_groups(places: &[String]) -> (HashMap<String, usize>, Vec<(String, usize)>, usize) {
-    let at = |p: &String, level: usize| -> Option<String> {
-        let l = levels(p);
-        l.get(level..)
-            .and_then(|rest| rest.iter().find(|s| !s.is_empty()))
-            .cloned()
-            .or_else(|| l.iter().rev().find(|s| !s.is_empty()).cloned())
-    };
-    let mut level = 0;
-    for candidate in 0..4 {
-        level = candidate;
-        let mut counts: HashMap<String, usize> = HashMap::new();
-        for p in places {
-            if let Some(v) = at(p, candidate) {
-                *counts.entry(v).or_default() += 1;
-            }
-        }
-        let top = counts.values().max().copied().unwrap_or(0);
-        if counts.len() >= 3 && (top as f64) < 0.7 * places.len() as f64 {
-            break;
-        }
-    }
-    let mut counts: HashMap<String, usize> = HashMap::new();
-    for p in places {
-        if let Some(v) = at(p, level) {
-            *counts.entry(v).or_default() += 1;
-        }
-    }
-    let mut ranked: Vec<(String, usize)> = counts.into_iter().collect();
-    ranked.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
-    let keep = if ranked.len() > charts::GROUP_COLORS.len() { charts::GROUP_COLORS.len() - 1 } else { ranked.len() };
-    let mut group_of = HashMap::new();
-    for p in places {
-        let g = at(p, level).and_then(|v| ranked.iter().take(keep).position(|(n, _)| *n == v)).unwrap_or(usize::MAX);
-        group_of.insert(p.clone(), g);
-    }
-    let mut groups: Vec<(String, usize)> = ranked.iter().take(keep).cloned().collect();
-    let other: usize = ranked.iter().skip(keep).map(|(_, n)| n).sum();
-    if other > 0 {
-        groups.push((t!("book.other").into_owned(), other));
-    }
-    (group_of, groups, keep)
-}
-
-fn group_color(i: usize, keep: usize) -> String {
-    if i < keep { charts::GROUP_COLORS[i].to_string() } else { charts::OTHER_COLOR.to_string() }
 }
 
 fn year_of(raw: Option<&str>) -> Option<i32> {
@@ -399,6 +267,11 @@ pub fn default_title(g: &Gedcom, spec: &BookSpec) -> String {
     }
 }
 
+/// The people of a book, as the visualizations see them.
+fn scope(spec: &BookSpec) -> Scope {
+    Scope { subject: spec.subject.clone(), line: spec.line, generations: spec.generations }
+}
+
 /// Builds the data of the book and the files it shows. `media_dir`: folder the media paths are
 /// relative to (the `.ged`'s), for the portraits; `today`: (year, date in words) for the colophon.
 pub fn build(
@@ -410,10 +283,8 @@ pub fn build(
     part: &Part,
 ) -> Result<(Data, Vec<Asset>), String> {
     let subject = g.individual(&spec.subject).ok_or_else(|| t!("book.no_subject").into_owned())?;
-    let members = match spec.line {
-        Line::Ancestors => ancestors(g, &spec.subject, spec.generations),
-        Line::Descendants => descendants(g, &spec.subject, spec.generations),
-    };
+    let tree = Tree::new(g, scope(spec))?;
+    let members = &tree.members;
     let in_book: HashMap<&str, &Member> = members.iter().map(|m| (m.xref.as_str(), m)).collect();
     let mut assets = Vec::new();
     let (w, h) = spec.size.mm();
@@ -438,121 +309,20 @@ pub fn build(
         ..Default::default()
     };
 
-    // Groups of places, for the fan and the lifespans.
-    let origins: HashMap<&str, String> =
-        members.iter().filter_map(|m| Some((m.xref.as_str(), origin_place(g, &g.individual(&m.xref)?)?))).collect();
-    let mut all_places: Vec<String> = members.iter().filter_map(|m| origins.get(m.xref.as_str()).cloned()).collect();
-    let (group_of, groups, keep) = place_groups(&all_places);
-    let color_of = |x: &str| -> Option<String> {
-        origins.get(x).map(|p| group_color(*group_of.get(p).unwrap_or(&usize::MAX), keep))
-    };
+    let palette = Palette::PRINT;
+    let mut all_places = tree.origins.all.clone();
 
-    // Fan (ancestors only).
-    if spec.line == Line::Ancestors {
-        let mut cells = Vec::new();
-        let mut unknown = 0;
-        for m in &members {
-            let Some(ind) = g.individual(&m.xref) else { continue };
-            for sosa in m.sosa.iter().chain(m.also.iter()) {
-                if *sosa >= 1 << spec.generations.min(9) {
-                    continue;
-                }
-                let color = color_of(&m.xref);
-                unknown += usize::from(color.is_none());
-                cells.push(FanCell {
-                    sosa: *sosa,
-                    given: ind.given().split_whitespace().next().unwrap_or_default().to_string(),
-                    surname: ind.surname(),
-                    years: years(&ind),
-                    color,
-                });
-            }
-        }
-        let gens = spec.generations.min(9);
-        assets.push(Asset { path: "fan.svg".into(), bytes: charts::fan(&cells, gens, true).into_bytes() });
-        assets.push(Asset { path: "fan-cover.svg".into(), bytes: charts::fan(&cells, gens, false).into_bytes() });
-        data.fan = true;
-        data.legend = groups
-            .iter()
-            .enumerate()
-            .map(|(i, (label, count))| Legend {
-                label: label.clone(),
-                color: group_color(i, keep),
-                count: *count,
-                unknown: false,
-            })
-            .collect();
-        if unknown > 0 {
-            data.legend.push(Legend {
-                label: t!("book.unknown_place").into_owned(),
-                color: "#FFFFFF".into(),
-                count: unknown,
-                unknown: true,
-            });
-        }
-    }
-
-    // Fan of descendants: each family shares its parent's sector by its number of descendants.
-    if spec.line == Line::Descendants {
-        let rings = spec.generations.min(9) as usize;
-        let parent = |n: &str| n.rsplit_once('.').map(|(p, _)| p.to_string());
-        // Weight of a member: the leaves under it, within the drawn rings.
-        let mut weight: HashMap<String, f64> = HashMap::new();
-        for m in members.iter().rev().filter(|m| (m.generation as usize) <= rings) {
-            let w = weight.get(&m.number).copied().unwrap_or(0.).max(1.);
-            weight.insert(m.number.clone(), w);
-            if let Some(p) = parent(&m.number) {
-                let pw = weight.entry(p).or_insert(0.);
-                *pw += w;
-            }
-        }
-        let mut cells = Vec::new();
-        let mut start: HashMap<String, f64> = HashMap::new();
-        let mut angle: HashMap<String, (f64, f64)> = HashMap::new();
-        for m in members.iter().filter(|m| (m.generation as usize) <= rings) {
-            let Some(ind) = g.individual(&m.xref) else { continue };
-            let (a0, a1) = match parent(&m.number) {
-                None => (180., 0.),
-                Some(p) => {
-                    let Some(&(pa0, pa1)) = angle.get(&p) else { continue };
-                    let total = weight.get(&p).copied().unwrap_or(1.).max(1.);
-                    let from = *start.get(&p).unwrap_or(&pa0);
-                    let span = (pa0 - pa1) * weight.get(&m.number).copied().unwrap_or(1.) / total;
-                    start.insert(p, from - span);
-                    (from, from - span)
-                }
-            };
-            angle.insert(m.number.clone(), (a0, a1));
-            cells.push(DescCell {
-                ring: m.generation as usize - 1,
-                a0,
-                a1,
-                given: ind.given().split_whitespace().next().unwrap_or_default().to_string(),
-                surname: ind.surname(),
-                years: years(&ind),
-                color: color_of(&m.xref),
-            });
-        }
-        // Only the rings that hold someone.
-        let rings = cells.iter().map(|c| c.ring + 1).max().unwrap_or(1).max(2);
-        assets.push(Asset { path: "fan.svg".into(), bytes: charts::descendant_fan(&cells, rings, true).into_bytes() });
-        assets.push(Asset {
-            path: "fan-cover.svg".into(),
-            bytes: charts::descendant_fan(&cells, rings, false).into_bytes(),
-        });
-        data.fan = true;
-        data.legend = groups
-            .iter()
-            .enumerate()
-            .map(|(i, (label, count))| Legend {
-                label: label.clone(),
-                color: group_color(i, keep),
-                count: *count,
-                unknown: false,
-            })
-            .collect();
-    }
-    if data.fan && part.opening {
+    // Fan, of ancestors or descendants, and the same without its names for the cover.
+    let fan = tree.fan(&palette, true);
+    assets.push(Asset { path: "fan.svg".into(), bytes: fan.svg.into_bytes() });
+    assets.push(Asset { path: "fan-cover.svg".into(), bytes: tree.fan(&palette, false).svg.into_bytes() });
+    data.fan = true;
+    data.legend = fan
+        .legend
+        .into_iter()
+        .map(|l| Legend { label: l.label, color: l.color, count: l.count, unknown: l.unknown })
+        .collect();
+    if part.opening {
         data.fan_page = Some(match spec.line {
             Line::Ancestors => {
                 FanPage { title: t!("book.origins").into_owned(), subtitle: t!("book.origins_sub").into_owned() }
@@ -564,77 +334,20 @@ pub fn build(
     }
 
     // Map of the places of origin.
-    let coords: HashMap<String, (f64, f64)> = g
-        .places()
-        .into_iter()
-        .filter_map(|p| {
-            let lat = gedcom::geo::parse_latitude(p.latitude.as_deref()?)?;
-            let lon = gedcom::geo::parse_longitude(p.longitude.as_deref()?)?;
-            Some((p.name, (lon, lat)))
-        })
-        .collect();
-    let mut points: BTreeMap<String, MapPoint> = BTreeMap::new();
-    let mut located = 0;
-    for m in &members {
-        let Some(p) = origins.get(m.xref.as_str()) else { continue };
-        let Some(&(lon, lat)) = coords.get(p) else { continue };
-        located += 1;
-        points.entry(p.clone()).or_insert_with(|| MapPoint { lon, lat, label: prose::town(p), count: 0 }).count += 1;
-    }
-    if points.len() >= 2 && part.opening {
-        let mut links = Vec::new();
-        for m in &members {
-            let Some(a) = origins.get(m.xref.as_str()).and_then(|p| coords.get(p)) else { continue };
-            let (f, mo) = g.parents(&m.xref);
-            for parent in [f, mo].into_iter().flatten() {
-                if in_book.contains_key(parent.xref())
-                    && let Some(b) = origins.get(parent.xref()).and_then(|p| coords.get(p))
-                    && a != b
-                {
-                    links.push((*a, *b));
-                }
-            }
-        }
-        let pts: Vec<MapPoint> = points.into_values().collect();
-        assets.push(Asset { path: "map.svg".into(), bytes: charts::map(&pts, &links).into_bytes() });
-        data.map = Some(MapInfo {
-            title: places_count(pts.len()),
-            caption: t!("book.places_caption", known = located, total = members.len()).into_owned(),
-        });
+    if part.opening
+        && let Some(map) = tree.places(&palette)
+    {
+        assets.push(Asset { path: "map.svg".into(), bytes: map.svg.into_bytes() });
+        data.map = Some(MapInfo { title: places_count(map.count), caption: map.caption });
     }
     all_places.sort();
     all_places.dedup();
 
-    // Lifespans: the first generations after the subject, at most 30 lives.
-    let mut lives = Vec::new();
-    let mut last_gen = 0;
-    for m in members.iter().filter(|m| m.generation >= 2) {
-        let Some(ind) = g.individual(&m.xref) else { continue };
-        let Some(birth) = ind.birth_year() else { continue };
-        if lives.len() >= 30 {
-            break;
-        }
-        let marriages = ind
-            .fams()
-            .into_iter()
-            .filter_map(|f| g.family(f))
-            .filter_map(|f| f.marriage().and_then(|e| e.date()).and_then(|d| d.year()))
-            .collect();
-        lives.push(Life {
-            label: format!("{} {}", prose::first_name(&ind), title_case(&ind.surname())),
-            birth,
-            death: year_of(ind.death().as_ref().and_then(|e| e.date_raw())),
-            marriages,
-            color: color_of(&m.xref).unwrap_or_else(|| charts::OTHER_COLOR.to_string()),
-            break_before: m.generation != last_gen,
-        });
-        last_gen = m.generation;
-    }
-    if lives.len() >= 3 && part.opening {
-        let svg = charts::lifespans(&lives, today.0, &t!("book.marriage"), &t!("book.ongoing"), |a| {
-            t!("book.age_years", n = a).into_owned()
-        });
-        assets.push(Asset { path: "lifespans.svg".into(), bytes: svg.into_bytes() });
+    // Lifespans: the first generations after the subject.
+    if part.opening
+        && let Some(lives) = tree.lives(&palette, today.0)
+    {
+        assets.push(Asset { path: "lifespans.svg".into(), bytes: lives.svg.into_bytes() });
         data.lifespans = true;
     }
 
@@ -699,54 +412,16 @@ pub fn build(
     data.levels = spec.chapters.values().flat_map(Writing::blocks).any(Block::optional);
 
     // Figures, in the last volume.
-    if spec.line == Line::Ancestors && part.figures {
-        let found: Vec<(usize, usize)> = (1..=spec.generations.min(12))
-            .map(|n| {
-                let lo = 1usize << (n - 1);
-                let hi = 1usize << n;
-                let count = members
-                    .iter()
-                    .map(|m| m.sosa.iter().chain(m.also.iter()).filter(|s| (lo..hi).contains(*s)).count())
-                    .sum();
-                (count, hi - lo)
-            })
-            .collect();
-        assets.push(Asset { path: "completeness.svg".into(), bytes: charts::completeness(&found).into_bytes() });
-        data.completeness = true;
-    }
-    let mut ages = Vec::new();
-    for m in &members {
-        let Some(ind) = g.individual(&m.xref) else { continue };
-        if let (Some(b), Some(d)) = (ind.birth(), ind.event("DEAT"))
-            && let (Some(by), Some(age)) = (ind.birth_year(), prose::age_years(&b, &d))
-            && age < 110
-        {
-            ages.push((by, age as f64, ind.sex().chars().next().unwrap_or('U')));
-        }
-    }
-    if ages.len() >= 8 && part.figures {
-        assets.push(Asset { path: "longevity.svg".into(), bytes: charts::longevity(&ages).into_bytes() });
-        data.longevity = Some(t!("book.longevity_caption", n = ages.len()).into_owned());
-    }
-    let mut jobs: HashMap<String, usize> = HashMap::new();
-    for m in &members {
-        let Some(ind) = g.individual(&m.xref) else { continue };
-        let mine: HashSet<String> = ind
-            .events()
-            .iter()
-            .filter(|e| e.tag() == "OCCU")
-            .filter_map(|e| e.value())
-            .map(|v| upper_first(v.trim()))
-            .collect();
-        for j in mine {
-            *jobs.entry(j).or_default() += 1;
-        }
-    }
-    let mut jobs: Vec<(String, usize)> = jobs.into_iter().filter(|(_, n)| *n >= 2).collect();
-    jobs.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
-    jobs.truncate(10);
     if part.figures {
-        data.occupations = jobs;
+        if let Some(found) = tree.figure(Kind::Generations, &palette, today.0) {
+            assets.push(Asset { path: "completeness.svg".into(), bytes: found.svg.into_bytes() });
+            data.completeness = true;
+        }
+        if let Some(ages) = tree.longevity(&palette) {
+            assets.push(Asset { path: "longevity.svg".into(), bytes: ages.svg.into_bytes() });
+            data.longevity = Some(ages.caption);
+        }
+        data.occupations = tree.jobs();
     }
 
     // Index of the people in this part.
@@ -855,10 +530,7 @@ pub struct OutlineChapter {
 /// The chapters of a book and who is in each, as the book shows them.
 pub fn outline(g: &Gedcom, spec: &BookSpec) -> Result<Vec<OutlineChapter>, String> {
     g.individual(&spec.subject).ok_or_else(|| t!("book.no_subject").into_owned())?;
-    let members = match spec.line {
-        Line::Ancestors => ancestors(g, &spec.subject, spec.generations),
-        Line::Descendants => descendants(g, &spec.subject, spec.generations),
-    };
+    let members = gedroots_viz::scope::members(g, &scope(spec));
     let mut out: Vec<OutlineChapter> = Vec::new();
     for m in &members {
         let Some(ind) = g.individual(&m.xref) else { continue };
@@ -889,20 +561,6 @@ fn upper_first(s: &str) -> String {
         Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
         None => String::new(),
     }
-}
-
-/// “GUYOT” → “Guyot”, for the narrow labels of the charts.
-fn title_case(s: &str) -> String {
-    s.split(' ')
-        .map(|w| {
-            let mut c = w.chars();
-            match c.next() {
-                Some(f) => f.to_uppercase().collect::<String>() + &c.as_str().to_lowercase(),
-                None => String::new(),
-            }
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
 }
 
 fn person_ref(ind: &Individual, in_book: &HashMap<&str, &Member>) -> PersonRef {
@@ -999,26 +657,6 @@ fn sheet(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn groups_places_at_the_level_that_tells_them_apart() {
-        let places: Vec<String> = [
-            ", Troyes, 10000, Aube, Grand Est, France",
-            ", Piney, 10220, Aube, Grand Est, France",
-            ", Saint-Étienne, 42100, Loire, Auvergne-Rhône-Alpes, France",
-            ", Médéa, 26000, , Médéa, Algérie",
-            ", Paris, 75000, Paris, Île-de-France, France",
-        ]
-        .iter()
-        .map(|s| s.to_string())
-        .collect();
-        let (of, groups, _) = place_groups(&places);
-        // Countries: France holds 80 %, so the regions are used.
-        assert_eq!(groups[0], ("Grand Est".to_string(), 2));
-        assert_eq!(groups.len(), 4);
-        assert_eq!(of[&places[0]], of[&places[1]]);
-        assert_ne!(of[&places[0]], of[&places[3]]);
-    }
 
     #[test]
     fn keys_are_valid_labels() {

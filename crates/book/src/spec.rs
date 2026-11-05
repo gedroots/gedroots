@@ -28,32 +28,8 @@ const URI: &str = concat!(env!("CARGO_PKG_REPOSITORY"), "/blob/main/docs/extensi
 /// Prefix of the identifiers of the books (`@BK1@`).
 const XREF_PREFIX: &str = "BK";
 
-pub const MIN_GENERATIONS: u32 = 2;
-pub const MAX_GENERATIONS: u32 = 12;
-pub const DEFAULT_GENERATIONS: u32 = 8;
-
-/// The person's ancestors (Sosa numbering) or descendants (d'Aboville numbering).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum Line {
-    #[default]
-    Ancestors,
-    Descendants,
-}
-
-impl Line {
-    pub const ALL: [Line; 2] = [Line::Ancestors, Line::Descendants];
-
-    fn tag(self) -> &'static str {
-        match self {
-            Line::Ancestors => "ANCESTORS",
-            Line::Descendants => "DESCENDANTS",
-        }
-    }
-
-    fn from_tag(s: &str) -> Line {
-        if s.eq_ignore_ascii_case("DESCENDANTS") { Line::Descendants } else { Line::Ancestors }
-    }
-}
+pub use gedroots_viz::Line;
+pub use gedroots_viz::scope::{DEFAULT_GENERATIONS, MAX_GENERATIONS, MIN_GENERATIONS};
 
 /// Trim size of the pages.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
