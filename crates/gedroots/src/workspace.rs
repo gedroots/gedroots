@@ -2006,6 +2006,16 @@ fn dot(color: Hsla) -> Div {
     div().size(px(7.)).flex_none().rounded_full().bg(color)
 }
 
+/// An agent at work: a circle that turns, like any activity of unknown length (still when the
+/// system asks to reduce motion).
+fn working(id: impl Into<ElementId>, size: f32) -> impl IntoElement {
+    Icon::new(IconName::LoaderCircle).size(px(size)).text_color(theme::ok()).with_animation(
+        id,
+        Animation::new(std::time::Duration::from_millis(1200)).repeat(),
+        |icon, delta| icon.transform(Transformation::rotate(percentage(delta))),
+    )
+}
+
 /// Row of a timeline: label and date, then a plain second line (with whom, where). A single click
 /// target; the links live in the event window and the context menu. Discreet dot: no source.
 fn event_row(
@@ -2338,10 +2348,10 @@ impl Workspace {
             .filter(|&n| n > 0 || (v == self.view && filtered))
         };
         // An agent at work: a dot on the Research page instead of its count.
-        let working = self.agent_working();
+        let busy = self.agent_working();
         let zone = |v: View, n: Option<usize>, cx: &mut Context<Self>| {
             let active = v == self.view;
-            let live = working && v == View::Research;
+            let live = busy && v == View::Research;
             h_flex()
                 .id(SharedString::from(format!("zone-{}", v.label())))
                 .px_2()
@@ -2358,7 +2368,7 @@ impl Workspace {
                     theme::muted()
                 }))
                 .child(div().flex_1().min_w_0().truncate().child(v.label()))
-                .when(live, |d| d.child(dot(theme::ok())))
+                .when(live, |d| d.child(working("zone-working", 12.)))
                 .when(!live, |d| {
                     d.children(n.map(|n| div().text_xs().text_color(theme::muted()).child(group_thousands(n))))
                 })
