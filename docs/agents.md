@@ -31,8 +31,11 @@ tool takes an optional `tree` (a name, file name or id, as `list_trees` gives th
 works on the tree of the window in front. A proposal goes to the To Review page of its own tree.
 All are read-only (`readOnlyHint`) except `propose_act`, `propose_change`, `propose_chapter` and
 `withdraw_proposal`, which write nothing either: they only add or take back a proposal to review;
-and `plan_research` and `log_search`, which write only the research log (see below), never the
-tree's data.
+and `note_research`, which writes only the research log (see below), never the tree's data.
+
+The file is the agents' memory: what was searched, the clues, where each agent stopped and what
+became of every proposal are kept in the `.ged`, so that any agent, in any session, carries on
+where another stopped (`resume_research`), with no memory of its own.
 
 | Tool | Returns |
 | --- | --- |
@@ -40,16 +43,13 @@ tree's data.
 | `file_context` | How the file is written: the description the user wrote (File Settings › General, `HEAD.NOTE`, word for word), language, place format, events, custom event types and occupations in use with their counts, media folders and naming, and the latest sources, people, families, media and repositories changed as raw GEDCOM (`examples`). Also served as the resource `gedroots://file/context` |
 | `search_people` | People matching a search, as in the app's search box |
 | `person_sheet` | Events with their position in the record, date, place, street address (`ADDR`), age, cause, cited sources (`PAGE`), media, associates and notes; parents (and how, when not by birth), unions, children, the person's notes and media; Sosa number |
-| `research_leads` | Records still to find for the people of a focus (search syntax, default `sosa:1-63`) or one person: births, marriages and deaths missing or without a source, parents of ancestors at the end of a line. Each lead has estimated years and why, places to search first, where to look, its state and the searches already noted |
-| `research_log` | Everything noted for a person and their unions: plan, searches, records found, ignored leads |
-| `plan_research` | Saves the agent's plan: the leads it will search, in order, each with a reason (state `planned`) |
-| `log_search` | Notes one search, whatever its result (`found`, `nothing`, `partial`): what was searched, years, place, viewer page; `finished` when nothing is left to search. `partial` is also how an agent keeps a record it cannot tie to the person (with what speaks for and against): a research lead stays in the Research page, never as a note in the tree |
+| `resume_research` | Where the research stands: the leads in progress anywhere in the tree (planned, or with a clue or a handoff) with their whole log, the other leads to search for a focus (search syntax, default `sosa:1-63`), each with estimated years and why, places to search first and where to look, the proposals waiting for review and what became of the others (saved, rejected with the user's reason, edited, withdrawn, replaced). With `person`: everything about that person |
+| `note_research` | Writes in a lead's log: `plan` (a lead about to be searched, with the reason; state `planned`), `search` (what was searched, whatever its result: `found`, `nothing`, `partial`; years, place, viewer page; `finished` when nothing is left), `clue` (a record that may be the one, with what speaks `for` and `against`: it stays in the Research page, never in the tree) or `handoff` (where the lead stands and the `next` search, when the agent stops) |
 | `quality_issues` | The Data Quality page's issues, filtered by category, kind or record and paged (`offset`, `limit`): message, records and places involved, whether the page fixes it in one click, whether it can be hidden, counts per category |
 | `search_sources` | Sources (register, repository, call number, number of acts) and repositories, to cite an existing one |
 | `locate_place` | For one place of an act: the tree's places of that name, the located places of the events of the act's people and their relatives (closest in time first), and the gazetteer's candidates (OpenStreetMap, through Photon, biased towards those places) in the file's place format, each with its distance to the closest of those events |
 | `match_people` | For the people named in an act (role, names, sex, age, act date), the people of the tree who could be them, with the reason and whether the match is likely |
 | `propose_act` | Adds an act to the To Review page: event, date, place, street address, source, reference, quality of the evidence (`QUAY`), transcription (plain text, only the act), people with their role, downloaded file, and the agent's remarks on the act (shown beside it, then kept as the note of its citation). Answers its id, what it will write and the temporary id of each new person; with `replaces`, corrects a waiting proposal |
-| `list_proposals` | Proposals waiting for review (id, `kind`, people with their ids, what each will write), and what became of the others: saved, rejected, edited in record entry, withdrawn, replaced |
 | `withdraw_proposal` | Takes back a waiting proposal |
 | `propose_change` | Adds a change for one Data Quality issue to the To Review page: the page's own fix (`fix`), edits among those the issue allows (`edit`), merging a possible duplicate (`merge`), or hiding a correct issue (`hide`), with the reason and the evidence. Without an issue, it proposes a correction read in a document (a name, a date, a sex, a citation). The answer lists the issues the change would create |
 | `read_book` | The tree's family books, or the chapters of one: each chapter is a generation, with its people (id, name, years, number, how much of a record the book gives them, facts known) and what the agent already wrote |
@@ -66,20 +66,19 @@ description is where the user writes their own conventions, in plain words, for 
 
 ## Prompts
 
-The server also serves three working methods as MCP prompts, so no plugin is needed: in Claude
+The server also serves its working methods as MCP prompts, so no plugin is needed: in Claude
 Code they appear as slash commands once the server is connected.
 
 | Prompt | Arguments | Does |
 | --- | --- | --- |
-| `research_session` | `focus`, `count` (both optional) | The research loop: reads the leads, saves a plan with `plan_research`, searches each lead in the browser, notes every search with `log_search`, proposes the acts found (`read_record`), then sums up what was found, what was searched in vain and what to try next |
-| `find_record` | `person`, `event` (both optional) | Picks a lead with `research_leads`, finds the right archive and register, searches it in the browser at a human pace, downloads the act and goes on with `read_record` |
+| `research` | `person`, `event`, `focus` (all optional) | The research loop: resumes with `resume_research`, plans a few leads, searches each in the browser at a human pace, notes every search and clue with `note_research`, proposes the acts found (`read_record`), notes a handoff on each lead left open, then sums up what was found, what was searched in vain and what to try next |
 | `read_record` | `file`, `person` (both optional) | Transcribes the act, checks it against the person's sheet, identifies each person with `match_people`, picks or describes the source with `search_sources`, then calls `propose_act` and fixes it if refused |
 | `review_quality` | `category`, `person` (both optional) | Goes through the Data Quality issues with `quality_issues`, checks each one against the sheets and sources, then proposes a fix, an edit or hiding it with `propose_change` |
 | `write_book` | `book`, `chapter` (both optional) | Reads the book with `read_book`, then chapter by chapter reads the people's sheets, searches the historical context in reliable sources, and proposes the narratives, context and hypotheses with `propose_chapter` |
 
 ```text
-/mcp__gedroots__research_session sosa:1-15
-/mcp__gedroots__find_record "Jean MARCHAND" birth
+/mcp__gedroots__research "Jean MARCHAND" birth
+/mcp__gedroots__research --focus sosa:1-15
 /mcp__gedroots__read_record ~/Downloads/act.pdf
 ```
 
@@ -111,15 +110,16 @@ its record is cited. A baptism counts as a birth, a burial as a death.
   register, source, archive, call number, number of events, years), close in time, those of the
   same kind of event first.
 
-What the agent plans and searches is kept in the file, under the person (or the family for a
-marriage), as a `_GR_TASK` structure ([extensions](extensions.md#_gr_task); `crates/gedcom/src/research_log.rs`).
+What the agent plans, searches, suspects (clues) and leaves for the next one (handoffs) is kept in
+the file, under the person (or the family for a marriage), with the agent's name, as a
+`_GR_TASK` structure ([extensions](extensions.md#_gr_task); `crates/gedcom/src/research_log.rs`).
 It is written at once, not reviewed: it is the trace of the research, not data of the tree. Each
 change is one undo step, and the top bar says what the agent noted. A found record is still
 proposed with `propose_act` and reviewed.
 
 The same leads and log are on the app's Research page (sidebar): the list of the focus by
 state (to find, no result, ignored), and for each lead its period and why, what is known, where to
-look and the log, the agent's searches marked “AI agent”. Copy Request for the Agent (the lead's context
+look and the log, the agent's entries marked with its name. Copy Request for the Agent (the lead's context
 menu) puts a request for one lead on the clipboard, to paste in the agent's conversation.
 
 ## Proposals and review
@@ -167,8 +167,7 @@ under such a person. Every tool answer carries `news` when the user decided abou
 that session's last call (saved, with the ids the new people now have; rejected; edited in record
 entry): agents are not pushed anything between their turns, so the news rides on their next call. A correction (`replaces: "P3"`) takes the place of the waiting proposal, and
 the people of the replaced proposal keep their temporary ids when linked again. The research
-tools (`person_sheet`, `research_leads`, `research_log`, `plan_research`, `log_search`) also
-take a temporary id once its proposal is saved; while it waits, they answer that the person is
+tools (`person_sheet`, `resume_research`, `note_research`) also take a temporary id once its proposal is saved; while it waits, they answer that the person is
 not in the tree yet and which proposal creates them. `search_people` falls back to names that
 sound alike (Carl finds Karl) when no name matches as written.
 
@@ -189,7 +188,11 @@ answer of `propose_act` lists the same lines in `will_write`), the attachment (r
 the exact GEDCOM lines that will change, computed on a copy of the file. **Save to Tree** (⌘↩)
 writes everything at once, as a single undo step, and stores the image next to the `.ged`,
 named by File Settings › Media; **Reject** (⌘⌫) drops it; **Edit in Record Entry…** opens it in
-the act editor. Proposals live in memory: they are lost when the app closes.
+the act editor. Every proposal (act, change, chapter) is also kept in the file as a `_GR_PROP`
+record ([extensions](extensions.md#_gr_prop); `crates/gedcom/src/agent_proposals.rs`): while it
+waits, with the agent's request, queued again under the same id when the file opens (one that no
+longer fits the tree is withdrawn, with the reason); once decided, with its outcome. It is not part
+of the tree's history: Undo and Redo leave it as it is.
 
 ### Locating new places
 

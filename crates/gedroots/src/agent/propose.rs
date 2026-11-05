@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct SourceParams {
     /// Existing source id (from `person_sheet` or `search_sources`). Leave empty to create a new source.
     pub id: Option<String>,
@@ -31,7 +31,7 @@ pub struct SourceParams {
 }
 
 /// A repository to create: the archive, library or office that keeps the register.
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct RepositoryParams {
     /// Its usual full name ("Archives départementales de la Manche").
     pub name: String,
@@ -42,7 +42,7 @@ pub struct RepositoryParams {
 }
 
 /// Coordinates for a new place of the proposal, chosen among `locate_place`'s candidates.
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct LocationParams {
     /// The place, written exactly as in `place` or a fact's `place` of this proposal.
     pub place: String,
@@ -54,7 +54,7 @@ pub struct LocationParams {
 
 /// Who a person of the act is in the tree, decided before proposing (`match_people` lists the
 /// candidates).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum Identity {
     /// A person already in the tree: give their `id`.
@@ -67,7 +67,7 @@ pub enum Identity {
 }
 
 /// Another fact the act gives about a person, besides its event.
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct FactParams {
     /// GEDCOM tag: BIRT, BAPM, DEAT, BURI, OCCU (occupation), RESI (residence), EDUC, RELI, EVEN…
     pub event: String,
@@ -91,7 +91,7 @@ pub struct FactParams {
     pub quality: Option<u8>,
 }
 
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct PersonParams {
     /// principal (the child, the deceased, each spouse), father, mother, spouse, witness,
     /// godfather, godmother, declarant, officiator, clergy, neighbor, friend, other.
@@ -129,7 +129,7 @@ pub struct PersonParams {
     pub facts: Vec<FactParams>,
 }
 
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct ProposeParams {
     /// Tree to work on, as `list_trees` names it, when several are open (default: the one in
     /// front in GEDRoots).
@@ -206,6 +206,13 @@ pub struct Pending {
     pub replaces: Option<String>,
     /// The agent's remarks, shown beside the act (also in `proposal.act.note`, written with it).
     pub remarks: String,
+    /// Its id when it is queued again as the file opens (`P3`); a new one is given otherwise.
+    pub id: Option<String>,
+    /// The agent that sent it.
+    pub agent: String,
+    /// The `propose_act` parameters as the agent sent them (JSON), kept in the file while the
+    /// proposal waits, to queue it again when the file opens.
+    pub request: String,
 }
 
 /// A proposal queued for review.
@@ -218,21 +225,8 @@ pub struct Queued {
     pub temps: Vec<Option<String>>,
 }
 
-/// What became of a proposal the agent sent.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, JsonSchema)]
-#[serde(rename_all = "lowercase")]
-pub enum Outcome {
-    /// Saved to the tree by the user.
-    Saved,
-    /// Rejected by the user: nothing was written.
-    Rejected,
-    /// Opened in record entry by the user, to correct it before saving.
-    Edited,
-    /// Withdrawn by the agent.
-    Withdrawn,
-    /// Replaced by a corrected proposal.
-    Replaced,
-}
+/// What became of a proposal the agent sent, as kept in the file.
+pub use gedcom::agent_proposals::Outcome;
 
 /// What became of a proposal.
 #[derive(Debug, Clone, Serialize, JsonSchema)]
@@ -266,7 +260,7 @@ pub struct Waiting {
 #[derive(Debug, Clone, Default)]
 pub struct Queue {
     pub waiting: Vec<Waiting>,
-    /// Proposals decided since launch, oldest first.
+    /// Proposals decided since launch, oldest first (the file keeps all of them, `_GR_PROP`).
     pub decided: Vec<Decision>,
     /// Temporary id → id of the person saved in the tree.
     pub saved: HashMap<String, String>,
@@ -500,7 +494,7 @@ fn base_act(event: &str, family_event: bool, date: &Option<String>) -> Result<Ac
     Ok(act)
 }
 
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct MatchPersonParams {
     /// Role in the act, as in `propose_act`.
     pub role: String,
@@ -518,7 +512,7 @@ pub struct MatchPersonParams {
     pub age: Option<String>,
 }
 
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct MatchParams {
     /// Tree to work on, as `list_trees` names it, when several are open (default: the one in
     /// front in GEDRoots).
@@ -652,6 +646,99 @@ pub fn to_proposal(p: &ProposeParams) -> Result<Proposal, String> {
 }
 
 /// `relation/415228` (a candidate's `osm`) as an `EXID` value and `TYPE`.
+/// An agent's request as the file keeps it while it waits: without `tree`, which only concerns
+/// the call, nor the fields left out.
+pub fn stored_request(p: &impl Serialize) -> serde_json::Value {
+    fn prune(v: &mut serde_json::Value) {
+        match v {
+            serde_json::Value::Object(o) => {
+                o.values_mut().for_each(prune);
+                o.retain(|_, v| !v.is_null());
+            }
+            serde_json::Value::Array(a) => a.iter_mut().for_each(prune),
+            _ => {}
+        }
+    }
+    let mut v = serde_json::to_value(p).unwrap_or_default();
+    if let Some(o) = v.as_object_mut() {
+        o.remove("tree");
+    }
+    prune(&mut v);
+    v
+}
+
+/// A `propose_act` request checked against the tree and its file prepared, ready to queue.
+pub struct Built {
+    pub pending: Pending,
+    /// What saving it will write, one line per change.
+    pub will_write: Vec<String>,
+    /// Role and name of each person, in the act's order.
+    pub people: Vec<(String, String)>,
+}
+
+/// Checks a `propose_act` request against the tree with the other waiting proposals, and prepares
+/// its file (blocking: a PDF page is rendered). Used by the tool, and when the file opens to queue
+/// again the proposals still waiting.
+pub fn build(p: &ProposeParams, ged: &Gedcom, queue: &Queue, agent: &str) -> Result<Built, String> {
+    let replaces = p.replaces.as_deref().map(str::trim).filter(|r| !r.is_empty()).map(str::to_string);
+    if let Some(r) = &replaces
+        && !queue.waiting.iter().any(|w| &w.id == r)
+    {
+        return Err(match ged.agent_proposal(r) {
+            Some(_) => format!("proposal {r} is no longer waiting for review: call resume_research"),
+            None => format!("no proposal {r}: call resume_research"),
+        });
+    }
+    // Checked against the tree with the other waiting proposals saved.
+    let h = Hypothesis::new(ged, queue, replaces.as_deref());
+    let mut proposal = to_proposal(p)?;
+    let temps = h.resolve(&mut proposal, ged)?;
+    proposal.complete(&h.ged);
+    proposal.check(&h.ged)?;
+    check_identities(&proposal, &ruled_out(p), &h)?;
+    // As the review page will show it: against the tree, a person another proposal creates is
+    // created by this one too.
+    h.unresolve(&mut proposal, &temps);
+    let will_write = effects(&proposal, ged);
+    let original = p.file.as_ref().map(|f| PathBuf::from(f.trim())).filter(|f| !f.as_os_str().is_empty());
+    // An act found online is kept twice: its image (downloaded file) and its web page.
+    if original.is_none() && p.url.as_deref().is_some_and(|u| !u.trim().is_empty()) {
+        return Err("give the downloaded image or PDF of the act in `file` too: GEDRoots keeps both \
+                    the act's image and its web page (`url`)"
+            .to_string());
+    }
+    let (image, preview) = match &original {
+        Some(path) => {
+            let prepared = prepare_file(path, p.pdf_page, prefers_images(ged), &cache_dir())?;
+            (Some(prepared.file), Some(prepared.preview))
+        }
+        None => (None, None),
+    };
+    attach(&mut proposal, image.as_deref());
+    let people = (0..proposal.act.participants.len())
+        .map(|i| (proposal.act.role_label(i).into_owned(), proposal.act.participants[i].display_name()))
+        .collect();
+    // Kept as sent, without what only concerns this call.
+    let mut request = stored_request(p);
+    if let Some(o) = request.as_object_mut() {
+        o.remove("replaces");
+    }
+    let pending = Pending {
+        proposal,
+        original,
+        pdf_page: p.pdf_page,
+        image,
+        preview,
+        temps,
+        replaces,
+        remarks: p.remarks.as_deref().unwrap_or("").trim().to_string(),
+        id: None,
+        agent: agent.to_string(),
+        request: request.to_string(),
+    };
+    Ok(Built { pending, will_write, people })
+}
+
 pub fn osm_exid(osm: &str) -> Result<(String, String), String> {
     let (kind, id) = osm.trim().trim_matches('/').split_once('/').unwrap_or(("", ""));
     if !matches!(kind, "node" | "way" | "relation") || id.is_empty() || !id.chars().all(|c| c.is_ascii_digit()) {

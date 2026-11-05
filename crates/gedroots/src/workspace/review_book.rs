@@ -11,6 +11,8 @@ use std::collections::BTreeSet;
 
 /// A chapter waiting for review.
 pub(super) struct ChapterItem {
+    /// Given to the agent (`P3`), kept in the file with what became of it.
+    pub(super) id: String,
     req: ChapterRequest,
     /// Blocks the user unticked, numbered in `Writing::blocks` order.
     excluded: BTreeSet<usize>,
@@ -19,21 +21,50 @@ pub(super) struct ChapterItem {
 impl Workspace {
     /// Chapter received from the agent (already checked against the book): queued, in place of a
     /// waiting proposal for the same chapter. Returns the number of proposals waiting.
-    pub(crate) fn add_chapter(&mut self, req: ChapterRequest, cx: &mut Context<Self>) -> Result<usize, String> {
+    pub(crate) fn add_chapter(
+        &mut self,
+        mut req: ChapterRequest,
+        cx: &mut Context<Self>,
+    ) -> Result<(String, usize), String> {
         let Some(doc) = &self.doc else { return Err("no file is open in GEDRoots".into()) };
         if gedroots_book::spec::book(&doc.ged, &req.book).is_none() {
             return Err(format!("no book `{}`: call read_book", req.book));
         }
-        let item = ChapterItem { req, excluded: BTreeSet::new() };
+        let requeued = req.id.is_some();
+        let id = match req.id.take() {
+            Some(id) => id,
+            None => self.next_proposal_id(),
+        };
+        let item = ChapterItem { id: id.clone(), req, excluded: BTreeSet::new() };
+        let (chapter, book) = self.chapter_title(&item, &self.doc.as_ref().unwrap().ged);
+        let data = serde_json::json!({
+            "tool": "propose_chapter",
+            "params": serde_json::from_str::<serde_json::Value>(&item.req.request).unwrap_or_default(),
+        });
+        let kept = self.doc.as_ref().and_then(|d| d.ged.agent_proposal(&id)).unwrap_or_default();
+        self.keep_proposal(gedcom::agent_proposals::StoredProposal {
+            id: id.clone(),
+            kind: gedcom::agent_proposals::ProposalKind::Chapter,
+            title: format!("{chapter} · {book}"),
+            about: item.req.writing.people.iter().map(|(x, _)| x.clone()).collect(),
+            agent: item.req.agent.clone(),
+            data: data.to_string(),
+            ..kept
+        });
         let same = |c: &ChapterItem| c.req.book == item.req.book && c.req.generation == item.req.generation;
-        match self.review.chapters.iter_mut().find(|c| same(c)) {
-            Some(slot) => *slot = item,
+        match self.review.chapters.iter().position(same) {
+            Some(i) => {
+                let old = std::mem::replace(&mut self.review.chapters[i], item);
+                self.decide_proposal(&old.id, gedcom::agent_proposals::Outcome::Replaced, &id);
+            }
             None => self.review.chapters.push(item),
         }
         let n = self.review_count();
-        self.set_status(crate::tn!("review.chapter_received", n), false);
+        if !requeued {
+            self.set_status(crate::tn!("review.chapter_received", n), false);
+        }
         cx.notify();
-        Ok(n)
+        Ok((id, n))
     }
 
     /// The displayed chapter, when the selection is past the acts and the changes.
@@ -42,8 +73,9 @@ impl Workspace {
         (i < self.review.chapters.len()).then_some(i)
     }
 
-    fn take_chapter(&mut self, i: usize) -> ChapterItem {
+    fn take_chapter(&mut self, i: usize, outcome: gedcom::agent_proposals::Outcome) -> ChapterItem {
         let item = self.review.chapters.remove(i);
+        self.decide_proposal(&item.id, outcome, "");
         let total = self.review.total();
         self.review.sel = self.review.sel.min(total.saturating_sub(1));
         if total == 0 {
@@ -53,7 +85,7 @@ impl Workspace {
     }
 
     pub(super) fn reject_chapter(&mut self, i: usize, cx: &mut Context<Self>) {
-        self.take_chapter(i);
+        self.take_chapter(i, gedcom::agent_proposals::Outcome::Rejected);
         self.set_status(t!("review.rejected"), false);
         cx.notify();
     }
@@ -83,7 +115,7 @@ impl Workspace {
         let kept = item.req.writing.without(&item.excluded);
         let old = spec.chapters.get(&item.req.generation).cloned().unwrap_or_default();
         spec.chapters.insert(item.req.generation, kept.over(&old));
-        self.take_chapter(i);
+        self.take_chapter(i, gedcom::agent_proposals::Outcome::Saved);
         let title = format!("{chapter} · {book}");
         let msg = t!("review.chapter_saved", title = title).into_owned();
         self.before_agent_change();

@@ -1,7 +1,9 @@
 //! “To Review” page: the records proposed by an AI agent, compared with the tree before being
 //! saved.
 //!
-//! The agent never writes: its proposals wait here, in memory, for the session. For each one, the
+//! The agent never writes: its proposals wait here. Each one is also kept in the file (`_GR_PROP`,
+//! with the agent's request while it waits, then what became of it), so that it is queued again
+//! when the file opens and every agent knows what was saved or rejected. For each one, the
 //! page shows the record’s image, an “In the tree” / “Proposed” comparison (each person can be
 //! unchecked), the attachment (repository, source, file, event) and, on request, the exact GEDCOM
 //! lines that will change. “Save to Tree” writes everything at once (a single undo point) and
@@ -12,6 +14,7 @@ use super::*;
 use crate::agent::propose::{self, Outcome, Pending, Queued};
 use crate::t;
 use gedcom::Conflict;
+use gedcom::agent_proposals::{ProposalKind, StoredProposal};
 use gedcom::proposal::{Change, Field, Proposal, SourceChoice};
 use gpui_kit::component::checkbox::Checkbox;
 use gpui_kit::component::menu::{DropdownMenu, PopupMenuItem};
@@ -175,7 +178,20 @@ fn outcome_text(o: Outcome) -> &'static str {
         Outcome::Edited => "the user opened it in record entry",
         Outcome::Withdrawn => "it was withdrawn",
         Outcome::Replaced => "it was replaced",
+        Outcome::Waiting => "it is waiting",
     }
+}
+
+/// The people of the tree an act names (linked, not temporary).
+fn linked(p: &Proposal) -> Vec<String> {
+    p.act
+        .participants
+        .iter()
+        .filter_map(|x| match &x.choice {
+            gedcom::PersonChoice::Link(id) if !propose::is_temp(id) => Some(id.clone()),
+            _ => None,
+        })
+        .collect()
 }
 
 fn change_tag(c: Change) -> (String, Hsla) {
@@ -242,6 +258,107 @@ fn conflict_menu(
 }
 
 impl Workspace {
+    /// Id for a new proposal (`P3`): one more than any given in this window or kept in the file.
+    pub(super) fn next_proposal_id(&mut self) -> String {
+        let kept = self.doc.as_ref().map(|d| d.ged.next_proposal_number()).unwrap_or(1) as usize;
+        self.review.last_id = self.review.last_id.max(kept.saturating_sub(1)) + 1;
+        format!("P{}", self.review.last_id)
+    }
+
+    /// Keeps a proposal in the file. It is not a change of the tree's data: no undo point, but
+    /// the file has changes to save.
+    pub(super) fn keep_proposal(&mut self, p: StoredProposal) {
+        if let Some(doc) = &mut self.doc {
+            doc.ged.store_agent_proposal(&p);
+            doc.dirty = true;
+        }
+    }
+
+    /// Records in the file what became of a proposal.
+    pub(super) fn decide_proposal(&mut self, id: &str, outcome: Outcome, note: &str) {
+        if let Some(doc) = &mut self.doc
+            && doc.ged.decide_agent_proposal(id, outcome, note)
+        {
+            doc.dirty = true;
+        }
+    }
+
+    /// Queues again the proposals the file keeps as waiting, oldest first, as their agent sent
+    /// them, under the same ids. One that no longer fits the tree is withdrawn, with the reason.
+    pub(super) fn requeue_proposals(&mut self, cx: &mut Context<Self>) {
+        let Some(doc) = &self.doc else { return };
+        let waiting: Vec<StoredProposal> =
+            doc.ged.agent_proposals().into_iter().filter(|p| p.outcome == Outcome::Waiting).collect();
+        if waiting.is_empty() {
+            return;
+        }
+        cx.spawn(async move |this, cx| {
+            for p in waiting {
+                let data: serde_json::Value = serde_json::from_str(&p.data).unwrap_or_default();
+                let params = data["params"].clone();
+                let result = match data["tool"].as_str().unwrap_or("") {
+                    "propose_act" => {
+                        let Ok(state) =
+                            this.update(cx, |ws, _| ws.doc.as_ref().map(|d| (d.ged.clone(), ws.review_queue())))
+                        else {
+                            return;
+                        };
+                        let Some((ged, queue)) = state else { return };
+                        let agent = p.agent.clone();
+                        let built = cx
+                            .background_spawn(async move {
+                                let params: propose::ProposeParams =
+                                    serde_json::from_value(params).map_err(|e| e.to_string())?;
+                                propose::build(&params, &ged, &queue, &agent)
+                            })
+                            .await;
+                        let temps: Vec<Option<String>> =
+                            serde_json::from_value(data["temps"].clone()).unwrap_or_default();
+                        this.update(cx, |ws, cx| {
+                            let mut pending = built?.pending;
+                            pending.id = Some(p.id.clone());
+                            pending.temps.resize(temps.len().max(pending.temps.len()), None);
+                            for (t, kept) in pending.temps.iter_mut().zip(&temps) {
+                                if t.is_none() {
+                                    *t = kept.clone();
+                                }
+                            }
+                            ws.queue_proposal(pending, false, cx).map(|_| ())
+                        })
+                    }
+                    "propose_change" => this.update(cx, |ws, cx| {
+                        let params: crate::agent::change::ChangeParams =
+                            serde_json::from_value(params).map_err(|e| e.to_string())?;
+                        let mut req = crate::agent::change::to_request(&params)?;
+                        (req.id, req.agent) = (Some(p.id.clone()), p.agent.clone());
+                        ws.add_change(req, cx).map(|_| ())
+                    }),
+                    "propose_chapter" => this.update(cx, |ws, cx| {
+                        let params: crate::agent::book::ProposeChapterParams =
+                            serde_json::from_value(params).map_err(|e| e.to_string())?;
+                        let ged = ws.doc.as_ref().map(|d| d.ged.clone()).ok_or("no file")?;
+                        let mut req = crate::agent::book::to_request(&params, &ged)?;
+                        (req.id, req.agent) = (Some(p.id.clone()), p.agent.clone());
+                        ws.add_chapter(req, cx).map(|_| ())
+                    }),
+                    _ => Ok(Err("its request was not kept".to_string())),
+                };
+                match result {
+                    Ok(Ok(())) => {}
+                    Ok(Err(e)) => {
+                        let note = format!("GEDRoots could not queue it again: {e}");
+                        let _ = this.update(cx, |ws, cx| {
+                            ws.decide_proposal(&p.id, Outcome::Withdrawn, &note);
+                            cx.notify();
+                        });
+                    }
+                    Err(_) => return,
+                }
+            }
+        })
+        .detach();
+    }
+
     /// Proposal received from the agent: checked against the displayed file, then queued.
     pub(crate) fn add_proposal(&mut self, pending: Pending, cx: &mut Context<Self>) -> Result<Queued, String> {
         self.queue_proposal(pending, false, cx)
@@ -278,17 +395,42 @@ impl Workspace {
                     self.review.last_temp += 1;
                     *t = Some(format!("{}{}", propose::TEMP, self.review.last_temp));
                 }
-                gedcom::PersonChoice::Create => {}
+                // Queued again as the file opens: later ones follow.
+                gedcom::PersonChoice::Create => {
+                    let n = t.as_deref().and_then(|t| t.strip_prefix(propose::TEMP)?.parse().ok()).unwrap_or(0);
+                    self.review.last_temp = self.review.last_temp.max(n);
+                }
                 _ => *t = None,
             }
         }
-        self.review.last_id += 1;
-        let id = format!("P{}", self.review.last_id);
+        let requeued = pending.id.is_some();
+        let id = match pending.id.clone() {
+            Some(id) => id,
+            None => self.next_proposal_id(),
+        };
         let temps = pending.temps.clone();
+        if !demo {
+            let data = serde_json::json!({
+                "tool": "propose_act",
+                "params": serde_json::from_str::<serde_json::Value>(&pending.request).unwrap_or_default(),
+                "temps": temps,
+            });
+            let stored = StoredProposal {
+                id: id.clone(),
+                kind: ProposalKind::Act,
+                title: self.doc.as_ref().map(|d| title(&d.ged, &pending.proposal)).unwrap_or_default(),
+                about: linked(&pending.proposal),
+                agent: pending.agent.clone(),
+                data: data.to_string(),
+                ..self.doc.as_ref().and_then(|d| d.ged.agent_proposal(&id)).unwrap_or_default()
+            };
+            self.keep_proposal(stored);
+        }
         let item = Item { id: id.clone(), pending, excluded: BTreeSet::new(), conflicts: Default::default(), demo };
         match replaced {
             Some(i) => {
                 let old = std::mem::replace(&mut self.review.items[i], item);
+                self.decide_proposal(&old.id, Outcome::Replaced, &id);
                 self.review.decided.push(decision(old.id, Outcome::Replaced));
                 self.set_status(t!("review.replaced"), false);
             }
@@ -297,6 +439,8 @@ impl Workspace {
                 let n = self.review.items.len();
                 match demo {
                     true => self.set_status(t!("review.demo"), false),
+                    // Queued again as the file opens: nothing new to announce.
+                    false if requeued => {}
                     false => self.set_status(crate::tn!("review.received", n), false),
                 }
             }
@@ -367,6 +511,7 @@ impl Workspace {
         }
         let item = self.review.items.remove(self.review.sel);
         if !item.demo {
+            self.decide_proposal(&item.id, outcome, "");
             self.review.decided.push(decision(item.id.clone(), outcome));
         }
         let total = self.review.total();
@@ -419,6 +564,7 @@ impl Workspace {
         let Some(item) = self.review.items.get(self.review.sel) else { return };
         let proposal = item.proposal();
         let temps = item.kept_temps();
+        let item_id = item.id.clone();
         let base = self.ged_dir();
         // The extracted image lives in the app’s cache: it must join the .ged folder.
         if base.is_none() && item.pending.image.is_some() {
@@ -448,9 +594,19 @@ impl Workspace {
                 for (t, x) in temps.iter().zip(&res.persons) {
                     if let (Some(t), Some(x)) = (t, x) {
                         self.review.saved.insert(t.clone(), x.clone());
+                        doc.ged.relink_agent_proposals(t, x);
                         let name = doc.ged.individual(x).map(|i| i.display_name()).unwrap_or_default();
                         saved.push(propose::SavedPerson { temp: t.clone(), id: x.clone(), name });
                     }
+                }
+                // The proposal is now about the people it created too.
+                if let Some(mut kept) = doc.ged.agent_proposal(&item_id) {
+                    for x in res.persons.iter().flatten() {
+                        if !kept.about.contains(x) {
+                            kept.about.push(x.clone());
+                        }
+                    }
+                    doc.ged.store_agent_proposal(&kept);
                 }
                 for it in &mut self.review.items {
                     propose::link_known(&mut it.pending.proposal, &it.pending.temps, &self.review.saved);

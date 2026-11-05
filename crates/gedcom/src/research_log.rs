@@ -412,6 +412,10 @@ mod tests {
         assert!(g.log_research("I1", Goal::Death, &clue, false));
         // A clue plans the lead; a handoff leaves its state.
         assert_eq!(g.research_task("I1", Goal::Death).unwrap().state, TaskState::Planned);
+        // The lead is now in progress, wherever it is in the tree.
+        let open = g.leads_in_progress(2026);
+        assert_eq!(open.iter().map(|l| (l.person.id.as_str(), l.goal)).collect::<Vec<_>>(), [("I1", Goal::Death)]);
+        assert_eq!(open[0].log.len(), 1);
         let handoff = NewEntry {
             kind: LogKind::Handoff,
             text: "One clue in Carentan".into(),
@@ -423,6 +427,7 @@ mod tests {
         assert!(g.log_research("I1", Goal::Death, &handoff, false));
         let t = g.research_task("I1", Goal::Death).unwrap();
         assert_eq!(t.state, TaskState::Ignored);
+        assert!(g.leads_in_progress(2026).is_empty());
         let text = g.to_gedcom_string();
         assert!(text.contains("3 _GR_KIND CLUE\n3 TEXT Burial of Jean MARCHAND"), "{text}");
         assert!(!text.contains("_GR_RES NONE"), "a clue has no search result: {text}");

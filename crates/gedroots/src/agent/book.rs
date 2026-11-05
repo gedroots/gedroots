@@ -10,7 +10,7 @@ use gedroots_book::{Block, BookSpec, Cite, Line, Writing};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct ReadBookParams {
     /// Tree to work on, as `list_trees` names it, when several are open (default: the one in
     /// front in GEDRoots).
@@ -103,7 +103,7 @@ pub struct PersonWriting {
     pub blocks: Vec<BlockParams>,
 }
 
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct ProposeChapterParams {
     /// Tree to work on, as `list_trees` names it, when several are open (default: the one in
     /// front in GEDRoots).
@@ -130,6 +130,12 @@ pub struct ChapterRequest {
     pub generation: u32,
     pub writing: Writing,
     pub remarks: String,
+    /// Its id when it is queued again as the file opens (`P3`); a new one is given otherwise.
+    pub id: Option<String>,
+    /// The agent that sent it.
+    pub agent: String,
+    /// The parameters as the agent sent them (JSON), kept in the file while the proposal waits.
+    pub request: String,
 }
 
 fn clean(id: &str) -> String {
@@ -233,6 +239,9 @@ pub fn to_request(p: &ProposeChapterParams, g: &Gedcom) -> Result<ChapterRequest
         generation: p.generation,
         writing,
         remarks: p.remarks.clone().unwrap_or_default().trim().to_string(),
+        id: None,
+        agent: String::new(),
+        request: super::propose::stored_request(p).to_string(),
     })
 }
 

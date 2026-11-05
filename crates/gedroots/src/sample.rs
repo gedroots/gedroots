@@ -139,6 +139,9 @@ pub fn demo_proposal(ged_path: &Path) -> Result<Pending, String> {
         temps: Vec::new(),
         replaces: None,
         remarks: String::new(),
+        id: None,
+        agent: String::new(),
+        request: String::new(),
     })
 }
 

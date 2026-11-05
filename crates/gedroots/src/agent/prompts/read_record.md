@@ -36,9 +36,8 @@ How to work:
    off), propose it anyway with a lower `quality` and say what is uncertain in `remarks`. If you
    cannot tell whether it is about this person at all (an age that contradicts the tree, two
    people of the same name in the parish), do not propose it and never write it as a note in the
-   tree: it is a research lead. Note it with `log_search` as `partial` on the person's lead (the
-   event it would be, the viewer page, and in `note` what speaks for and against), and tell the
-   user. It waits in GEDRoots' Research page until another record proves or rules it out.
+   tree: it is a clue. Note it with `note_research` `clue` on the person's lead (the event it
+   would be, the viewer page, and what speaks `for` and `against`), and tell the user. It waits in GEDRoots' Research page until another record proves or rules it out.
 4. Call `file_context` if you have not yet: read the user's description of the file and the
    latest sources and people. Then call `search_sources` with the register or the archive's name.
    Reuse the repository, and write the source the way this file does: reuse a register's source

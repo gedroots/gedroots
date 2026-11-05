@@ -227,7 +227,7 @@ impl Edit {
     }
 
     /// The record the edit changes, when it names one.
-    fn record(&self) -> Option<&str> {
+    pub fn record(&self) -> Option<&str> {
         match self {
             Edit::SetEvent { record, .. }
             | Edit::AddEvent { record, .. }

@@ -337,7 +337,7 @@ impl Workspace {
                     h_flex()
                         .gap_2()
                         .flex_wrap()
-                        .child(chip("/mcp__gedroots__find_record"))
+                        .child(chip("/mcp__gedroots__research"))
                         .child(chip("/mcp__gedroots__read_record")),
                 ),
             );

@@ -37,19 +37,22 @@ pub fn url() -> String {
     format!("http://127.0.0.1:{PORT}/mcp")
 }
 
+/// A change queued: its id, the proposals waiting, the issues it would create.
+pub type ChangeQueued = (String, usize, Vec<String>);
+
 /// What the app asks of the displayed document, from the server's thread.
 pub enum Request {
     Snapshot(tokio::sync::oneshot::Sender<Option<Snapshot>>),
     /// Copy of the document with its Data Quality issues, as the Quality page computes them.
     Quality(tokio::sync::oneshot::Sender<Option<(Snapshot, Vec<gedcom::analysis::check::Issue>)>>),
-    /// Change for a Data Quality issue: added to “To Review”, with the issues it would create, or
-    /// refused.
-    ProposeChange(Box<change::ChangeRequest>, tokio::sync::oneshot::Sender<Result<(usize, Vec<String>), String>>),
+    /// Change for a Data Quality issue: added to “To Review”, with its id, the number of proposals
+    /// waiting and the issues it would create, or refused.
+    ProposeChange(Box<change::ChangeRequest>, tokio::sync::oneshot::Sender<Result<ChangeQueued, String>>),
     /// Record proposal: added to the window's “To Review” page, or refused.
     Propose(Box<propose::Pending>, tokio::sync::oneshot::Sender<Result<propose::Queued, String>>),
-    /// What the agent wrote for a chapter of a book: added to “To Review”, with the number of
-    /// proposals waiting.
-    ProposeChapter(Box<book::ChapterRequest>, tokio::sync::oneshot::Sender<Result<usize, String>>),
+    /// What the agent wrote for a chapter of a book: added to “To Review”, with its id and the
+    /// number of proposals waiting.
+    ProposeChapter(Box<book::ChapterRequest>, tokio::sync::oneshot::Sender<Result<(String, usize), String>>),
     /// The agent withdraws a waiting proposal: the number still waiting, or why it cannot.
     Withdraw(String, tokio::sync::oneshot::Sender<Result<usize, String>>),
     /// Change to the research log (plan, searches), never to the tree's data: applied at once,

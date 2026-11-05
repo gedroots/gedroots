@@ -209,22 +209,61 @@ impl Gedcom {
             + 1
     }
 
-    /// Keeps a proposal, replacing the one with the same id; its date is now when it has none.
-    pub fn store_agent_proposal(&mut self, p: &StoredProposal) {
+    fn declare_proposal_tags(&mut self) {
         for tag in [PROP_TAG, ABOUT_TAG, DATA_TAG] {
             self.declare_extension(tag, URI);
         }
         for tag in [KIND_TAG, RES_TAG, AGENT_TAG] {
             self.declare_extension(tag, TASK_URI);
         }
+    }
+
+    /// Keeps a proposal, replacing the one with the same id; its date is now when it has none.
+    pub fn store_agent_proposal(&mut self, p: &StoredProposal) {
+        self.declare_proposal_tags();
         let mut p = p.clone();
         if p.date.is_empty() {
             (p.date, p.time) = crate::node::now_gedcom();
         }
         let node = p.write();
+        // Unchanged records stay shared, so that the tree still counts as settled.
+        if self.get(&xref(&p.id)).is_some_and(|n| *n == node) {
+            return;
+        }
         match self.get_mut(&xref(&p.id)) {
             Some(existing) => *existing = node,
-            None => self.records.push(Arc::new(node)),
+            None => {
+                self.records.push(Arc::new(node));
+                self.reindex();
+            }
+        }
+    }
+
+    /// Gives this tree the proposals of `from`, as they are there: they are not part of what Undo,
+    /// Redo or a reload bring back, which only concern the tree's data.
+    pub fn carry_agent_proposals(&mut self, from: &Gedcom) {
+        let theirs: Vec<Arc<Node>> = from.records.iter().filter(|r| r.tag == PROP_TAG).cloned().collect();
+        let ours = self.records.iter().filter(|r| r.tag == PROP_TAG);
+        if ours.clone().count() == theirs.len() && ours.zip(&theirs).all(|(a, b)| Arc::ptr_eq(a, b)) {
+            return;
+        }
+        self.records.retain(|r| r.tag != PROP_TAG);
+        self.records.extend(theirs);
+        self.reindex();
+        if self.records.iter().any(|r| r.tag == PROP_TAG) {
+            self.declare_proposal_tags();
+        }
+    }
+
+    /// Replaces a temporary person id in the requests of the waiting proposals, once the person is
+    /// saved to the tree: queued again when the file opens, they link the saved person.
+    pub fn relink_agent_proposals(&mut self, temp: &str, xref: &str) {
+        let quoted = format!("\"{temp}\"");
+        for p in self.agent_proposals() {
+            if p.outcome == Outcome::Waiting && p.data.contains(&quoted) {
+                let data = p.data.replace(&quoted, &format!("\"{}\"", xref.trim_matches('@')));
+                self.store_agent_proposal(&StoredProposal { data, ..p });
+            }
         }
     }
 
@@ -291,5 +330,28 @@ mod tests {
         );
         assert_eq!(g.agent_proposals_about("@I1@").len(), 1);
         assert!(!g.decide_agent_proposal("P9", Outcome::Saved, ""));
+    }
+
+    #[test]
+    fn kept_through_undo_and_relinked() {
+        let mut g = Gedcom::parse(FILE).unwrap();
+        let before = g.clone();
+        let p =
+            StoredProposal { id: "P1".into(), data: "{\"people\":[{\"id\":\"new-2\"}]}".into(), ..Default::default() };
+        g.store_agent_proposal(&p);
+        // Read back at once, without parsing the file again.
+        assert!(g.agent_proposal("P1").is_some());
+        // Storing it again unchanged keeps the record shared.
+        let stored = g.agent_proposal("P1").unwrap();
+        let rec = g.records.last().unwrap().clone();
+        g.store_agent_proposal(&stored);
+        assert!(Arc::ptr_eq(&rec, g.records.last().unwrap()));
+        // Undo brings back a tree without it: it is carried over.
+        let mut undone = before.clone();
+        undone.carry_agent_proposals(&g);
+        assert_eq!(undone.agent_proposal("P1").map(|p| p.data), Some(p.data.clone()));
+        assert!(undone.to_gedcom_string().contains("2 TAG _GR_PROP "));
+        undone.relink_agent_proposals("new-2", "@I7@");
+        assert_eq!(undone.agent_proposal("P1").unwrap().data, "{\"people\":[{\"id\":\"I7\"}]}");
     }
 }

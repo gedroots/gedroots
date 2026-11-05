@@ -354,6 +354,10 @@ impl Gedcom {
     pub fn stamp_changes(&mut self, saved: &Gedcom) {
         for r in &mut self.records {
             let Some(xref) = r.xref.as_deref() else { continue };
+            // Agents' proposals carry their own date.
+            if r.tag == crate::agent_proposals::PROP_TAG {
+                continue;
+            }
             match saved.get(xref) {
                 Some(old) => {
                     let shared = saved.index.get(xref).is_some_and(|&i| Arc::ptr_eq(&saved.records[i], r));
