@@ -94,7 +94,7 @@ private struct BookReader: View {
     var body: some View {
         Group {
             if let typeset {
-                PDFReader(url: typeset.url).ignoresSafeArea(edges: .bottom)
+                PDFReader(url: typeset.url)
             } else if failed {
                 ContentUnavailableView("Can't Typeset This Book", systemImage: "exclamationmark.triangle")
             } else {
@@ -103,6 +103,7 @@ private struct BookReader: View {
         }
         .navigationTitle(book.title)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .tabBar)
         .toolbar {
             if let typeset {
                 ToolbarItem(placement: .topBarTrailing) {

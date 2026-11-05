@@ -25,7 +25,8 @@ struct TreeView: View {
                     TreeCommands(model: model)
                 }
                 .navigationDestination(for: PersonLink.self) { link in PersonView(model: model, id: link.id) }
-                .treeSearch(model: model, zone: .people, prompt: "Search People", query: $query, scoped: scope != .all) {
+                .treeSearch(model: model, zone: .people, prompt: "Search People", query: $query, scoped: scope != .all,
+                            listed: !model.recent.isEmpty) {
                     scope = .all
                 }
                 .searchScopes($scope, activation: .onSearchPresentation) {

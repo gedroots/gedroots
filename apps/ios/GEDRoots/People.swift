@@ -53,7 +53,7 @@ struct PersonLabel: View {
     }
 }
 
-/// Last sync.
+/// Last sync. A sync that fails says nothing: the tree is read offline, from its last copy.
 struct SyncFooter: View {
     let model: TreeModel
     var body: some View {
@@ -65,9 +65,6 @@ struct SyncFooter: View {
                 }
             } else if let date = model.lastSync {
                 Text("Updated \(date, format: .relative(presentation: .named))")
-            }
-            if let error = model.error, model.tree != nil {
-                Text(error).font(.footnote).foregroundStyle(.red)
             }
         }
         .foregroundStyle(.secondary)
