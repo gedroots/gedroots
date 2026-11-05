@@ -12,9 +12,9 @@ use super::relatives::PickPurpose;
 use super::*;
 use crate::commands::label;
 use crate::t;
-use gedcom::leads::{DEFAULT_FOCUS, Goal, Lead, PastSearch, RecordType, WhereToLook, Years};
+use gedcom::leads::{DEFAULT_FOCUS, Goal, Lead, LogEntry, LogKind, RecordType, WhereToLook, Years};
 use gedcom::research::current_year;
-use gedcom::research_log::{NewSearch, SearchResult, TaskState};
+use gedcom::research_log::{NewEntry, SearchResult, TaskState};
 use gpui_kit::component::Selectable;
 use gpui_kit::component::button::ButtonGroup;
 use gpui_kit::component::checkbox::Checkbox;
@@ -254,14 +254,14 @@ impl Workspace {
             (Some(a), None) | (None, Some(a)) => Some(Years::new(a, a)),
             (None, None) => None,
         };
-        let search = NewSearch {
-            searched,
+        let search = NewEntry {
+            text: searched,
             result: Some(d.result),
             years,
             place: lead.places.first().cloned().unwrap_or_default(),
             url: d.url.read(cx).value().trim().to_string(),
             note: d.note.read(cx).value().trim().to_string(),
-            by_agent: false,
+            ..Default::default()
         };
         let (finished, found) = (d.finished, d.result == SearchResult::Found);
         self.add_dialog = None;
@@ -280,7 +280,7 @@ impl Workspace {
         let Some(l) = self.lead(&key).cloned() else { return };
         let (owner, goal) = (l.owner().to_string(), l.goal);
         // Resumed: back to planned if something was searched, otherwise only suggested.
-        let state = match (ignore, l.searches.is_empty()) {
+        let state = match (ignore, l.log.is_empty()) {
             (true, _) => TaskState::Ignored,
             (false, true) => TaskState::Suggested,
             (false, false) => TaskState::Planned,
@@ -674,7 +674,7 @@ impl Workspace {
                     .tooltip(label::note_search().trim_end_matches('…').to_string())
                     .on_click(cx.listener(move |this, _, w, cx| this.open_search_dialog(k.clone(), w, cx))),
             ))
-            .children(l.searches.iter().rev().map(|s| self.render_past_search(s)));
+            .children(l.log.iter().rev().map(|s| self.render_log_entry(s)));
         let column = v_flex()
             .w_full()
             .max_w(px(680.))
@@ -694,23 +694,31 @@ impl Workspace {
             .into_any_element()
     }
 
-    fn render_past_search(&self, s: &PastSearch) -> Div {
-        let (shape, color) = result_icon(s.result);
+    fn render_log_entry(&self, s: &LogEntry) -> Div {
+        let (shape, color) = match s.kind {
+            LogKind::Search => result_icon(s.result),
+            LogKind::Clue => (IconName::CircleDot, theme::warn()),
+            LogKind::Handoff => (IconName::ArrowRight, theme::muted()),
+        };
         let date = if s.date.is_empty() { String::new() } else { Date::parse(&s.date).display() };
         let mut meta: Vec<String> = Vec::new();
         if let Some(y) = s.years {
             meta.push(y.to_string());
         }
-        meta.push(
-            match s.result {
-                SearchResult::Found => t!("research.result.found"),
-                SearchResult::Nothing => t!("research.result.nothing"),
-                SearchResult::Partial => t!("research.result.partial"),
+        if s.kind == LogKind::Search {
+            meta.push(
+                match s.result {
+                    SearchResult::Found => t!("research.result.found"),
+                    SearchResult::Nothing => t!("research.result.nothing"),
+                    SearchResult::Partial => t!("research.result.partial"),
+                }
+                .into_owned(),
+            );
+        }
+        for v in [&s.note, &s.evidence_for, &s.against, &s.next] {
+            if !v.is_empty() {
+                meta.push(v.clone());
             }
-            .into_owned(),
-        );
-        if !s.note.is_empty() {
-            meta.push(s.note.clone());
         }
         let url = s.url.clone();
         h_flex()
@@ -726,7 +734,7 @@ impl Workspace {
                     .flex_1()
                     .min_w_0()
                     .text_sm()
-                    .child(s.searched.clone())
+                    .child(s.text.clone())
                     .child(div().text_xs().text_color(theme::muted()).child(meta.join(" · ")))
                     .when(!url.is_empty(), |d| {
                         let href = url.clone();
@@ -742,8 +750,12 @@ impl Workspace {
                         )
                     }),
             )
-            .when(s.by_agent, |d| {
-                d.child(div().flex_none().text_xs().text_color(theme::muted()).child(t!("research.by_agent")))
+            .when(s.by_agent(), |d| {
+                let who = match s.agent.as_str() {
+                    gedcom::research_log::UNKNOWN_AGENT => t!("research.by_agent").into_owned(),
+                    name => name.to_string(),
+                };
+                d.child(div().flex_none().text_xs().text_color(theme::muted()).child(who))
             })
     }
 

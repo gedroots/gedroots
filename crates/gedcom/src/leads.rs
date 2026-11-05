@@ -224,14 +224,34 @@ pub struct WhereToLook {
     pub used_registers: Vec<UsedRegister>,
 }
 
-/// A search already made, from the file's research log.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// What an entry of a lead's research log is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize, schemars::JsonSchema))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+pub enum LogKind {
+    /// A register or index searched, found or not.
+    #[default]
+    Search,
+    /// A record that may be the one, not tied to the person yet: what speaks for and against.
+    Clue,
+    /// Where the lead stands when an agent (or the user) stops, and the next search to make.
+    Handoff,
+}
+
+/// An entry of a lead's research log, from the file.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, schemars::JsonSchema))]
-pub struct PastSearch {
-    /// Day of the search (GEDCOM date).
+pub struct LogEntry {
+    pub kind: LogKind,
+    /// Day of the entry (GEDCOM date).
     pub date: String,
-    /// What was searched: register, place, years, names.
-    pub searched: String,
+    /// Time of the entry (UTC, `21:47:03`), when noted by this version of GEDRoots.
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "String::is_empty"))]
+    pub time: String,
+    /// A search: what was searched (register, place, years, names). A clue: the record found. A
+    /// handoff: where the lead stands.
+    pub text: String,
+    /// For a search.
     pub result: SearchResult,
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub years: Option<Years>,
@@ -241,8 +261,23 @@ pub struct PastSearch {
     pub url: String,
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "String::is_empty"))]
     pub note: String,
-    /// Noted by an AI agent.
-    pub by_agent: bool,
+    /// For a clue: what speaks for it being this person, and against.
+    #[cfg_attr(feature = "serde", serde(rename = "for", skip_serializing_if = "String::is_empty"))]
+    pub evidence_for: String,
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "String::is_empty"))]
+    pub against: String,
+    /// For a handoff: the next search to make.
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "String::is_empty"))]
+    pub next: String,
+    /// The AI agent that noted it (its name, or “AI agent” when unknown); empty: the user.
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "String::is_empty"))]
+    pub agent: String,
+}
+
+impl LogEntry {
+    pub fn by_agent(&self) -> bool {
+        !self.agent.is_empty()
+    }
 }
 
 /// How a person was seen alive, for [`Reason::Seen`].
@@ -374,8 +409,8 @@ pub struct Lead {
     /// Why it was planned, or why it was ignored.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "String::is_empty"))]
     pub note: String,
-    /// Searches already made, oldest first.
-    pub searches: Vec<PastSearch>,
+    /// The research log: searches, clues and handoffs, oldest first.
+    pub log: Vec<LogEntry>,
 }
 
 impl Lead {
@@ -947,7 +982,7 @@ impl Gedcom {
             where_to_look: Vec::new(),
             state: TaskState::Suggested,
             note: String::new(),
-            searches: Vec::new(),
+            log: Vec::new(),
         };
         // Birth.
         let birth = pick(Goal::Birth.tags());
@@ -1265,11 +1300,11 @@ impl Gedcom {
         let Some(task) = self.research_task(l.owner(), l.goal) else { return };
         l.state = task.state;
         l.note = task.note;
-        l.searches = task.searches;
+        l.log = task.log;
         // A death searched in vain over the first years of the period happened later (and a birth
         // searched over its last years, earlier): only when the search covers an end of the period.
         let Some(mut y) = l.years else { return };
-        for s in l.searches.iter().filter(|s| s.result == SearchResult::Nothing) {
+        for s in l.log.iter().filter(|s| s.kind == LogKind::Search && s.result == SearchResult::Nothing) {
             let Some(sy) = s.years else { continue };
             match l.goal {
                 Goal::Death if sy.from <= y.from && sy.to >= y.from && sy.to < y.to => {
@@ -1309,7 +1344,7 @@ pub fn closed_lead(g: &Gedcom, xref: &str, goal: Goal, family: Option<&str>) -> 
         where_to_look: Vec::new(),
         state: TaskState::Suggested,
         note: String::new(),
-        searches: Vec::new(),
+        log: Vec::new(),
     }
 }
 
@@ -1496,8 +1531,8 @@ mod tests {
     #[test]
     fn searches_in_vain_narrow_the_period() {
         let mut g = ged();
-        let search = crate::research_log::NewSearch {
-            searched: "Decennial tables of Saint-Lô, deaths".into(),
+        let search = crate::research_log::NewEntry {
+            text: "Decennial tables of Saint-Lô, deaths".into(),
             result: Some(SearchResult::Nothing),
             years: Some(Years::new(1852, 1855)),
             ..Default::default()
@@ -1506,7 +1541,7 @@ mod tests {
         let death = g.lead("I4", Goal::Death, None, 2026).unwrap();
         assert_eq!(death.years, Some(Years::new(1856, 1860)));
         assert_eq!(death.state, TaskState::Planned);
-        assert_eq!(death.searches.len(), 1);
+        assert_eq!(death.log.len(), 1);
         // The marriage's log is held by the family.
         g.set_research_state("F3", Goal::Marriage, TaskState::Ignored, "Not an ancestor");
         let marr = g.lead("I5", Goal::Marriage, Some("F3"), 2026).unwrap();

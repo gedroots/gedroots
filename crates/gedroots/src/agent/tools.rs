@@ -13,9 +13,9 @@ use axum::middleware::Next;
 use axum::response::Response;
 use gedcom::RecordKind;
 use gedcom::context::FileContext;
-use gedcom::leads::{Goal, Lead, PastSearch, Years};
+use gedcom::leads::{Goal, Lead, LogEntry, Years};
 use gedcom::research::{PersonRef, PersonSheet, QualityFilter, QualityReport, current_year};
-use gedcom::research_log::{NewSearch, SearchResult, TaskState};
+use gedcom::research_log::{NewEntry, SearchResult, TaskState, UNKNOWN_AGENT};
 use rmcp::handler::server::wrapper::{Json, Parameters};
 use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
 use rmcp::transport::streamable_http_server::{StreamableHttpServerConfig, StreamableHttpService};
@@ -414,7 +414,7 @@ pub struct TaskLog {
     pub state: TaskState,
     #[serde(skip_serializing_if = "String::is_empty")]
     pub note: String,
-    pub searches: Vec<PastSearch>,
+    pub log: Vec<LogEntry>,
 }
 
 #[derive(Debug, Serialize, JsonSchema)]
@@ -675,7 +675,7 @@ impl GedrootsMcp {
                     spouse: spouse.clone(),
                     state: t.state,
                     note: t.note,
-                    searches: t.searches,
+                    log: t.log,
                 });
             }
         };
@@ -761,14 +761,15 @@ impl GedrootsMcp {
             (Some(a), None) | (None, Some(a)) => Some(Years::new(a, a)),
             (None, None) => None,
         };
-        let search = NewSearch {
-            searched: searched.clone(),
+        let search = NewEntry {
+            text: searched.clone(),
             result: Some(p.result),
             years,
             place: p.place.unwrap_or_default(),
             url: p.url.unwrap_or_default(),
             note: p.note.unwrap_or_default(),
-            by_agent: true,
+            agent: super::last_client().map(|(n, _)| n).unwrap_or_else(|| UNKNOWN_AGENT.to_string()),
+            ..Default::default()
         };
         let (goal, finished) = (p.goal, p.finished.unwrap_or(false));
         self.edit(
@@ -789,7 +790,7 @@ impl GedrootsMcp {
                 if let Some(t) = s.ged.research_task(lead.owner(), p.goal) {
                     lead.state = t.state;
                     lead.note = t.note;
-                    lead.searches = t.searches;
+                    lead.log = t.log;
                 }
                 self.answer(&s, lead)
             }
@@ -1510,8 +1511,8 @@ mod tests {
             "searched":"Decennial tables of Rennes, deaths, MARCHAND","result":"nothing","from_year":1863,"to_year":1872}),
         );
         let lead = &logged["result"]["structuredContent"];
-        assert_eq!(lead["searches"][0]["result"], "nothing", "{logged}");
-        assert_eq!(lead["searches"][0]["by_agent"], true);
+        assert_eq!(lead["log"][0]["result"], "nothing", "{logged}");
+        assert!(lead["log"][0]["agent"].is_string());
         let log = call(23, "research_log", serde_json::json!({"person":"I1"}));
         assert_eq!(log["result"]["structuredContent"]["log"][0]["title"], "Death of Jean MARCHAND", "{log}");
         // A sourced or unknown record cannot be planned.

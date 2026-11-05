@@ -46,6 +46,7 @@ pub mod i18n;
 
 pub mod act;
 pub mod address;
+pub mod agent_proposals;
 pub mod analysis;
 pub mod associations;
 pub mod atlas;
