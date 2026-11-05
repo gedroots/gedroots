@@ -1,5 +1,5 @@
-//! The agent reads the tree's visualizations (`gedroots-viz`): `list_visualizations` says what
-//! each one shows, `read_visualization` gives its data, as the Visualizations page's Table view,
+//! The agent reads the tree's visualizations (`gedroots-viz`): `read_visualization` without a name
+//! says what each one shows, with a name it gives its data, as the Visualizations page's Table view,
 //! with its legend and caption. The drawings themselves stay in the app and the books.
 
 use gedcom::Gedcom;
@@ -9,11 +9,11 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct ReadVizParams {
-    /// Tree to work on, as `list_trees` names it, when several are open (default: the one in
+    /// Tree to work on, as `file_context` names it in `trees`, when several are open (default: the one in
     /// front in GEDRoots).
     pub tree: Option<String>,
-    /// The visualization, as `list_visualizations` names it (`fan`, `places`, `lives`…).
-    pub visualization: String,
+    /// The visualization (`fan`, `places`, `lives`…). Leave it out for the list of them.
+    pub visualization: Option<String>,
     /// Whose ancestors or descendants (`I12`). Default: the tree's root person.
     pub person: Option<String>,
     /// `ancestors` (default) or `descendants`.
@@ -22,16 +22,14 @@ pub struct ReadVizParams {
     pub generations: Option<u32>,
 }
 
-#[derive(Debug, Deserialize, JsonSchema)]
-pub struct ListVizParams {
-    /// Tree to work on, as `list_trees` names it, when several are open (default: the one in
-    /// front in GEDRoots).
-    pub tree: Option<String>,
-}
-
 #[derive(Debug, Serialize, JsonSchema)]
 pub struct Visualizations {
-    pub visualizations: Vec<VizSummary>,
+    /// Without a name: every visualization GEDRoots draws.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub visualizations: Option<Vec<VizSummary>>,
+    /// With a name: its data.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub visualization: Option<Visualization>,
 }
 
 #[derive(Debug, Serialize, JsonSchema)]
@@ -88,24 +86,22 @@ fn names() -> String {
     Kind::ALL.map(|k| k.slug()).join(", ")
 }
 
-pub fn list() -> Visualizations {
-    Visualizations {
-        visualizations: Kind::ALL
-            .into_iter()
-            .map(|k| VizSummary {
-                name: k.slug().into(),
-                title: k.title(),
-                purpose: k.purpose().into(),
-                lines: Line::ALL.into_iter().filter(|l| k.supports(*l)).map(|l| line_name(l).into()).collect(),
-            })
-            .collect(),
-    }
+pub fn list() -> Vec<VizSummary> {
+    Kind::ALL
+        .into_iter()
+        .map(|k| VizSummary {
+            name: k.slug().into(),
+            title: k.title(),
+            purpose: k.purpose().into(),
+            lines: Line::ALL.into_iter().filter(|l| k.supports(*l)).map(|l| line_name(l).into()).collect(),
+        })
+        .collect()
 }
 
 /// The data of a visualization, for a person (the root person by default).
 pub fn read(g: &Gedcom, p: &ReadVizParams, year: i32) -> Result<Visualization, String> {
-    let kind = Kind::from_slug(&p.visualization)
-        .ok_or_else(|| format!("no visualization `{}`: one of {}", p.visualization, names()))?;
+    let name = p.visualization.as_deref().unwrap_or_default().trim();
+    let kind = Kind::from_slug(name).ok_or_else(|| format!("no visualization `{name}`: one of {}", names()))?;
     let line = match p.line.as_deref().map(|l| l.trim().to_ascii_lowercase()).as_deref() {
         None | Some("" | "ancestors") => Line::Ancestors,
         Some("descendants") => Line::Descendants,
@@ -152,7 +148,7 @@ mod tests {
     fn params(viz: &str, line: Option<&str>) -> ReadVizParams {
         ReadVizParams {
             tree: None,
-            visualization: viz.into(),
+            visualization: Some(viz.into()),
             person: Some("@I1@".into()),
             line: line.map(Into::into),
             generations: Some(3),
@@ -170,6 +166,6 @@ mod tests {
         assert!(read(&g, &params("longevity", None), 2026).unwrap_err().contains("too little"));
         assert!(read(&g, &params("generations", Some("descendants")), 2026).unwrap_err().contains("ancestors only"));
         assert!(read(&g, &params("weather", None), 2026).unwrap_err().contains("fan, places"));
-        assert_eq!(list().visualizations.len(), Kind::ALL.len());
+        assert_eq!(list().len(), Kind::ALL.len());
     }
 }

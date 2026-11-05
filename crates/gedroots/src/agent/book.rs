@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct ReadBookParams {
-    /// Tree to work on, as `list_trees` names it, when several are open (default: the one in
+    /// Tree to work on, as `file_context` names it in `trees`, when several are open (default: the one in
     /// front in GEDRoots).
     pub tree: Option<String>,
     /// Book id (`BK1`). Leave empty to list the tree's books.
@@ -29,7 +29,7 @@ pub enum Kind {
     Context,
     /// What the records do not say (why a family moved): `basis` required.
     Hypothesis,
-    /// A visualization GEDRoots draws from the tree (`list_visualizations`): `visualization`
+    /// A visualization GEDRoots draws from the tree (`read_visualization`): `visualization`
     /// required, `text` an optional comment shown under it.
     Visualization,
 }
@@ -58,7 +58,7 @@ pub struct BlockParams {
     /// Hypothesis: the clues it rests on, at least one ("born on the coast near Alicante").
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub basis: Vec<String>,
-    /// Visualization: its name (`places`, `fan`, `lives`…, from `list_visualizations`).
+    /// Visualization: its name (`places`, `fan`, `lives`…, from `read_visualization`).
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub visualization: String,
     /// Visualization: whose ancestors or descendants (`I12`). Default: the book's person.
@@ -105,7 +105,7 @@ pub struct PersonWriting {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct ProposeChapterParams {
-    /// Tree to work on, as `list_trees` names it, when several are open (default: the one in
+    /// Tree to work on, as `file_context` names it in `trees`, when several are open (default: the one in
     /// front in GEDRoots).
     pub tree: Option<String>,
     /// Book id (`BK1`, from `read_book`).

@@ -36,8 +36,8 @@ How to work:
 5. **When you find the act,** download its image or the PDF of the register into my Downloads
    folder (if the viewer offers no download, save a screenshot of the act there), note the address
    of the act's page (the viewer's permanent link), the register's call number and the image or
-   page number. Read it and propose it right away following the `read_record` prompt
-   (`match_people`, then `propose_act`), before searching the next lead. Never hold acts back to
+   page number. Read it and propose it right away, as « Reading an act » below says,
+   before searching the next lead. Never hold acts back to
    propose them together at the end, and never wait to be sure: a probable act is proposed with its
    honest `quality` and your doubts in `remarks`, and I decide while you go on searching. A new
    question raised by the act (a parent named for the first time, a widow, a remarriage) is a new
@@ -53,3 +53,7 @@ How to work:
    register to request).
 
 Never show GEDRoots ids (I12, S4…) to me.
+
+## Reading an act
+
+{read_act}

@@ -79,7 +79,7 @@ impl Workspace {
         Some(agent::Snapshot { key, ged: doc.ged.clone(), queue: self.review_queue() })
     }
 
-    /// The tree of this window, for `list_trees` (not in front: the caller knows which one is).
+    /// The tree of this window, for `file_context` (not in front: the caller knows which one is).
     pub(crate) fn agent_tree(&self) -> Option<agent::Tree> {
         let doc = self.doc.as_ref()?;
         let g = &doc.ged;

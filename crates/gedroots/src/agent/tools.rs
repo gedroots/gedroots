@@ -6,8 +6,8 @@
 
 use super::book::{self, Books, ProposeChapterParams, ReadBookParams};
 use super::change::{self, ChangeParams, ChangeProposed};
-use super::propose::{self, Decision, MatchParams, ProposeParams};
-use super::viz::{self as visual, ListVizParams, ReadVizParams, Visualization, Visualizations};
+use super::propose::{self, Decision, ProposeParams};
+use super::viz::{self as visual, ReadVizParams, Visualizations};
 use super::{Ask, Request, Snapshot};
 use axum::extract::State;
 use axum::http::{StatusCode, header};
@@ -39,18 +39,23 @@ pub struct GedrootsMcp {
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct SearchParams {
-    /// Tree to work on, as `list_trees` names it, when several are open (default: the one in
+    /// Tree to work on, as `file_context` names it in `trees`, when several are open (default: the one in
     /// front in GEDRoots).
     pub tree: Option<String>,
-    /// Query as typed in GEDRoots' search box: words of the name or place.
-    pub query: String,
+    /// Query as typed in GEDRoots' search box: words of a name or place, spelling variants found
+    /// by sound (Carl finds Karl), and the advanced search keywords (`born:<1850`, `died:1900-1910`,
+    /// `place:manche`, `sosa:1-15`, `descendants:@I12@`…).
+    pub query: Option<String>,
+    /// Instead of `query`, the people named in an act, before proposing it: for each one without
+    /// `id`, the people of the tree who could be them, with the reason.
+    pub act: Option<propose::ActMatch>,
     /// Maximum number of results (default 50).
     pub limit: Option<usize>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct PersonParams {
-    /// Tree to work on, as `list_trees` names it, when several are open (default: the one in
+    /// Tree to work on, as `file_context` names it in `trees`, when several are open (default: the one in
     /// front in GEDRoots).
     pub tree: Option<String>,
     /// Person id, as returned by another tool (e.g. `I12`).
@@ -59,7 +64,7 @@ pub struct PersonParams {
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct ContextParams {
-    /// Tree to work on, as `list_trees` names it, when several are open (default: the one in
+    /// Tree to work on, as `file_context` names it in `trees`, when several are open (default: the one in
     /// front in GEDRoots).
     pub tree: Option<String>,
     /// Records of each kind given as examples (default 5, at most 20).
@@ -68,7 +73,7 @@ pub struct ContextParams {
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct ResumeParams {
-    /// Tree to work on, as `list_trees` names it, when several are open (default: the one in
+    /// Tree to work on, as `file_context` names it in `trees`, when several are open (default: the one in
     /// front in GEDRoots).
     pub tree: Option<String>,
     /// One person (id): all their leads and their unions', whatever their state, with their log,
@@ -98,7 +103,7 @@ pub enum NoteKind {
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct NoteParams {
-    /// Tree to work on, as `list_trees` names it, when several are open (default: the one in
+    /// Tree to work on, as `file_context` names it in `trees`, when several are open (default: the one in
     /// front in GEDRoots).
     pub tree: Option<String>,
     pub kind: NoteKind,
@@ -136,7 +141,7 @@ pub struct NoteParams {
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct QualityParams {
-    /// Tree to work on, as `list_trees` names it, when several are open (default: the one in
+    /// Tree to work on, as `file_context` names it in `trees`, when several are open (default: the one in
     /// front in GEDRoots).
     pub tree: Option<String>,
     /// Only this category: dates, family, structure, empty, media, places, sources, files, coords.
@@ -155,7 +160,7 @@ pub struct QualityParams {
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct SourceSearch {
-    /// Tree to work on, as `list_trees` names it, when several are open (default: the one in
+    /// Tree to work on, as `file_context` names it in `trees`, when several are open (default: the one in
     /// front in GEDRoots).
     pub tree: Option<String>,
     /// Words of the source's title, register, call number or repository name.
@@ -191,7 +196,7 @@ pub struct Sources {
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct LocateParams {
-    /// Tree to work on, as `list_trees` names it, when several are open (default: the one in
+    /// Tree to work on, as `file_context` names it in `trees`, when several are open (default: the one in
     /// front in GEDRoots).
     pub tree: Option<String>,
     /// The place as the act or the tree writes it, with what tells it apart: "Saint-Martin,
@@ -280,7 +285,7 @@ pub struct Proposed {
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct ProposalId {
-    /// Tree to work on, as `list_trees` names it, when several are open (default: the one in
+    /// Tree to work on, as `file_context` names it in `trees`, when several are open (default: the one in
     /// front in GEDRoots).
     pub tree: Option<String>,
     /// Id of a waiting proposal (`P3`), from `propose_act` or `resume_research`.
@@ -356,16 +361,13 @@ pub struct PersonMatches {
     pub candidates: Vec<Candidate>,
 }
 
+/// `file_context`: the open trees, then how the file is written.
 #[derive(Debug, Serialize, JsonSchema)]
-pub struct Matches {
-    /// The people of the act not yet identified (without `id`).
-    pub people: Vec<PersonMatches>,
-}
-
-#[derive(Debug, Serialize, JsonSchema)]
-pub struct Trees {
+pub struct Context {
     /// The trees open in GEDRoots, the one in front first.
     pub trees: Vec<TreeInfo>,
+    #[serde(flatten)]
+    pub file: FileContext,
 }
 
 #[derive(Debug, Serialize, JsonSchema)]
@@ -387,8 +389,13 @@ pub struct TreeInfo {
 }
 
 #[derive(Debug, Serialize, JsonSchema)]
-pub struct People {
-    pub people: Vec<PersonRef>,
+pub struct Found {
+    /// With `query`: the people found.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub people: Option<Vec<PersonRef>>,
+    /// With `act`: for each person of the act without id, the candidates of the tree.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub matches: Option<Vec<PersonMatches>>,
 }
 
 #[derive(Debug, Serialize, JsonSchema)]
@@ -563,54 +570,76 @@ impl GedrootsMcp {
         rx.await.map_err(|_| "GEDRoots is closing".to_string())?
     }
 
-    #[tool(
-        name = "list_trees",
-        description = "The trees open in GEDRoots, one per window, the one in front first, with their number of people, families, sources and media and their root person. Every other tool works on the tree in front unless given `tree`: call this when the user names a tree, or before working when several may be open.",
-        annotations(read_only_hint = true, open_world_hint = false)
-    )]
-    async fn list_trees(&self) -> Result<Json<Trees>, String> {
+    /// The trees open in GEDRoots, the one in front first.
+    async fn trees(&self) -> Result<Vec<TreeInfo>, String> {
         let (tx, rx) = tokio::sync::oneshot::channel();
         self.send(None, Request::Trees(tx)).await.map_err(|_| "GEDRoots is closing".to_string())?;
         let trees = rx.await.map_err(|_| "GEDRoots is closing".to_string())?;
-        Ok(Json(Trees {
-            trees: trees
-                .into_iter()
-                .map(|t| TreeInfo {
-                    name: t.name,
-                    file: t.file,
-                    id: t.id,
-                    people: t.people,
-                    families: t.families,
-                    sources: t.sources,
-                    media: t.media,
-                    root: t.root,
-                    in_front: t.in_front,
-                })
-                .collect(),
-        }))
+        Ok(trees
+            .into_iter()
+            .map(|t| TreeInfo {
+                name: t.name,
+                file: t.file,
+                id: t.id,
+                people: t.people,
+                families: t.families,
+                sources: t.sources,
+                media: t.media,
+                root: t.root,
+                in_front: t.in_front,
+            })
+            .collect())
     }
 
     #[tool(
         name = "file_context",
-        description = "How this file is written, to write new records the same way: the description the user wrote for the file (their conventions, word for word), its language and place format, the events, custom event types and occupations in use with their counts, where media are filed and named, and the latest sources, people, families, media and repositories changed, as raw GEDCOM. Call it before proposing anything, and follow what you see: source titles, registers, one source per act or per register, name forms, event types.",
+        description = "Start every session with it. `trees`: the trees open in GEDRoots, one per window, the one in front first, with their size and root person; every tool works on the tree in front unless given `tree` (when the user names another one). Then how that file is written, to write new records the same way: the description the user wrote for the file (their conventions, word for word), its language and place format, the events, custom event types and occupations in use with their counts, where media are filed and named, and the latest sources, people, families, media and repositories changed, as raw GEDCOM. Follow what you see: source titles, registers, one source per act or per register, name forms, event types.",
         annotations(read_only_hint = true, open_world_hint = false)
     )]
-    async fn file_context(&self, Parameters(p): Parameters<ContextParams>) -> Res<FileContext> {
+    async fn file_context(&self, Parameters(p): Parameters<ContextParams>) -> Res<Context> {
         let tree = p.tree.clone();
+        let trees = self.trees().await?;
         let s = self.snapshot(tree.as_deref()).await?;
-        let context = s.ged.file_context(p.examples.unwrap_or(5).min(20));
-        self.answer(&s, context)
+        let file = s.ged.file_context(p.examples.unwrap_or(5).min(20));
+        self.answer(&s, Context { trees, file })
     }
 
     #[tool(
         name = "search_people",
-        description = "Searches the tree for people by name, given name or place.",
+        description = "Finds people in the tree. With `query`: by name, given name or place, with spelling variants found by sound and the advanced search keywords. With `act`, before proposing an act: give its event and date and everyone it names with their role, and the id of those already identified so that their relatives rank first; for each person without id, the candidates of the tree with the reason. Check `likely` candidates with person_sheet: `propose_act` refuses to create someone who resembles them unless they are linked or listed in `not`. An empty result is not proof that someone is absent: try other spellings.",
         annotations(read_only_hint = true, open_world_hint = false)
     )]
-    async fn search(&self, Parameters(p): Parameters<SearchParams>) -> Res<People> {
+    async fn search(&self, Parameters(p): Parameters<SearchParams>) -> Res<Found> {
         let tree = p.tree.clone();
         let s = self.snapshot(tree.as_deref()).await?;
-        self.answer(&s, People { people: s.ged.search_people(&p.query, p.limit.unwrap_or(50).min(500)) })
+        let Some(a) = &p.act else {
+            let query = p.query.as_deref().unwrap_or_default();
+            let people = s.ged.search_people(query, p.limit.unwrap_or(50).min(500));
+            return self.answer(&s, Found { people: Some(people), matches: None });
+        };
+        self.report(tree.as_deref(), super::Doing::MatchesPeople);
+        let act = propose::match_act(a)?;
+        let matches = act
+            .participants
+            .iter()
+            .enumerate()
+            .filter(|(_, x)| !matches!(x.choice, gedcom::PersonChoice::Link(_)))
+            .map(|(i, x)| PersonMatches {
+                index: i,
+                role: act.role_label(i).into_owned(),
+                name: x.display_name(),
+                candidates: act
+                    .suggestions(&s.ged, i)
+                    .into_iter()
+                    .map(|c| Candidate {
+                        person: s.ged.person_ref(&c.xref),
+                        reason: c.reason,
+                        likely: c.score >= gedcom::proposal::PLAUSIBLE_MATCH,
+                    })
+                    .collect(),
+            })
+            .collect();
+        self.answer(&s, Found { people: None, matches: Some(matches) })
     }
 
     #[tool(
@@ -917,39 +946,6 @@ impl GedrootsMcp {
     }
 
     #[tool(
-        name = "match_people",
-        description = "Finds who the people named in an act are in the tree, before proposing it. Give the act's event and date and everyone named, with their role; give the id of those already identified, so that their relatives rank first. Returns, for each person without id, the candidates of the tree with the reason. `likely` candidates must be checked (person_sheet): `propose_act` refuses to create someone who resembles them unless they are linked or listed in `not`.",
-        annotations(read_only_hint = true, open_world_hint = false)
-    )]
-    async fn match_people(&self, Parameters(p): Parameters<MatchParams>) -> Res<Matches> {
-        let tree = p.tree.clone();
-        self.report(tree.as_deref(), super::Doing::MatchesPeople);
-        let s = self.snapshot(tree.as_deref()).await?;
-        let act = propose::match_act(&p)?;
-        let people = act
-            .participants
-            .iter()
-            .enumerate()
-            .filter(|(_, x)| !matches!(x.choice, gedcom::PersonChoice::Link(_)))
-            .map(|(i, x)| PersonMatches {
-                index: i,
-                role: act.role_label(i).into_owned(),
-                name: x.display_name(),
-                candidates: act
-                    .suggestions(&s.ged, i)
-                    .into_iter()
-                    .map(|c| Candidate {
-                        person: s.ged.person_ref(&c.xref),
-                        reason: c.reason,
-                        likely: c.score >= gedcom::proposal::PLAUSIBLE_MATCH,
-                    })
-                    .collect(),
-            })
-            .collect();
-        self.answer(&s, Matches { people })
-    }
-
-    #[tool(
         name = "locate_place",
         description = "Finds where a place of an act is, one place at a time, before proposing it: the tree's places of that name, the located places of the people's events and of their relatives' (closest in time first), and the candidates of the gazetteer (OpenStreetMap) with their distance to those events. Homonyms are common (Saint-Martin, Neukirchen): choose the candidate that fits the act (its jurisdictions, the family's region, the distance), not merely the first, and give its `place` and coordinates in `propose_act` (`place` and `locations`). When none fits or you are unsure, propose the place without a location.",
         annotations(read_only_hint = true, open_world_hint = true)
@@ -1015,7 +1011,7 @@ impl GedrootsMcp {
 
     #[tool(
         name = "propose_act",
-        description = "Proposes an act found in the archives (birth, marriage, death…), with its source, people and image. Nothing is written: the proposal waits in GEDRoots' review page, where the user compares it with the tree and saves or rejects it. Each person says who they are: identity link (in the tree, with id), create or mention; call match_people first. Give every other fact the act states about a person in their `facts` (birth date in a baptism, marginal mention of a death, occupations, residences), each with its own date or none; the answer lists everything that will be written, the proposal's id (to correct it, propose it again with `replaces`) and the temporary id of each new person (link it to name the same person in another proposal: never create them twice). It is refused, with the reason, if it does not fit the tree (unknown source or person, a parent other than the tree's, a person to create who resembles someone of the tree, impossible date): fix it and propose again. Write facts in the tree's language and wording (an occupation the tree already has keeps the tree's text; only the transcription keeps the act's language and spelling); an occupation or residence at another date is another attestation, not a duplicate. Give the place as the tree names it (the municipality: a street, number or building goes in `address`, never in the place); a new place can carry its coordinates in `locations`, chosen with `locate_place`. A new source names its repository: an existing one (`repository_id`), or one to create (`repository`, when search_sources finds none). Give the date in GEDCOM format, the downloaded file (a PDF register needs pdf_page) and the act's page in the archive's viewer (url): both are kept, the image and a web link.",
+        description = "Proposes an act found in the archives (birth, marriage, death…), with its source, people and image. Nothing is written: the proposal waits in GEDRoots' review page, where the user compares it with the tree and saves or rejects it. Each person says who they are: identity link (in the tree, with id), create or mention; call search_people with the `act` first. Give every other fact the act states about a person in their `facts` (birth date in a baptism, marginal mention of a death, occupations, residences), each with its own date or none; the answer lists everything that will be written, the proposal's id (to correct it, propose it again with `replaces`) and the temporary id of each new person (link it to name the same person in another proposal: never create them twice). It is refused, with the reason, if it does not fit the tree (unknown source or person, a parent other than the tree's, a person to create who resembles someone of the tree, impossible date): fix it and propose again. Write facts in the tree's language and wording (an occupation the tree already has keeps the tree's text; only the transcription keeps the act's language and spelling); an occupation or residence at another date is another attestation, not a duplicate. Give the place as the tree names it (the municipality: a street, number or building goes in `address`, never in the place); a new place can carry its coordinates in `locations`, chosen with `locate_place`. A new source names its repository: an existing one (`repository_id`), or one to create (`repository`, when search_sources finds none). Give the date in GEDCOM format, the downloaded file (a PDF register needs pdf_page) and the act's page in the archive's viewer (url): both are kept, the image and a web link.",
         annotations(
             read_only_hint = false,
             destructive_hint = false,
@@ -1109,7 +1105,7 @@ impl GedrootsMcp {
 
     #[tool(
         name = "propose_chapter",
-        description = "Proposes what you wrote for one chapter of a family book (`read_book`): an introduction (`intro`) and the narratives of some of its people (`people`). Each block is `text` (the facts as a narrative, people named by id in braces, `{I12}`, checked to be in the tree), `context` (history that explains the facts: a war, a migration, a crisis, a law; `title` and at least one of `sources` required: search them, never cite from memory alone) or `hypothesis` (what the records do not say, such as why a family moved; the `basis` it rests on required, with what would check it), or `visualization` (a chart GEDRoots draws from the tree when it typesets the book, `list_visualizations`: `visualization` required, with `person`, `line` and `generations` when it is not about the book's people, and an optional comment in `text`; choose the ones that tell the chapter's story, such as the migrations a generation made, and read them with `read_visualization` first; one about the book's own people is then shown there instead of in the book's opening pages or figures). Never present a hypothesis as a fact. Nothing is written: the chapter waits in GEDRoots' review page, where the user leaves out the context, hypotheses and visualizations they do not want, then saves it into the book. A new proposal for the same chapter takes the place of the waiting one. Write in the book's `language` (`read_book`). Work one chapter at a time.",
+        description = "Proposes what you wrote for one chapter of a family book (`read_book`): an introduction (`intro`) and the narratives of some of its people (`people`). Each block is `text` (the facts as a narrative, people named by id in braces, `{I12}`, checked to be in the tree), `context` (history that explains the facts: a war, a migration, a crisis, a law; `title` and at least one of `sources` required: search them, never cite from memory alone) or `hypothesis` (what the records do not say, such as why a family moved; the `basis` it rests on required, with what would check it), or `visualization` (a chart GEDRoots draws from the tree when it typesets the book, `read_visualization`: `visualization` required, with `person`, `line` and `generations` when it is not about the book's people, and an optional comment in `text`; choose the ones that tell the chapter's story, such as the migrations a generation made, and read them with `read_visualization` first; one about the book's own people is then shown there instead of in the book's opening pages or figures). Never present a hypothesis as a fact. Nothing is written: the chapter waits in GEDRoots' review page, where the user leaves out the context, hypotheses and visualizations they do not want, then saves it into the book. A new proposal for the same chapter takes the place of the waiting one. Write in the book's `language` (`read_book`). Work one chapter at a time.",
         annotations(read_only_hint = false, destructive_hint = false, idempotent_hint = true, open_world_hint = false)
     )]
     async fn propose_chapter(&self, Parameters(p): Parameters<ProposeChapterParams>) -> Res<ChapterProposed> {
@@ -1128,41 +1124,35 @@ impl GedrootsMcp {
     }
 
     #[tool(
-        name = "list_visualizations",
-        description = "The visualizations GEDRoots draws from the tree (fan chart coloured by origin, map of the birthplaces, map of the migrations from one generation to the next, horizon of the distances each generation moved, lifespans, ancestors found per generation, longevity, occupations, births, marriages and deaths by month): what each one shows, and when it is worth placing in a family book. Read one with `read_visualization`.",
-        annotations(read_only_hint = true, open_world_hint = false)
-    )]
-    async fn list_visualizations(&self, Parameters(p): Parameters<ListVizParams>) -> Res<Visualizations> {
-        let s = self.snapshot(p.tree.as_deref()).await?;
-        self.answer(&s, visual::list())
-    }
-
-    #[tool(
         name = "read_visualization",
-        description = "The data of one visualization (`list_visualizations`) for a person's ancestors or descendants (default: the root person's ancestors over 8 generations), as the table the app shows beside the drawing: one row per person, place, generation or occupation, with the legend of its colours (the regions people come from) and its caption. Use it to write about where a family came from, how far it moved, how long people lived or what trades they had: the figures are computed by GEDRoots, quote them rather than counting yourself.",
+        description = "The visualizations GEDRoots draws from the tree. Without `visualization`: the list of them (fan chart coloured by origin, map of the birthplaces, migrations from one generation to the next, distances each generation moved, lifespans, ancestors found per generation, longevity, occupations, births, marriages and deaths by month), what each one shows and when it is worth placing in a family book. With one: its data for a person's ancestors or descendants (default: the root person's ancestors over 8 generations), as the table the app shows beside the drawing, with the legend of its colours and its caption. The figures are computed by GEDRoots: quote them rather than counting yourself.",
         annotations(read_only_hint = true, open_world_hint = false)
     )]
-    async fn read_visualization(&self, Parameters(p): Parameters<ReadVizParams>) -> Res<Visualization> {
+    async fn read_visualization(&self, Parameters(p): Parameters<ReadVizParams>) -> Res<Visualizations> {
         let s = self.snapshot(p.tree.as_deref()).await?;
+        if p.visualization.as_deref().is_none_or(|v| v.trim().is_empty()) {
+            return self.answer(&s, Visualizations { visualizations: Some(visual::list()), visualization: None });
+        }
         let v = visual::read(&s.ged, &p, current_year())?;
-        self.answer(&s, v)
+        self.answer(&s, Visualizations { visualizations: None, visualization: Some(v) })
     }
 }
 
 /// Instructions given to the agent on connection.
 const INSTRUCTIONS: &str = "GEDRoots is a genealogy app; these tools read the GEDCOM 7 family tree open in \
-it (the window in front, or `tree`, from `list_trees`). They never change its data: what you find becomes \
-a proposal (`propose_act`, `propose_change`, `propose_chapter`) that the user reviews in GEDRoots before \
-saving. Only the research log (`note_research`) is written at once. \
+it. Start with `file_context`: the open trees (each tool works on the one in front, or on `tree`) and how \
+the file is written; write like the rest of the file (its language, source titles, name forms, event \
+types). The tools never change the tree's data: what you find becomes a proposal (`propose_act`, \
+`propose_change`, `propose_chapter`) that the user reviews in GEDRoots before saving. Only the research \
+log (`note_research`) is written at once. \
 The file is the research's memory, shared by every agent and the user: you need no memory of your own. \
-Start each session with `resume_research`: the leads in progress with everything searched, the clues \
+To search records, call `resume_research`: the leads in progress with everything searched, the clues \
 and the last handoff, the records still to find, and what became of every proposal (saved, rejected \
-with the user's reason). Carry on from there, never search a register twice, and before you stop, note \
-a `handoff` on each lead you worked on, with the `next` search. \
-Call `file_context` before proposing, and write like the rest of the file (its language, source titles, \
-name forms, event types). Note every search with `note_research`, found or not. A record you cannot tie \
-to the person is a `clue` (with what speaks for and against), never a note in the tree. Propose each act \
-as soon as you have read it, with your honest `quality` and your doubts in `remarks`: the user decides. \
+with the user's reason). Carry on from there, never search a register twice, note every search with \
+`note_research`, found or not, and before you stop, note a `handoff` on each lead you worked on, with \
+the `next` search. A record you cannot tie to the person is a `clue` (with what speaks for and \
+against), never a note in the tree. Propose each act as soon as you have read it, with your honest \
+`quality` and your doubts in `remarks`: the user decides. \
 Ids (I12, F3…) are only for passing between tools: never show them to the user. A person a waiting \
 proposal creates has a temporary id (new-3): link it to name them again. Every answer carries `news` \
 when the user decided on a proposal since your last call. The prompts give the method: `research` \
@@ -1383,7 +1373,7 @@ mod tests {
         let (_, _, list) =
             post(port, "secret", Some(&sid), serde_json::json!({"jsonrpc":"2.0","id":2,"method":"tools/list"}));
         let tools = list["result"]["tools"].as_array().expect("tools");
-        assert_eq!(tools.len(), 17);
+        assert_eq!(tools.len(), 14);
         // The proposals only queue a proposal; the research tools write the research log only.
         let mut writers: Vec<String> = tools
             .iter()
@@ -1406,7 +1396,7 @@ mod tests {
             port,
             "secret",
             Some(&sid),
-            serde_json::json!({"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"list_trees","arguments":{}}}),
+            serde_json::json!({"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"file_context","arguments":{}}}),
         );
         let trees = &call["result"]["structuredContent"]["trees"];
         assert_eq!(trees[0]["name"], "Marchand", "{call}");
