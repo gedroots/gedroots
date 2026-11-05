@@ -3,49 +3,94 @@ import SwiftUI
 /// The Tree tab: the grandparents, the parents, the person (the root person at first), then their
 /// unions and children. A tap on a relative centres the tree on them; a tap on the person opens
 /// their record. Lineages are told by a dot and by their place in the tree, never colour alone.
+/// Its search finds anyone in the tree (there is no list of people, like FamilySearch and
+/// Ancestry): before anything is typed, it shows the records opened last.
 struct TreeView: View {
     let model: TreeModel
     @State private var path = NavigationPath()
     @State private var family: FamilyView?
+    @State private var query = ""
+    @State private var scope = Scope.all
 
     private var current: String? { model.treeFocus ?? model.tree?.root() }
 
     var body: some View {
         NavigationStack(path: $path) {
-            Group {
-                if let f = family {
-                    ScrollView {
-                        FamilyChart(family: f, center: center, open: { path.append(PersonLink(id: $0)) })
-                            .padding(16)
+            TreeContent(model: model, family: family, query: query, scope: scope, center: center,
+                        open: { path.append(PersonLink(id: $0)) })
+                .navigationTitle(model.current?.title ?? String(localized: "Tree"))
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbarTitleMenu {
+                    TreePicker(model: model)
+                    TreeCommands(model: model)
+                }
+                .navigationDestination(for: PersonLink.self) { link in PersonView(model: model, id: link.id) }
+                .treeSearch(model: model, zone: .people, prompt: "Search People", query: $query, scoped: scope != .all) {
+                    scope = .all
+                }
+                .searchScopes($scope, activation: .onSearchPresentation) {
+                    Text("All").tag(Scope.all)
+                    Text("Ancestors").tag(Scope.ancestors)
+                }
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button("Root Person", systemImage: "house") { withAnimation { model.treeFocus = nil } }
+                            .disabled(model.treeFocus == nil)
                     }
-                    .refreshable { await model.syncIfPaired() }
-                } else {
-                    ReceivingView(model: model)
+                    ToolbarItem(placement: .topBarTrailing) { MoreMenu(model: model) }
                 }
-            }
-            .navigationTitle(model.current?.title ?? String(localized: "Tree"))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarTitleMenu {
-                TreePicker(model: model)
-                TreeCommands(model: model)
-            }
-            .navigationDestination(for: PersonLink.self) { link in PersonView(model: model, id: link.id) }
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Root Person", systemImage: "house") { withAnimation { model.treeFocus = nil } }
-                        .disabled(model.treeFocus == nil)
-                }
-                ToolbarItem(placement: .topBarTrailing) { MoreMenu(model: model) }
-            }
         }
         .tint(Theme.accent)
         .task(id: "\(current ?? "")#\(model.revision)") { family = current.flatMap { model.tree?.family(id: $0) } }
-        // Show in Tree from a record: back to the chart, centred on the person.
-        .onChange(of: model.jumps) { if model.tab == .tree { path = NavigationPath() } }
+        // Show in Tree: back to the chart, centred on the person. A record asked for (from the
+        // iPhone's search): the record, over the chart.
+        .onChange(of: model.jumps) { jumped(back: true) }
+        // Also when the iPhone's search launched the app.
+        .onAppear { jumped(back: false) }
+    }
+
+    /// `back`: without a record to open, back to the chart.
+    private func jumped(back: Bool) {
+        guard model.tab == .tree else { return }
+        if let id = model.personToOpen {
+            model.personToOpen = nil
+            path = NavigationPath([PersonLink(id: id)])
+        } else if back {
+            path = NavigationPath()
+        }
     }
 
     private func center(_ id: String) {
         withAnimation(.snappy(duration: 0.2)) { model.treeFocus = id }
+    }
+}
+
+/// The chart, or while searching, the people found.
+private struct TreeContent: View {
+    let model: TreeModel
+    let family: FamilyView?
+    let query: String
+    let scope: Scope
+    let center: (String) -> Void
+    let open: (String) -> Void
+    @Environment(\.isSearching) private var searching
+
+    var body: some View {
+        if searching {
+            PeopleResults(model: model, query: query, scope: scope)
+        } else if let f = family {
+            ScrollView {
+                FamilyChart(family: f, center: center, open: open)
+                    .padding(16)
+                SyncFooter(model: model)
+                    .font(.footnote)
+                    .frame(maxWidth: .infinity)
+                    .padding(.bottom, 16)
+            }
+            .refreshable { await model.syncIfPaired() }
+        } else {
+            ReceivingView(model: model)
+        }
     }
 }
 

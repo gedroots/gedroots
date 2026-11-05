@@ -2847,6 +2847,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "gedcom",
+ "gedroots-book",
  "gedroots-sync",
  "rust-i18n",
  "thiserror 2.0.21",

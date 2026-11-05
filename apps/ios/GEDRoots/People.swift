@@ -1,76 +1,38 @@
 import SwiftUI
 
-/// List of individuals by surname, searchable with the same keywords as the desktop
-/// (`born:1850-1900`, `place:saint-lô`…); pull to sync again.
-struct PeopleView: View {
+/// The people found by the Tree's search, or before anything is typed, the records opened
+/// last. Same criteria as the desktop (`born:1850-1900`, `place:saint-lô`…), as tokens.
+struct PeopleResults: View {
     let model: TreeModel
-    @State private var query = ""
-    @State private var scope = Scope.all
-    @State private var path = NavigationPath()
+    let query: String
+    let scope: Scope
+
+    private var browsing: Bool { query.isEmpty && scope == .all }
 
     private var results: [PersonRow] {
         guard let tree = model.tree else { return [] }
-        if query.isEmpty && scope == .all { return model.people }
+        if browsing {
+            let byID = Dictionary(model.people.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+            return model.recent.compactMap { byID[$0] }
+        }
         return tree.search(query: query, scope: scope)
     }
 
-    /// Sections by the first letter of the surname, like Contacts.
-    private var sections: [(String, [PersonRow])] {
-        var out: [(String, [PersonRow])] = []
-        for p in results {
-            let letter = p.surname.first.map { String($0).folding(options: .diacriticInsensitive, locale: nil).uppercased() } ?? "#"
-            if out.last?.0 == letter { out[out.count - 1].1.append(p) } else { out.append((letter, [p])) }
-        }
-        return out
-    }
-
     var body: some View {
-        NavigationStack(path: $path) {
-            List {
-                if model.tree == nil {
-                    ReceivingView(model: model)
+        let rows = results
+        List {
+            Section {
+                ForEach(rows) { person in
+                    NavigationLink(value: PersonLink(id: person.id)) { PersonLabel(person: person) }
+                        .personMenu(model: model, id: person.id)
                 }
-                ForEach(sections, id: \.0) { letter, people in
-                    Section(letter) {
-                        ForEach(people) { person in
-                            NavigationLink(value: PersonLink(id: person.id)) { PersonLabel(person: person) }
-                                .personMenu(model: model, id: person.id)
-                        }
-                    }
-                    .indexLabel(letter)
-                }
-                if model.tree != nil {
-                    Section { SyncFooter(model: model) }
-                }
-            }
-            .sectionIndex()
-            .navigationTitle("People")
-            .navigationDestination(for: PersonLink.self) { link in
-                PersonView(model: model, id: link.id)
-            }
-            .overlay {
-                if model.tree != nil, results.isEmpty, !query.isEmpty { ContentUnavailableView.search }
-            }
-            .treeSearch(model: model, zone: .people, prompt: "Search People", query: $query, scoped: scope != .all) { scope = .all }
-            .searchScopes($scope, activation: .onSearchPresentation) {
-                Text("All").tag(Scope.all)
-                Text("Ancestors").tag(Scope.ancestors)
-            }
-            .refreshable { await model.syncIfPaired() }
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) { MoreMenu(model: model) }
+            } header: {
+                if browsing && !rows.isEmpty { Text("Recent") }
             }
         }
-        .tint(Theme.accent)
-        // A record opened from the iPhone's search, also when it launched the app.
-        .onChange(of: model.jumps) { openRequested() }
-        .onAppear { openRequested() }
-    }
-
-    private func openRequested() {
-        guard model.tab == .people, let id = model.personToOpen else { return }
-        model.personToOpen = nil
-        path = NavigationPath([PersonLink(id: id)])
+        .overlay {
+            if rows.isEmpty && !browsing { ContentUnavailableView.search }
+        }
     }
 }
 
@@ -109,18 +71,6 @@ struct SyncFooter: View {
             }
         }
         .foregroundStyle(.secondary)
-    }
-}
-
-/// The letters along the edge of the list, like Contacts: drag along them to jump to a
-/// surname (iOS 26 and later).
-private extension View {
-    @ViewBuilder func indexLabel(_ letter: String) -> some View {
-        if #available(iOS 26.0, *) { sectionIndexLabel(Text(verbatim: letter)) } else { self }
-    }
-
-    @ViewBuilder func sectionIndex() -> some View {
-        if #available(iOS 26.0, *) { listSectionIndexVisibility(.visible) } else { self }
     }
 }
 
