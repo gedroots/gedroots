@@ -57,9 +57,6 @@ research.state.not_found:
 research.state.ignored:
   en: ignored
   fr: ignorée
-research.period:
-  en: Estimated period
-  fr: Période estimée
 research.known:
   en: What is known
   fr: Ce que l’on sait

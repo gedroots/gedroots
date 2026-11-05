@@ -36,6 +36,8 @@ pub(super) struct ResearchState {
     pub menu_lead: Rc<RefCell<Option<String>>>,
     /// What each connected agent is doing, by its name.
     pub live: std::collections::HashMap<String, Live>,
+    /// The handoff is unfolded (folded by default: the clues and the log say the rest).
+    pub handoff_open: bool,
 }
 
 /// An agent's last tool call: shown while it is recent.
@@ -57,6 +59,7 @@ impl Default for ResearchState {
             focus: DEFAULT_FOCUS.to_string(),
             show_not_found: false,
             show_ignored: false,
+            handoff_open: false,
             menu_lead: Rc::default(),
             live: Default::default(),
         }
@@ -668,30 +671,25 @@ impl Workspace {
             .filter(|e| e.kind == LogKind::Clue)
             .enumerate()
             .map(|(i, e)| {
+                // “For: …”, “Against: …”: one line each, the label muted.
                 let side = |title: std::borrow::Cow<'static, str>, text: &str| {
                     (!text.is_empty()).then(|| {
-                        v_flex()
-                            .flex_1()
-                            .min_w_0()
-                            .gap_0p5()
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .font_weight(FontWeight::SEMIBOLD)
-                                    .text_color(theme::muted())
-                                    .child(title),
-                            )
-                            .child(div().text_sm().child(text.to_string()))
+                        h_flex()
+                            .gap_1()
+                            .items_start()
+                            .child(div().flex_none().text_color(theme::muted()).child(title))
+                            .child(div().flex_1().min_w_0().child(text.to_string()))
                     })
                 };
                 let url = e.url.clone();
                 v_flex()
-                    .gap_2()
+                    .gap_1()
                     .px_3()
                     .py_2()
                     .rounded(theme::RADIUS_SM)
                     .border_1()
                     .border_color(theme::border())
+                    .text_sm()
                     .child(
                         h_flex()
                             .gap_2()
@@ -701,21 +699,13 @@ impl Workspace {
                                     .pt_0p5()
                                     .child(Icon::new(IconName::Diamond).size(px(14.)).text_color(theme::warn())),
                             )
-                            .child(
-                                div()
-                                    .flex_1()
-                                    .min_w_0()
-                                    .text_sm()
-                                    .font_weight(FontWeight::MEDIUM)
-                                    .child(e.text.clone()),
-                            )
+                            .child(div().flex_1().min_w_0().font_weight(FontWeight::MEDIUM).child(e.text.clone()))
                             .when(!url.is_empty(), |d| {
                                 let href = url.clone();
                                 d.child(
                                     div()
                                         .id(SharedString::from(format!("clue-link-{i}")))
                                         .flex_none()
-                                        .text_xs()
                                         .text_color(theme::accent())
                                         .cursor_pointer()
                                         .child(host(&url).to_string())
@@ -723,13 +713,13 @@ impl Workspace {
                                 )
                             }),
                     )
-                    .when(!e.note.is_empty(), |d| {
-                        d.child(div().text_xs().text_color(theme::muted()).child(e.note.clone()))
-                    })
                     .child(
-                        h_flex()
-                            .gap_4()
-                            .items_start()
+                        v_flex()
+                            .pl(px(22.))
+                            .gap_0p5()
+                            .when(!e.note.is_empty(), |d| {
+                                d.child(div().text_color(theme::muted()).child(e.note.clone()))
+                            })
                             .children(side(t!("research.for"), &e.evidence_for))
                             .children(side(t!("research.against"), &e.against)),
                     )
@@ -738,39 +728,46 @@ impl Workspace {
         let clues = (!clue_cards.is_empty()).then(|| section(t!("research.clues")).children(clue_cards));
         // Where the last one stopped, and the search to make next.
         let handoff = l.log.iter().rev().find(|e| e.kind == LogKind::Handoff).map(|e| {
-            let by = e.by_agent().then(|| agent_label(&e.agent));
-            section(t!("research.handoff"))
-                .child(div().text_sm().child(e.text.clone()))
-                .when(!e.next.is_empty(), |d| {
-                    d.child(
-                        h_flex()
-                            .gap_1()
-                            .flex_wrap()
-                            .text_sm()
-                            .child(div().font_weight(FontWeight::SEMIBOLD).child(t!("research.next_search")))
-                            .child(e.next.clone()),
-                    )
+            let open = self.research.handoff_open;
+            let mut by = vec![Date::parse(&e.date).display()];
+            if e.by_agent() {
+                by.insert(0, agent_label(&e.agent));
+            }
+            v_flex()
+                .gap_2()
+                .child(
+                    h_flex()
+                        .id("research-handoff")
+                        .gap_1()
+                        .items_center()
+                        .cursor_pointer()
+                        .text_color(theme::muted())
+                        .child(
+                            Icon::new(if open { IconName::ChevronDown } else { IconName::ChevronRight }).size(px(14.)),
+                        )
+                        .child(label_caps(t!("research.handoff")))
+                        .child(div().text_xs().child(format!("· {}", by.join(" · "))))
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.research.handoff_open = !this.research.handoff_open;
+                            cx.notify();
+                        })),
+                )
+                .when(open, |d| {
+                    d.child(v_flex().gap_1().text_sm().child(div().child(e.text.clone())).when(
+                        !e.next.is_empty(),
+                        |d| {
+                            d.child(
+                                h_flex()
+                                    .gap_1()
+                                    .items_start()
+                                    .child(
+                                        div().flex_none().text_color(theme::muted()).child(t!("research.next_search")),
+                                    )
+                                    .child(div().flex_1().min_w_0().child(e.next.clone())),
+                            )
+                        },
+                    ))
                 })
-                .children(by.map(|b| {
-                    let date = Date::parse(&e.date).display();
-                    div().text_xs().text_color(theme::muted()).child(format!("{b} · {date}"))
-                }))
-        });
-        // Estimated period and why.
-        let period = l.years.map(|y| {
-            section(t!("research.period")).child(
-                h_flex()
-                    .gap_4()
-                    .items_start()
-                    .child(mono(y.to_string()).text_xl().font_weight(FontWeight::SEMIBOLD).text_color(theme::text()))
-                    .child(
-                        v_flex()
-                            .gap_0p5()
-                            .text_sm()
-                            .text_color(theme::muted())
-                            .children(l.years_reasons.iter().map(|r| div().child(r.label()))),
-                    ),
-            )
         });
         // What is known: the person's events and those of their unions, then the record to find.
         let entries: Vec<_> =
@@ -812,12 +809,24 @@ impl Workspace {
             .child(
                 row(
                     l.years.map(|y| y.to_string()).unwrap_or_default(),
-                    h_flex()
-                        .gap_1()
+                    v_flex()
+                        .gap_0p5()
                         .text_sm()
-                        .text_color(theme::accent())
-                        .child(div().font_weight(FontWeight::SEMIBOLD).child(goal_label(l.goal)))
-                        .when_some(l.places.first(), |d, p| d.child(format!("· {} ?", short_place(p))))
+                        .child(
+                            h_flex()
+                                .gap_1()
+                                .text_color(theme::accent())
+                                .child(div().font_weight(FontWeight::SEMIBOLD).child(goal_label(l.goal)))
+                                .when_some(l.places.first(), |d, p| d.child(format!("· {} ?", short_place(p)))),
+                        )
+                        // Why these years: computed from what dates the person.
+                        .when(!l.years_reasons.is_empty(), |d| {
+                            d.child(
+                                div()
+                                    .text_color(theme::muted())
+                                    .child(l.years_reasons.iter().map(|r| r.label()).collect::<Vec<_>>().join(" · ")),
+                            )
+                        })
                         .into_any_element(),
                     div()
                         .px_1()
@@ -917,7 +926,6 @@ impl Workspace {
             .children(live)
             .children(clues)
             .children(handoff)
-            .children(period)
             .child(known)
             .children(where_)
             .child(log);

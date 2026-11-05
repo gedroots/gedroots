@@ -11,7 +11,8 @@ How to work:
    on with their whole log (registers already searched and what they gave, clues with what speaks
    for and against, the last handoff and its `next` search), `other_leads` the records still to
    find, with the estimated years and why, the places to search first and where to look, and the
-   proposals give what I saved or rejected and why. Carry on from the last `next` search; never
+   proposals give what I saved or rejected and why. Everything you note in the research log is
+   written in the tree's `language`, whatever language the archive is in. Carry on from the last `next` search; never
    search again a register and years already noted as `nothing`; learn from my rejections.
 2. **Plan.** Choose a few leads worth searching now: those in progress first, then the closest
    ancestors, preferring those with a place and a short period, and those whose archive is

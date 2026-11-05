@@ -393,6 +393,9 @@ pub struct People {
 
 #[derive(Debug, Serialize, JsonSchema)]
 pub struct Resume {
+    /// Language of the tree (BCP 47, `HEAD.LANG`; empty when the file does not say: the one its
+    /// records are written in). Write everything you note in the research log in it.
+    pub language: String,
     /// Leads being worked on, by you or another agent or the user (planned, or with a clue or a
     /// handoff), last worked on first, each with its whole log: carry on from there.
     pub in_progress: Vec<Lead>,
@@ -713,13 +716,20 @@ impl GedrootsMcp {
             .collect();
         self.answer(
             &s,
-            Resume { in_progress, other_leads: other.into_iter().take(limit).collect(), other_total, waiting, decided },
+            Resume {
+                language: g.header.child_val("LANG").unwrap_or("").trim().to_string(),
+                in_progress,
+                other_leads: other.into_iter().take(limit).collect(),
+                other_total,
+                waiting,
+                decided,
+            },
         )
     }
 
     #[tool(
         name = "note_research",
-        description = "Writes in the research log of a lead, which GEDRoots keeps in the file for the user and every agent (shown in its Research page; written at once, with an undo point; the tree's data is not changed). `plan`: a lead you are about to search, with why in `text`. `search`: every register, index or database you looked at, whatever its result (`found`, `nothing`, `partial` for a mention or an index entry without the act), with the years, place and viewer page: the next search, yours or anyone's, starts from there and the estimated years narrow. `clue`: a record that may be the one but that you cannot tie to the person (an age that contradicts the tree, two people of the same name): give its viewer page and what speaks `for` and `against`; it waits here until another record settles it, and is never written to the tree. `handoff`: before you stop, where the lead stands and the `next` search to make, so that another agent carries on without asking. A record found is still proposed with `propose_act`. Returns the lead as it is now.",
+        description = "Writes in the research log of a lead, which GEDRoots keeps in the file for the user and every agent (shown in its Research page; written at once, with an undo point; the tree's data is not changed). `plan`: a lead you are about to search, with why in `text`. `search`: every register, index or database you looked at, whatever its result (`found`, `nothing`, `partial` for a mention or an index entry without the act), with the years, place and viewer page: the next search, yours or anyone's, starts from there and the estimated years narrow. `clue`: a record that may be the one but that you cannot tie to the person (an age that contradicts the tree, two people of the same name): give its viewer page and what speaks `for` and `against`; it waits here until another record settles it, and is never written to the tree. `handoff`: before you stop, where the lead stands and the `next` search to make, so that another agent carries on without asking. A record found is still proposed with `propose_act`. Write in the tree's language (`language` in resume_research), like the rest of the file, whatever language the archive or the conversation is in; names, places and quotes from a record keep their spelling. Returns the lead as it is now.",
         annotations(
             read_only_hint = false,
             destructive_hint = false,
