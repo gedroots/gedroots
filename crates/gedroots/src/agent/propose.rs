@@ -55,7 +55,7 @@ pub struct LocationParams {
     pub reason: Option<String>,
 }
 
-/// Who a person of the act is in the tree, decided before proposing (`match_people` lists the
+/// Who a person of the act is in the tree, decided before proposing (`search_people` lists the
 /// candidates).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
@@ -103,12 +103,12 @@ pub struct PersonParams {
     pub of: Option<usize>,
     /// link (an existing person, with `id`), create (a new person) or mention (named only).
     pub identity: Identity,
-    /// With link: the person's id (from `match_people`, `search_people` or `person_sheet`), or
+    /// With link: the person's id (from `search_people` or `person_sheet`), or
     /// the temporary id (`new-3`) of a person that a waiting proposal creates (`new_people` of
     /// its answer, `list_proposals`): both proposals then name the same new person.
     pub id: Option<String>,
     /// With create: ids of the people of the tree checked and found to be someone else (the
-    /// candidates `match_people` or a refusal gave).
+    /// candidates `search_people` or a refusal gave).
     #[serde(default)]
     pub not: Vec<String>,
     pub given: Option<String>,
@@ -134,7 +134,7 @@ pub struct PersonParams {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct ProposeParams {
-    /// Tree to work on, as `list_trees` names it, when several are open (default: the one in
+    /// Tree to work on, as `file_context` names it in `trees`, when several are open (default: the one in
     /// front in GEDRoots).
     pub tree: Option<String>,
     /// GEDCOM event tag: BIRT, BAPM, CHR, MARR, DEAT, BURI, CENS… Any other event (military
@@ -516,11 +516,9 @@ pub struct MatchPersonParams {
     pub age: Option<String>,
 }
 
+/// An act whose people `search_people` looks for in the tree.
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
-pub struct MatchParams {
-    /// Tree to work on, as `list_trees` names it, when several are open (default: the one in
-    /// front in GEDRoots).
-    pub tree: Option<String>,
+pub struct ActMatch {
     /// GEDCOM event tag of the act (BIRT, BAPM, MARR, DEAT…, EVEN).
     pub event: String,
     /// With EVEN: the event belongs to the couple.
@@ -532,8 +530,8 @@ pub struct MatchParams {
     pub people: Vec<MatchPersonParams>,
 }
 
-/// The act described for `match_people`.
-pub fn match_act(p: &MatchParams) -> Result<Act, String> {
+/// The act described for `search_people`.
+pub fn match_act(p: &ActMatch) -> Result<Act, String> {
     let mut act = base_act(&p.event, p.family_event, &p.date)?;
     for person in &p.people {
         let mut part = Participant::new(role(&person.role)?).of(person.of.unwrap_or(0));

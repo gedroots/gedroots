@@ -84,6 +84,12 @@ impl Workspace {
         item
     }
 
+    /// Withdrawn by its agent. Always `true`, to chain after a lookup.
+    pub(super) fn withdraw_chapter(&mut self, i: usize) -> bool {
+        self.take_chapter(i, gedcom::agent_proposals::Outcome::Withdrawn);
+        true
+    }
+
     pub(super) fn reject_chapter(&mut self, i: usize, cx: &mut Context<Self>) {
         self.take_chapter(i, gedcom::agent_proposals::Outcome::Rejected);
         self.set_status(t!("review.rejected"), false);

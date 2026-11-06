@@ -8,6 +8,9 @@ use rmcp::{prompt, prompt_router};
 use schemars::JsonSchema;
 use serde::Deserialize;
 
+/// How to read an act and propose it: in `read_record`, and in `research`, whose agent cannot read
+/// another prompt.
+const READ_ACT: &str = include_str!("prompts/read_act.md");
 const READ_RECORD: &str = include_str!("prompts/read_record.md");
 const RESEARCH: &str = include_str!("prompts/research.md");
 const REVIEW_QUALITY: &str = include_str!("prompts/review_quality.md");
@@ -50,7 +53,8 @@ pub struct BookArgs {
 }
 
 fn text(template: &str, target: String) -> Vec<PromptMessage> {
-    vec![PromptMessage::new_text(Role::User, template.replace("{target}", target.trim()))]
+    let text = template.replace("{read_act}", READ_ACT.trim()).replace("{target}", target.trim());
+    vec![PromptMessage::new_text(Role::User, text)]
 }
 
 fn some(s: &Option<String>) -> Option<&str> {
@@ -123,5 +127,20 @@ impl GedrootsMcp {
         .collect::<Vec<_>>()
         .join("\n");
         text(WRITE_BOOK, target)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_research_prompt_carries_the_act_reading_method() {
+        for template in [RESEARCH, READ_RECORD] {
+            let message = text(template, "Person: Jean MARCHAND".into());
+            let body = serde_json::to_string(&message).unwrap();
+            assert!(!body.contains("{read_act}") && !body.contains("{target}"), "{body}");
+            assert!(body.contains("faithful transcription") && body.contains("search_people"), "{body}");
+        }
     }
 }

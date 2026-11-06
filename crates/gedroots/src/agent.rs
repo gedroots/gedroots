@@ -38,7 +38,8 @@ pub fn url() -> String {
 }
 
 /// A change queued: its id, the proposals waiting, the issues it would create.
-pub type ChangeQueued = (String, usize, Vec<String>);
+/// Id, proposals waiting, whether the issue is gone, issues it would create.
+pub type ChangeQueued = (String, usize, Option<bool>, Vec<String>);
 
 /// What the app asks of the displayed document, from the server's thread.
 pub enum Request {
@@ -109,13 +110,13 @@ pub enum NoteKind {
     Handoff,
 }
 
-/// A request for the tree named `tree` (as `list_trees` names it), or for the window in front.
+/// A request for the tree named `tree` (as `file_context` names it in `trees`), or for the window in front.
 pub struct Ask {
     pub tree: Option<String>,
     pub request: Request,
 }
 
-/// A tree open in a window, as `list_trees` shows it.
+/// A tree open in a window, as `file_context` shows it in `trees`.
 #[derive(Clone, Debug)]
 pub struct Tree {
     /// Name shown in the window's title bar.
@@ -153,7 +154,7 @@ impl Tree {
 pub fn no_tree(tree: Option<&str>) -> String {
     match tree {
         None => "no file is open in GEDRoots".to_string(),
-        Some(t) => format!("no tree named “{t}” is open in GEDRoots: call list_trees for the open trees"),
+        Some(t) => format!("no tree named “{t}” is open in GEDRoots: call file_context for the open trees (`trees`)"),
     }
 }
 
@@ -312,7 +313,9 @@ fn workspace(tree: Option<&str>, cx: &App) -> Result<Entity<crate::workspace::Wo
     match found.len() {
         0 => Err(no_tree(tree)),
         1 => Ok(found.remove(0).1),
-        _ => Err(format!("several open trees are named “{name}”: name one by its id, as list_trees gives it")),
+        _ => Err(format!(
+            "several open trees are named “{name}”: name one by its id, as file_context gives it in `trees`"
+        )),
     }
 }
 

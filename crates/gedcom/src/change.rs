@@ -5,11 +5,11 @@
 //!
 //! Like an act proposal ([`crate::proposal`]), a change is only a description: the app shows it
 //! in To Review and applies it when the user saves it. Before it is queued, [`QualityChange::check`]
-//! applies it to a copy of the file and checks the issue is gone. A change that does not fix its
-//! issue, or that edits records the issue is not about, is refused with the reason, which the
-//! agent reads to correct it. Edits are typed (never raw GEDCOM) and each kind of issue allows only
-//! some of them ([`edits_for`]). A possible duplicate is merged (`Action::Merge`), with the value
-//! to keep for each contradictory fact, which the user reviews in the merge window.
+//! applies it to a copy of the file and says whether its issue is gone and which issues it would
+//! create. Edits are typed (never raw GEDCOM); any of them may be proposed with or without an issue,
+//! except those that act on the structure an issue designates ([`NEED_ISSUE`]). Two people or two
+//! places are merged (`Action::Merge`), from a possible duplicate or not, with the value to keep for
+//! each contradictory fact, which the user reviews in the merge window.
 
 use crate::act::quality_label;
 use crate::analysis::check::{IGNORE_TAG, Issue, code_label};
@@ -284,6 +284,14 @@ impl Evidence {
     }
 }
 
+/// Two records a merge without an issue is about: two people (ids), or two places (as the tree
+/// writes them).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MergePair {
+    People(String, String),
+    Places(String, String),
+}
+
 /// A change proposed for an issue, or a correction without one.
 #[derive(Debug, Clone, PartialEq)]
 pub struct QualityChange {
@@ -292,8 +300,19 @@ pub struct QualityChange {
     pub issue: Option<Issue>,
     pub issue_id: Option<String>,
     pub action: Action,
+    /// For a merge without an issue: the two records.
+    pub pair: Option<MergePair>,
     pub reason: String,
     pub evidence: Evidence,
+}
+
+/// What applying a change to a copy of the file showed.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Checked {
+    /// With an issue: is it gone afterwards?
+    pub resolves: Option<bool>,
+    /// Issues the change would create.
+    pub new: Vec<Issue>,
 }
 
 /// Line of the comparison: what the tree has, what the change makes of it.
@@ -305,32 +324,11 @@ pub struct ChangeRow {
     pub change: Change,
 }
 
-/// Edits a correction without an issue may make: those that name their record.
-pub const CORRECTIONS: &[&str] = &[
-    "set_name",
-    "add_name",
-    "set_event",
-    "add_event",
-    "delete_event",
-    "set_sex",
-    "cite_source",
-    "set_coordinates",
-    "rename_place",
-    "set_repository",
-    "set_age",
-    "link_relative",
-    "unlink_relative",
-    "set_pedigree",
-    "add_note",
-    "set_note",
-    "add_associate",
-    "remove_associate",
-    "attach_media",
-    "detach_media",
-];
+/// Edits that act on the structure an issue designates: they need that issue.
+pub const NEED_ISSUE: &[&str] = &["set_media_file", "set_value", "delete_structure"];
 
-/// Edits each kind of issue allows. Changing a filiation (own ancestor) or a person's links stays
-/// with the user.
+/// Edits that usually settle each kind of issue, as a hint for the agent: any typed edit may be
+/// proposed with an issue.
 pub fn edits_for(code: &str) -> &'static [&'static str] {
     match code {
         "husband_not_male" | "wife_not_female" | "role_sex_mismatch" => &["set_sex"],
@@ -394,54 +392,9 @@ impl Gedcom {
 }
 
 impl QualityChange {
-    /// Records the change may edit: the issue's record and the records involved; any record for a
-    /// correction.
-    fn allowed(&self, xref: &str) -> bool {
-        match &self.issue {
-            Some(i) => i.xref == xref || i.related.iter().any(|r| r == xref),
-            None => true,
-        }
-    }
-
-    /// The issue, for the actions that need one.
+    /// The issue, for what needs one.
     fn the_issue(&self) -> Result<&Issue, String> {
-        self.issue.as_ref().ok_or_else(|| {
-            "without an issue, a change can only `edit`: `fix`, `hide` and `merge` are for an issue of `quality_issues`"
-                .to_string()
-        })
-    }
-
-    /// Checks a correction without an issue: edits that name their record, a reason and evidence.
-    fn validate_correction(&self, g: &Gedcom) -> Result<(), String> {
-        let Action::Edit(edits) = &self.action else { return self.the_issue().map(|_| ()) };
-        if edits.is_empty() {
-            return Err("give at least one edit".into());
-        }
-        if self.reason.trim().is_empty() {
-            return Err("give the reason for the correction in `reason`: what you read".into());
-        }
-        if self.evidence.is_empty() {
-            return Err(
-                "a correction without an issue needs `evidence`: the source of the tree, the viewer page or a quote of the document"
-                    .into(),
-            );
-        }
-        for e in edits {
-            if !CORRECTIONS.contains(&e.name()) {
-                return Err(format!(
-                    "`{}` needs an issue of `quality_issues`; without one, use {}",
-                    e.name(),
-                    CORRECTIONS.join(", ")
-                ));
-            }
-            if let Some(x) = e.record()
-                && g.get(x).is_none()
-            {
-                return Err(format!("no record {x} in the tree"));
-            }
-            self.validate_edit(g, e)?;
-        }
-        Ok(())
+        self.issue.as_ref().ok_or_else(|| "this needs the `issue` of `quality_issues` it is about".to_string())
     }
 
     /// Checks what an edit needs, whatever the issue.
@@ -602,22 +555,20 @@ impl QualityChange {
         }
     }
 
-    /// Checks the change on its own: allowed for this kind of issue, with what it needs.
+    /// Checks the change on its own: what each edit needs, a reason, and evidence for a
+    /// correction without an issue.
     fn validate(&self, g: &Gedcom) -> Result<(), String> {
-        let Some(issue) = &self.issue else { return self.validate_correction(g) };
-        let code = issue.code;
         match &self.action {
             Action::Fix => {
+                let code = self.the_issue()?.code;
                 // A possible duplicate's “fix” is the comparison window: merged or hidden instead.
                 if quality::fix_of(code).is_none() || matches!(code, "possible_duplicate" | "possible_duplicate_place")
                 {
-                    return Err(format!(
-                        "`{code}` has no automatic fix: propose edits ({}) or hide it with a reason",
-                        allowed_list(code)
-                    ));
+                    return Err(format!("`{code}` has no automatic fix: {}", allowed_list(code)));
                 }
             }
             Action::Hide => {
+                let issue = self.the_issue()?;
                 if !can_hide(g, issue) {
                     return Err("this issue is about places or files, not a record: it cannot be hidden".into());
                 }
@@ -626,18 +577,17 @@ impl QualityChange {
                 }
             }
             Action::Merge(_) => {
-                if !matches!(code, "possible_duplicate" | "possible_duplicate_place") {
-                    return Err(format!(
-                        "only a `possible_duplicate` or a `possible_duplicate_place` can be merged, not `{code}`"
-                    ));
-                }
                 if self.reason.trim().is_empty() {
                     return Err("give the reason they are the same in `reason`".into());
                 }
-                if code == "possible_duplicate" {
+                if self.merge_pair().is_some() {
                     self.merge_choices(g)?;
-                } else {
+                } else if self.place_pair().is_some() {
                     self.place_merge_choices(g)?;
+                } else {
+                    return Err(
+                        "give the two people (`merge_people`) or the two places (`merge_places`) to merge".into()
+                    );
                 }
             }
             Action::Edit(edits) => {
@@ -645,22 +595,25 @@ impl QualityChange {
                     return Err("give at least one edit".into());
                 }
                 if self.reason.trim().is_empty() {
-                    return Err("give the reason for the change in `reason`".into());
+                    return Err("give the reason for the change in `reason`: what you read".into());
                 }
-                let allowed = edits_for(code);
+                if self.issue.is_none() && self.evidence.is_empty() {
+                    return Err(
+                        "a correction without an issue needs `evidence`: the source of the tree, the viewer page or a quote of the document"
+                            .into(),
+                    );
+                }
                 for e in edits {
-                    if !allowed.contains(&e.name()) {
-                        return Err(format!("`{}` is not allowed for `{code}`: use {}", e.name(), allowed_list(code)));
+                    if self.issue.is_none() && NEED_ISSUE.contains(&e.name()) {
+                        return Err(format!(
+                            "`{}` changes the structure an issue designates: give that `issue`",
+                            e.name()
+                        ));
                     }
                     if let Some(x) = e.record()
-                        && !self.allowed(x)
+                        && g.get(x).is_none()
                     {
-                        return Err(format!("{x} is not one of the records this issue is about"));
-                    }
-                    if let Edit::SetCoordinates { place, .. } = e
-                        && !issue.related.iter().any(|p| p == place)
-                    {
-                        return Err(format!("`{place}` is not the place of this issue"));
+                        return Err(format!("no record {x} in the tree"));
                     }
                     self.validate_edit(g, e)?;
                 }
@@ -728,10 +681,12 @@ impl QualityChange {
                 for e in order {
                     self.apply_edit(g, e)?;
                 }
-                let touched: Vec<String> = match &self.issue {
-                    Some(i) => std::iter::once(&i.xref).chain(&i.related).cloned().collect(),
-                    None => edits.iter().filter_map(|e| e.record().map(str::to_string)).collect(),
-                };
+                let touched: Vec<String> = self
+                    .issue
+                    .iter()
+                    .flat_map(|i| std::iter::once(&i.xref).chain(&i.related).cloned())
+                    .chain(edits.iter().filter_map(|e| e.record().map(str::to_string)))
+                    .collect();
                 for x in touched {
                     if let Some(r) = g.get_mut(&x) {
                         r.touch();
@@ -744,12 +699,18 @@ impl QualityChange {
 
     /// The two people of a possible duplicate, if they can still be merged.
     pub fn merge_pair(&self) -> Option<(String, String)> {
+        if let Some(MergePair::People(a, b)) = &self.pair {
+            return Some((a.clone(), b.clone()));
+        }
         let i = self.issue.as_ref()?;
         (i.code == "possible_duplicate").then(|| Some((i.xref.clone(), i.related.first()?.clone()))).flatten()
     }
 
     /// The two places of a possible duplicate place.
     pub fn place_pair(&self) -> Option<(String, String)> {
+        if let Some(MergePair::Places(a, b)) = &self.pair {
+            return Some((a.clone(), b.clone()));
+        }
         let i = self.issue.as_ref()?;
         match (i.code, &i.related[..]) {
             ("possible_duplicate_place", [a, b]) => Some((a.clone(), b.clone())),
@@ -1101,11 +1062,10 @@ impl QualityChange {
         }
     }
 
-    /// Checks the change before it is queued: it fits the issue, and once applied to a copy of the
-    /// file (`rerun` gives the issues of a file, like the Quality page), the issue is gone. Returns
-    /// the issues the change would create.
-    /// A correction without an issue only has to apply.
-    pub fn check(&self, g: &Gedcom, rerun: &dyn Fn(&Gedcom) -> Vec<Issue>) -> Result<Vec<Issue>, String> {
+    /// Checks the change before it is queued: it applies to a copy of the file (`rerun` gives the
+    /// issues of a file, like the Quality page). Says whether its issue is gone, and the issues it
+    /// would create: the agent and the user decide, nothing is refused for them.
+    pub fn check(&self, g: &Gedcom, rerun: &dyn Fn(&Gedcom) -> Vec<Issue>) -> Result<Checked, String> {
         let before = rerun(g);
         if let (Some(_), Some(id)) = (&self.issue, &self.issue_id)
             && find_issue(&before, id).is_none()
@@ -1116,12 +1076,10 @@ impl QualityChange {
         self.apply(&mut copy)?;
         let after = rerun(&copy);
         let (b, a) = (counts(&before), counts(&after));
-        if let Some(issue) = &self.issue {
+        let resolves = self.issue.as_ref().map(|issue| {
             let key = count_key(issue);
-            if a.get(&key).copied().unwrap_or(0) >= b.get(&key).copied().unwrap_or(0) {
-                return Err(format!("after this change, GEDRoots still reports: {}", issue.message));
-            }
-        }
+            a.get(&key).copied().unwrap_or(0) < b.get(&key).copied().unwrap_or(0)
+        });
         // Issues that appear: more of their kind on their record than before.
         let mut seen: HashMap<_, usize> = HashMap::new();
         let mut new = Vec::new();
@@ -1133,7 +1091,7 @@ impl QualityChange {
                 new.push(i.clone());
             }
         }
-        Ok(new)
+        Ok(Checked { resolves, new })
     }
 
     /// Short title: the kind of issue and its record (“Death Before Birth · Jean GUYOT”), or
@@ -1141,8 +1099,14 @@ impl QualityChange {
     pub fn title(&self, g: &Gedcom) -> String {
         let Some(issue) = &self.issue else {
             let kind = t!("change.correction").into_owned();
-            let record = match &self.action {
-                Action::Edit(edits) => edits.iter().find_map(|e| e.record()).map(|x| g.record_label(x)),
+            let record = match (&self.action, &self.pair) {
+                (Action::Edit(edits), _) => edits.iter().find_map(|e| e.record()).map(|x| g.record_label(x)),
+                (Action::Merge(_), Some(MergePair::People(a, b))) => {
+                    Some(format!("{} & {}", g.record_label(a), g.record_label(b)))
+                }
+                (Action::Merge(_), Some(MergePair::Places(a, b))) => {
+                    Some(format!("{} & {}", short_place(a), short_place(b)))
+                }
                 _ => None,
             };
             return match record {
@@ -1364,7 +1328,13 @@ impl QualityChange {
                         let title = match (media, file) {
                             (Some(m), _) => g.record_label(m),
                             (None, Some(f)) => {
-                                g.media_by_file(f.trim()).map(|m| g.record_label(&m)).unwrap_or(f.clone())
+                                g.media_by_file(f.trim()).map(|m| g.record_label(&m)).unwrap_or_else(|| {
+                                    // A downloaded file: its name, not where it waits.
+                                    std::path::Path::new(f.trim())
+                                        .file_name()
+                                        .map(|n| n.to_string_lossy().into_owned())
+                                        .unwrap_or_else(|| f.clone())
+                                })
                             }
                             (None, None) => String::new(),
                         };
@@ -1738,15 +1708,18 @@ fn conflict_list(plan: &MergePlan) -> String {
     }
 }
 
+/// What to propose instead of the Quality page's fix.
 fn allowed_list(code: &str) -> String {
     if code == "possible_duplicate" {
-        return "nothing: merge them (`merge`, with `choices`) or, if they are two people, hide it".into();
+        return "merge them (`merge_people`, with `choices`) or, if they are two people, `hide_issue`".into();
     }
     if code == "possible_duplicate_place" {
-        return "nothing: merge them (`merge`, with `choices`) or, if they are two places, hide it".into();
+        return "merge them (`merge_places`, with `choices`) or, if they are two places, `hide_issue`".into();
     }
-    let e = edits_for(code);
-    if e.is_empty() { "nothing: this issue can only be hidden, or fixed by the user".into() } else { e.join(", ") }
+    match edits_for(code) {
+        [] => "propose edits, or `hide_issue` with the reason it is right".into(),
+        e => format!("propose edits (usually {}), or `hide_issue` with the reason it is right", e.join(", ")),
+    }
 }
 
 fn node_ref<'a>(n: &'a Node, path: &[usize]) -> Option<&'a Node> {

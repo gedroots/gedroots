@@ -27,7 +27,7 @@ in the machine's settings. The commands and blocks are built in `crates/gedroots
 ## Tools
 
 The tools return structured JSON (`outputSchema`). GEDRoots shows one tree per window: every
-tool takes an optional `tree` (a name, file name or id, as `list_trees` gives them) and otherwise
+tool takes an optional `tree` (a name, file name or id, as `file_context` gives them in `trees`) and otherwise
 works on the tree of the window in front. A proposal goes to the To Review page of its own tree.
 All are read-only (`readOnlyHint`) except `propose_act`, `propose_change`, `propose_chapter` and
 `withdraw_proposal`, which write nothing either: they only add or take back a proposal to review;
@@ -39,23 +39,20 @@ where another stopped (`resume_research`), with no memory of its own.
 
 | Tool | Returns |
 | --- | --- |
-| `list_trees` | The trees open in GEDRoots, the one in front first: name, file, id, number of people, families, sources and media, root person |
-| `file_context` | How the file is written: the description the user wrote (File Settings › General, `HEAD.NOTE`, word for word), language, place format, events, custom event types and occupations in use with their counts, media folders and naming, and the latest sources, people, families, media and repositories changed as raw GEDCOM (`examples`). Also served as the resource `gedroots://file/context` |
-| `search_people` | People matching a search, as in the app's search box |
+| `file_context` | The trees open in GEDRoots (`trees`: name, file, id, number of people, families, sources and media, root person, the one in front first), then how the file is written: the description the user wrote (File Settings › General, `HEAD.NOTE`, word for word), language, place format, events, custom event types and occupations in use with their counts, media folders and naming, and the latest sources, people, families, media and repositories changed as raw GEDCOM (`examples`). Also served as the resource `gedroots://file/context` |
+| `search_people` | With `query`: people matching a search, as in the app's search box (advanced keywords, spellings found by sound). With `act`: for the people named in an act (role, names, sex, age, act date), the people of the tree who could be them, with the reason and whether the match is likely |
 | `person_sheet` | Events with their position in the record, date, place, street address (`ADDR`), age, cause, cited sources (`PAGE`), media, associates and notes; parents (and how, when not by birth), unions, children, the person's notes and media; Sosa number |
 | `resume_research` | Where the research stands, and the tree's language to write the log in: the leads in progress anywhere in the tree (planned, or with a clue or a handoff) with their whole log, the other leads to search for a focus (search syntax, default `sosa:1-63`), each with estimated years and why, places to search first and where to look, the proposals waiting for review and what became of the others (saved, rejected with the user's reason, edited, withdrawn, replaced). With `person`: everything about that person |
 | `note_research` | Writes in a lead's log: `plan` (a lead about to be searched, with the reason; state `planned`), `search` (what was searched, whatever its result: `found`, `nothing`, `partial`; years, place, viewer page; `finished` when nothing is left), `clue` (a record that may be the one, with what speaks `for` and `against`: it stays in the Research page, never in the tree) or `handoff` (where the lead stands and the `next` search, when the agent stops) |
 | `quality_issues` | The Data Quality page's issues, filtered by category, kind or record and paged (`offset`, `limit`): message, records and places involved, whether the page fixes it in one click, whether it can be hidden, counts per category |
 | `search_sources` | Sources (register, repository, call number, number of acts) and repositories, to cite an existing one |
 | `locate_place` | For one place of an act: the tree's places of that name, the located places of the events of the act's people and their relatives (closest in time first), and the gazetteer's candidates (OpenStreetMap, through Photon, biased towards those places) in the file's place format, best fit first, each with its `fit`, its reasons (`why`) and its distance to the closest of those events; for the tree's places, whether they follow the format and their completed name |
-| `match_people` | For the people named in an act (role, names, sex, age, act date), the people of the tree who could be them, with the reason and whether the match is likely |
 | `propose_act` | Adds an act to the To Review page: event, date, place, street address, source, reference, quality of the evidence (`QUAY`), transcription (plain text, only the act), people with their role, downloaded file, and the agent's remarks on the act (shown beside it, then kept as the note of its citation). Answers its id, what it will write and the temporary id of each new person; with `replaces`, corrects a waiting proposal |
 | `withdraw_proposal` | Takes back a waiting proposal |
-| `propose_change` | Adds a change for one Data Quality issue to the To Review page: the page's own fix (`fix`), edits among those the issue allows (`edit`), merging a possible duplicate (`merge`), or hiding a correct issue (`hide`), with the reason and the evidence. Without an issue, it proposes a correction read in a document (a name, a date, a sex, a citation). The answer lists the issues the change would create |
+| `propose_change` | Adds typed edits to the To Review page, with the reason and the evidence: a correction read in a document, a change for a Data Quality issue (the page's own fix `apply_fix`, or `hide_issue` for a correct one), or a merge of two people or places. The answer says whether it resolves its issue and lists the issues it would create; `replaces` corrects a waiting one |
 | `read_book` | The tree's family books, or the chapters of one: each chapter is a generation, with its people (id, name, years, number, how much of a record the book gives them, facts known) and what the agent already wrote |
 | `propose_chapter` | Adds what the agent wrote for one chapter of a book to the To Review page: an introduction and people's narratives, in `text` blocks (people cited as `{I12}`, checked to be in the tree), `context` blocks (with their sources) and `hypothesis` blocks (with their basis), and `visualization` blocks (a chart GEDRoots draws from the tree, for the book's people or another person's ancestors or descendants, with an optional comment). A new proposal for the same chapter takes the place of the waiting one. In To Review, context, hypotheses and visualizations can be unticked; only the ticked ones are saved into the book |
-| `list_visualizations` | The visualizations GEDRoots draws (fan chart by origin, places and migrations, lives, ancestors found, longevity, occupations): what each shows and when it suits a book |
-| `read_visualization` | The data of one visualization for a person's ancestors or descendants: the Visualizations page's table (one row per person, place, generation or occupation), the legend of its colours and its caption |
+| `read_visualization` | Without a name, the visualizations GEDRoots draws (fan chart by origin, places and migrations, lives, ancestors found, longevity, occupations): what each shows and when it suits a book. With one, its data for a person's ancestors or descendants: the Visualizations page's table (one row per person, place, generation or occupation), the legend of its colours and its caption |
 
 Ids (`I12`, `F3`…) are only for passing between tools; the server's instructions ask the agent
 not to show them.
@@ -71,8 +68,8 @@ Code they appear as slash commands once the server is connected.
 
 | Prompt | Arguments | Does |
 | --- | --- | --- |
-| `research` | `person`, `event`, `focus` (all optional) | The research loop: resumes with `resume_research`, plans a few leads, searches each in the browser at a human pace, notes every search and clue with `note_research`, proposes the acts found (`read_record`), notes a handoff on each lead left open, then sums up what was found, what was searched in vain and what to try next |
-| `read_record` | `file`, `person` (both optional) | Transcribes the act, checks it against the person's sheet, identifies each person with `match_people`, picks or describes the source with `search_sources`, then calls `propose_act` and fixes it if refused |
+| `research` | `person`, `event`, `focus` (all optional) | The research loop: resumes with `resume_research`, plans a few leads, searches each in the browser at a human pace, notes every search and clue with `note_research`, proposes each act found right away, with the same method as `read_record`, notes a handoff on each lead left open, then sums up what was found, what was searched in vain and what to try next |
+| `read_record` | `file`, `person` (both optional) | Transcribes the act, checks it against the person's sheet, identifies each person with `search_people` (`act`), picks or describes the source with `search_sources`, then calls `propose_act` and fixes it if refused |
 | `review_quality` | `category`, `person` (both optional) | Goes through the Data Quality issues with `quality_issues`, checks each one against the sheets and sources, then proposes a fix, an edit or hiding it with `propose_change` |
 | `write_book` | `book`, `chapter` (both optional) | Reads the book with `read_book`, then chapter by chapter reads the people's sheets, searches the historical context in reliable sources, and proposes the narratives, context and hypotheses with `propose_chapter` |
 
@@ -239,57 +236,46 @@ already located (moving it is a `propose_change` with `set_coordinates`).
   `GEDRoots/agents` in the platform's configuration folder (`~/Library/Application Support` on
   macOS, `~/.config` on Linux, `%APPDATA%` on Windows), never in the `.ged`.
 
-## Quality changes
+## Changes
 
-`propose_change` (`crates/gedcom/src/change.rs`) targets one issue by the id `quality_issues`
-gives it. Each issue lists the edits it accepts (`edits`): `set_event`, `delete_event`,
-`set_sex`, `set_coordinates`, `set_media_file`, `cite_source`, `set_value`,
-`delete_structure`. A change is refused, with the reason, when:
+`propose_change` (`crates/gedcom/src/change.rs`) proposes a list of typed `edits` (never raw
+GEDCOM), with the `reason` (what the agent read) and the `evidence` (a source of the tree, the
+viewer page or a quote). Any edit may be proposed on any record, for a Data Quality issue
+(`issue`, the id `quality_issues` gives it) or without one. Without an issue, the item is titled
+**Correction** in To Review and the evidence is required. The edits:
 
-- the issue no longer exists (the agent calls `quality_issues` again);
-- the edit is not one the issue accepts, or touches a record the issue does not involve;
-- `fix` is asked for an issue without an automatic fix, or `hide` without a reason;
-- a cited source does not exist, or coordinates are out of range;
-- after applying it on a copy, GEDRoots still reports the issue.
+- **names and events**: `set_name` (given name and/or surname of one of the person's names, the
+  rest of the name kept), `add_name` (another `NAME`, with its `TYPE`, for a variant spelling),
+  `set_event` (value such as an occupation, date, place, street address and/or `cause`),
+  `add_event` (`OCCU` with its value, `RESI` with its address…), `delete_event`, `set_sex`,
+  `set_age` (`AGE`; on a family event, the age of one of the couple), `add_associate` and
+  `remove_associate` (`ASSO` with its GEDCOM 7 `ROLE` and `PHRASE`);
+- **sources and places**: `cite_source`, `set_repository` (an existing repository, or one to
+  create, as in `propose_act`), `rename_place` (everywhere it is used, its coordinates kept),
+  `set_coordinates` (with the `osm` of the `locate_place` candidate, kept as the place's `EXID`);
+- **family links**: `link_relative`, `unlink_relative` (a child taken from a wrong father stays
+  with the mother, in a family of their own, and the couple's union stays), `set_pedigree`
+  (`FAMC.PEDI`);
+- **notes**: `add_note` and `set_note` (empty text removes it), on a record or one of its events;
+- **media**: `attach_media` (an existing media, or the file the agent downloaded, which goes
+  through the same import as an act's image: copied to the app's cache, a PDF page extracted,
+  shown beside the change in To Review, then named and filed according to File Settings › Media
+  when the user saves it) and `detach_media` (the media stays in the file);
+- **structures an issue designates** (need that `issue`): `set_value`, `delete_structure`,
+  `set_media_file`.
 
-Fixes of the same kind are grouped into one To Review item, applied together. The item shows the
-values in the tree and the proposed ones, the reason, the evidence and the GEDCOM diff; saving it
-is one undo step. Hiding keeps the reason as a `NOTE` under `_GR_IGNORE`, and a possible duplicate
-is hidden with `_GR_DISTINCT`. For an issue, filiations (parents, unions) cannot be changed this
-way; a correction can change them (below).
+Four edits go on their own: `apply_fix` (the Quality page's own fix of an issue with
+`automatic_fix`; fixes of the same kind are grouped into one To Review item, applied together),
+`hide_issue` (the issue is right: the reason is kept as a `NOTE` under `_GR_IGNORE`, and a
+possible duplicate is recorded with `_GR_DISTINCT`), `merge_people` and `merge_places` (two
+records become one: those of a possible duplicate, or `keep` and `other`; `choices` gives whose
+value to keep for each fact or level that differs). **Compare and Merge…** opens the merge window
+with the agent's choices already ticked: the user checks them and merges there.
 
-Without `issue`, a change is a correction the agent read in a document: a given name misread
-in a proposal the user already saved, a name the act spells otherwise, a wrong date. It may only
-`edit`, with `set_name` (given name and/or surname of one of the person's names, the rest of the
-name kept), `add_name` (another `NAME`, with its `TYPE`, for a variant spelling), `set_event`
-(value such as an occupation, date, place and/or street address of an existing event),
-`add_event` (a new event or attribute: `OCCU` with its value, `RESI` with its address…),
-`rename_place` (a place renamed everywhere it is used, its coordinates kept),
-`delete_event`, `set_sex`, `cite_source`, `set_coordinates` (with the `osm` of the
-`locate_place` candidate, kept as the place's `EXID`) or `set_repository` (the repository and
-call number of a source: an existing repository, or one to create, as in `propose_act`), on any
-record. It can also change:
-
-- **family links**: `link_relative` (an existing person becomes the father, mother, spouse, child
-  or sibling of another, in the family that already exists or a new one), `unlink_relative` (a
-  wrong link removed; a child taken from a wrong father stays with the mother, in a family of
-  their own, and the couple's union stays), `set_pedigree` (`FAMC.PEDI`: adopted, foster…);
-- **notes**: `add_note` and `set_note` (empty text removes it), on a record or on one of its
-  events; a shared note (`SNOTE`) stays with the user;
-- **event details**: `cause` in `set_event` (`CAUS`), `set_age` (`AGE`; on a family event, the
-  age of one of the couple, under `HUSB`/`WIFE`), `add_associate` and `remove_associate` (`ASSO`
-  with its GEDCOM 7 `ROLE` and `PHRASE`: witnesses, godparents, officiants);
-- **media**: `attach_media` (an existing media, or a file of the tree's folder, on a record or an
-  event) and `detach_media` (the media stays in the file).
-
-The reason and
-the evidence (a source of the tree, the viewer page or a quote) are required: the user checks
-them in To Review, where the item is titled **Correction**. When `propose_act` links a person
-the act names otherwise, its `will_write` says so and points to this correction.
-
-A possible duplicate can also be merged (`merge`). Its issue lists, under `merge`, the person
-kept, the person merged into it and the facts that contradict each other (`conflicts`: `NAME`,
-`BIRT`…). The agent gives, in `choices`, whose value to keep for each of them; a merge without a
-choice for every conflict, for two people the engine rules out (close relatives, lives too far
-apart), or without a reason, is refused. In To Review, **Compare and Merge…** opens the merge
-window with the agent's choices already ticked: the user checks them and merges there.
+Each issue lists the edits that usually settle it (`edits`), as a hint only. GEDRoots applies the
+change to a copy first and answers whether it `resolves` its issue and which issues it would
+create; it refuses a change only when it cannot apply (an unknown record or source, coordinates out
+of range, a merge the engine rules out or without a choice for every conflict, no reason, a
+correction without evidence). A waiting change is corrected with `replaces` (its id) or withdrawn
+with `withdraw_proposal`. When `propose_act` links a person the act names otherwise, its
+`will_write` says so and points to this correction.

@@ -6,6 +6,7 @@
 //! same kind are gathered into one row, approved at once.
 
 use super::*;
+use crate::agent::ChangeQueued;
 use crate::agent::change::ChangeRequest;
 use crate::t;
 use gedcom::analysis::check::Issue;
@@ -21,6 +22,19 @@ pub(super) struct ChangeItem {
     pub(super) id: String,
     pub(super) change: QualityChange,
     new_issues: Vec<String>,
+}
+
+/// Files the agent downloaded that the change attaches (absolute paths, until it is saved).
+pub(super) fn change_files(c: &QualityChange) -> Vec<std::path::PathBuf> {
+    let Action::Edit(edits) = &c.action else { return Vec::new() };
+    edits
+        .iter()
+        .filter_map(|e| match e {
+            gedcom::change::Edit::AttachMedia { media: None, file: Some(f), .. } => Some(std::path::PathBuf::from(f)),
+            _ => None,
+        })
+        .filter(|f| f.is_absolute())
+        .collect()
 }
 
 /// One row of the list: a change, or the automatic fixes of one kind.
@@ -81,27 +95,54 @@ impl Workspace {
 
     /// Is a change waiting for this issue?
     pub(super) fn change_pending(&self, issue: &Issue) -> bool {
+        self.change_pending_but(issue, None)
+    }
+
+    /// Is a change for this issue waiting, other than `but` (the one being replaced)?
+    fn change_pending_but(&self, issue: &Issue, but: Option<&str>) -> bool {
         let key = quality::issue_key(issue);
-        self.review
-            .changes
-            .iter()
-            .flat_map(|g| &g.items)
-            .any(|c| c.change.issue.as_ref().is_some_and(|i| quality::issue_key(i) == key))
+        self.review.changes.iter().flat_map(|g| &g.items).any(|c| {
+            Some(c.id.as_str()) != but && c.change.issue.as_ref().is_some_and(|i| quality::issue_key(i) == key)
+        })
+    }
+
+    /// Takes a waiting change out of the list (replaced by a corrected one, or withdrawn by its
+    /// agent), recording what became of it. `false` if no change has this id.
+    pub(crate) fn take_change_by_id(&mut self, id: &str, outcome: gedcom::agent_proposals::Outcome) -> bool {
+        let Some(g) = self.review.changes.iter().position(|g| g.items.iter().any(|c| c.id == id)) else {
+            return false;
+        };
+        if self.review.changes[g].items.len() == 1 {
+            self.take_change(g, outcome);
+        } else {
+            let group = &mut self.review.changes[g];
+            let k = group.items.iter().position(|c| c.id == id).unwrap_or_default();
+            group.items.remove(k);
+            group.excluded =
+                group.excluded.iter().filter(|&&e| e != k).map(|&e| if e > k { e - 1 } else { e }).collect();
+            self.decide_proposal(id, outcome, "");
+        }
+        true
     }
 
     /// Change received from the agent: checked against the displayed file, then queued. Returns
-    /// the number of proposals waiting and the issues the change would create.
-    pub(crate) fn add_change(
-        &mut self,
-        req: ChangeRequest,
-        cx: &mut Context<Self>,
-    ) -> Result<(String, usize, Vec<String>), String> {
+    /// its id, the number of proposals waiting, whether its issue is gone and the issues the change
+    /// would create.
+    pub(crate) fn add_change(&mut self, req: ChangeRequest, cx: &mut Context<Self>) -> Result<ChangeQueued, String> {
         if self.doc.is_none() {
             return Err("no file is open in GEDRoots".into());
         }
+        if let Some(r) = &req.replaces
+            && !self.review.changes.iter().flat_map(|g| &g.items).any(|c| &c.id == r)
+        {
+            return Err(match self.review.decided.iter().rev().find(|d| &d.id == r) {
+                Some(d) => format!("proposal {r} is no longer waiting: {}", super::review::outcome_text(d.outcome)),
+                None => format!("no change {r} waiting for review"),
+            });
+        }
         self.refresh_quality();
         let issues = self.quality.issues.clone();
-        // Without an issue: a correction the agent read in a document.
+        // Without an issue: a correction the agent read in a document, or a merge.
         let issue = match &req.issue_id {
             None => None,
             Some(id) => {
@@ -110,7 +151,7 @@ impl Workspace {
                 if issue.ignored && req.action == Action::Hide {
                     return Err("this issue is already hidden".into());
                 }
-                if self.change_pending(issue) {
+                if self.change_pending_but(issue, req.replaces.as_deref()) {
                     return Err("a change for this issue is already waiting for review".into());
                 }
                 Some(issue.clone())
@@ -120,14 +161,19 @@ impl Workspace {
             issue,
             issue_id: req.issue_id,
             action: req.action,
+            pair: req.pair,
             reason: req.reason,
             evidence: req.evidence,
         };
-        let new = {
+        let checked = {
             let rerun = self.rerun_quality();
             change.check(&self.doc.as_ref().unwrap().ged, &rerun)?
         };
-        let new_issues: Vec<String> = new.into_iter().map(|i| i.message).collect();
+        if let Some(r) = &req.replaces {
+            self.take_change_by_id(r, gedcom::agent_proposals::Outcome::Replaced);
+        }
+        let resolves = checked.resolves;
+        let new_issues: Vec<String> = checked.new.into_iter().map(|i| i.message).collect();
         let requeued = req.id.is_some();
         let id = match req.id {
             Some(id) => id,
@@ -137,6 +183,9 @@ impl Workspace {
             change.issue.iter().flat_map(|i| [i.xref.clone()].into_iter().chain(i.related.clone())).collect();
         if let Action::Edit(edits) = &change.action {
             about.extend(edits.iter().filter_map(|e| e.record()).map(str::to_string));
+        }
+        if let Some(gedcom::change::MergePair::People(a, b)) = &change.pair {
+            about.extend([a.clone(), b.clone()]);
         }
         about.dedup();
         let title = change.title(&self.doc.as_ref().unwrap().ged);
@@ -166,7 +215,7 @@ impl Workspace {
         }
         self.quality.stale = true;
         cx.notify();
-        Ok((id, n, new_issues))
+        Ok((id, n, resolves, new_issues))
     }
 
     /// The displayed change group, when the selection is past the acts.
@@ -249,8 +298,26 @@ impl Workspace {
             cx.notify();
             return;
         }
+        // A file the agent downloaded (in the app's cache, or a one-page PDF kept as is): filed
+        // like an act's image.
+        let cached: Vec<String> =
+            change_files(&kept[0].change).iter().filter_map(|f| copy.media_by_file(&f.to_string_lossy())).collect();
+        let mut note = String::new();
+        if !cached.is_empty() {
+            let Some(base) = self.ged_dir() else {
+                self.set_error("review.save_ged_first", t!("review.save_ged_first"));
+                cx.notify();
+                return;
+            };
+            for m in &cached {
+                note = media_files::store_act_media(&mut copy, Some(&base), m);
+                if let Err(e) = super::review::copy_out_of_cache(&mut copy, &base, m) {
+                    note = t!("media_files.copy_failed", error = e).into_owned();
+                }
+            }
+        }
         self.take_change(i, gedcom::agent_proposals::Outcome::Saved);
-        let msg = t!("review.change_saved", title = title).into_owned();
+        let msg = t!("review.change_saved", title = title).into_owned() + &note;
         self.before_agent_change();
         self.edit_ged(
             move |g| {
