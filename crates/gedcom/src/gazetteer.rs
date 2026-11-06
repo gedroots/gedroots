@@ -226,14 +226,103 @@ pub fn join_parts(parts: &[String]) -> String {
     parts.iter().map(|p| p.trim()).collect::<Vec<_>>().join(", ")
 }
 
+/// Tag of the levels the user chose for the jurisdictions of the place format
+/// (`HEAD.PLAC._GR_LEVEL`).
+pub const LEVEL_TAG: &str = "_GR_LEVEL";
+const LEVEL_URI: &str = "https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_level";
+
+impl Level {
+    /// Keyword of the level in `_GR_LEVEL`.
+    pub fn key(self) -> &'static str {
+        match self {
+            Level::Locality => "locality",
+            Level::Municipality => "municipality",
+            Level::PostCode => "postcode",
+            Level::County => "county",
+            Level::State => "state",
+            Level::Country => "country",
+            Level::Other => "none",
+        }
+    }
+
+    pub fn from_key(key: &str) -> Option<Level> {
+        [
+            Level::Locality,
+            Level::Municipality,
+            Level::PostCode,
+            Level::County,
+            Level::State,
+            Level::Country,
+            Level::Other,
+        ]
+        .into_iter()
+        .find(|l| l.key() == key.trim())
+    }
+
+    /// A jurisdiction name the gazetteer recognizes as this level.
+    fn canonical(self) -> &'static str {
+        match self {
+            Level::Locality => "Locality",
+            Level::Municipality => "Municipality",
+            Level::PostCode => "Postcode",
+            Level::County => "County",
+            Level::State => "State",
+            Level::Country => "Country",
+            Level::Other => "",
+        }
+    }
+}
+
 impl Gedcom {
+    /// The levels the user chose for the jurisdictions of the place format, in its order
+    /// (`None`: recognized automatically).
+    pub fn place_levels(&self) -> Vec<Option<Level>> {
+        let n = self.place_form().len();
+        let chosen: Vec<Option<Level>> = self
+            .header
+            .path_val(&["PLAC", LEVEL_TAG])
+            .map(|v| v.split(',').map(Level::from_key).collect())
+            .unwrap_or_default();
+        (0..n).map(|i| chosen.get(i).copied().flatten()).collect()
+    }
+
+    /// Saves the levels chosen for the jurisdictions (`None`: recognized automatically); nothing
+    /// is written when none is chosen. Returns whether it changed.
+    pub fn set_place_levels(&mut self, levels: &[Option<Level>]) -> bool {
+        if self.place_levels() == levels {
+            return false;
+        }
+        let value = levels.iter().map(|l| l.map(Level::key).unwrap_or("")).collect::<Vec<_>>().join(", ");
+        if levels.iter().all(Option::is_none) {
+            if let Some(plac) = self.header.child_mut("PLAC") {
+                plac.children.retain(|c| c.tag != LEVEL_TAG);
+            }
+        } else {
+            self.declare_extension(LEVEL_TAG, LEVEL_URI);
+            self.header.ensure_child("PLAC").set_child_val(LEVEL_TAG, &value);
+        }
+        true
+    }
+
+    /// Level of each jurisdiction of the place format: the user's choice, else recognized from
+    /// its name or the tree's values ([`Gedcom::gazetteer_form`]).
+    pub fn form_levels(&self) -> Vec<Level> {
+        self.gazetteer_form().iter().map(|f| Level::of(f)).collect()
+    }
+
     /// The place format as the gazetteer reads it: a jurisdiction whose name says nothing
     /// (“Code INSEE”, “Niveau 3”) is recognized by the tree's own values when they leave no doubt
     /// (postal codes, country names); otherwise it stays unknown and is left empty. The labels are
     /// for matching only, never shown.
     pub fn gazetteer_form(&self) -> Vec<String> {
+        let chosen = self.place_levels();
         let form = self.place_form();
-        if form.iter().all(|f| Level::of(f) != Level::Other) {
+        let form: Vec<String> = form
+            .into_iter()
+            .zip(&chosen)
+            .map(|(f, c)| c.map(|l| l.canonical().to_string()).unwrap_or(f))
+            .collect();
+        if form.iter().enumerate().all(|(i, f)| chosen[i].is_some() || Level::of(f) != Level::Other) {
             return form;
         }
         let places: Vec<Vec<String>> = self
@@ -249,7 +338,8 @@ impl Gedcom {
                 // A label naming another kind of value (an INSEE code, a FIPS number) stays unknown.
                 let k = sort_key(f);
                 let named = ["insee", "code", "id", "fips", "gnis", "number", "nummer", "numero"];
-                if taken[i] != Level::Other
+                if chosen[i].is_some()
+                    || taken[i] != Level::Other
                     || named.iter().any(|w| k.split(|c: char| !c.is_alphanumeric()).any(|x| x == *w))
                 {
                     return f.clone();
@@ -487,6 +577,27 @@ mod tests {
         // INSEE code looks the same but its label names it: left empty.
         assert_eq!(g.gazetteer_form(), vec!["Commune", "Code INSEE", "Postcode", "Country"]);
         assert_eq!(g.place_form(), vec!["Commune", "Code INSEE", "Niveau 2", "Niveau 3"]);
+    }
+
+    #[test]
+    fn chosen_levels_win() {
+        let mut g = Gedcom::parse(
+            "0 HEAD\n1 GEDC\n2 VERS 7.0\n1 PLAC\n2 FORM Paroisse, Code INSEE, Niveau 3, Pays\n0 TRLR\n",
+        )
+        .unwrap();
+        assert_eq!(g.form_levels(), vec![Level::Municipality, Level::Other, Level::Other, Level::Country]);
+        assert!(g.set_place_levels(&[None, None, Some(Level::County), None]));
+        assert!(!g.set_place_levels(&[None, None, Some(Level::County), None]));
+        let text = g.to_gedcom_string();
+        assert!(text.contains("2 _GR_LEVEL , , county,\n"), "{text}");
+        assert!(text.contains("2 TAG _GR_LEVEL "), "{text}");
+        assert_eq!(g.form_levels(), vec![Level::Municipality, Level::Other, Level::County, Level::Country]);
+        // “Not filled” for a level the name would give.
+        g.set_place_levels(&[Some(Level::Other), None, Some(Level::County), None]);
+        assert_eq!(g.form_levels()[0], Level::Other);
+        // Back to automatic: the tag goes.
+        g.set_place_levels(&[None, None, None, None]);
+        assert!(!g.to_gedcom_string().contains("2 _GR_LEVEL"));
     }
 
     #[test]

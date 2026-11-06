@@ -552,7 +552,10 @@ impl Workspace {
                             .cursor_pointer()
                             .when(on, |d| d.bg(theme::hover()))
                             .hover(|d| d.bg(theme::surface()))
-                            .child(div().pt_0p5().child(Icon::new(shape).size(px(14.)).text_color(color)))
+                            .child(div().pt_0p5().map(|d| match live {
+                                Some(_) => d.child(working(SharedString::from(format!("lead-working-{key}")), 14.)),
+                                None => d.child(Icon::new(shape).size(px(14.)).text_color(color)),
+                            }))
                             .child(
                                 v_flex().flex_1().min_w_0().child(div().truncate().child(lead_title(l))).child(
                                     div().truncate().text_xs().text_color(theme::muted()).child(meta.join(" · ")),
@@ -659,7 +662,7 @@ impl Workspace {
                 .border_color(theme::border())
                 .bg(theme::surface())
                 .text_sm()
-                .child(dot(theme::ok()))
+                .child(working("lead-live-working", 14.))
                 .child(div().flex_none().font_weight(FontWeight::SEMIBOLD).child(agent_label(agent)))
                 .child(div().min_w_0().truncate().text_color(theme::muted()).child(now.text.clone()))
         });

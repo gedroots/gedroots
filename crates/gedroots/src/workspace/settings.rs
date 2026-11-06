@@ -13,6 +13,7 @@ use super::*;
 use crate::editor::{PickerState, choice, picker};
 use crate::t;
 use gpui_kit::component::input::TextareaState;
+use gedcom::gazetteer::Level;
 use gpui_kit::component::menu::{DropdownMenu, PopupMenuItem};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -46,6 +47,8 @@ struct PlaceRow {
     name: Entity<InputState>,
     /// Position in the current format (`None`: added).
     from: Option<usize>,
+    /// Level chosen for the gazetteer (`None`: recognized automatically).
+    level: Option<Level>,
 }
 
 /// A custom event type being edited.
@@ -151,6 +154,7 @@ impl Workspace {
         }
         let language = choice(&langs, &s.language, window, cx);
         let root = picker(&g, RecordKind::Individual, g.root().as_deref().unwrap_or(""), window, cx);
+        let levels = g.place_levels();
         let places = g
             .place_form()
             .iter()
@@ -158,6 +162,7 @@ impl Workspace {
             .map(|(i, name)| PlaceRow {
                 name: text_input(&t!("settings.municipality"), name, window, cx),
                 from: Some(i),
+                level: levels.get(i).copied().flatten(),
             })
             .collect();
         let events = g
@@ -251,6 +256,12 @@ impl Workspace {
             .map(|r| Jurisdiction { name: r.name.read(cx).value().trim().to_string(), from: r.from })
             .filter(|j| !j.name.is_empty() || j.from.is_some())
             .collect();
+        let levels: Vec<Option<Level>> = d
+            .places
+            .iter()
+            .filter(|r| !r.name.read(cx).value().trim().is_empty() || r.from.is_some())
+            .map(|r| r.level)
+            .collect();
         // (family, old TYPE, new TYPE, label if it changes)
         let events: Vec<(bool, Option<String>, String, Option<String>)> = d
             .events
@@ -280,7 +291,8 @@ impl Workspace {
         let current = g.place_form();
         let format_changed = format.len() != current.len()
             || format.iter().enumerate().any(|(i, j)| j.from != Some(i) || j.name != current[i]);
-        changed |= root_changed || format_changed || !removed.is_empty();
+        let levels_changed = g.place_levels() != levels;
+        changed |= root_changed || format_changed || levels_changed || !removed.is_empty();
         changed |= events
             .iter()
             .any(|(_, old, new, label)| !new.is_empty() && (old.as_deref() != Some(new.as_str()) || label.is_some()));
@@ -302,6 +314,7 @@ impl Workspace {
                         msg.push_str(&crate::tn!("settings.skipped", r.skipped));
                     }
                 }
+                g.set_place_levels(&levels);
                 for (family, label) in &removed {
                     g.undeclare_event_type(*family, label);
                 }
@@ -459,12 +472,61 @@ impl Workspace {
                 .collect::<Vec<_>>()
                 .join(", ")
         });
+        // What each jurisdiction is recognized as without a choice: by its name, or by the
+        // tree's values for a jurisdiction of the current format.
+        let auto = {
+            let mut probe = g.clone();
+            probe.set_place_levels(&vec![None; old_len]);
+            probe.form_levels()
+        };
+        let ws = cx.entity().downgrade();
         let rows = d.places.iter().enumerate().map(|(i, r)| {
             let id = |what: &str| SharedString::from(format!("plac-{what}-{i}"));
+            let detected = match r.from.and_then(|k| auto.get(k)) {
+                Some(l) if *l != Level::Other => *l,
+                _ => Level::of(&r.name.read(cx).value()),
+            };
+            let shown = r.level.unwrap_or(detected);
+            let ws = ws.clone();
+            let level = Button::new(id("level"))
+                .small()
+                .outline()
+                .w(px(150.))
+                .dropdown_caret(true)
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .truncate()
+                        .when(shown == Level::Other, |d| d.text_color(theme::muted()))
+                        .child(level_label(shown)),
+                )
+                .dropdown_menu(move |menu, _, _| {
+                    let mut menu = menu;
+                    for (n, l) in LEVELS.iter().enumerate() {
+                        if n == LEVELS.len() - 1 {
+                            menu = menu.separator();
+                        }
+                        let (ws, l) = (ws.clone(), *l);
+                        menu = menu.item(PopupMenuItem::new(level_label(l)).checked(l == shown).on_click(
+                            move |_, _, cx| {
+                                let _ = ws.update(cx, |this, cx| {
+                                    if let Some(r) = this.settings_dialog().and_then(|d| d.places.get_mut(i)) {
+                                        // The detected level again: back to automatic.
+                                        r.level = (l != detected).then_some(l);
+                                    }
+                                    cx.notify();
+                                });
+                            },
+                        ));
+                    }
+                    menu
+                });
             h_flex()
                 .gap_1()
                 .items_center()
                 .child(div().flex_1().child(Input::new(&r.name).small()))
+                .child(level)
                 .child(Button::new(id("up")).xsmall().ghost().icon(IconName::ChevronUp).disabled(i == 0).on_click(
                     cx.listener(move |this, _, _, cx| {
                         if let Some(d) = this.settings_dialog() {
@@ -501,7 +563,7 @@ impl Workspace {
                         let name = text_input(&t!("settings.jurisdiction"), "", w, cx);
                         name.update(cx, |s, cx| s.focus(w, cx));
                         if let Some(d) = this.settings_dialog() {
-                            d.places.push(PlaceRow { name, from: None });
+                            d.places.push(PlaceRow { name, from: None, level: None });
                         }
                         cx.notify();
                     },
@@ -902,4 +964,28 @@ fn media_naming(d: &SettingsDialog, cx: &App) -> MediaNaming {
 
 fn field(label: impl Into<SharedString>, el: AnyElement) -> Div {
     v_flex().gap_1().min_w_0().child(label_caps(label)).child(el)
+}
+
+/// The levels of a jurisdiction, in the menu's order; “Not Filled” last.
+const LEVELS: [Level; 7] = [
+    Level::Locality,
+    Level::Municipality,
+    Level::PostCode,
+    Level::County,
+    Level::State,
+    Level::Country,
+    Level::Other,
+];
+
+fn level_label(l: Level) -> String {
+    match l {
+        Level::Locality => t!("settings.level.locality"),
+        Level::Municipality => t!("settings.level.municipality"),
+        Level::PostCode => t!("settings.level.postcode"),
+        Level::County => t!("settings.level.county"),
+        Level::State => t!("settings.level.state"),
+        Level::Country => t!("settings.level.country"),
+        Level::Other => t!("settings.level.none"),
+    }
+    .into_owned()
 }

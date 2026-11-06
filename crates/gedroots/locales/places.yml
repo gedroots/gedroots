@@ -107,3 +107,9 @@ places.none_found:
 places.position:
   en: Position
   fr: Position
+places.complete:
+  en: Complete from OpenStreetMap
+  fr: Compléter depuis OpenStreetMap
+places.cancel:
+  en: Cancel
+  fr: Annuler
