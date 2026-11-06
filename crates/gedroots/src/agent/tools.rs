@@ -214,6 +214,12 @@ pub struct TreePlace {
     pub located: bool,
     /// Events and records that name it.
     pub uses: usize,
+    /// False when it does not split into the tree's place format (`format`).
+    pub follows_format: bool,
+    /// The place completed with the best candidate when it is `likely`: missing jurisdictions
+    /// (postal code, département, region) filled, in the tree's format. When it is this place,
+    /// propose_change `set_coordinates` then `rename_place` to this name.
+    pub completed: Option<String>,
 }
 
 #[derive(Debug, Serialize, JsonSchema)]
@@ -242,6 +248,11 @@ pub struct PlaceCandidate {
     pub distance_km: Option<f64>,
     /// That closest event.
     pub nearest: Option<String>,
+    /// `likely`, `possible` or `unlikely`, from what speaks for and against it in `why`.
+    pub fit: String,
+    /// The reasons: distance to the family's events, the jurisdictions the query names, its level
+    /// (a département is not a municipality), its country.
+    pub why: Vec<String>,
 }
 
 #[derive(Debug, Serialize, JsonSchema)]
@@ -251,8 +262,11 @@ pub struct Located {
     pub in_tree: Vec<TreePlace>,
     /// Located places of the people's events and their relatives', closest in time first.
     pub nearby: Vec<NearbyPlace>,
-    /// What the gazetteer (OpenStreetMap) finds, places near `nearby` ranked higher.
+    /// What the gazetteer (OpenStreetMap) finds, the best fit first.
     pub candidates: Vec<PlaceCandidate>,
+    /// The tree's place format (`HEAD.PLAC.FORM`): a new place gives each jurisdiction in this
+    /// order, empty ones kept. A candidate's `place` already follows it.
+    pub format: Vec<String>,
 }
 
 #[derive(Debug, Serialize, JsonSchema)]
@@ -276,6 +290,9 @@ pub struct Proposed {
     pub will_write: Vec<String>,
     /// The people it creates, with their temporary id.
     pub new_people: Vec<NewPerson>,
+    /// New places it adds to the tree without coordinates: locate each with `locate_place` and
+    /// propose again with `replaces` and `locations`, unless no candidate fits.
+    pub unlocated_places: Vec<String>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -951,7 +968,7 @@ impl GedrootsMcp {
 
     #[tool(
         name = "locate_place",
-        description = "Finds where a place of an act is, one place at a time, before proposing it: the tree's places of that name, the located places of the people's events and of their relatives' (closest in time first), and the candidates of the gazetteer (OpenStreetMap) with their distance to those events. Homonyms are common (Saint-Martin, Neukirchen): choose the candidate that fits the act (its jurisdictions, the family's region, the distance), not merely the first, and give its `place` and coordinates in `propose_act` (`place` and `locations`). When none fits or you are unsure, propose the place without a location.",
+        description = "Finds where a place is, one place at a time, before proposing it or to locate and complete a place of the tree: the tree's places of that name, the located places of the people's events and of their relatives' (closest in time first), and the gazetteer's candidates (OpenStreetMap) in the tree's place format, the best fit first, each with its `fit` (likely, possible, unlikely) and `why`: distance to the family's events, the jurisdictions you name (\"Saint-Martin, Manche\"), its level (a département is not a municipality), its country. Homonyms are common (Saint-Martin, Neukirchen): weigh `why` against the act (the parish or département it names, where the people lived), not merely the first. For a new place, give the chosen candidate's `place` as is in `propose_act` (`place`, a fact's `place`, a residence) and, in `locations`, its coordinates, `osm` and the `reason` of your choice; never write a new place by hand in another format. For a place of the tree without coordinates or incomplete (`follows_format` false, `completed`), propose_change `set_coordinates` then `rename_place` to the completed name. When no candidate fits, propose the place without a location, written in the tree's `format`.",
         annotations(read_only_hint = true, open_world_hint = true)
     )]
     async fn locate_place(&self, Parameters(p): Parameters<LocateParams>) -> Res<Located> {
@@ -962,12 +979,8 @@ impl GedrootsMcp {
         }
         self.report(p.tree.as_deref(), super::Doing::LocatesPlace(query.clone()));
         let g = &s.ged;
-        let in_tree = g
-            .places_named(&query)
-            .into_iter()
-            .take(10)
-            .map(|pl| TreePlace { located: pl.coords().is_some(), uses: pl.uses, place: pl.name })
-            .collect();
+        let form = g.gazetteer_form();
+        let in_tree: Vec<gedcom::Place> = g.places_named(&query).into_iter().take(10).collect();
         let people: Vec<String> = p.people.iter().filter_map(|x| person_id(&s, x).ok()).collect();
         let refs: Vec<&str> = people.iter().map(String::as_str).collect();
         let year = p.date.as_deref().and_then(|d| gedcom::Date::parse(d).year());
@@ -985,9 +998,27 @@ impl GedrootsMcp {
         .await
         .map_err(|e| e.to_string())?
         .map_err(|e| format!("the gazetteer did not answer: {e}"))?;
-        let candidates = gedcom::locate::rank(found, &nearby, &g.place_form())
+        let ranked = gedcom::locate::rank(found, &nearby, &form, &query);
+        let best = ranked.first().filter(|r| r.fit == gedcom::locate::Fit::Likely);
+        let in_tree = in_tree
+            .into_iter()
+            .map(|pl| {
+                let completed =
+                    best.map(|b| gedcom::gazetteer::complete(&pl.name, &b.candidate, &form)).filter(|c| *c != pl.name);
+                TreePlace {
+                    located: pl.coords().is_some(),
+                    uses: pl.uses,
+                    follows_format: gedcom::gazetteer::follows_form(&pl.name, &form),
+                    completed,
+                    place: pl.name,
+                }
+            })
+            .collect();
+        let candidates = ranked
             .into_iter()
             .map(|r| PlaceCandidate {
+                fit: r.fit.as_str().to_string(),
+                why: r.why,
                 place: r.place,
                 name: r.candidate.title(),
                 context: r.candidate.context(),
@@ -1010,7 +1041,7 @@ impl GedrootsMcp {
                 longitude: n.longitude,
             })
             .collect();
-        self.answer(&s, Located { in_tree, nearby, candidates })
+        self.answer(&s, Located { in_tree, nearby, candidates, format: g.place_form() })
     }
 
     #[tool(
@@ -1051,6 +1082,12 @@ impl GedrootsMcp {
                 waiting: queued.waiting,
                 will_write: built.will_write,
                 new_people,
+                unlocated_places: built
+                    .new_places
+                    .into_iter()
+                    .filter(|(_, located)| !located)
+                    .map(|(p, _)| p)
+                    .collect(),
             },
         )
     }

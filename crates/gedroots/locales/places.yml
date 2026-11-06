@@ -80,6 +80,9 @@ places.offline:
 places.located:
   en: "%{place}: %{lat} %{lon} (%{uses})"
   fr: "%{place} : %{lat} %{lon} (%{uses})"
+places.located_completed:
+  en: "Located and completed: %{place} (%{uses})"
+  fr: "Localisé et complété : %{place} (%{uses})"
 places.uses.one:
   en: "%{n} use"
   fr: "%{n} occurrence"

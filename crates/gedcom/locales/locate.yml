@@ -1,0 +1,8 @@
+_version: 2
+# Locating a place an agent proposes (crates/gedcom/src/locate.rs).
+locate.near:
+  en: "%{km} km from %{place}: %{event} of %{person}, %{year}"
+  fr: "À %{km} km de %{place} : %{event} de %{person}, %{year}"
+locate.near_undated:
+  en: "%{km} km from %{place}: %{event} of %{person}"
+  fr: "À %{km} km de %{place} : %{event} de %{person}"

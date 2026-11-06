@@ -163,7 +163,7 @@ impl Workspace {
         if places.iter().any(|p| shown(&p.name)) || self.pending_places.iter().any(|p| shown(&p.name)) {
             return None;
         }
-        let form = doc.ged.place_form();
+        let form = doc.ged.gazetteer_form();
         let key = sort_key(typed.split(',').next().unwrap_or("").trim());
         let mut hits: Vec<(String, String)> = places
             .iter()
@@ -513,23 +513,41 @@ impl Workspace {
         .detach();
     }
 
+    /// Locates a place of the file with the chosen result, and completes it: its empty
+    /// jurisdictions (postal code, département, region) take the gazetteer's values, and a place
+    /// written outside the file's format is written again in it. The tree's own spelling of a
+    /// jurisdiction is kept; a name another place of the file already has is left alone.
     fn choose_location(&mut self, name: String, c: Candidate, window: &mut Window, cx: &mut Context<Self>) {
         self.locate = None;
-        self.mutate(window, cx, move |g| {
+        let mut renamed = None;
+        self.mutate(window, cx, |g| {
             let (la, lo) = (geo::format_latitude(c.lat), geo::format_longitude(c.lon));
-            let n = g.locate_place(&name, &la, &lo, c.exid.as_ref());
-            Ok((
-                t!(
+            let completed = gedcom::gazetteer::complete(&name, &c, &g.gazetteer_form());
+            let target = if completed != name && !g.places().iter().any(|p| p.name == completed) {
+                g.update_place(&name, &completed, "", "");
+                renamed = Some(completed.clone());
+                completed
+            } else {
+                name.clone()
+            };
+            let n = g.locate_place(&target, &la, &lo, c.exid.as_ref());
+            let msg = match &renamed {
+                Some(new) => {
+                    t!("places.located_completed", place = place_label(new), uses = crate::tn!("places.uses", n))
+                }
+                None => t!(
                     "places.located",
                     place = short_place(&name),
                     lat = la,
                     lon = lo,
                     uses = crate::tn!("places.uses", n)
-                )
-                .into_owned(),
-                None,
-            ))
+                ),
+            };
+            Ok((msg.into_owned(), None))
         });
+        if let Some(new) = renamed {
+            self.goto_place(new, window, cx);
+        }
     }
 
     pub(super) fn place_by_hand(&mut self, name: String, cx: &mut Context<Self>) {

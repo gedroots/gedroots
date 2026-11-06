@@ -47,7 +47,7 @@ where another stopped (`resume_research`), with no memory of its own.
 | `note_research` | Writes in a lead's log: `plan` (a lead about to be searched, with the reason; state `planned`), `search` (what was searched, whatever its result: `found`, `nothing`, `partial`; years, place, viewer page; `finished` when nothing is left), `clue` (a record that may be the one, with what speaks `for` and `against`: it stays in the Research page, never in the tree) or `handoff` (where the lead stands and the `next` search, when the agent stops) |
 | `quality_issues` | The Data Quality page's issues, filtered by category, kind or record and paged (`offset`, `limit`): message, records and places involved, whether the page fixes it in one click, whether it can be hidden, counts per category |
 | `search_sources` | Sources (register, repository, call number, number of acts) and repositories, to cite an existing one |
-| `locate_place` | For one place of an act: the tree's places of that name, the located places of the events of the act's people and their relatives (closest in time first), and the gazetteer's candidates (OpenStreetMap, through Photon, biased towards those places) in the file's place format, each with its distance to the closest of those events |
+| `locate_place` | For one place of an act: the tree's places of that name, the located places of the events of the act's people and their relatives (closest in time first), and the gazetteer's candidates (OpenStreetMap, through Photon, biased towards those places) in the file's place format, best fit first, each with its `fit`, its reasons (`why`) and its distance to the closest of those events; for the tree's places, whether they follow the format and their completed name |
 | `match_people` | For the people named in an act (role, names, sex, age, act date), the people of the tree who could be them, with the reason and whether the match is likely |
 | `propose_act` | Adds an act to the To Review page: event, date, place, street address, source, reference, quality of the evidence (`QUAY`), transcription (plain text, only the act), people with their role, downloaded file, and the agent's remarks on the act (shown beside it, then kept as the note of its citation). Answers its id, what it will write and the temporary id of each new person; with `replaces`, corrects a waiting proposal |
 | `withdraw_proposal` | Takes back a waiting proposal |
@@ -198,17 +198,33 @@ waits, with the agent's request, queued again under the same id when the file op
 longer fits the tree is withdrawn, with the reason); once decided, with its outcome. It is not part
 of the tree's history: Undo and Redo leave it as it is.
 
-### Locating new places
+### Locating and completing places
 
 A place the tree does not have yet can come with its coordinates (`locations`: the place,
-latitude, longitude and the OpenStreetMap identifier, written as the place's `MAP` and `EXID`).
-The agent first calls `locate_place`, one place at a time (at most one request every 1.1 s,
-never in bulk): homonyms are common, so the answer puts each candidate next to the places where
-the act's people and their relatives lived, closest in time first, and the agent picks the
-candidate that fits the act's jurisdictions and the family's region. Nothing ranks or picks for
-it: the user sees the place and its coordinates in the attachment of To Review. A location is
-refused for a place the proposal does not name, or one the tree has already located (moving it
-is a `propose_change` with `set_coordinates`).
+latitude, longitude, the OpenStreetMap identifier, written as the place's `MAP` and `EXID`, and
+the agent's reason for choosing it). The agent first calls `locate_place`, one place at a time
+(at most one request every 1.1 s, never in bulk). Homonyms are common, so each candidate comes
+scored, best first, with what speaks for and against it (`fit`: likely, possible or unlikely,
+and `why`): its distance to the places where the act's people and their relatives lived (the
+closest in time weigh most), the jurisdictions the agent named (“Saint-Martin, Manche”), its
+level (a département is not a municipality) and its country. The score informs, the agent
+decides against what the act says, and the user sees in To Review how far the place is from the
+family's events and the agent's reason.
+
+Candidates come in the file's place format (`HEAD.PLAC.FORM`), each jurisdiction recognized by
+its name in six languages, or by the tree's values when the name says nothing (postal codes,
+countries); an unknown one is left empty. A new place must follow that format, so that it
+splits into its jurisdictions like the others: a place written by hand in another one
+(“Hérault, Occitanie, France” in a file of six jurisdictions) is refused with the format and an
+example. The answer of `propose_act` lists the new places still without coordinates
+(`unlocated_places`).
+
+A place of the tree without coordinates, or outside the format (Data Quality › Places), is
+located the same way: `locate_place` gives it `completed` (missing postal code, département or
+region filled from the best candidate, the tree's spelling kept), and the agent proposes
+`set_coordinates` then `rename_place`. In the app, Locate on a place's record completes it the
+same way. A location is refused for a place the proposal does not name, or one the tree has
+already located (moving it is a `propose_change` with `set_coordinates`).
 
 ## Privacy and safety
 

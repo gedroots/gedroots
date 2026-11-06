@@ -65,8 +65,11 @@ How to work:
    the tree names it. A place the tree does not have yet (or has without coordinates) is located
    with `locate_place`, one place at a time: give the people of the act already in the tree and
    the act's date, then choose the candidate that fits the act's jurisdictions and is close to
-   the family's other events, not merely the first; give its `place` and, in `locations`, its
-   coordinates and `osm`. When no candidate clearly fits, propose the place without a location.
+   the family's other events, not merely the first: weigh each candidate's `fit` and `why`.
+   Give its `place` as is (never a place written by hand in another format) and, in
+   `locations`, its coordinates, `osm` and the `reason` of your choice. When no candidate
+   clearly fits, propose the place without a location, in the tree's place `format`; the
+   answer's `unlocated_places` lists the new places still without coordinates.
    Give the transcription, and both the downloaded file (`file`, with `pdf_page`
    for a PDF) and the act's page in the archive's viewer (`url`, its permanent link such as an
    ark when the viewer offers one): GEDRoots keeps the image and a web link, so the user can see

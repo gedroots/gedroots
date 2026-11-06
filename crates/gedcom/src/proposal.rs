@@ -62,6 +62,8 @@ pub struct Location {
     pub longitude: f64,
     /// Identifier in the gazetteer (`EXID` value and `TYPE` URI), e.g. an OpenStreetMap relation.
     pub exid: Option<(String, String)>,
+    /// Why the agent chose it among the homonyms, shown in the review.
+    pub reason: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -306,6 +308,7 @@ impl Proposal {
     pub fn check(&self, ged: &Gedcom) -> Result<(), String> {
         self.check_source(ged)?;
         self.check_people(ged)?;
+        self.check_new_places(ged)?;
         self.check_locations(ged)?;
         self.apply(&mut ged.clone()).map(|_| ())
     }
@@ -339,16 +342,45 @@ impl Proposal {
         Ok(())
     }
 
-    /// Places the proposal writes: the event's and its facts'.
+    /// Places the proposal writes: the event's, the people's residence and birthplace, and their
+    /// facts'.
     pub fn places(&self) -> Vec<&str> {
         let mut out: Vec<&str> = Vec::new();
-        let facts = self.act.participants.iter().flat_map(|p| p.facts.iter().map(|f| f.place.as_str()));
-        for p in std::iter::once(self.act.place.as_str()).chain(facts) {
+        let people = self.act.participants.iter().flat_map(|p| {
+            [p.get(PersonField::Residence), p.get(PersonField::Birthplace)]
+                .into_iter()
+                .chain(p.facts.iter().map(|f| f.place.as_str()))
+        });
+        for p in std::iter::once(self.act.place.as_str()).chain(people) {
             if !p.trim().is_empty() && !out.contains(&p) {
                 out.push(p);
             }
         }
         out
+    }
+
+    /// Places the proposal adds to the tree.
+    pub fn new_places(&self, ged: &Gedcom) -> Vec<&str> {
+        let known = ged.places();
+        self.places().into_iter().filter(|p| !known.iter().any(|k| k.name == *p)).collect()
+    }
+
+    /// A new place follows the file's place format, so that it splits into its jurisdictions like
+    /// the others.
+    fn check_new_places(&self, ged: &Gedcom) -> Result<(), String> {
+        let form = ged.place_form();
+        for p in self.new_places(ged) {
+            if !crate::gazetteer::follows_form(p, &form) {
+                return Err(format!(
+                    "`{p}` is a new place but does not follow the tree's place format, {} jurisdictions separated by commas, empty ones kept: `{}`. Call `locate_place` and give the candidate's `place` as is (or write all {} jurisdictions, e.g. `{}`)",
+                    form.len(),
+                    form.join(", "),
+                    form.len(),
+                    form_example(ged, &form),
+                ));
+            }
+        }
+        Ok(())
     }
 
     /// Coordinates go to a new place of the proposal, never move one the tree has located.
@@ -634,13 +666,34 @@ impl Proposal {
                 chain.source = Some(Link { value: title, detail: s.register.trim().to_string(), created: true });
             }
         }
+        // Each location with how far it is from the family's located events, for the user to
+        // judge the agent's choice, and the agent's reason.
+        let people: Vec<&str> = self
+            .act
+            .participants
+            .iter()
+            .filter_map(|p| match &p.choice {
+                PersonChoice::Link(x) => Some(x.as_str()),
+                _ => None,
+            })
+            .collect();
+        let year = crate::Date::parse(&self.act.date).year();
+        let nearby = ged.nearby_places(&people, year, 15);
         chain.places = self
             .locations
             .iter()
-            .map(|l| Link {
-                value: crate::short_place(&l.place),
-                detail: format!("{}, {}", format_latitude(l.latitude), format_longitude(l.longitude)),
-                created: true,
+            .map(|l| {
+                let near = nearby
+                    .iter()
+                    .map(|n| (crate::locate::distance_km((l.latitude, l.longitude), (n.latitude, n.longitude)), n))
+                    .min_by(|a, b| a.0.total_cmp(&b.0))
+                    .map(|(km, n)| crate::locate::near_label(km, n));
+                let detail = near
+                    .into_iter()
+                    .chain(Some(l.reason.trim().to_string()).filter(|r| !r.is_empty()))
+                    .collect::<Vec<_>>()
+                    .join(" · ");
+                Link { value: crate::short_place(&l.place), detail, created: true }
             })
             .collect();
         chain
@@ -680,6 +733,17 @@ fn norm(s: &str) -> String {
 
 /// The text without case, accents, spaces or punctuation: “Staatseisenbahn-Gesellschaft” and
 /// “Staatseisenbahngesellschaft” are the same words.
+/// A place of the tree that follows the format, the most complete and cited, to show what a place looks like.
+fn form_example(ged: &Gedcom, form: &[String]) -> String {
+    let filled = |n: &str| n.split(',').filter(|s| !s.trim().is_empty()).count();
+    ged.places()
+        .into_iter()
+        .filter(|p| crate::gazetteer::follows_form(&p.name, form) && filled(&p.name) >= 2)
+        .max_by_key(|p| (filled(&p.name), p.uses))
+        .map(|p| p.name)
+        .unwrap_or_else(|| vec![""; form.len()].join(", "))
+}
+
 pub(crate) fn loose(s: &str) -> String {
     crate::media_naming::simplify(s).chars().filter(|c| c.is_alphanumeric()).flat_map(char::to_lowercase).collect()
 }
@@ -1359,10 +1423,12 @@ mod tests {
             latitude: 49.1188,
             longitude: -1.1061,
             exid: Some(osm.clone()),
+            reason: String::new(),
         }];
         p.complete(&g);
         p.check(&g).unwrap();
-        assert_eq!(p.chain(&g).places[0].detail, "N49.1188, W1.1061");
+        // No located place in the family to compare with, no reason: nothing to add.
+        assert_eq!(p.chain(&g).places[0].detail, "");
         let mut g2 = g.clone();
         p.apply(&mut g2).unwrap();
         let text = g2.to_gedcom_string();
@@ -1381,7 +1447,61 @@ mod tests {
         // Already located in the tree: never moved by an act.
         g.update_place("Rennes", "Rennes", "N48.11", "W1.68");
         let mut q = birth(SourceChoice::Existing("S1".into()));
-        q.locations = vec![Location { place: "Rennes".into(), latitude: 48.0, longitude: -1.0, exid: None }];
+        q.locations = vec![Location {
+            place: "Rennes".into(),
+            latitude: 48.0,
+            longitude: -1.0,
+            exid: None,
+            reason: String::new(),
+        }];
         assert!(q.check(&g).unwrap_err().contains("already located"));
+    }
+
+    #[test]
+    fn new_places_follow_the_place_format() {
+        let text = FILE
+            .replace(
+                "0 HEAD\n1 GEDC\n2 VERS 7.0\n",
+                "0 HEAD\n1 GEDC\n2 VERS 7.0\n1 PLAC\n2 FORM Commune, Département, Pays\n",
+            )
+            .replace("2 PLAC Rennes\n", "2 PLAC Rennes, Ille-et-Vilaine, France\n");
+        let g = Gedcom::parse(&text).unwrap();
+        let mut p = birth(SourceChoice::Existing("S1".into()));
+        p.act.place = "Hérault, France".into();
+        p.complete(&g);
+        let err = p.check(&g).unwrap_err();
+        assert!(err.contains("does not follow the tree's place format"), "{err}");
+        assert!(err.contains("`Commune, Département, Pays`"), "{err}");
+        assert!(err.contains("`Rennes, Ille-et-Vilaine, France`"), "{err}");
+        p.act.place = ", Hérault, France".into();
+        p.check(&g).unwrap();
+        // The tree's own places are left as they are.
+        p.act.place = "Rennes, Ille-et-Vilaine, France".into();
+        p.check(&g).unwrap();
+    }
+
+    #[test]
+    fn residence_and_birthplace_can_be_located() {
+        let g = ged();
+        let mut p = birth(SourceChoice::Existing("S1".into()));
+        p.act.participants[2].set(PersonField::Residence, "Agneaux");
+        p.locations = vec![Location {
+            place: "Agneaux".into(),
+            latitude: 49.1,
+            longitude: -1.1,
+            exid: None,
+            reason: String::new(),
+        }];
+        p.complete(&g);
+        p.check(&g).unwrap();
+        assert_eq!(p.new_places(&g), vec!["Agneaux"]);
+        // The review says how far it is from the family's located events, and why the agent
+        // chose it.
+        let mut g = g;
+        g.update_place("Rennes", "Rennes", "N48.11", "W1.68");
+        p.locations[0].reason = "the act names the parish".into();
+        let detail = &p.chain(&g).places[0].detail;
+        assert!(detail.starts_with("118 km from Rennes: Birth of Jean BLANC, 1802"), "{detail}");
+        assert!(detail.ends_with(" · the act names the parish"), "{detail}");
     }
 }
