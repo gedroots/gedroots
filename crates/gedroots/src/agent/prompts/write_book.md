@@ -28,7 +28,7 @@ How to work:
      you have read);
    - `hypothesis`: what the records do not say (why they moved, why a child was born far from
      home), with its `basis`: the clues, and what would confirm it (a register to consult).
-   - `visualization`: a chart GEDRoots draws from the tree (`list_visualizations`), placed where
+   - `visualization`: a chart GEDRoots draws from the tree (`read_visualization`), placed where
      it tells the story: the map of the places when a generation migrates, the lives when a
      generation is decimated, the occupations when a family changes trade. It can show another
      person's ancestors or descendants (`person`, `line`, `generations`), such as a maternal

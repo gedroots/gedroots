@@ -10,7 +10,7 @@ use std::path::Path;
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct ChangeParams {
-    /// Tree to work on, as `list_trees` names it, when several are open (default: the one in
+    /// Tree to work on, as `file_context` names it in `trees`, when several are open (default: the one in
     /// front in GEDRoots).
     pub tree: Option<String>,
     /// What to change. `apply_fix`, `hide_issue`, `merge_people` and `merge_places` go on their

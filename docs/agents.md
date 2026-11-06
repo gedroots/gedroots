@@ -27,7 +27,7 @@ in the machine's settings. The commands and blocks are built in `crates/gedroots
 ## Tools
 
 The tools return structured JSON (`outputSchema`). GEDRoots shows one tree per window: every
-tool takes an optional `tree` (a name, file name or id, as `list_trees` gives them) and otherwise
+tool takes an optional `tree` (a name, file name or id, as `file_context` gives them in `trees`) and otherwise
 works on the tree of the window in front. A proposal goes to the To Review page of its own tree.
 All are read-only (`readOnlyHint`) except `propose_act`, `propose_change`, `propose_chapter` and
 `withdraw_proposal`, which write nothing either: they only add or take back a proposal to review;
@@ -39,23 +39,20 @@ where another stopped (`resume_research`), with no memory of its own.
 
 | Tool | Returns |
 | --- | --- |
-| `list_trees` | The trees open in GEDRoots, the one in front first: name, file, id, number of people, families, sources and media, root person |
-| `file_context` | How the file is written: the description the user wrote (File Settings › General, `HEAD.NOTE`, word for word), language, place format, events, custom event types and occupations in use with their counts, media folders and naming, and the latest sources, people, families, media and repositories changed as raw GEDCOM (`examples`). Also served as the resource `gedroots://file/context` |
-| `search_people` | People matching a search, as in the app's search box |
+| `file_context` | The trees open in GEDRoots (`trees`: name, file, id, number of people, families, sources and media, root person, the one in front first), then how the file is written: the description the user wrote (File Settings › General, `HEAD.NOTE`, word for word), language, place format, events, custom event types and occupations in use with their counts, media folders and naming, and the latest sources, people, families, media and repositories changed as raw GEDCOM (`examples`). Also served as the resource `gedroots://file/context` |
+| `search_people` | With `query`: people matching a search, as in the app's search box (advanced keywords, spellings found by sound). With `act`: for the people named in an act (role, names, sex, age, act date), the people of the tree who could be them, with the reason and whether the match is likely |
 | `person_sheet` | Events with their position in the record, date, place, street address (`ADDR`), age, cause, cited sources (`PAGE`), media, associates and notes; parents (and how, when not by birth), unions, children, the person's notes and media; Sosa number |
 | `resume_research` | Where the research stands, and the tree's language to write the log in: the leads in progress anywhere in the tree (planned, or with a clue or a handoff) with their whole log, the other leads to search for a focus (search syntax, default `sosa:1-63`), each with estimated years and why, places to search first and where to look, the proposals waiting for review and what became of the others (saved, rejected with the user's reason, edited, withdrawn, replaced). With `person`: everything about that person |
 | `note_research` | Writes in a lead's log: `plan` (a lead about to be searched, with the reason; state `planned`), `search` (what was searched, whatever its result: `found`, `nothing`, `partial`; years, place, viewer page; `finished` when nothing is left), `clue` (a record that may be the one, with what speaks `for` and `against`: it stays in the Research page, never in the tree) or `handoff` (where the lead stands and the `next` search, when the agent stops) |
 | `quality_issues` | The Data Quality page's issues, filtered by category, kind or record and paged (`offset`, `limit`): message, records and places involved, whether the page fixes it in one click, whether it can be hidden, counts per category |
 | `search_sources` | Sources (register, repository, call number, number of acts) and repositories, to cite an existing one |
 | `locate_place` | For one place of an act: the tree's places of that name, the located places of the events of the act's people and their relatives (closest in time first), and the gazetteer's candidates (OpenStreetMap, through Photon, biased towards those places) in the file's place format, each with its distance to the closest of those events |
-| `match_people` | For the people named in an act (role, names, sex, age, act date), the people of the tree who could be them, with the reason and whether the match is likely |
 | `propose_act` | Adds an act to the To Review page: event, date, place, street address, source, reference, quality of the evidence (`QUAY`), transcription (plain text, only the act), people with their role, downloaded file, and the agent's remarks on the act (shown beside it, then kept as the note of its citation). Answers its id, what it will write and the temporary id of each new person; with `replaces`, corrects a waiting proposal |
 | `withdraw_proposal` | Takes back a waiting proposal |
 | `propose_change` | Adds typed edits to the To Review page, with the reason and the evidence: a correction read in a document, a change for a Data Quality issue (the page's own fix `apply_fix`, or `hide_issue` for a correct one), or a merge of two people or places. The answer says whether it resolves its issue and lists the issues it would create; `replaces` corrects a waiting one |
 | `read_book` | The tree's family books, or the chapters of one: each chapter is a generation, with its people (id, name, years, number, how much of a record the book gives them, facts known) and what the agent already wrote |
 | `propose_chapter` | Adds what the agent wrote for one chapter of a book to the To Review page: an introduction and people's narratives, in `text` blocks (people cited as `{I12}`, checked to be in the tree), `context` blocks (with their sources) and `hypothesis` blocks (with their basis), and `visualization` blocks (a chart GEDRoots draws from the tree, for the book's people or another person's ancestors or descendants, with an optional comment). A new proposal for the same chapter takes the place of the waiting one. In To Review, context, hypotheses and visualizations can be unticked; only the ticked ones are saved into the book |
-| `list_visualizations` | The visualizations GEDRoots draws (fan chart by origin, places and migrations, lives, ancestors found, longevity, occupations): what each shows and when it suits a book |
-| `read_visualization` | The data of one visualization for a person's ancestors or descendants: the Visualizations page's table (one row per person, place, generation or occupation), the legend of its colours and its caption |
+| `read_visualization` | Without a name, the visualizations GEDRoots draws (fan chart by origin, places and migrations, lives, ancestors found, longevity, occupations): what each shows and when it suits a book. With one, its data for a person's ancestors or descendants: the Visualizations page's table (one row per person, place, generation or occupation), the legend of its colours and its caption |
 
 Ids (`I12`, `F3`…) are only for passing between tools; the server's instructions ask the agent
 not to show them.
@@ -71,8 +68,8 @@ Code they appear as slash commands once the server is connected.
 
 | Prompt | Arguments | Does |
 | --- | --- | --- |
-| `research` | `person`, `event`, `focus` (all optional) | The research loop: resumes with `resume_research`, plans a few leads, searches each in the browser at a human pace, notes every search and clue with `note_research`, proposes the acts found (`read_record`), notes a handoff on each lead left open, then sums up what was found, what was searched in vain and what to try next |
-| `read_record` | `file`, `person` (both optional) | Transcribes the act, checks it against the person's sheet, identifies each person with `match_people`, picks or describes the source with `search_sources`, then calls `propose_act` and fixes it if refused |
+| `research` | `person`, `event`, `focus` (all optional) | The research loop: resumes with `resume_research`, plans a few leads, searches each in the browser at a human pace, notes every search and clue with `note_research`, proposes each act found right away, with the same method as `read_record`, notes a handoff on each lead left open, then sums up what was found, what was searched in vain and what to try next |
+| `read_record` | `file`, `person` (both optional) | Transcribes the act, checks it against the person's sheet, identifies each person with `search_people` (`act`), picks or describes the source with `search_sources`, then calls `propose_act` and fixes it if refused |
 | `review_quality` | `category`, `person` (both optional) | Goes through the Data Quality issues with `quality_issues`, checks each one against the sheets and sources, then proposes a fix, an edit or hiding it with `propose_change` |
 | `write_book` | `book`, `chapter` (both optional) | Reads the book with `read_book`, then chapter by chapter reads the people's sheets, searches the historical context in reliable sources, and proposes the narratives, context and hypotheses with `propose_chapter` |
 
