@@ -317,11 +317,8 @@ impl Gedcom {
     pub fn gazetteer_form(&self) -> Vec<String> {
         let chosen = self.place_levels();
         let form = self.place_form();
-        let form: Vec<String> = form
-            .into_iter()
-            .zip(&chosen)
-            .map(|(f, c)| c.map(|l| l.canonical().to_string()).unwrap_or(f))
-            .collect();
+        let form: Vec<String> =
+            form.into_iter().zip(&chosen).map(|(f, c)| c.map(|l| l.canonical().to_string()).unwrap_or(f)).collect();
         if form.iter().enumerate().all(|(i, f)| chosen[i].is_some() || Level::of(f) != Level::Other) {
             return form;
         }
@@ -581,10 +578,9 @@ mod tests {
 
     #[test]
     fn chosen_levels_win() {
-        let mut g = Gedcom::parse(
-            "0 HEAD\n1 GEDC\n2 VERS 7.0\n1 PLAC\n2 FORM Paroisse, Code INSEE, Niveau 3, Pays\n0 TRLR\n",
-        )
-        .unwrap();
+        let mut g =
+            Gedcom::parse("0 HEAD\n1 GEDC\n2 VERS 7.0\n1 PLAC\n2 FORM Paroisse, Code INSEE, Niveau 3, Pays\n0 TRLR\n")
+                .unwrap();
         assert_eq!(g.form_levels(), vec![Level::Municipality, Level::Other, Level::Other, Level::Country]);
         assert!(g.set_place_levels(&[None, None, Some(Level::County), None]));
         assert!(!g.set_place_levels(&[None, None, Some(Level::County), None]));

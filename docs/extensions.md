@@ -18,6 +18,7 @@ start with `_GR_` and are declared in the header, as GEDCOM 7 requires:
 2 TAG _GR_FIND https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_find
 2 TAG _GR_WEB https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_web
 2 TAG _GR_DISTINCT https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_distinct
+2 TAG _GR_LEVEL https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_level
 2 TAG _GR_TASK https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_task
 2 TAG _GR_PROP https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_prop
 2 TAG _GR_BOOK https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_book
@@ -287,6 +288,7 @@ with the right code.
 | `missing_coords` | Place without coordinates (`PLAC.MAP`) |
 | `bad_coords` | Unreadable or incomplete coordinates |
 | `possible_duplicate_place` | Two places that may be the same: written differently (case, accents, "St"/"Saint", codes), a shortened form of exactly one other place, or a name that starts the other one ("Leudon" / "Leudon-en-Brie") under the same higher level with the same code or coordinates less than 2 km apart. Compared in the **Merge Two Places** window; hidden with `_GR_DISTINCT` in the header. An agent proposes to merge them (its choice for each level that differs) or to hide them, reviewed in To Review |
+| `place_format` | Place whose name does not split into the jurisdictions of the place format (`HEAD.PLAC.FORM`): too few or too many commas. Located and completed in the place's record (**Place › Locate…** or **Complete…**), or by an agent |
 | `place_hierarchy` | The same division attached to two higher divisions ("Loire" in "Rhône-Alpes" and in "Auvergne-Rhône-Alpes"); "Harmonize" keeps the most frequent |
 | `possible_duplicate` | Two individuals that may be the same person; hidden with `_GR_DISTINCT` on the pair, not `_GR_IGNORE` |
 
@@ -338,6 +340,28 @@ header:
 
 Renaming or merging a place updates its marks; a pair that becomes a single place loses its
 mark.
+
+## `_GR_LEVEL`
+
+What each jurisdiction of the place format (`HEAD.PLAC.FORM`) is, for OpenStreetMap: GEDRoots
+fills it from the gazetteer when a place is created, located or completed. A jurisdiction is
+recognized by its name (“Commune”, “Département”, “Code_Postal”, “County”, “Gemeinde”,
+“Provincia”… in six languages), or by the tree's values when its name says nothing (postal
+codes, country names); otherwise it is left empty. `_GR_LEVEL` keeps only what the user
+corrected in **File Settings › Places**, and is absent when nothing was.
+
+- **Under**: `HEAD.PLAC`, at level 2, beside `FORM`.
+- **Value**: one keyword per jurisdiction, in the order of `FORM`, separated by commas: `locality`,
+  `municipality`, `postcode`, `county`, `state`, `country`, `none` (never filled), or nothing
+  (recognized automatically).
+- **Substructures**: none.
+
+```
+0 HEAD
+1 PLAC
+2 FORM Paroisse, Code INSEE, Niveau 3, Pays
+2 _GR_LEVEL , none, county,
+```
 
 ## Source and media types (no extension)
 

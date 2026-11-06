@@ -12,8 +12,8 @@ use super::add::{AddDialog, plus_button};
 use super::*;
 use crate::editor::{PickerState, choice, picker};
 use crate::t;
-use gpui_kit::component::input::TextareaState;
 use gedcom::gazetteer::Level;
+use gpui_kit::component::input::TextareaState;
 use gpui_kit::component::menu::{DropdownMenu, PopupMenuItem};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -967,15 +967,8 @@ fn field(label: impl Into<SharedString>, el: AnyElement) -> Div {
 }
 
 /// The levels of a jurisdiction, in the menu's order; “Not Filled” last.
-const LEVELS: [Level; 7] = [
-    Level::Locality,
-    Level::Municipality,
-    Level::PostCode,
-    Level::County,
-    Level::State,
-    Level::Country,
-    Level::Other,
-];
+const LEVELS: [Level; 7] =
+    [Level::Locality, Level::Municipality, Level::PostCode, Level::County, Level::State, Level::Country, Level::Other];
 
 fn level_label(l: Level) -> String {
     match l {

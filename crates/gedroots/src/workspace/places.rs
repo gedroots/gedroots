@@ -621,12 +621,14 @@ impl Workspace {
                 }))
                 .when(!completing, |d| d.child(by_hand))
                 .when(completing, |d| {
-                    d.child(place_row("locate-cancel".into(), IconName::Close, t!("places.cancel").into(), None).on_click(
-                        cx.listener(|this, _, _, cx| {
-                            this.locate = None;
-                            cx.notify();
-                        }),
-                    ))
+                    d.child(
+                        place_row("locate-cancel".into(), IconName::Close, t!("places.cancel").into(), None).on_click(
+                            cx.listener(|this, _, _, cx| {
+                                this.locate = None;
+                                cx.notify();
+                            }),
+                        ),
+                    )
                 })
                 .into_any_element(),
         };
