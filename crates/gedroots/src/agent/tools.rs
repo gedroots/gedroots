@@ -1057,7 +1057,7 @@ impl GedrootsMcp {
 
     #[tool(
         name = "withdraw_proposal",
-        description = "Takes back a proposal still waiting in GEDRoots' review page (wrong act, wrong person…). Nothing was written. To correct it instead, call propose_act with `replaces`.",
+        description = "Takes back a proposal still waiting in GEDRoots' review page (wrong act, wrong person…). Nothing was written. To correct it instead, propose it again with `replaces`.",
         annotations(read_only_hint = false, destructive_hint = false, idempotent_hint = true, open_world_hint = false)
     )]
     async fn withdraw(&self, Parameters(p): Parameters<ProposalId>) -> Res<Withdrawn> {
@@ -1071,7 +1071,7 @@ impl GedrootsMcp {
 
     #[tool(
         name = "propose_change",
-        description = "Proposes a change for a Data Quality issue (`quality_issues`), or a correction you read in a document. Nothing is written: it waits in GEDRoots' review page, where the user saves or rejects it. `fix` applies the Quality page's own fix (issues with `automatic_fix`). `edit` changes the records the issue is about, with the edits the issue lists in `edits` (a date read in the act, the sex of a spouse, a place's coordinates, a citation of an existing source…). `hide` keeps the issue as right, for instance a marriage really celebrated very young, and saves the reason with it. For a `possible_duplicate`: `merge` when the two records are the same person (read both with `read_record` first; `choices` says, for each fact of the issue's `merge.conflicts`, whose value is right), `hide` when they are two people. For a `possible_duplicate_place`: `merge` when the two names are one place (`choices` gives, for each level of `merge.conflicts` and `MAP` for coordinates, the place, `merge.keep` or `merge.other`, whose value is right; the merged place replaces both everywhere, with their localities), `hide` when they are two places. The user reviews a merge in GEDRoots' merge window. Give `reason` (what you read) and, when you can, `evidence`. Never hide an issue only to clear the list. It is refused, with the reason, if the edit is not one the issue allows, touches another record, or does not make the issue go away: GEDRoots applies it to a copy first. The answer lists the issues the change would create. Without `issue`, it is a correction of any record: a given name or surname misread in an earlier proposal or wrong in the tree (`set_name`; `add_name` keeps a variant spelling as another name), an occupation or other fact, its value, date, place or street address (`set_event` on an existing one, `add_event` for a new one), a place's name everywhere it is used or its coordinates (`rename_place`, `set_coordinates`, choosing with `locate_place`), the repository of a source (`set_repository`: an existing one, or one to create), a sex, a citation, a wrong family link (`unlink_relative`, then `link_relative` to the right person; `set_pedigree` for an adoption), a note on a person or an event (`add_note`, `set_note`: a comment on facts already in the tree, never a research lead, which goes to `note_research`), the age at an event, its cause and its witnesses or godparents (`set_age`, `cause` in `set_event`, `add_associate`, `remove_associate`), a media on a record or an event (`attach_media`, `detach_media`); `edit` only, with `reason` and `evidence` (the source, the viewer page or a quote of the document).",
+        description = "Proposes typed edits of the tree: a correction you read in a document (a name misread in an earlier proposal or wrong in the tree, a date, a place, a family link, a note, a media), a change for a Data Quality issue (`quality_issues`), or a merge. Nothing is written: it waits in GEDRoots' review page, where the user saves or rejects it. `edits` lists the changes, of any kind, on any record; their fields are in the schema. With `issue`, the answer says whether it `resolves` it; `apply_fix` applies the Quality page's own fix (`automatic_fix`), `hide_issue` keeps an issue that is right (a marriage really celebrated very young) with the reason, never only to clear the list. `merge_people` and `merge_places` make two records one (read both first; `choices` gives whose value is right for each fact or level that differs); the user reviews them in the merge window. A note comments on facts already in the tree; a research lead goes to `note_research`. To attach the image of a document, give the file you downloaded to `attach_media`: GEDRoots imports it like an act's image. Always give `reason` (what you read) and, without an issue, `evidence` (the source, the viewer page or a quote). GEDRoots applies it to a copy first: it is refused, with the reason, only when it cannot apply; the answer lists the issues it would create. To correct it while it waits, propose again with `replaces`.",
         annotations(
             read_only_hint = false,
             destructive_hint = false,
@@ -1082,15 +1082,18 @@ impl GedrootsMcp {
     async fn propose_change(&self, Parameters(p): Parameters<ChangeParams>) -> Res<ChangeProposed> {
         let tree = p.tree.clone();
         self.report(tree.as_deref(), super::Doing::ProposesChange);
-        let mut req = change::to_request(&p)?;
+        let s = self.snapshot(tree.as_deref()).await?;
+        let ged = s.ged.clone();
+        let mut req =
+            tokio::task::spawn_blocking(move || change::to_request(&p, &ged)).await.map_err(|e| e.to_string())??;
         req.agent = self.agent_name();
         let (tx, rx) = tokio::sync::oneshot::channel();
         self.send(tree.as_deref(), Request::ProposeChange(Box::new(req), tx))
             .await
             .map_err(|_| "GEDRoots is closing".to_string())?;
-        let (id, waiting, new_issues) = rx.await.map_err(|_| "GEDRoots is closing".to_string())??;
+        let (id, waiting, resolves, new_issues) = rx.await.map_err(|_| "GEDRoots is closing".to_string())??;
         let s = self.snapshot(tree.as_deref()).await?;
-        self.answer(&s, ChangeProposed { id, status: "waiting for review".into(), waiting, new_issues })
+        self.answer(&s, ChangeProposed { id, status: "waiting for review".into(), waiting, resolves, new_issues })
     }
 
     #[tool(

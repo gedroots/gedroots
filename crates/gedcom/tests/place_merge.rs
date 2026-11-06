@@ -158,6 +158,7 @@ fn agent_change(g: &Gedcom, a: &str, action: gedcom::change::Action) -> gedcom::
         issue: Some(issues[n].clone()),
         issue_id: Some(ids[n].clone()),
         action,
+        pair: None,
         reason: "The parish took the name of the hill in 1850".into(),
         evidence: Default::default(),
     }

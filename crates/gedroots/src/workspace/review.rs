@@ -126,7 +126,7 @@ pub(super) struct Review {
     last_id: usize,
     last_temp: usize,
     /// What became of the proposals no longer waiting, for the agent.
-    decided: Vec<propose::Decision>,
+    pub(super) decided: Vec<propose::Decision>,
     /// Temporary id → person saved in the tree.
     saved: std::collections::HashMap<String, String>,
 }
@@ -171,7 +171,7 @@ fn decision(id: String, outcome: Outcome) -> propose::Decision {
 }
 
 /// What became of a proposal, for the agent.
-fn outcome_text(o: Outcome) -> &'static str {
+pub(super) fn outcome_text(o: Outcome) -> &'static str {
     match o {
         Outcome::Saved => "the user saved it",
         Outcome::Rejected => "the user rejected it",
@@ -329,7 +329,8 @@ impl Workspace {
                     "propose_change" => this.update(cx, |ws, cx| {
                         let params: crate::agent::change::ChangeParams =
                             serde_json::from_value(params).map_err(|e| e.to_string())?;
-                        let mut req = crate::agent::change::to_request(&params)?;
+                        let ged = ws.doc.as_ref().map(|d| d.ged.clone()).ok_or("no file")?;
+                        let mut req = crate::agent::change::to_request(&params, &ged)?;
                         (req.id, req.agent) = (Some(p.id.clone()), p.agent.clone());
                         ws.add_change(req, cx).map(|_| ())
                     }),
@@ -452,6 +453,15 @@ impl Workspace {
     /// The agent takes back a waiting proposal.
     pub(crate) fn withdraw_proposal(&mut self, id: &str, cx: &mut Context<Self>) -> Result<usize, String> {
         let id = id.trim();
+        // A change or a chapter: taken out of its list.
+        let chapter = self.review.chapters.iter().position(|c| c.id == id);
+        if self.take_change_by_id(id, Outcome::Withdrawn) || chapter.is_some_and(|c| self.withdraw_chapter(c)) {
+            let total = self.review.total();
+            self.review.sel = self.review.sel.min(total.saturating_sub(1));
+            self.set_status(t!("review.withdrawn"), false);
+            cx.notify();
+            return Ok(self.review_count());
+        }
         let Some(i) = self.review.items.iter().position(|it| it.id == id) else {
             return Err(match self.review.decided.iter().rev().find(|d| d.id == id) {
                 Some(d) => format!("proposal {id} is no longer waiting: {}", outcome_text(d.outcome)),
@@ -759,11 +769,27 @@ impl Workspace {
                 .into_any_element();
         }
         if let Some(i) = self.selected_change() {
+            // An image the agent attaches is shown like an act's, beside what changes.
+            let image = self.review.changes[i]
+                .items
+                .first()
+                .and_then(|c| super::review_change::change_files(&c.change).into_iter().next())
+                .filter(|f| crate::images::image_size(f).is_some());
             return h_flex()
                 .flex_1()
                 .min_w_0()
                 .items_stretch()
                 .child(list)
+                .when_some(image, |d, path| {
+                    d.child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .relative()
+                            .bg(theme::viewer())
+                            .child(self.review.zoom.view("review-change-image", path).max_fit(f32::INFINITY)),
+                    )
+                })
                 .child(self.render_change_detail(i, &self.review.changes[i], g, cx))
                 .into_any_element();
         }
@@ -1284,7 +1310,7 @@ fn planned_file(g: &Gedcom, p: &Proposal) -> Option<String> {
 
 /// Files of the media left in the app’s cache (no naming template): copied next to the .ged.
 /// Returns `true` if a file was copied.
-fn copy_out_of_cache(g: &mut Gedcom, base: &std::path::Path, media: &str) -> Result<bool, String> {
+pub(super) fn copy_out_of_cache(g: &mut Gedcom, base: &std::path::Path, media: &str) -> Result<bool, String> {
     let cache = crate::agent::propose::cache_dir();
     let Some(node) = g.get_mut(media) else { return Ok(false) };
     let mut copied = false;

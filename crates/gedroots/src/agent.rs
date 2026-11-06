@@ -38,7 +38,8 @@ pub fn url() -> String {
 }
 
 /// A change queued: its id, the proposals waiting, the issues it would create.
-pub type ChangeQueued = (String, usize, Vec<String>);
+/// Id, proposals waiting, whether the issue is gone, issues it would create.
+pub type ChangeQueued = (String, usize, Option<bool>, Vec<String>);
 
 /// What the app asks of the displayed document, from the server's thread.
 pub enum Request {

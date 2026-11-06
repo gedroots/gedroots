@@ -165,7 +165,8 @@ pub struct QualityIssue {
     /// The Quality page fixes it in one click; `batch_fix`: for the whole list at once.
     pub automatic_fix: bool,
     pub batch_fix: bool,
-    /// Edits `propose_change` accepts for it (`set_event`, `set_sex`…); empty: fix or hide only.
+    /// Edits of `propose_change` that usually settle it (`set_event`, `set_sex`…); any other may
+    /// be proposed too.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Vec::is_empty"))]
     pub edits: Vec<String>,
     /// The user can hide it on the Quality page, when they checked it is right.
