@@ -57,7 +57,13 @@
    writes a close occupation another way, and it is the same one, propose again with `replaces`
    and the tree's wording. Give the place as
    the tree names it. A place the tree does not have yet (or has without coordinates) is located
-   with `locate_place`, one place at a time.
+   with `locate_place`, one place at a time: give the people of the act already in the tree and
+   the act's date, and weigh each candidate's `fit` and `why` against what the act says (the
+   département, the parish), not merely the distance. Give the chosen candidate's `place` as is
+   (never a place written by hand in another format) and, in `locations`, its coordinates, `osm`
+   and the `reason` of your choice. When no candidate clearly fits, propose the place without a
+   location, in the tree's place `format`; the answer's `unlocated_places` lists the new places
+   still without coordinates.
    Give the transcription, and both the downloaded file (`file`, with `pdf_page`
    for a PDF) and the act's page in the archive's viewer (`url`, its permanent link such as an
    ark when the viewer offers one): GEDRoots keeps the image and a web link, so the user can see

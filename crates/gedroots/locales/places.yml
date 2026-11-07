@@ -80,6 +80,9 @@ places.offline:
 places.located:
   en: "%{place}: %{lat} %{lon} (%{uses})"
   fr: "%{place} : %{lat} %{lon} (%{uses})"
+places.located_completed:
+  en: "Located and completed: %{place} (%{uses})"
+  fr: "Localisé et complété : %{place} (%{uses})"
 places.uses.one:
   en: "%{n} use"
   fr: "%{n} occurrence"
@@ -104,3 +107,9 @@ places.none_found:
 places.position:
   en: Position
   fr: Position
+places.complete:
+  en: Complete from OpenStreetMap
+  fr: Compléter depuis OpenStreetMap
+places.cancel:
+  en: Cancel
+  fr: Annuler

@@ -129,3 +129,24 @@ settings.sites:
 settings.add_site:
   en: Add Site
   fr: Ajouter un site
+settings.level.locality:
+  en: Locality
+  fr: Lieu-dit
+settings.level.municipality:
+  en: Municipality
+  fr: Commune
+settings.level.postcode:
+  en: Postal Code
+  fr: Code postal
+settings.level.county:
+  en: County
+  fr: Département
+settings.level.state:
+  en: Region
+  fr: Région
+settings.level.country:
+  en: Country
+  fr: Pays
+settings.level.none:
+  en: Not Filled
+  fr: Non rempli

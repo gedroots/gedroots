@@ -123,7 +123,7 @@ pub fn category(code: &str) -> Category {
         "missing_file" | "moved_file" | "duplicate_media" | "missing_form" => Category::Media,
         "unsourced" => Category::Sources,
         "unattached_file" => Category::Files,
-        "possible_duplicate_place" | "place_hierarchy" | "bad_coords" => Category::Places,
+        "possible_duplicate_place" | "place_hierarchy" | "bad_coords" | "place_format" => Category::Places,
         "missing_coords" => Category::Coords,
         "possible_duplicate" => Category::Duplicates,
         _ => Category::Dates,
@@ -698,7 +698,25 @@ fn place_issue(code: &'static str, severity: Severity, places: &[&str], message:
 
 fn places(g: &Gedcom, out: &mut Vec<Issue>) {
     let all = g.places();
+    let form = g.place_form();
     for p in &all {
+        // Outside the file's place format, its jurisdictions cannot be told apart (map, search,
+        // completion from the gazetteer).
+        if !crate::gazetteer::follows_form(&p.name, &form) {
+            out.push(place_issue(
+                "place_format",
+                Severity::Info,
+                &[&p.name],
+                t!(
+                    "quality.place_format",
+                    place = p.name.clone(),
+                    n = p.name.split(',').count(),
+                    expected = form.len(),
+                    form = form.join(", ")
+                )
+                .into(),
+            ));
+        }
         match (&p.latitude, &p.longitude) {
             (None, None) => out.push(place_issue("missing_coords", Severity::Info, &[&p.name], place_label(&p.name))),
             _ if p.coords().is_none() => out.push(place_issue(

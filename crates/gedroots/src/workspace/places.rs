@@ -163,7 +163,7 @@ impl Workspace {
         if places.iter().any(|p| shown(&p.name)) || self.pending_places.iter().any(|p| shown(&p.name)) {
             return None;
         }
-        let form = doc.ged.place_form();
+        let form = doc.ged.gazetteer_form();
         let key = sort_key(typed.split(',').next().unwrap_or("").trim());
         let mut hits: Vec<(String, String)> = places
             .iter()
@@ -513,23 +513,47 @@ impl Workspace {
         .detach();
     }
 
+    /// Locates a place of the file with the chosen result, and completes it: its empty
+    /// jurisdictions (postal code, département, region) take the gazetteer's values, and a place
+    /// written outside the file's format is written again in it. The tree's own spelling of a
+    /// jurisdiction is kept; a name another place of the file already has is left alone.
     fn choose_location(&mut self, name: String, c: Candidate, window: &mut Window, cx: &mut Context<Self>) {
         self.locate = None;
-        self.mutate(window, cx, move |g| {
-            let (la, lo) = (geo::format_latitude(c.lat), geo::format_longitude(c.lon));
-            let n = g.locate_place(&name, &la, &lo, c.exid.as_ref());
-            Ok((
-                t!(
+        let mut renamed = None;
+        self.mutate(window, cx, |g| {
+            // A located place keeps its coordinates (perhaps placed by hand): completing it only
+            // adds what it lacks.
+            let known = g.places().into_iter().find(|p| p.name == name);
+            let (la, lo) = match known.as_ref().filter(|p| p.coords().is_some()) {
+                Some(p) => (p.latitude.clone().unwrap_or_default(), p.longitude.clone().unwrap_or_default()),
+                None => (geo::format_latitude(c.lat), geo::format_longitude(c.lon)),
+            };
+            let completed = gedcom::gazetteer::complete(&name, &c, &g.gazetteer_form());
+            let target = if completed != name && !g.places().iter().any(|p| p.name == completed) {
+                g.update_place(&name, &completed, "", "");
+                renamed = Some(completed.clone());
+                completed
+            } else {
+                name.clone()
+            };
+            let n = g.locate_place(&target, &la, &lo, c.exid.as_ref());
+            let msg = match &renamed {
+                Some(new) => {
+                    t!("places.located_completed", place = place_label(new), uses = crate::tn!("places.uses", n))
+                }
+                None => t!(
                     "places.located",
                     place = short_place(&name),
                     lat = la,
                     lon = lo,
                     uses = crate::tn!("places.uses", n)
-                )
-                .into_owned(),
-                None,
-            ))
+                ),
+            };
+            Ok((msg.into_owned(), None))
         });
+        if let Some(new) = renamed {
+            self.goto_place(new, window, cx);
+        }
     }
 
     pub(super) fn place_by_hand(&mut self, name: String, cx: &mut Context<Self>) {
@@ -540,11 +564,22 @@ impl Workspace {
     }
 
     /// “Position” section of the record of a place without coordinates.
+    /// Place › Complete… (or Locate… for a place without coordinates), also from its context
+    /// menu: opens the place's record and searches it in the gazetteer, to pick the result that
+    /// completes it.
+    pub(super) fn start_complete(&mut self, name: String, window: &mut Window, cx: &mut Context<Self>) {
+        self.goto_place(name.clone(), window, cx);
+        self.tab = CenterTab::Form;
+        self.start_locate(name, cx);
+    }
+
     pub(super) fn render_locate(&self, place: &Place, cx: &mut Context<Self>) -> Option<AnyElement> {
-        if place.coords().is_some() {
+        let name = place.name.clone();
+        let completing = place.coords().is_some();
+        // A located place shows the section only while it is being completed.
+        if completing && !self.locate.as_ref().is_some_and(|l| l.name == name) {
             return None;
         }
-        let name = place.name.clone();
         let by_hand = {
             let name = name.clone();
             place_row("locate-hand".into(), IconName::MapPin, t!("places.place_on_map").into(), None)
@@ -584,7 +619,17 @@ impl Workspace {
                             cx.listener(move |this, _, w, cx| this.choose_location(name.clone(), c2.clone(), w, cx)),
                         )
                 }))
-                .child(by_hand)
+                .when(!completing, |d| d.child(by_hand))
+                .when(completing, |d| {
+                    d.child(
+                        place_row("locate-cancel".into(), IconName::Close, t!("places.cancel").into(), None).on_click(
+                            cx.listener(|this, _, _, cx| {
+                                this.locate = None;
+                                cx.notify();
+                            }),
+                        ),
+                    )
+                })
                 .into_any_element(),
         };
         Some(
@@ -593,7 +638,7 @@ impl Workspace {
                 .gap_2()
                 .border_b_1()
                 .border_color(theme::border())
-                .child(label_caps(t!("places.position")))
+                .child(label_caps(if completing { t!("places.complete") } else { t!("places.position") }))
                 .child(body)
                 .into_any_element(),
         )

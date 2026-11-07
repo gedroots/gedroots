@@ -119,6 +119,7 @@ pub fn code_label(code: &str) -> Cow<'static, str> {
         "bad_coords" => t!("check.code.bad_coords"),
         "possible_duplicate_place" => t!("check.code.possible_duplicate_place"),
         "place_hierarchy" => t!("check.code.place_hierarchy"),
+        "place_format" => t!("check.code.place_format"),
         "role_sex_mismatch" => t!("check.code.role_sex_mismatch"),
         "outside_source_period" => t!("check.code.outside_source_period"),
         "possible_duplicate" => t!("check.code.possible_duplicate"),

@@ -82,6 +82,7 @@ actions!(
         EnterRecord,
         // Place
         LocatePlace,
+        CompletePlace,
         PlaceOnMap,
         MergeWithPlace,
         FindDuplicatePlaces,
@@ -646,6 +647,7 @@ fn model_with(recents: &[std::path::PathBuf], sites: &[String]) -> Vec<(SharedSt
         t!("menu.place").into(),
         vec![
             a(t!("cmd.locate_place"), LocatePlace),
+            a(t!("cmd.complete_place"), CompletePlace),
             Sep,
             a(t!("cmd.merge_with_place"), MergeWithPlace),
             a(t!("cmd.find_duplicate_places"), FindDuplicatePlaces),

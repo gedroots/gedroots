@@ -31,17 +31,92 @@ impl Level {
     pub fn of(label: &str) -> Level {
         let k = sort_key(label).replace(['_', '-'], " ");
         let has = |words: &[&str]| words.iter().any(|w| k.contains(w));
-        if has(&["lieudit", "lieu dit", "hameau", "hamlet", "quartier", "neighbourhood", "locality"]) {
+        // English and French first, then German, Spanish, Italian, Dutch and Portuguese.
+        if has(&[
+            "lieudit",
+            "lieu dit",
+            "hameau",
+            "hamlet",
+            "quartier",
+            "neighbourhood",
+            "locality",
+            "ortsteil",
+            "weiler",
+            "barrio",
+            "aldea",
+            "frazione",
+            "localita",
+            "buurtschap",
+            "gehucht",
+            "lugar",
+        ]) {
             Level::Locality
-        } else if has(&["postal", "postcode", "zip"]) || k.trim() == "cp" {
+        } else if has(&["postal", "postcode", "zip", "postleitzahl", "plz", "postale", "cap", "postcode"])
+            || k.trim() == "cp"
+        {
             Level::PostCode
-        } else if has(&["commune", "ville", "city", "town", "village", "paroisse", "parish", "municip", "localite"]) {
+        } else if has(&[
+            "commune",
+            "ville",
+            "city",
+            "town",
+            "village",
+            "paroisse",
+            "parish",
+            "municip",
+            "localite",
+            "gemeinde",
+            "stadt",
+            "ort",
+            "pfarrei",
+            "kirchspiel",
+            "pueblo",
+            "ciudad",
+            "parroquia",
+            "comune",
+            "citta",
+            "paese",
+            "parrocchia",
+            "gemeente",
+            "plaats",
+            "stad",
+            "parochie",
+            "concelho",
+            "freguesia",
+            "cidade",
+        ]) {
             Level::Municipality
-        } else if has(&["departement", "county", "comte", "district", "province"]) {
+        } else if has(&[
+            "departement",
+            "county",
+            "comte",
+            "district",
+            "province",
+            "kreis",
+            "landkreis",
+            "bezirk",
+            "amt",
+            "provincia",
+            "comarca",
+            "partido",
+            "distrito",
+            "provincie",
+        ]) {
             Level::County
-        } else if has(&["region", "state", "etat"]) {
+        } else if has(&[
+            "region",
+            "state",
+            "etat",
+            "land",
+            "bundesland",
+            "kanton",
+            "canton",
+            "comunidad",
+            "regione",
+            "estado",
+        ]) {
             Level::State
-        } else if has(&["pays", "country", "nation"]) {
+        } else if has(&["pays", "country", "nation", "staat", "pais", "nazione", "stato"]) {
             Level::Country
         } else {
             Level::Other
@@ -79,6 +154,18 @@ impl Candidate {
             Level::State => self.addr(&["state", "region"]),
             Level::Country => self.addr(&["country"]),
             Level::Other => None,
+        }
+    }
+
+    /// Level of the place itself (its first address key): a village is a municipality, a
+    /// département a county.
+    pub fn own_level(&self) -> Level {
+        match self.address.first().map(|(k, _)| k.as_str()) {
+            Some("city" | "town" | "village" | "municipality") => Level::Municipality,
+            Some("county" | "state_district") => Level::County,
+            Some("state" | "region") => Level::State,
+            Some("country") => Level::Country,
+            _ => Level::Locality,
         }
     }
 
@@ -137,6 +224,175 @@ pub fn join_parts(parts: &[String]) -> String {
         return String::new();
     }
     parts.iter().map(|p| p.trim()).collect::<Vec<_>>().join(", ")
+}
+
+/// Tag of the levels the user chose for the jurisdictions of the place format
+/// (`HEAD.PLAC._GR_LEVEL`).
+pub const LEVEL_TAG: &str = "_GR_LEVEL";
+const LEVEL_URI: &str = "https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_level";
+
+impl Level {
+    /// Keyword of the level in `_GR_LEVEL`.
+    pub fn key(self) -> &'static str {
+        match self {
+            Level::Locality => "locality",
+            Level::Municipality => "municipality",
+            Level::PostCode => "postcode",
+            Level::County => "county",
+            Level::State => "state",
+            Level::Country => "country",
+            Level::Other => "none",
+        }
+    }
+
+    pub fn from_key(key: &str) -> Option<Level> {
+        [
+            Level::Locality,
+            Level::Municipality,
+            Level::PostCode,
+            Level::County,
+            Level::State,
+            Level::Country,
+            Level::Other,
+        ]
+        .into_iter()
+        .find(|l| l.key() == key.trim())
+    }
+
+    /// A jurisdiction name the gazetteer recognizes as this level.
+    fn canonical(self) -> &'static str {
+        match self {
+            Level::Locality => "Locality",
+            Level::Municipality => "Municipality",
+            Level::PostCode => "Postcode",
+            Level::County => "County",
+            Level::State => "State",
+            Level::Country => "Country",
+            Level::Other => "",
+        }
+    }
+}
+
+impl Gedcom {
+    /// The levels the user chose for the jurisdictions of the place format, in its order
+    /// (`None`: recognized automatically).
+    pub fn place_levels(&self) -> Vec<Option<Level>> {
+        let n = self.place_form().len();
+        let chosen: Vec<Option<Level>> = self
+            .header
+            .path_val(&["PLAC", LEVEL_TAG])
+            .map(|v| v.split(',').map(Level::from_key).collect())
+            .unwrap_or_default();
+        (0..n).map(|i| chosen.get(i).copied().flatten()).collect()
+    }
+
+    /// Saves the levels chosen for the jurisdictions (`None`: recognized automatically); nothing
+    /// is written when none is chosen. Returns whether it changed.
+    pub fn set_place_levels(&mut self, levels: &[Option<Level>]) -> bool {
+        if self.place_levels() == levels {
+            return false;
+        }
+        let value = levels.iter().map(|l| l.map(Level::key).unwrap_or("")).collect::<Vec<_>>().join(", ");
+        if levels.iter().all(Option::is_none) {
+            if let Some(plac) = self.header.child_mut("PLAC") {
+                plac.children.retain(|c| c.tag != LEVEL_TAG);
+            }
+        } else {
+            self.declare_extension(LEVEL_TAG, LEVEL_URI);
+            self.header.ensure_child("PLAC").set_child_val(LEVEL_TAG, &value);
+        }
+        true
+    }
+
+    /// Level of each jurisdiction of the place format: the user's choice, else recognized from
+    /// its name or the tree's values ([`Gedcom::gazetteer_form`]).
+    pub fn form_levels(&self) -> Vec<Level> {
+        self.gazetteer_form().iter().map(|f| Level::of(f)).collect()
+    }
+
+    /// The place format as the gazetteer reads it: a jurisdiction whose name says nothing
+    /// (“Code INSEE”, “Niveau 3”) is recognized by the tree's own values when they leave no doubt
+    /// (postal codes, country names); otherwise it stays unknown and is left empty. The labels are
+    /// for matching only, never shown.
+    pub fn gazetteer_form(&self) -> Vec<String> {
+        let chosen = self.place_levels();
+        let form = self.place_form();
+        let form: Vec<String> =
+            form.into_iter().zip(&chosen).map(|(f, c)| c.map(|l| l.canonical().to_string()).unwrap_or(f)).collect();
+        if form.iter().enumerate().all(|(i, f)| chosen[i].is_some() || Level::of(f) != Level::Other) {
+            return form;
+        }
+        let places: Vec<Vec<String>> = self
+            .places()
+            .into_iter()
+            .map(|p| p.name.split(',').map(|s| s.trim().to_string()).collect::<Vec<_>>())
+            .filter(|parts| parts.len() == form.len())
+            .collect();
+        let taken: Vec<Level> = form.iter().map(|f| Level::of(f)).collect();
+        form.iter()
+            .enumerate()
+            .map(|(i, f)| {
+                // A label naming another kind of value (an INSEE code, a FIPS number) stays unknown.
+                let k = sort_key(f);
+                let named = ["insee", "code", "id", "fips", "gnis", "number", "nummer", "numero"];
+                if chosen[i].is_some()
+                    || taken[i] != Level::Other
+                    || named.iter().any(|w| k.split(|c: char| !c.is_alphanumeric()).any(|x| x == *w))
+                {
+                    return f.clone();
+                }
+                let values: Vec<&str> = places.iter().map(|p| p[i].as_str()).filter(|v| !v.is_empty()).collect();
+                if values.len() < 3 {
+                    return f.clone();
+                }
+                let all = |pred: &dyn Fn(&str) -> bool| values.iter().all(|v| pred(v));
+                let postcode = |v: &str| (4..=6).contains(&v.len()) && v.chars().all(|c| c.is_ascii_digit());
+                let country = |v: &str| crate::atlas::in_place(v).is_some();
+                if all(&postcode) && !taken.contains(&Level::PostCode) {
+                    "Postcode".to_string()
+                } else if all(&country) && !taken.contains(&Level::Country) {
+                    "Country".to_string()
+                } else {
+                    f.clone()
+                }
+            })
+            .collect()
+    }
+}
+
+/// Does a place name follow the file's place format: one value per jurisdiction, empty ones
+/// kept (`", Troyes, 10000, Aube, Grand Est, France"`)? Always, without a format of several
+/// jurisdictions.
+pub fn follows_form(name: &str, form: &[String]) -> bool {
+    form.len() < 2 || name.split(',').count() == form.len()
+}
+
+/// A place of the tree completed with a gazetteer result, in the file's format: the empty
+/// jurisdictions take the gazetteer's value, the others keep the tree's spelling. A place that
+/// does not follow the format (“Lalobbe, Ardennes, France” in a file of six jurisdictions) is
+/// written again from the gazetteer, keeping a locality the gazetteer does not have.
+pub fn complete(name: &str, candidate: &Candidate, form: &[String]) -> String {
+    if form.len() < 2 {
+        return name.to_string();
+    }
+    let theirs = candidate.parts(form);
+    if follows_form(name, form) {
+        let ours: Vec<String> = name.split(',').map(|s| s.trim().to_string()).collect();
+        let merged: Vec<String> = ours.into_iter().zip(theirs).map(|(o, t)| if o.is_empty() { t } else { o }).collect();
+        return join_parts(&merged);
+    }
+    let mut parts = theirs;
+    // “La Besace, Lalobbe, Ardennes”: a first part that is none of the gazetteer's goes to the
+    // locality, when the format has one and the gazetteer leaves it empty.
+    let key = |s: &str| sort_key(s.trim());
+    if let Some(first) = name.split(',').map(str::trim).find(|s| !s.is_empty())
+        && !parts.iter().any(|p| key(p) == key(first))
+        && let Some(i) = form.iter().position(|f| Level::of(f) == Level::Locality)
+        && parts[i].is_empty()
+    {
+        parts[i] = first.to_string();
+    }
+    join_parts(&parts)
 }
 
 /// Locality of an existing place: “La Borde, Troyes” → (jurisdictions of the new place, parent
@@ -300,6 +556,68 @@ mod tests {
         let text = g.to_gedcom_string();
         assert!(text.contains("3 MAP\n4 LATI N48.2978\n4 LONG E4.1175\n3 EXID 415228\n4 TYPE https://www.openstreetmap.org/relation/\n"), "{text}");
         assert_eq!(text.matches("EXID").count(), 1);
+    }
+
+    #[test]
+    fn levels_in_other_languages_and_from_values() {
+        assert_eq!(Level::of("Gemeinde"), Level::Municipality);
+        assert_eq!(Level::of("Kreis"), Level::County);
+        assert_eq!(Level::of("Provincia"), Level::County);
+        assert_eq!(Level::of("Bundesland"), Level::State);
+        let g = Gedcom::parse(
+            "0 HEAD\n1 GEDC\n2 VERS 7.0\n1 PLAC\n2 FORM Commune, Code INSEE, Niveau 2, Niveau 3\n\
+0 @I1@ INDI\n1 BIRT\n2 PLAC Troyes, 10387, 10000, France\n1 DEAT\n2 PLAC Agneaux, 50002, 50180, France\n\
+1 RESI\n2 PLAC Lyon, 69123, 69001, France\n1 EVEN\n2 PLAC Rennes, , , France\n0 TRLR\n",
+        )
+        .unwrap();
+        // Digits under a label that says nothing: postal codes; country names: the country. The
+        // INSEE code looks the same but its label names it: left empty.
+        assert_eq!(g.gazetteer_form(), vec!["Commune", "Code INSEE", "Postcode", "Country"]);
+        assert_eq!(g.place_form(), vec!["Commune", "Code INSEE", "Niveau 2", "Niveau 3"]);
+    }
+
+    #[test]
+    fn chosen_levels_win() {
+        let mut g =
+            Gedcom::parse("0 HEAD\n1 GEDC\n2 VERS 7.0\n1 PLAC\n2 FORM Paroisse, Code INSEE, Niveau 3, Pays\n0 TRLR\n")
+                .unwrap();
+        assert_eq!(g.form_levels(), vec![Level::Municipality, Level::Other, Level::Other, Level::Country]);
+        assert!(g.set_place_levels(&[None, None, Some(Level::County), None]));
+        assert!(!g.set_place_levels(&[None, None, Some(Level::County), None]));
+        let text = g.to_gedcom_string();
+        assert!(text.contains("2 _GR_LEVEL , , county,\n"), "{text}");
+        assert!(text.contains("2 TAG _GR_LEVEL "), "{text}");
+        assert_eq!(g.form_levels(), vec![Level::Municipality, Level::Other, Level::County, Level::Country]);
+        // “Not filled” for a level the name would give.
+        g.set_place_levels(&[Some(Level::Other), None, Some(Level::County), None]);
+        assert_eq!(g.form_levels()[0], Level::Other);
+        // Back to automatic: the tag goes.
+        g.set_place_levels(&[None, None, None, None]);
+        assert!(!g.to_gedcom_string().contains("2 _GR_LEVEL"));
+    }
+
+    #[test]
+    fn completes_places() {
+        let form = ancestris();
+        let c = parres();
+        // Empty jurisdictions filled, the tree's spelling kept.
+        assert_eq!(
+            complete(", St-Parres-aux-Tertres, , Aube, , France", &c, &form),
+            ", St-Parres-aux-Tertres, 10410, Aube, Grand Est, France"
+        );
+        // Not in the format: written again from the gazetteer.
+        assert!(!follows_form("Saint-Parres-aux-Tertres, Aube, France", &form));
+        assert_eq!(
+            complete("Saint-Parres-aux-Tertres, Aube, France", &c, &form),
+            ", Saint-Parres-aux-Tertres, 10410, Aube, Grand Est, France"
+        );
+        // A locality the gazetteer does not know is kept.
+        assert_eq!(
+            complete("Les Cortins, Saint-Parres-aux-Tertres (Aube)", &c, &form),
+            "Les Cortins, Saint-Parres-aux-Tertres, 10410, Aube, Grand Est, France"
+        );
+        // No format: unchanged.
+        assert_eq!(complete("Saint-Parres", &c, &[]), "Saint-Parres");
     }
 
     #[test]

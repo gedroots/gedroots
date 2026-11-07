@@ -71,20 +71,27 @@ fn parse(v: &serde_json::Value) -> Vec<Candidate> {
             let p = f.get("properties")?;
             let s = |k: &str| p.get(k).and_then(|x| x.as_str()).filter(|x| !x.trim().is_empty());
             let name = s("name")?.trim().to_string();
-            // The place itself, filed at its level: municipality, or locality in its municipality.
+            // The place itself, filed at its level: municipality, locality in its municipality, or
+            // a broader jurisdiction (a département, a region).
             let kind = match s("osm_value").unwrap_or("") {
                 k @ ("city" | "town" | "village" | "municipality") => k,
                 k @ ("hamlet" | "isolated_dwelling" | "locality" | "neighbourhood" | "quarter") => k,
+                k @ ("county" | "state" | "region" | "country") => k,
                 _ => "locality",
             };
             let mut address = vec![(kind.to_string(), name.clone())];
-            if !matches!(kind, "city" | "town" | "village" | "municipality")
+            let broad = matches!(kind, "county" | "state" | "region" | "country");
+            if !broad
+                && !matches!(kind, "city" | "town" | "village" | "municipality")
                 && let Some(c) = s("city").filter(|c| *c != name)
             {
                 address.push(("city".into(), c.to_string()));
             }
             for k in ["postcode", "county", "state", "country"] {
-                if let Some(v) = s(k) {
+                // A département is not filed twice, nor given a postal code.
+                if let Some(v) = s(k)
+                    && !(broad && (k == kind || k == "postcode"))
+                {
                     address.push((k.to_string(), v.to_string()));
                 }
             }
@@ -133,5 +140,21 @@ mod tests {
             vec!["Cortins de Saint-Parres", "Saint-Parres-aux-Tertres", "10410", "Aube", "Grand Est", "France"]
         );
         assert_eq!(found[1].context(), "Saint-Parres-aux-Tertres · Aube · Grand Est · France");
+    }
+
+    #[test]
+    fn a_departement_is_filed_as_one() {
+        let v: serde_json::Value = serde_json::from_str(
+            r#"{"features":[{"geometry":{"coordinates":[3.5,43.6]},"properties":{"osm_type":"R",
+              "osm_id":7461,"osm_value":"county","name":"Hérault","county":"Hérault","postcode":"34000",
+              "state":"Occitanie","country":"France"}}]}"#,
+        )
+        .unwrap();
+        let c = &parse(&v)[0];
+        assert_eq!(c.own_level(), gedcom::gazetteer::Level::County);
+        let form: Vec<String> =
+            ["Lieudit", "Commune", "Code_Postal", "Département", "Région", "Pays"].map(String::from).to_vec();
+        // Not a locality named “Hérault”, as before.
+        assert_eq!(c.parts(&form), vec!["", "", "", "Hérault", "Occitanie", "France"]);
     }
 }

@@ -119,9 +119,6 @@ review:
   web_link:
     en: Web Link
     fr: Lien web
-  located:
-    en: "Located at %{coords}"
-    fr: "Localisé en %{coords}"
   same_register:
     en: "%{register}, like %{n} other sources of the file"
     fr: "%{register}, comme %{n} autres sources du fichier"

@@ -338,7 +338,8 @@ pub fn edits_for(code: &str) -> &'static [&'static str] {
             &["set_value", "delete_structure"]
         }
         "unsourced" => &["cite_source"],
-        "missing_coords" | "bad_coords" => &["set_coordinates"],
+        "missing_coords" | "bad_coords" => &["set_coordinates", "rename_place"],
+        "place_format" => &["rename_place", "set_coordinates"],
         "missing_file" => &["set_media_file"],
         code if quality::category(code) == Category::Dates => &["set_event", "delete_event"],
         _ => &[],

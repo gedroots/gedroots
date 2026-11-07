@@ -50,6 +50,9 @@ pub struct LocationParams {
     pub longitude: f64,
     /// The candidate's `osm` (`relation/415228`), kept as the place's identifier.
     pub osm: Option<String>,
+    /// Why this candidate and not a homonym, in a few words in the tree's language (“the act
+    /// names the département”, “the family's village, 3 km away”): shown to the user beside it.
+    pub reason: Option<String>,
 }
 
 /// Who a person of the act is in the tree, decided before proposing (`search_people` lists the
@@ -177,8 +180,9 @@ pub struct ProposeParams {
     pub pdf_page: Option<usize>,
     /// Permanent address of the act's page in the archive's viewer; kept as a web link of the source.
     pub url: Option<String>,
-    /// Coordinates of the new places it names, chosen with `locate_place` (the candidate close to
-    /// the people's other events). Only for places the tree has not located.
+    /// Coordinates of the new places it names, chosen with `locate_place` (the candidate that fits
+    /// the act and the family's other events best), with the reason of the choice. Only for places
+    /// the tree has not located.
     #[serde(default)]
     pub locations: Vec<LocationParams>,
     /// Id of a waiting proposal (`P3`) that this one corrects: it takes its place in the review
@@ -638,6 +642,7 @@ pub fn to_proposal(p: &ProposeParams) -> Result<Proposal, String> {
             latitude: l.latitude,
             longitude: l.longitude,
             exid,
+            reason: opt(&l.reason).to_string(),
         });
     }
     Ok(Proposal { source, act, url: opt(&p.url).to_string(), conflicts: Default::default(), locations })
@@ -670,6 +675,8 @@ pub struct Built {
     pub pending: Pending,
     /// What saving it will write, one line per change.
     pub will_write: Vec<String>,
+    /// The places it adds to the tree, and whether it gives their coordinates.
+    pub new_places: Vec<(String, bool)>,
     /// Role and name of each person, in the act's order.
     pub people: Vec<(String, String)>,
 }
@@ -698,6 +705,11 @@ pub fn build(p: &ProposeParams, ged: &Gedcom, queue: &Queue, agent: &str) -> Res
     // created by this one too.
     h.unresolve(&mut proposal, &temps);
     let will_write = effects(&proposal, ged);
+    let new_places = proposal
+        .new_places(&h.ged)
+        .into_iter()
+        .map(|p| (p.to_string(), proposal.locations.iter().any(|l| l.place == p)))
+        .collect();
     let original = p.file.as_ref().map(|f| PathBuf::from(f.trim())).filter(|f| !f.as_os_str().is_empty());
     // An act found online is kept twice: its image (downloaded file) and its web page.
     if original.is_none() && p.url.as_deref().is_some_and(|u| !u.trim().is_empty()) {
@@ -734,7 +746,7 @@ pub fn build(p: &ProposeParams, ged: &Gedcom, queue: &Queue, agent: &str) -> Res
         agent: agent.to_string(),
         request: request.to_string(),
     };
-    Ok(Built { pending, will_write, people })
+    Ok(Built { pending, will_write, new_places, people })
 }
 
 pub fn osm_exid(osm: &str) -> Result<(String, String), String> {

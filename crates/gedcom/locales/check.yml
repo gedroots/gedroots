@@ -129,6 +129,9 @@ check.code.possible_duplicate_place:
 check.code.possible_duplicate:
   en: "Possible duplicate"
   fr: "Doublon possible"
+check.code.place_format:
+  en: "Place outside the place format"
+  fr: "Lieu hors du format des lieux"
 check.code.place_hierarchy:
   en: "Inconsistent hierarchy"
   fr: "Rattachement incohérent"

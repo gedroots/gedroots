@@ -1091,7 +1091,7 @@ impl Workspace {
             links = links.child(link_row(
                 t!("review.place").into_owned(),
                 gedcom::place_label(&place.value),
-                t!("review.located", coords = place.detail).into_owned(),
+                place.detail.clone(),
                 place.created,
             ));
         }

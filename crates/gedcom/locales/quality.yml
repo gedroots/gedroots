@@ -159,6 +159,9 @@ quality.missing_file:
 quality.duplicate_media:
   en: "“%{a}” and “%{b}” point to the same file"
   fr: "« %{a} » et « %{b} » désignent le même fichier"
+quality.place_format:
+  en: "%{place}: %{n} jurisdictions instead of %{expected} (%{form})"
+  fr: "%{place} : %{n} niveaux au lieu de %{expected} (%{form})"
 quality.bad_coords:
   en: "%{place}: unreadable coordinates (%{lat} %{long})"
   fr: "%{place} : coordonnées illisibles (%{lat} %{long})"

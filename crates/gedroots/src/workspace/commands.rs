@@ -140,6 +140,14 @@ impl Workspace {
                 }
             })
         });
+        // A located place: its missing jurisdictions filled from the gazetteer.
+        let d = d.when(place.is_some() && !unlocated, |d| {
+            on!(d, cx, CompletePlace, |this, w, cx| {
+                if let Some(p) = this.selected_place() {
+                    this.start_complete(p, w, cx)
+                }
+            })
+        });
         // Research: the commands of the chosen lead.
         let d = match self.selected_lead().map(|l| l.state) {
             Some(state) => {

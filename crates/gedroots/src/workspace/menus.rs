@@ -227,8 +227,10 @@ impl Workspace {
 }
 
 pub(super) fn place_menu(ws: Ws, name: String, from: From) -> MenuBuilder {
-    Rc::new(move |menu, _, _| {
-        let (n1, n2, n3, n4) = (name.clone(), name.clone(), name.clone(), name.clone());
+    Rc::new(move |menu, _, cx| {
+        let (n1, n2, n3, n4, n5) = (name.clone(), name.clone(), name.clone(), name.clone(), name.clone());
+        let located = read(&ws, cx, |_, g| g.places().into_iter().any(|p| p.name == name && p.coords().is_some()));
+        let label = if located == Some(true) { t!("cmd.complete_place") } else { t!("cmd.locate_place") };
         menu.item(act(&ws, t!("context.show_on_map"), move |this, w, cx| {
             this.goto_place(n1.clone(), w, cx);
             this.tab = CenterTab::Map;
@@ -237,6 +239,7 @@ pub(super) fn place_menu(ws: Ws, name: String, from: From) -> MenuBuilder {
             this.goto_place(n2.clone(), w, cx);
             this.tab = CenterTab::Form;
         }))
+        .item(act(&ws, label, move |this, w, cx| this.start_complete(n5.clone(), w, cx)))
         .separator()
         .item(act(&ws, label::copy_name(), move |this, _, cx| this.copy_name(&n3, cx)))
         .when(matches!(from, From::List), |m| {
