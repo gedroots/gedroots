@@ -24,16 +24,20 @@ env:
 jobs:
   build:
     runs-on: macos-latest
+    permissions:
+      contents: read
+      # Replaces main's cache of build outputs.
+      actions: write
     steps:
       - uses: actions/checkout@v7
         with:
           submodules: true
-      - name: Rust toolchain in the mise folder
-        run: echo "MISE_RUSTUP_HOME=$HOME/.local/share/mise/rustup" >> "$GITHUB_ENV"
+      # No cache of the tools: they install in under a minute, and their cache took the room of
+      # the build outputs below.
       - uses: jdx/mise-action@v5
         with:
           version: 2026.10.25
-          cache_save: ${{ github.ref == 'refs/heads/main' }}
+          cache: false
       # Saved by main only: a pull request's copy could only be read by that pull request, and
       # would take room from the caches every pull request shares.
       - name: Restore the crates and build outputs
@@ -45,13 +49,18 @@ jobs:
             ~/.cargo/registry/cache
             ~/.cargo/git/db
             target
-          key: ${{ github.job }}-ios-${{ hashFiles('mise.lock', 'Cargo.lock') }}
-          restore-keys: ${{ github.job }}-ios-
+          key: ios
       - name: XcodeGen
         run: brew install xcodegen
       - run: mise run ios:build
+      # A cache cannot be overwritten: main's previous copy goes first.
+      - name: Delete the previous build outputs
+        if: github.ref == 'refs/heads/main'
+        run: gh cache delete ios || true
+        env:
+          GH_TOKEN: ${{ github.token }}
       - name: Save the crates and build outputs
-        if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
+        if: github.ref == 'refs/heads/main'
         uses: actions/cache/save@v6
         with:
           path: |
@@ -59,4 +68,4 @@ jobs:
             ~/.cargo/registry/cache
             ~/.cargo/git/db
             target
-          key: ${{ steps.cache.outputs.cache-primary-key }}
+          key: ios
