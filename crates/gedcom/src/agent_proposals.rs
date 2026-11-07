@@ -222,6 +222,13 @@ impl Gedcom {
     pub fn store_agent_proposal(&mut self, p: &StoredProposal) {
         self.declare_proposal_tags();
         let mut p = p.clone();
+        // Only records of the tree: a place (named, not a record) or a removed record would be a
+        // broken link.
+        let mut seen = std::collections::HashSet::new();
+        p.about.retain(|x| {
+            let x = x.trim_matches('@');
+            self.get(x).is_some_and(|r| r.tag != PROP_TAG) && seen.insert(x.to_string())
+        });
         if p.date.is_empty() {
             (p.date, p.time) = crate::node::now_gedcom();
         }
@@ -330,6 +337,36 @@ mod tests {
         );
         assert_eq!(g.agent_proposals_about("@I1@").len(), 1);
         assert!(!g.decide_agent_proposal("P9", Outcome::Saved, ""));
+    }
+
+    #[test]
+    fn about_only_records_of_the_tree() {
+        // A proposal to merge two places names them, but places are not records: they must not
+        // become links to a missing record.
+        let mut g = Gedcom::parse(FILE).unwrap();
+        let p = StoredProposal {
+            id: "P1".into(),
+            about: vec![
+                ", Agde, Hérault, Occitanie, France".into(),
+                "I1".into(),
+                "@I1@".into(),
+                "I9".into(),
+                "".into(),
+            ],
+            ..Default::default()
+        };
+        g.store_agent_proposal(&p);
+        assert_eq!(g.agent_proposal("P1").unwrap().about, vec!["I1".to_string()]);
+        let issues = crate::analysis::check::check(&g, &Default::default());
+        assert!(!issues.iter().any(|i| i.code == "broken_link"), "{issues:?}");
+        // Files written before: the Quality page's fix removes these links and keeps the proposal.
+        let old = "0 HEAD\n1 GEDC\n2 VERS 7.0\n0 @I1@ INDI\n0 @GRP1@ _GR_PROP P1\n1 _GR_KIND CHANGE\n\
+                   1 _GR_ABOUT @, Agde, Hérault, Occitanie, France@\n1 _GR_ABOUT @I1@\n1 _GR_RES SAVED\n0 TRLR\n";
+        let mut g = Gedcom::parse(old).unwrap();
+        let broken: Vec<_> = crate::quality::run(&g).into_iter().filter(|i| i.code == "broken_link").collect();
+        assert_eq!(broken.len(), 1);
+        assert_eq!(g.fix_issues(&broken), 1);
+        assert_eq!(g.agent_proposal("P1").unwrap().about, vec!["I1".to_string()]);
     }
 
     #[test]
