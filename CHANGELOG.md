@@ -1,5 +1,13 @@
 # Changelog
 
+## [2026.11.10](https://github.com/gedroots/gedroots/releases/tag/v2026.11.10) - 2026-11-07
+
+### 🔄 Changed
+
+- Turn the Research icon while an agent works on a lead by @antoninguyot in [#176](https://github.com/gedroots/gedroots/pull/176)
+- Unify propose_change into typed edits, and import the files agents attach by @antoninguyot in [#177](https://github.com/gedroots/gedroots/pull/177)
+- Geocode the places agents propose, with ranked candidates, and complete places in the file's format by @antoninguyot in [#180](https://github.com/gedroots/gedroots/pull/180)
+
 ## [2026.11.9](https://github.com/gedroots/gedroots/releases/tag/v2026.11.9) - 2026-11-05
 
 ### 🔄 Changed
