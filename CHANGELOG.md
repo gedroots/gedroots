@@ -1,5 +1,11 @@
 # Changelog
 
+## [2026.11.11](https://github.com/gedroots/gedroots/releases/tag/v2026.11.11) - 2026-11-07
+
+### 🔄 Changed
+
+- Keep agent proposals linked only to records of the tree by @antoninguyot in [#181](https://github.com/gedroots/gedroots/pull/181)
+
 ## [2026.11.10](https://github.com/gedroots/gedroots/releases/tag/v2026.11.10) - 2026-11-07
 
 ### 🔄 Changed
