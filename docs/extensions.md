@@ -567,7 +567,7 @@ to remember it.
     the research log's tags, declared with its URI);
   - `DATE <date>` with `TIME <time>` (UTC): when it was sent;
   - `TEXT <text>`: what it is, in one line;
-  - `_GR_ABOUT @<INDI or FAM>@`: the people (or families) it is about, one per line;
+  - `_GR_ABOUT @<XREF>@`: the records it is about (people, families, sources…), one per line; places, which are not records, are never listed;
   - `_GR_RES <outcome>`: `WAITING`, `SAVED`, `REJECTED`, `EDITED` (opened in record entry by the
     user), `WITHDRAWN` or `REPLACED`;
   - `_GR_AGENT <name>`: the agent that sent it;
