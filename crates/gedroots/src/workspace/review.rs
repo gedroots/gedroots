@@ -760,13 +760,8 @@ impl Workspace {
             .children(self.review.changes.iter().enumerate().map(|(i, group)| self.render_change_row(i, group, g, cx)))
             .children(self.review.chapters.iter().enumerate().map(|(i, item)| self.render_chapter_row(i, item, g, cx)));
         if let Some(i) = self.selected_chapter() {
-            return h_flex()
-                .flex_1()
-                .min_w_0()
-                .items_stretch()
-                .child(list)
-                .child(self.render_chapter_detail(i, &self.review.chapters[i], g, cx))
-                .into_any_element();
+            let (detail, bar) = self.render_chapter_detail(i, &self.review.chapters[i], g, cx);
+            return review_page(list, detail, bar);
         }
         if let Some(i) = self.selected_change() {
             // An image the agent attaches is shown like an act's, beside what changes.
@@ -775,11 +770,10 @@ impl Workspace {
                 .first()
                 .and_then(|c| super::review_change::change_files(&c.change).into_iter().next())
                 .filter(|f| crate::images::image_size(f).is_some());
-            return h_flex()
-                .flex_1()
-                .min_w_0()
+            let (detail, bar) = self.render_change_detail(i, &self.review.changes[i], g, cx);
+            let content = h_flex()
+                .size_full()
                 .items_stretch()
-                .child(list)
                 .when_some(image, |d, path| {
                     d.child(
                         div()
@@ -790,30 +784,22 @@ impl Workspace {
                             .child(self.review.zoom.view("review-change-image", path).max_fit(f32::INFINITY)),
                     )
                 })
-                .child(self.render_change_detail(i, &self.review.changes[i], g, cx))
-                .into_any_element();
+                .child(detail);
+            return review_page(list, content, bar);
         }
         let Some(item) = self.review.items.get(self.review.sel) else {
             return list.into_any_element();
         };
         // No image: no empty viewer, the proposal takes a single centred column.
         let image = item.pending.preview.is_some() || item.pending.image.is_some();
-        h_flex()
-            .flex_1()
-            .min_w_0()
-            .items_stretch()
-            .child(list)
-            .map(|d| match image {
-                true => d.child(self.review_viewer(item)).child(self.review_detail(item, g, cx)),
-                false => d.child(
-                    v_flex()
-                        .flex_1()
-                        .min_w_0()
-                        .items_center()
-                        .child(self.review_detail(item, g, cx).max_w(px(640.)).size_full().border_l_0()),
-                ),
-            })
-            .into_any_element()
+        let (detail, bar) = self.review_detail(item, g, cx);
+        let content = h_flex().size_full().items_stretch().map(|d| match image {
+            true => d.child(self.review_viewer(item)).child(detail),
+            false => d.child(
+                v_flex().flex_1().min_w_0().items_center().child(detail.max_w(px(640.)).size_full().border_l_0()),
+            ),
+        });
+        review_page(list, content, bar)
     }
 
     fn review_viewer(&self, item: &Item) -> AnyElement {
@@ -870,7 +856,8 @@ impl Workspace {
             .into_any_element()
     }
 
-    fn review_detail(&self, item: &Item, g: &Gedcom, cx: &mut Context<Self>) -> Div {
+    /// The proposal's detail and its action bar.
+    fn review_detail(&self, item: &Item, g: &Gedcom, cx: &mut Context<Self>) -> (Div, AnyElement) {
         let full = &item.pending.proposal;
         let p = item.proposal();
         // The proposal may no longer fit the tree (changed since): it stays visible, but is not
@@ -1171,7 +1158,7 @@ impl Workspace {
         let remarks = item.pending.remarks.clone();
         let url = item.pending.proposal.url.trim().to_string();
         let can_save = problem.is_none();
-        v_flex()
+        let detail = v_flex()
             .w(px(500.))
             .flex_none()
             .border_l_1()
@@ -1229,38 +1216,58 @@ impl Workspace {
                         )
                     })
                     .child(gedcom),
-            )
-            .child(
-                h_flex()
-                    .px_4()
-                    .py_3()
-                    .gap_2()
-                    .border_t_1()
-                    .border_color(theme::border())
-                    .child(
-                        Button::new("review-reject")
-                            .ghost()
-                            .small()
-                            .label(t!("review.reject").into_owned())
-                            .on_click(cx.listener(|this, _, _, cx| this.reject_proposal(cx))),
-                    )
-                    .child(div().flex_1())
-                    .child(
-                        Button::new("review-edit")
-                            .small()
-                            .label(t!("review.edit").into_owned())
-                            .on_click(cx.listener(|this, _, w, cx| this.edit_proposal(w, cx))),
-                    )
-                    .child(
-                        Button::new("review-save")
-                            .primary()
-                            .small()
-                            .disabled(!can_save)
-                            .label(t!("review.save").into_owned())
-                            .on_click(cx.listener(|this, _, w, cx| this.accept_proposal(w, cx))),
-                    ),
-            )
+            );
+        let bar = action_bar(
+            Button::new("review-reject")
+                .ghost()
+                .small()
+                .label(t!("review.reject").into_owned())
+                .on_click(cx.listener(|this, _, _, cx| this.reject_proposal(cx))),
+            Some(
+                Button::new("review-edit")
+                    .small()
+                    .label(t!("review.edit").into_owned())
+                    .on_click(cx.listener(|this, _, w, cx| this.edit_proposal(w, cx))),
+            ),
+            Button::new("review-save")
+                .primary()
+                .small()
+                .disabled(!can_save)
+                .label(t!("review.save").into_owned())
+                .on_click(cx.listener(|this, _, w, cx| this.accept_proposal(w, cx))),
+        );
+        (detail, bar)
     }
+}
+
+/// The page right of the list: the selected proposal above, its action bar below. The bar spans
+/// the whole page whatever the proposal shows (an image or not, an act, a change or a chapter),
+/// so Save stays in the bottom right corner and a run of proposals can be saved without moving
+/// the pointer, like GNOME's action bar or the commit buttons of a window.
+fn review_page(list: impl IntoElement, content: impl IntoElement, bar: AnyElement) -> AnyElement {
+    h_flex()
+        .flex_1()
+        .min_w_0()
+        .items_stretch()
+        .child(list)
+        .child(v_flex().flex_1().min_w_0().child(div().flex_1().min_h_0().child(content)).child(bar))
+        .into_any_element()
+}
+
+/// Reject on the left, then the optional secondary action and Save on the right.
+pub(super) fn action_bar(reject: Button, middle: Option<Button>, save: Button) -> AnyElement {
+    h_flex()
+        .flex_none()
+        .px_4()
+        .py_3()
+        .gap_2()
+        .border_t_1()
+        .border_color(theme::border())
+        .child(reject)
+        .child(div().flex_1())
+        .children(middle)
+        .child(save)
+        .into_any_element()
 }
 
 /// Name the record’s file will get according to File Settings › Media (without a template: its own
