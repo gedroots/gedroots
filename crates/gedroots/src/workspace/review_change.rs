@@ -13,6 +13,7 @@ use gedcom::analysis::check::Issue;
 use gedcom::change::{Action, QualityChange, find_issue};
 use gedcom::proposal::Change;
 use gedcom::quality;
+use gpui_kit::component::Selectable;
 use gpui_kit::component::checkbox::Checkbox;
 use std::collections::BTreeSet;
 
@@ -113,7 +114,7 @@ impl Workspace {
             return false;
         };
         if self.review.changes[g].items.len() == 1 {
-            self.take_change(g, outcome);
+            self.take_change(g, outcome, "");
         } else {
             let group = &mut self.review.changes[g];
             let k = group.items.iter().position(|c| c.id == id).unwrap_or_default();
@@ -132,14 +133,14 @@ impl Workspace {
         if self.doc.is_none() {
             return Err("no file is open in GEDRoots".into());
         }
+        let waiting = |r: &str| self.review.changes.iter().flat_map(|g| &g.items).any(|c| c.id == r);
         if let Some(r) = &req.replaces
-            && !self.review.changes.iter().flat_map(|g| &g.items).any(|c| &c.id == r)
+            && !waiting(r)
+            && !self.awaits_correction(r)
         {
-            return Err(match self.review.decided.iter().rev().find(|d| &d.id == r) {
-                Some(d) => format!("proposal {r} is no longer waiting: {}", super::review::outcome_text(d.outcome)),
-                None => format!("no change {r} waiting for review"),
-            });
+            return Err(self.doc.as_ref().unwrap().ged.agent_not_replaceable(r));
         }
+        let corrects = self.corrected_by(req.replaces.as_deref());
         self.refresh_quality();
         let issues = self.quality.issues.clone();
         // Without an issue: a correction the agent read in a document, or a merge.
@@ -170,6 +171,7 @@ impl Workspace {
             change.check(&self.doc.as_ref().unwrap().ged, &rerun)?
         };
         if let Some(r) = &req.replaces {
+            // Waiting: replaced. Sent back by the user: the new one points to it.
             self.take_change_by_id(r, gedcom::agent_proposals::Outcome::Replaced);
         }
         let resolves = checked.resolves;
@@ -201,6 +203,7 @@ impl Workspace {
             about,
             agent: req.agent,
             data: data.to_string(),
+            corrects: corrects.or(kept.corrects.clone()),
             ..kept
         });
         let item = ChangeItem { id: id.clone(), change, new_issues: new_issues.clone() };
@@ -226,12 +229,18 @@ impl Workspace {
 
     /// Removes a row, recording in the file what became of its changes (the unchecked fixes of a
     /// saved group are rejected).
-    pub(super) fn take_change(&mut self, i: usize, outcome: gedcom::agent_proposals::Outcome) -> ChangeGroup {
+    pub(super) fn take_change(
+        &mut self,
+        i: usize,
+        outcome: gedcom::agent_proposals::Outcome,
+        note: &str,
+    ) -> ChangeGroup {
+        self.review.rejecting = None;
         let group = self.review.changes.remove(i);
         for (k, item) in group.items.iter().enumerate() {
             let rejected = outcome == gedcom::agent_proposals::Outcome::Saved && group.excluded.contains(&k);
-            let o = if rejected { gedcom::agent_proposals::Outcome::Rejected } else { outcome };
-            self.decide_proposal(&item.id, o, "");
+            let (o, note) = if rejected { (gedcom::agent_proposals::Outcome::Rejected, "") } else { (outcome, note) };
+            self.decide_proposal(&item.id, o, note);
         }
         let total = self.review.total();
         self.review.sel = self.review.sel.min(total.saturating_sub(1));
@@ -247,7 +256,7 @@ impl Workspace {
         let same =
             |c: &ChangeItem| c.change.merge_pair().is_some_and(|(x, y)| (x == a && y == b) || (x == b && y == a));
         while let Some(i) = self.review.changes.iter().position(|g| g.items.iter().any(same)) {
-            self.take_change(i, gedcom::agent_proposals::Outcome::Saved);
+            self.take_change(i, gedcom::agent_proposals::Outcome::Saved, "");
         }
     }
 
@@ -257,14 +266,8 @@ impl Workspace {
         let same =
             |c: &ChangeItem| c.change.place_pair().is_some_and(|(x, y)| (x == a && y == b) || (x == b && y == a));
         while let Some(i) = self.review.changes.iter().position(|g| g.items.iter().any(same)) {
-            self.take_change(i, gedcom::agent_proposals::Outcome::Saved);
+            self.take_change(i, gedcom::agent_proposals::Outcome::Saved, "");
         }
-    }
-
-    pub(super) fn reject_change(&mut self, i: usize, cx: &mut Context<Self>) {
-        self.take_change(i, gedcom::agent_proposals::Outcome::Rejected);
-        self.set_status(t!("review.rejected"), false);
-        cx.notify();
     }
 
     /// Saves the displayed change (or the checked fixes of the group): one undo point.
@@ -316,7 +319,7 @@ impl Workspace {
                 }
             }
         }
-        self.take_change(i, gedcom::agent_proposals::Outcome::Saved);
+        self.take_change(i, gedcom::agent_proposals::Outcome::Saved, "");
         let msg = t!("review.change_saved", title = title).into_owned() + &note;
         self.before_agent_change();
         self.edit_ged(
@@ -374,10 +377,10 @@ impl Workspace {
             .when(!sel, |d| d.hover(|d| d.bg(theme::hover())))
             .child(div().font_weight(FontWeight::MEDIUM).child(group.title(g)))
             .child(div().text_xs().text_color(theme::muted()).truncate().child(meta))
-            .on_click(cx.listener(move |this, _, _, cx| {
-                this.review.sel = n;
-                cx.notify();
-            }))
+            .when(self.requested_changes(&group.items[0].id).is_some(), |d| {
+                d.child(div().text_xs().text_color(theme::accent()).child(t!("review.corrected").into_owned()))
+            })
+            .on_click(cx.listener(move |this, _, _, cx| this.review_select(n, cx)))
             .into_any_element()
     }
 
@@ -574,12 +577,14 @@ impl Workspace {
             Some(i) => format!("{} · {by}", i.message),
             None => by.into_owned(),
         };
+        let body = v_flex().gap_4().children(self.your_request(&first.id)).child(body);
         let detail = v_flex()
             .flex_1()
             .min_w_0()
             .items_center()
             .child(
                 v_flex()
+                    .relative()
                     .size_full()
                     .max_w(px(640.))
                     .child(
@@ -600,8 +605,9 @@ impl Workspace {
             Button::new("change-reject")
                 .ghost()
                 .small()
-                .label(t!("review.reject").into_owned())
-                .on_click(cx.listener(move |this, _, _, cx| this.reject_change(i, cx))),
+                .selected(self.review.rejecting.is_some())
+                .label(t!("review.reject_ellipsis").into_owned())
+                .on_click(cx.listener(|this, _, w, cx| this.reject_proposal(w, cx))),
             None,
             Button::new("change-save")
                 .primary()

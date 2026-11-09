@@ -13,7 +13,9 @@ How to work:
    find, with the estimated years and why, the places to search first and where to look, and the
    proposals give what I saved or rejected and why. Everything you note in the research log is
    written in the tree's `language`, whatever language the archive is in. Carry on from the last `next` search; never
-   search again a register and years already noted as `nothing`; learn from my rejections.
+   search again a register and years already noted as `nothing`; learn from my rejections. The
+   proposals I sent back asking for changes (`changes_requested`) come first: correct each one as
+   its `note` says and propose it again with `replaces`.
 2. **Plan.** Choose a few leads worth searching now: those in progress first, then the closest
    ancestors, preferring those with a place and a short period, and those whose archive is
    online. Note each with `note_research` `plan`, with a one-sentence reason. Tell me the plan in a

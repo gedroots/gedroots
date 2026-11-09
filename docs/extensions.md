@@ -568,10 +568,13 @@ to remember it.
   - `DATE <date>` with `TIME <time>` (UTC): when it was sent;
   - `TEXT <text>`: what it is, in one line;
   - `_GR_ABOUT @<XREF>@`: the records it is about (people, families, sources…), one per line; places, which are not records, are never listed;
-  - `_GR_RES <outcome>`: `WAITING`, `SAVED`, `REJECTED`, `EDITED` (opened in record entry by the
-    user), `WITHDRAWN` or `REPLACED`;
+  - `_GR_RES <outcome>`: `WAITING`, `SAVED`, `REJECTED`, `CHANGES_REQUESTED` (rejected, the
+    agent asked to correct it), `EDITED` (opened in record entry by the user), `WITHDRAWN` or
+    `REPLACED`;
   - `_GR_AGENT <name>`: the agent that sent it;
-  - `NOTE <text>`: the user's reason, or the proposal that replaced it;
+  - `NOTE <text>`: the user's reason (what to change, for `CHANGES_REQUESTED`), or the proposal
+    that replaced it;
+  - `_GR_CORR @<XREF>@`: the proposal it corrects, after the user asked for changes;
   - `_GR_DATA <json>`: the agent's request as it sent it, only while it waits: GEDRoots queues it
     again when the file opens.
 
@@ -581,6 +584,7 @@ to remember it.
 2 TAG _GR_PROP https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_prop
 2 TAG _GR_ABOUT https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_prop
 2 TAG _GR_DATA https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_prop
+2 TAG _GR_CORR https://github.com/gedroots/gedroots/blob/main/docs/extensions.md#_gr_prop
 0 @GRP3@ _GR_PROP P3
 1 _GR_KIND ACT
 1 DATE 5 NOV 2026
@@ -590,6 +594,23 @@ to remember it.
 1 _GR_RES REJECTED
 1 _GR_AGENT Claude Code
 1 NOTE Not our Johann: he was born about 1726
+0 @GRP5@ _GR_PROP P5
+1 _GR_KIND ACT
+1 DATE 5 NOV 2026
+2 TIME 22:10:41
+1 TEXT Baptism · Anna RIEDAUER
+1 _GR_RES CHANGES_REQUESTED
+1 _GR_AGENT Claude Code
+1 NOTE The godmother is her aunt Eva, already in the tree
+0 @GRP6@ _GR_PROP P6
+1 _GR_KIND ACT
+1 DATE 5 NOV 2026
+2 TIME 22:14:02
+1 TEXT Baptism · Anna RIEDAUER
+1 _GR_RES WAITING
+1 _GR_AGENT Claude Code
+1 _GR_CORR @GRP5@
+1 _GR_DATA {"event":"BAPM",…}
 ```
 
 ## `_GR_BOOK`

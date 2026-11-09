@@ -345,7 +345,8 @@ pub struct DecidedProposal {
     pub agent: String,
     pub date: String,
     pub outcome: Outcome,
-    /// The user's reason, the proposal that replaced it, or why it could not be queued again.
+    /// The user's reason (with `changes_requested`, what to change), the proposal that replaced
+    /// it, or why it could not be queued again.
     #[serde(skip_serializing_if = "String::is_empty")]
     pub note: String,
     /// The people (or families) it is about; once saved, those it created too.
@@ -427,6 +428,11 @@ pub struct Resume {
     pub other_leads: Vec<Lead>,
     /// Number of other leads before the limit.
     pub other_total: usize,
+    /// Proposals the user rejected asking for changes, not corrected yet, oldest first: do these
+    /// first. Read `note`, then propose it again with `replaces` and the proposal's id (or
+    /// `withdraw_proposal` if you cannot).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub changes_requested: Vec<DecidedProposal>,
     /// Proposals waiting for the user in GEDRoots' review page, in its order.
     pub waiting: Vec<WaitingProposal>,
     /// What became of the others, most recent first.
@@ -526,8 +532,9 @@ pub struct Answer<T> {
     #[serde(flatten)]
     pub result: T,
     /// What the user did with the proposals since your last call: saved (with the ids the new
-    /// people now have in the tree: link those), rejected, opened in record entry. Only present
-    /// when something happened.
+    /// people now have in the tree: link those), rejected (with the reason in `note`),
+    /// `changes_requested` (what to change in `note`: correct it now, proposing it again with
+    /// `replaces`), opened in record entry. Only present when something happened.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub news: Vec<Decision>,
 }
@@ -678,7 +685,7 @@ impl GedrootsMcp {
 
     #[tool(
         name = "resume_research",
-        description = "Where the research stands, as GEDRoots' file keeps it for every agent: start every session with it, so that you carry on from where you, another agent or the user stopped, without searching anything twice. `in_progress`: the leads being worked on, each with its whole log (registers searched and what they gave, clues with what speaks for and against, the last handoff and its `next` search). `other_leads`: records still to find for the people of `focus` (births, marriages and deaths missing or without a source, parents at the end of a line), each with the estimated years and why, the places to search first, where to look (kinds of registers for that country and period, with the registers of that place the file already cites, their archive and call number). `waiting`: your proposals and other agents' waiting for the user, with the temporary ids of the people they create. `decided`: what became of the others (saved, rejected with the user's reason, opened in record entry, withdrawn, replaced). With `person`: everything about that person instead.",
+        description = "Where the research stands, as GEDRoots' file keeps it for every agent: start every session with it, so that you carry on from where you, another agent or the user stopped, without searching anything twice. `in_progress`: the leads being worked on, each with its whole log (registers searched and what they gave, clues with what speaks for and against, the last handoff and its `next` search). `other_leads`: records still to find for the people of `focus` (births, marriages and deaths missing or without a source, parents at the end of a line), each with the estimated years and why, the places to search first, where to look (kinds of registers for that country and period, with the registers of that place the file already cites, their archive and call number). `changes_requested`: proposals the user sent back with what to change (`note`): correct them first, proposing each again with `replaces`. `waiting`: your proposals and other agents' waiting for the user, with the temporary ids of the people they create. `decided`: what became of the others (saved, rejected with the user's reason, opened in record entry, withdrawn, replaced). With `person`: everything about that person instead.",
         annotations(read_only_hint = true, open_world_hint = false)
     )]
     async fn resume_research(&self, Parameters(p): Parameters<ResumeParams>) -> Res<Resume> {
@@ -744,21 +751,25 @@ impl GedrootsMcp {
                 }
             })
             .collect();
+        let decided_proposal = |pr: &gedcom::agent_proposals::StoredProposal| DecidedProposal {
+            id: pr.id.clone(),
+            kind: pr.kind,
+            title: pr.title.clone(),
+            agent: pr.agent.clone(),
+            date: format!("{} {}", pr.date, pr.time).trim().to_string(),
+            outcome: pr.outcome,
+            note: pr.note.clone(),
+            about: pr.about.iter().filter(|a| g.individual(a).is_some()).map(|a| g.person_ref(a)).collect(),
+        };
+        let sent_back = g.agent_changes_requested();
+        let awaits = |pr: &gedcom::agent_proposals::StoredProposal| sent_back.iter().any(|b| b.id == pr.id);
+        let changes_requested = proposals.iter().filter(|pr| awaits(pr)).map(decided_proposal).collect();
         let decided = proposals
             .iter()
             .rev()
-            .filter(|pr| pr.outcome != Outcome::Waiting)
+            .filter(|pr| pr.outcome != Outcome::Waiting && !awaits(pr))
             .take(30)
-            .map(|pr| DecidedProposal {
-                id: pr.id.clone(),
-                kind: pr.kind,
-                title: pr.title.clone(),
-                agent: pr.agent.clone(),
-                date: format!("{} {}", pr.date, pr.time).trim().to_string(),
-                outcome: pr.outcome,
-                note: pr.note.clone(),
-                about: pr.about.iter().filter(|a| g.individual(a).is_some()).map(|a| g.person_ref(a)).collect(),
-            })
+            .map(decided_proposal)
             .collect();
         self.answer(
             &s,
@@ -767,6 +778,7 @@ impl GedrootsMcp {
                 in_progress,
                 other_leads: other.into_iter().take(limit).collect(),
                 other_total,
+                changes_requested,
                 waiting,
                 decided,
             },
@@ -1042,7 +1054,7 @@ impl GedrootsMcp {
 
     #[tool(
         name = "propose_act",
-        description = "Proposes an act found in the archives (birth, marriage, death…), with its source, people and image. Nothing is written: the proposal waits in GEDRoots' review page, where the user compares it with the tree and saves or rejects it. Each person says who they are: identity link (in the tree, with id), create or mention; call search_people with the `act` first. Give every other fact the act states about a person in their `facts` (birth date in a baptism, marginal mention of a death, occupations, residences), each with its own date or none; the answer lists everything that will be written, the proposal's id (to correct it, propose it again with `replaces`) and the temporary id of each new person (link it to name the same person in another proposal: never create them twice). It is refused, with the reason, if it does not fit the tree (unknown source or person, a parent other than the tree's, a person to create who resembles someone of the tree, impossible date): fix it and propose again. Write facts in the tree's language and wording (an occupation the tree already has keeps the tree's text; only the transcription keeps the act's language and spelling); an occupation or residence at another date is another attestation, not a duplicate. Give the place as the tree names it (the municipality: a street, number or building goes in `address`, never in the place); a new place can carry its coordinates in `locations`, chosen with `locate_place`. A new source names its repository: an existing one (`repository_id`), or one to create (`repository`, when search_sources finds none). Give the date in GEDCOM format, the downloaded file (a PDF register needs pdf_page) and the act's page in the archive's viewer (url): both are kept, the image and a web link.",
+        description = "Proposes an act found in the archives (birth, marriage, death…), with its source, people and image. Nothing is written: the proposal waits in GEDRoots' review page, where the user compares it with the tree and saves it, rejects it or asks you for changes. Each person says who they are: identity link (in the tree, with id), create or mention; call search_people with the `act` first. Give every other fact the act states about a person in their `facts` (birth date in a baptism, marginal mention of a death, occupations, residences), each with its own date or none; the answer lists everything that will be written, the proposal's id (to correct it, propose it again with `replaces`) and the temporary id of each new person (link it to name the same person in another proposal: never create them twice). It is refused, with the reason, if it does not fit the tree (unknown source or person, a parent other than the tree's, a person to create who resembles someone of the tree, impossible date): fix it and propose again. Write facts in the tree's language and wording (an occupation the tree already has keeps the tree's text; only the transcription keeps the act's language and spelling); an occupation or residence at another date is another attestation, not a duplicate. Give the place as the tree names it (the municipality: a street, number or building goes in `address`, never in the place); a new place can carry its coordinates in `locations`, chosen with `locate_place`. A new source names its repository: an existing one (`repository_id`), or one to create (`repository`, when search_sources finds none). Give the date in GEDCOM format, the downloaded file (a PDF register needs pdf_page) and the act's page in the archive's viewer (url): both are kept, the image and a web link.",
         annotations(
             read_only_hint = false,
             destructive_hint = false,
@@ -1090,7 +1102,7 @@ impl GedrootsMcp {
 
     #[tool(
         name = "withdraw_proposal",
-        description = "Takes back a proposal still waiting in GEDRoots' review page (wrong act, wrong person…). Nothing was written. To correct it instead, propose it again with `replaces`.",
+        description = "Takes back a proposal still waiting in GEDRoots' review page (wrong act, wrong person…), or one the user asked you to change that you cannot correct (say why to the user). Nothing was written. To correct it instead, propose it again with `replaces`.",
         annotations(read_only_hint = false, destructive_hint = false, idempotent_hint = true, open_world_hint = false)
     )]
     async fn withdraw(&self, Parameters(p): Parameters<ProposalId>) -> Res<Withdrawn> {
@@ -1104,7 +1116,7 @@ impl GedrootsMcp {
 
     #[tool(
         name = "propose_change",
-        description = "Proposes typed edits of the tree: a correction you read in a document (a name misread in an earlier proposal or wrong in the tree, a date, a place, a family link, a note, a media), a change for a Data Quality issue (`quality_issues`), or a merge. Nothing is written: it waits in GEDRoots' review page, where the user saves or rejects it. `edits` lists the changes, of any kind, on any record; their fields are in the schema. With `issue`, the answer says whether it `resolves` it; `apply_fix` applies the Quality page's own fix (`automatic_fix`), `hide_issue` keeps an issue that is right (a marriage really celebrated very young) with the reason, never only to clear the list. `merge_people` and `merge_places` make two records one (read both first; `choices` gives whose value is right for each fact or level that differs); the user reviews them in the merge window. A note comments on facts already in the tree; a research lead goes to `note_research`. To attach the image of a document, give the file you downloaded to `attach_media`: GEDRoots imports it like an act's image. Always give `reason` (what you read) and, without an issue, `evidence` (the source, the viewer page or a quote). GEDRoots applies it to a copy first: it is refused, with the reason, only when it cannot apply; the answer lists the issues it would create. To correct it while it waits, propose again with `replaces`.",
+        description = "Proposes typed edits of the tree: a correction you read in a document (a name misread in an earlier proposal or wrong in the tree, a date, a place, a family link, a note, a media), a change for a Data Quality issue (`quality_issues`), or a merge. Nothing is written: it waits in GEDRoots' review page, where the user saves it, rejects it or asks you for changes. `edits` lists the changes, of any kind, on any record; their fields are in the schema. With `issue`, the answer says whether it `resolves` it; `apply_fix` applies the Quality page's own fix (`automatic_fix`), `hide_issue` keeps an issue that is right (a marriage really celebrated very young) with the reason, never only to clear the list. `merge_people` and `merge_places` make two records one (read both first; `choices` gives whose value is right for each fact or level that differs); the user reviews them in the merge window. A note comments on facts already in the tree; a research lead goes to `note_research`. To attach the image of a document, give the file you downloaded to `attach_media`: GEDRoots imports it like an act's image. Always give `reason` (what you read) and, without an issue, `evidence` (the source, the viewer page or a quote). GEDRoots applies it to a copy first: it is refused, with the reason, only when it cannot apply; the answer lists the issues it would create. To correct it while it waits, or when the user asks for changes, propose again with `replaces`.",
         annotations(
             read_only_hint = false,
             destructive_hint = false,
@@ -1185,7 +1197,8 @@ log (`note_research`) is written at once. \
 The file is the research's memory, shared by every agent and the user: you need no memory of your own. \
 To search records, call `resume_research`: the leads in progress with everything searched, the clues \
 and the last handoff, the records still to find, and what became of every proposal (saved, rejected \
-with the user's reason). Carry on from there, never search a register twice, note every search with \
+with the user's reason). When the user asks for changes on a proposal (`changes_requested`, in `news` or \
+`resume_research`), do what their `note` says before anything else and propose it again with `replaces`. Carry on from there, never search a register twice, note every search with \
 `note_research`, found or not, and before you stop, note a `handoff` on each lead you worked on, with \
 the `next` search. A record you cannot tie to the person is a `clue` (with what speaks for and \
 against), never a note in the tree. Propose each act as soon as you have read it, with your honest \

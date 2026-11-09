@@ -85,3 +85,7 @@
 9. When `news` says the user saved one of your proposals, link its new people by the id they now
    have in the tree. Before the next proposal, read the people again (`person_sheet`): the user
    may have changed them in record entry.
+10. When the user asks for changes on a proposal (`changes_requested` in `news` or
+   `resume_research`), read their `note` as an instruction about that act: read the act again,
+   then propose it again with `replaces` and the proposal's id, saying in `remarks` what you
+   changed. If you think they are wrong, say why in `remarks` rather than ignoring them.
