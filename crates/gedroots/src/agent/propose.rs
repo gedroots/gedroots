@@ -187,8 +187,9 @@ pub struct ProposeParams {
     /// the tree has not located.
     #[serde(default)]
     pub locations: Vec<LocationParams>,
-    /// Id of a waiting proposal (`P3`) that this one corrects: it takes its place in the review
-    /// page, and its new people keep their temporary ids when linked again.
+    /// Id of the proposal (`P3`) that this one corrects: a waiting one, which it takes the place of
+    /// in the review page (its new people keep their temporary ids when linked again), or one the
+    /// user sent back asking for changes (`changes_requested`).
     pub replaces: Option<String>,
 }
 
@@ -239,6 +240,10 @@ pub use gedcom::agent_proposals::Outcome;
 pub struct Decision {
     pub id: String,
     pub outcome: Outcome,
+    /// The user's reason; with `changes_requested`, what to change before proposing it again with
+    /// `replaces`.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub note: String,
     /// Saved: the new people it created, now in the tree.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub new_people: Vec<SavedPerson>,
@@ -690,11 +695,9 @@ pub fn build(p: &ProposeParams, ged: &Gedcom, queue: &Queue, agent: &str) -> Res
     let replaces = p.replaces.as_deref().map(str::trim).filter(|r| !r.is_empty()).map(str::to_string);
     if let Some(r) = &replaces
         && !queue.waiting.iter().any(|w| &w.id == r)
+        && !ged.agent_awaits_correction(r)
     {
-        return Err(match ged.agent_proposal(r) {
-            Some(_) => format!("proposal {r} is no longer waiting for review: call resume_research"),
-            None => format!("no proposal {r}: call resume_research"),
-        });
+        return Err(ged.agent_not_replaceable(r));
     }
     // Checked against the tree with the other waiting proposals saved.
     let h = Hypothesis::new(ged, queue, replaces.as_deref());
@@ -1008,6 +1011,36 @@ mod tests {
         let links = after.web_links(&res.source);
         assert_eq!(links.len(), 1);
         assert_eq!(links[0].url, "https://archives.example.org/ark:/12345/v9");
+    }
+
+    #[test]
+    fn replaces_a_proposal_sent_back_with_changes_once() {
+        use gedcom::agent_proposals::{Outcome, StoredProposal};
+        let mut ged =
+            gedcom::Gedcom::parse("0 HEAD\n1 GEDC\n2 VERS 7.0\n0 @I1@ INDI\n1 NAME Jean /BLANC/\n1 SEX M\n0 TRLR\n")
+                .unwrap();
+        for (id, outcome) in [("P1", Outcome::ChangesRequested), ("P2", Outcome::Rejected)] {
+            ged.store_agent_proposal(&StoredProposal { id: id.into(), outcome, ..Default::default() });
+        }
+        let params = |replaces: &str| -> ProposeParams {
+            serde_json::from_value(serde_json::json!({"event": "BIRT", "date": "2 MAR 1800",
+                "source": {"register": "Rennes"}, "replaces": replaces,
+                "people": [{"role": "principal", "identity": "link", "id": "I1"}]}))
+            .unwrap()
+        };
+        let queue = super::Queue::default();
+        let built = super::build(&params("P1"), &ged, &queue, "Claude Code").unwrap();
+        assert_eq!(built.pending.replaces.as_deref(), Some("P1"));
+        let err = super::build(&params("P2"), &ged, &queue, "Claude Code").err().unwrap();
+        assert!(err.contains("no longer waiting"), "{err}");
+        // Once corrected, the correction is the one to replace.
+        ged.store_agent_proposal(&StoredProposal {
+            id: "P3".into(),
+            corrects: Some("P1".into()),
+            ..Default::default()
+        });
+        let err = super::build(&params("P1"), &ged, &queue, "Claude Code").err().unwrap();
+        assert!(err.contains("already corrected by P3"), "{err}");
     }
 
     #[test]

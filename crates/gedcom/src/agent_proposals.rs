@@ -18,6 +18,8 @@
 //!
 //! `_GR_DATA` is the agent's request, as it sent it, kept only while the proposal waits: GEDRoots
 //! queues it again when the file opens. Once decided, the record keeps its summary and outcome.
+//! When the user asked for changes (`_GR_RES CHANGES_REQUESTED`, what to change in `NOTE`), the
+//! agent's corrected proposal points back to it (`_GR_CORR @GRP3@`).
 
 use crate::document::Gedcom;
 use crate::node::Node;
@@ -29,6 +31,7 @@ const ABOUT_TAG: &str = "_GR_ABOUT";
 const RES_TAG: &str = "_GR_RES";
 const AGENT_TAG: &str = "_GR_AGENT";
 const DATA_TAG: &str = "_GR_DATA";
+const CORR_TAG: &str = "_GR_CORR";
 const URI: &str = extension_uri!("_gr_prop");
 /// `_GR_KIND`, `_GR_RES` and `_GR_AGENT` are shared with the research log.
 const TASK_URI: &str = extension_uri!("_gr_task");
@@ -79,6 +82,10 @@ pub enum Outcome {
     Saved,
     /// Rejected by the user: nothing was written.
     Rejected,
+    /// Rejected by the user, who asked the agent to correct it (what to change in the note):
+    /// nothing was written, the agent proposes it again with `replaces`.
+    #[cfg_attr(feature = "serde", serde(rename = "changes_requested"))]
+    ChangesRequested,
     /// Opened in record entry by the user, to correct it before saving.
     Edited,
     /// Withdrawn by the agent.
@@ -93,6 +100,7 @@ impl Outcome {
             Outcome::Waiting => "WAITING",
             Outcome::Saved => "SAVED",
             Outcome::Rejected => "REJECTED",
+            Outcome::ChangesRequested => "CHANGES_REQUESTED",
             Outcome::Edited => "EDITED",
             Outcome::Withdrawn => "WITHDRAWN",
             Outcome::Replaced => "REPLACED",
@@ -103,6 +111,7 @@ impl Outcome {
         match v {
             "SAVED" => Outcome::Saved,
             "REJECTED" => Outcome::Rejected,
+            "CHANGES_REQUESTED" => Outcome::ChangesRequested,
             "EDITED" => Outcome::Edited,
             "WITHDRAWN" => Outcome::Withdrawn,
             "REPLACED" => Outcome::Replaced,
@@ -127,8 +136,11 @@ pub struct StoredProposal {
     /// The people (or families) it is about, in the tree.
     pub about: Vec<String>,
     pub outcome: Outcome,
-    /// The user's reason, or the proposal that replaced it.
+    /// The user's reason (what to change, when they asked for changes), or the proposal that
+    /// replaced it.
     pub note: String,
+    /// The proposal it corrects, after the user asked for changes (`P3`).
+    pub corrects: Option<String>,
     /// The agent's request (JSON), kept while it waits.
     pub data: String,
 }
@@ -146,6 +158,7 @@ impl StoredProposal {
             about: n.children_with(ABOUT_TAG).map(|a| a.val().trim_matches('@').to_string()).collect(),
             outcome: Outcome::parse(n.child_val(RES_TAG).unwrap_or("")),
             note: n.child("NOTE").map(Node::text).unwrap_or_default(),
+            corrects: n.child_val(CORR_TAG).map(|v| v.trim_matches('@').trim_start_matches(XREF_PREFIX).to_string()),
             data: n.child(DATA_TAG).map(Node::text).unwrap_or_default(),
         }
     }
@@ -175,6 +188,9 @@ impl StoredProposal {
         }
         if !self.note.trim().is_empty() {
             n.children.push(text("NOTE", self.note.trim()));
+        }
+        if let Some(c) = self.corrects.as_deref().filter(|c| !c.trim().is_empty()) {
+            n.children.push(Node::with_value(CORR_TAG, format!("@{}@", xref(c.trim()))));
         }
         if self.outcome == Outcome::Waiting && !self.data.is_empty() {
             n.children.push(text(DATA_TAG, &self.data));
@@ -210,7 +226,7 @@ impl Gedcom {
     }
 
     fn declare_proposal_tags(&mut self) {
-        for tag in [PROP_TAG, ABOUT_TAG, DATA_TAG] {
+        for tag in [PROP_TAG, ABOUT_TAG, DATA_TAG, CORR_TAG] {
             self.declare_extension(tag, URI);
         }
         for tag in [KIND_TAG, RES_TAG, AGENT_TAG] {
@@ -289,6 +305,37 @@ impl Gedcom {
         true
     }
 
+    /// The proposal that answers the user's request for changes on `id`, if the agent sent one.
+    pub fn agent_correction_of(&self, id: &str) -> Option<StoredProposal> {
+        self.agent_proposals().into_iter().find(|p| p.corrects.as_deref() == Some(id))
+    }
+
+    /// The proposals the user asked to correct that no corrected proposal answers yet, oldest
+    /// first.
+    pub fn agent_changes_requested(&self) -> Vec<StoredProposal> {
+        let all = self.agent_proposals();
+        all.iter()
+            .filter(|p| p.outcome == Outcome::ChangesRequested)
+            .filter(|p| !all.iter().any(|c| c.corrects.as_deref() == Some(p.id.as_str())))
+            .cloned()
+            .collect()
+    }
+
+    /// Whether the user asked for changes on `id` and no corrected proposal answers it yet: the
+    /// agent may propose it again with `replaces`.
+    pub fn agent_awaits_correction(&self, id: &str) -> bool {
+        self.agent_changes_requested().iter().any(|p| p.id == id)
+    }
+
+    /// Why a proposal that is not waiting cannot be replaced, for the agent.
+    pub fn agent_not_replaceable(&self, id: &str) -> String {
+        match (self.agent_proposal(id), self.agent_correction_of(id)) {
+            (_, Some(c)) => format!("proposal {id} was already corrected by {}: give `replaces` {}", c.id, c.id),
+            (Some(_), None) => format!("proposal {id} is no longer waiting for review: call resume_research"),
+            (None, None) => format!("no proposal {id}: call resume_research"),
+        }
+    }
+
     /// The proposals about a person or family, oldest first.
     pub fn agent_proposals_about(&self, xref: &str) -> Vec<StoredProposal> {
         let x = xref.trim_matches('@');
@@ -337,6 +384,25 @@ mod tests {
         );
         assert_eq!(g.agent_proposals_about("@I1@").len(), 1);
         assert!(!g.decide_agent_proposal("P9", Outcome::Saved, ""));
+    }
+
+    #[test]
+    fn changes_requested_then_corrected() {
+        let mut g = Gedcom::parse(FILE).unwrap();
+        g.store_agent_proposal(&StoredProposal { id: "P1".into(), data: "{}".into(), ..Default::default() });
+        assert!(g.decide_agent_proposal("P1", Outcome::ChangesRequested, "The bride is Anna, not Maria"));
+        assert_eq!(g.agent_changes_requested().len(), 1);
+        g.store_agent_proposal(&StoredProposal { id: "P2".into(), corrects: Some("P1".into()), ..Default::default() });
+        let text = g.to_gedcom_string();
+        assert!(text.contains("1 _GR_RES CHANGES_REQUESTED\n1 NOTE The bride is Anna, not Maria\n"), "{text}");
+        assert!(text.contains("1 _GR_CORR @GRP1@\n"), "{text}");
+        assert!(text.contains("2 TAG _GR_CORR https://"), "{text}");
+        let g = Gedcom::parse(&text).unwrap();
+        assert_eq!(g.agent_proposal("P2").unwrap().corrects.as_deref(), Some("P1"));
+        assert_eq!(g.agent_correction_of("P1").unwrap().id, "P2");
+        assert!(g.agent_changes_requested().is_empty());
+        let issues = crate::analysis::check::check(&g, &Default::default());
+        assert!(!issues.iter().any(|i| i.code == "broken_link"), "{issues:?}");
     }
 
     #[test]

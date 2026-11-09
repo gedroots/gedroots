@@ -42,7 +42,7 @@ where another stopped (`resume_research`), with no memory of its own.
 | `file_context` | The trees open in GEDRoots (`trees`: name, file, id, number of people, families, sources and media, root person, the one in front first), then how the file is written: the description the user wrote (File Settings › General, `HEAD.NOTE`, word for word), language, place format, events, custom event types and occupations in use with their counts, media folders and naming, and the latest sources, people, families, media and repositories changed as raw GEDCOM (`examples`). Also served as the resource `gedroots://file/context` |
 | `search_people` | With `query`: people matching a search, as in the app's search box (advanced keywords, spellings found by sound). With `act`: for the people named in an act (role, names, sex, age, act date), the people of the tree who could be them, with the reason and whether the match is likely |
 | `person_sheet` | Events with their position in the record, date, place, street address (`ADDR`), age, cause, cited sources (`PAGE`), media, associates and notes; parents (and how, when not by birth), unions, children, the person's notes and media; Sosa number |
-| `resume_research` | Where the research stands, and the tree's language to write the log in: the leads in progress anywhere in the tree (planned, or with a clue or a handoff) with their whole log, the other leads to search for a focus (search syntax, default `sosa:1-63`), each with estimated years and why, places to search first and where to look, the proposals waiting for review and what became of the others (saved, rejected with the user's reason, edited, withdrawn, replaced). With `person`: everything about that person |
+| `resume_research` | Where the research stands, and the tree's language to write the log in: the leads in progress anywhere in the tree (planned, or with a clue or a handoff) with their whole log, the other leads to search for a focus (search syntax, default `sosa:1-63`), each with estimated years and why, places to search first and where to look, the proposals the user sent back asking for changes, the proposals waiting for review and what became of the others (saved, rejected with the user's reason, edited, withdrawn, replaced). With `person`: everything about that person |
 | `note_research` | Writes in a lead's log: `plan` (a lead about to be searched, with the reason; state `planned`), `search` (what was searched, whatever its result: `found`, `nothing`, `partial`; years, place, viewer page; `finished` when nothing is left), `clue` (a record that may be the one, with what speaks `for` and `against`: it stays in the Research page, never in the tree) or `handoff` (where the lead stands and the `next` search, when the agent stops) |
 | `quality_issues` | The Data Quality page's issues, filtered by category, kind or record and paged (`offset`, `limit`): message, records and places involved, whether the page fixes it in one click, whether it can be hidden, counts per category |
 | `search_sources` | Sources (register, repository, call number, number of acts) and repositories, to cite an existing one |
@@ -165,8 +165,8 @@ another proposal links that id to name the same person, and creating them again 
 any other likely duplicate. Both proposals then create the person; whichever the user saves
 first does, and the other is relinked to the saved person. The review page shows “Also in …”
 under such a person. Every tool answer carries `news` when the user decided about proposals since
-that session's last call (saved, with the ids the new people now have; rejected; edited in record
-entry): agents are not pushed anything between their turns, so the news rides on their next call. A correction (`replaces: "P3"`) takes the place of the waiting proposal, and
+that session's last call (saved, with the ids the new people now have; rejected, with the reason;
+changes requested, with what to change; edited in record entry): agents are not pushed anything between their turns, so the news rides on their next call. A correction (`replaces: "P3"`) takes the place of the waiting proposal, and
 the people of the replaced proposal keep their temporary ids when linked again. The research
 tools (`person_sheet`, `resume_research`, `note_research`) also take a temporary id once its proposal is saved; while it waits, they answer that the person is
 not in the tree yet and which proposal creates them. `search_people` falls back to names that
@@ -189,7 +189,11 @@ estimated births deduced from the act are listed there too, so nothing is writte
 answer of `propose_act` lists the same lines in `will_write`), the attachment (repository, source, file, web link, event), the agent's remarks (saved with the act as the note of its citation, shown under the source in the event's sheet), the transcription line by line and, on demand,
 the exact GEDCOM lines that will change, computed on a copy of the file. **Save to Tree** (⌘↩)
 writes everything at once, as a single undo step, and stores the image next to the `.ged`,
-named by File Settings › Media; **Reject** (⌘⌫) drops it; **Edit in Record Entry…** opens it in
+named by File Settings › Media; **Reject…** (⌘⌫) asks why, in a popover: **Reject** drops it
+(with the reason, if any), **Request Changes** (⌘↩) sends it back to its agent with what to
+change. The agent reads it in `news` at its next call, or in `resume_research`
+(`changes_requested`), and proposes it again with `replaces`; the correction comes back marked
+**Corrected**, with **Your Request** above it. Nothing is written in either case; **Edit in Record Entry…** opens it in
 the act editor. Every proposal (act, change, chapter) is also kept in the file as a `_GR_PROP`
 record ([extensions](extensions.md#_gr_prop); `crates/gedcom/src/agent_proposals.rs`): while it
 waits, with the agent's request, queued again under the same id when the file opens (one that no
