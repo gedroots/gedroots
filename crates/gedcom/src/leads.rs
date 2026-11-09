@@ -899,35 +899,66 @@ fn label(r: &atlas::Record, goal: Goal) -> String {
     }
 }
 
+/// A focus split into its Sosa range (computed from the root person here, not read from
+/// Ancestris' tags) and its other criteria; empty: [`DEFAULT_FOCUS`].
+fn split_focus(focus: &str) -> (Option<(u64, u64)>, String) {
+    let focus = if focus.trim().is_empty() { DEFAULT_FOCUS } else { focus };
+    let mut sosa: Option<(u64, u64)> = None;
+    let rest: Vec<&str> = focus
+        .split_whitespace()
+        .filter(|t| {
+            let k = sort_key(t);
+            if k == "sosa" {
+                sosa = Some((1, u64::MAX));
+                return false;
+            }
+            match k.strip_prefix("sosa:").and_then(crate::search::YearRange::parse) {
+                Some(r) => {
+                    sosa = Some((r.from.unwrap_or(1).max(1) as u64, r.to.map_or(u64::MAX, |t| t.max(0) as u64)));
+                    false
+                }
+                None => true,
+            }
+        })
+        .collect();
+    (sosa, rest.join(" "))
+}
+
 impl Gedcom {
     /// Leads of the people matching `focus` (search syntax: `sosa:1-63`, `place:troyes
     /// born:<1850`…; empty: [`DEFAULT_FOCUS`]), sorted by Sosa number then name.
     pub fn research_leads(&self, focus: &str, this_year: i32) -> Vec<Lead> {
-        let focus = if focus.trim().is_empty() { DEFAULT_FOCUS } else { focus };
         let ctx = Context::new(self, this_year);
-        // Sosa numbers are computed from the root person here, not read from Ancestris' tags.
-        let mut sosa: Option<(u64, u64)> = None;
-        let rest: Vec<&str> = focus
-            .split_whitespace()
-            .filter(|t| {
-                let k = sort_key(t);
-                if k == "sosa" {
-                    sosa = Some((1, u64::MAX));
-                    return false;
-                }
-                match k.strip_prefix("sosa:").and_then(crate::search::YearRange::parse) {
-                    Some(r) => {
-                        sosa = Some((r.from.unwrap_or(1).max(1) as u64, r.to.map_or(u64::MAX, |t| t.max(0) as u64)));
-                        false
-                    }
-                    None => true,
-                }
-            })
-            .collect();
-        let rest = rest.join(" ");
+        let (sosa, rest) = split_focus(focus);
+        self.focus_leads(&ctx, sosa, &rest)
+    }
+
+    /// What the Research page lists: the leads of `focus` ([`Gedcom::research_leads`]) and, after
+    /// them, the leads in progress outside it whose person (or spouse) matches its other criteria
+    /// (the Sosa range aside: an agent may work on anyone), the file being read once.
+    pub fn research_page(&self, focus: &str, this_year: i32) -> Vec<Lead> {
+        let ctx = Context::new(self, this_year);
+        let (sosa, rest) = split_focus(focus);
+        let mut out = self.focus_leads(&ctx, sosa, &rest);
+        let matching: Option<std::collections::HashSet<String>> =
+            (!rest.trim().is_empty()).then(|| self.search_individuals(&rest).into_iter().collect());
+        let key = |l: &Lead| (l.owner().to_string(), l.goal);
+        let listed: std::collections::HashSet<(String, Goal)> = out.iter().map(key).collect();
+        for l in self.in_progress_with(&ctx) {
+            let shown = matching
+                .as_ref()
+                .is_none_or(|m| m.contains(&l.person.id) || l.spouse.as_ref().is_some_and(|s| m.contains(&s.id)));
+            if shown && !listed.contains(&key(&l)) {
+                out.push(l);
+            }
+        }
+        out
+    }
+
+    fn focus_leads(&self, ctx: &Context, sosa: Option<(u64, u64)>, rest: &str) -> Vec<Lead> {
         let mut people: Vec<String> = match rest.trim().is_empty() {
             true => self.records_of(RecordKind::Individual).filter_map(|r| r.xref.clone()).collect(),
-            false => self.search_individuals(&rest),
+            false => self.search_individuals(rest),
         };
         if let Some((a, b)) = sosa {
             people.retain(|x| ctx.sosa.get(x).is_some_and(|n| *n >= a && *n <= b));
@@ -935,7 +966,7 @@ impl Gedcom {
         let mut out = Vec::new();
         let mut families_done = std::collections::HashSet::new();
         for x in &people {
-            out.extend(self.person_leads(&ctx, x, &mut families_done));
+            out.extend(self.person_leads(ctx, x, &mut families_done));
         }
         let name = |l: &Lead| sort_key(&l.person.name);
         out.sort_by(|a, b| {
@@ -955,7 +986,11 @@ impl Gedcom {
     /// The lead of a goal for a person; `family`: the union, for a marriage (optional when there
     /// is only one).
     pub fn lead(&self, xref: &str, goal: Goal, family: Option<&str>, this_year: i32) -> Result<Lead, String> {
-        let leads = self.leads_of(xref, this_year);
+        Self::pick_lead(self.leads_of(xref, this_year), goal, family)
+    }
+
+    /// The lead of `goal` (and of the union `family`) among a person's leads.
+    fn pick_lead(leads: Vec<Lead>, goal: Goal, family: Option<&str>) -> Result<Lead, String> {
         let mut matching: Vec<Lead> = leads.into_iter().filter(|l| l.goal == goal).collect();
         if let Some(f) = family {
             matching.retain(|l| l.family_id.as_deref() == Some(f));
@@ -973,7 +1008,14 @@ impl Gedcom {
     /// The leads being worked on ([`Lead::in_progress`]), anywhere in the tree, last worked on
     /// first, whose record is not cited yet. Their log tells where each one stands.
     pub fn leads_in_progress(&self, this_year: i32) -> Vec<Lead> {
+        self.in_progress_with(&Context::new(self, this_year))
+    }
+
+    /// [`Gedcom::leads_in_progress`], the file already read: each person's leads are computed once
+    /// for all their tasks.
+    fn in_progress_with(&self, ctx: &Context) -> Vec<Lead> {
         let mut out: Vec<Lead> = Vec::new();
+        let mut of_person: HashMap<String, Vec<Lead>> = HashMap::new();
         for r in &self.records {
             let Some(owner) = r.xref.as_deref() else { continue };
             for task in self.research_tasks(owner) {
@@ -984,7 +1026,10 @@ impl Gedcom {
                     },
                     None => (owner.to_string(), None),
                 };
-                let Ok(mut lead) = self.lead(&person, task.goal, family.as_deref(), this_year) else { continue };
+                let leads = of_person
+                    .entry(person.clone())
+                    .or_insert_with(|| self.person_leads(ctx, &person, &mut std::collections::HashSet::new()));
+                let Ok(mut lead) = Self::pick_lead(leads.clone(), task.goal, family.as_deref()) else { continue };
                 (lead.state, lead.note, lead.log) = (task.state, task.note, task.log);
                 if lead.in_progress() {
                     out.push(lead);
