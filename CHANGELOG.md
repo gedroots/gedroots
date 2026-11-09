@@ -1,5 +1,15 @@
 # Changelog
 
+## [2026.11.11](https://github.com/gedroots/gedroots/releases/tag/v2026.11.11) - 2026-11-09
+
+### 🔄 Changed
+
+- Keep agent proposals linked only to records of the tree by @antoninguyot in [#181](https://github.com/gedroots/gedroots/pull/181)
+- Let the user reject an agent proposal with a reason, or ask the agent for changes by @antoninguyot in [#183](https://github.com/gedroots/gedroots/pull/183)
+- Make searching the Research page fast and filter it by state by @antoninguyot in [#185](https://github.com/gedroots/gedroots/pull/185)
+- Keep an act's web page without requiring its image by @antoninguyot in [#186](https://github.com/gedroots/gedroots/pull/186)
+- Keep Save in the same place for every proposal in To Review by @antoninguyot in [#184](https://github.com/gedroots/gedroots/pull/184)
+
 ## [2026.11.10](https://github.com/gedroots/gedroots/releases/tag/v2026.11.10) - 2026-11-07
 
 ### 🔄 Changed
