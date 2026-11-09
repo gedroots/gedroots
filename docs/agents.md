@@ -178,7 +178,8 @@ in the app's cache until the act is saved. The act's page in the archive's viewe
 web link of the source, like the links added in the app: a media whose `FILE` is the address
 (`FORM text/html`), titled after the source and the reference. The image and the web link stay two
 separate media: the source shows the image and a link button, and a web link is never offered
-as an act's image. A proposal with a `url` must also give the `file`.
+as an act's image. The `url` needs no `file`: an act proposed with only its link gets the web link,
+written when the act is saved.
 
 The **To Review** page (sidebar) shows, for each proposal,
 the act's image, its quality next to the agent's name (a questionable or unreliable proposal is

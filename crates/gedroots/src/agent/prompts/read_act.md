@@ -64,10 +64,11 @@
    and the `reason` of your choice. When no candidate clearly fits, propose the place without a
    location, in the tree's place `format`; the answer's `unlocated_places` lists the new places
    still without coordinates.
-   Give the transcription, and both the downloaded file (`file`, with `pdf_page`
-   for a PDF) and the act's page in the archive's viewer (`url`, its permanent link such as an
-   ark when the viewer offers one): GEDRoots keeps the image and a web link, so the user can see
-   the act and find the original again.
+   Give the transcription and the act's page in the archive's viewer (`url`, its permanent link
+   such as an ark when the viewer offers one): GEDRoots keeps it as the source's web link, so the
+   user can find the original again. The link goes only in `url`, never in `page` (the act's
+   number and image) or in `remarks`. Add the downloaded file (`file`, with `pdf_page` for a PDF)
+   when you have one: GEDRoots keeps the image too.
 7. If GEDRoots refuses the proposal, read the reason, fix the proposal and propose it again.
    Nothing is written until the user compares and saves it: tell them it is waiting in GEDRoots'
    To Review page, and list the facts you left out and why. Give the same remarks in

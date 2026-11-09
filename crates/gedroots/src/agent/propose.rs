@@ -156,7 +156,8 @@ pub struct ProposeParams {
     /// Street address of the event within the place, as written ("12, rue Mercière", "Hôtel-Dieu").
     pub address: Option<String>,
     pub source: SourceParams,
-    /// Reference of the act in its source: act number, page, image ("act 27, image 45").
+    /// Reference of the act in its source: act number, page, image ("act 27, image 45"); the
+    /// act's web address goes in `url`.
     pub page: Option<String>,
     /// Your honest confidence in what you propose, as the GEDCOM 7 quality of the evidence
     /// (`QUAY`, written on the citation and shown to the user): 3 the act itself, read clearly,
@@ -174,11 +175,12 @@ pub struct ProposeParams {
     /// of its citation.
     pub remarks: Option<String>,
     pub people: Vec<PersonParams>,
-    /// Absolute path of the downloaded image or PDF of the act (required with `url`).
+    /// Absolute path of the downloaded image or PDF of the act, when you downloaded one.
     pub file: Option<String>,
     /// For a PDF of several pages: page of the act (from 1).
     pub pdf_page: Option<usize>,
-    /// Permanent address of the act's page in the archive's viewer; kept as a web link of the source.
+    /// Permanent address of the act's page in the archive's viewer (an ark when the viewer offers
+    /// one); kept as a web link of the source, with or without `file`. Never in `page` or `remarks`.
     pub url: Option<String>,
     /// Coordinates of the new places it names, chosen with `locate_place` (the candidate that fits
     /// the act and the family's other events best), with the reason of the choice. Only for places
@@ -711,12 +713,6 @@ pub fn build(p: &ProposeParams, ged: &Gedcom, queue: &Queue, agent: &str) -> Res
         .map(|p| (p.to_string(), proposal.locations.iter().any(|l| l.place == p)))
         .collect();
     let original = p.file.as_ref().map(|f| PathBuf::from(f.trim())).filter(|f| !f.as_os_str().is_empty());
-    // An act found online is kept twice: its image (downloaded file) and its web page.
-    if original.is_none() && p.url.as_deref().is_some_and(|u| !u.trim().is_empty()) {
-        return Err("give the downloaded image or PDF of the act in `file` too: GEDRoots keeps both \
-                    the act's image and its web page (`url`)"
-            .to_string());
-    }
     let (image, preview) = match &original {
         Some(path) => {
             let prepared = prepare_file(path, p.pdf_page, prefers_images(ged), &cache_dir())?;
@@ -989,6 +985,29 @@ mod tests {
         assert_eq!((prop.act.event.as_str(), prop.act.event_type.as_str()), ("EVEN", "Military service"));
         assert_eq!(prop.act.record_date, "12 MAR 1872");
         assert!(!prop.act.family_even);
+    }
+
+    #[test]
+    fn an_act_with_only_its_web_page_keeps_the_link() {
+        let ged = gedcom::Gedcom::parse(
+            "0 HEAD\n1 GEDC\n2 VERS 7.0\n0 @I1@ INDI\n1 NAME Jean /BLANC/\n1 SEX M\n1 DEAT\n2 DATE 1870\n\
+             0 @R1@ REPO\n1 NAME Archives\n0 TRLR\n",
+        )
+        .unwrap();
+        let p: ProposeParams = serde_json::from_value(serde_json::json!({
+            "event": "BURI", "date": "3 MAR 1870", "page": "acte n° 9",
+            "source": {"register": "Inhumations 1870", "repository_id": "R1"},
+            "people": [{"role": "principal", "identity": "link", "id": "I1"}],
+            "url": "https://archives.example.org/ark:/12345/v9"
+        }))
+        .unwrap();
+        let built = super::build(&p, &ged, &super::Queue::default(), "Agent").unwrap();
+        assert!(built.pending.image.is_none());
+        let mut after = ged.clone();
+        let res = built.pending.proposal.apply(&mut after).unwrap();
+        let links = after.web_links(&res.source);
+        assert_eq!(links.len(), 1);
+        assert_eq!(links[0].url, "https://archives.example.org/ark:/12345/v9");
     }
 
     #[test]
