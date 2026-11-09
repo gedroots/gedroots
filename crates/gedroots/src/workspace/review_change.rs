@@ -391,7 +391,7 @@ impl Workspace {
         group: &ChangeGroup,
         g: &Gedcom,
         cx: &mut Context<Self>,
-    ) -> AnyElement {
+    ) -> (AnyElement, AnyElement) {
         let batch = group.batch().is_some();
         let first = &group.items[0];
         let c = &first.change;
@@ -578,7 +578,7 @@ impl Workspace {
             None => by.into_owned(),
         };
         let body = v_flex().gap_4().children(self.your_request(&first.id)).child(body);
-        v_flex()
+        let detail = v_flex()
             .flex_1()
             .min_w_0()
             .items_center()
@@ -598,34 +598,24 @@ impl Workspace {
                     )
                     .child(
                         v_flex().id("change-detail").flex_1().min_h_0().overflow_y_scroll().px_4().py_2().child(body),
-                    )
-                    .child(
-                        h_flex()
-                            .px_4()
-                            .py_3()
-                            .gap_2()
-                            .border_t_1()
-                            .border_color(theme::border())
-                            .child(
-                                Button::new("change-reject")
-                                    .ghost()
-                                    .small()
-                                    .selected(self.review.rejecting.is_some())
-                                    .label(t!("review.reject_ellipsis").into_owned())
-                                    .on_click(cx.listener(|this, _, w, cx| this.reject_proposal(w, cx))),
-                            )
-                            .child(div().flex_1())
-                            .child(
-                                Button::new("change-save")
-                                    .primary()
-                                    .small()
-                                    .disabled(kept == 0)
-                                    .label(save)
-                                    .on_click(cx.listener(move |this, _, w, cx| this.accept_change(i, w, cx))),
-                            ),
-                    )
-                    .children(self.reject_popover(cx)),
+                    ),
             )
-            .into_any_element()
+            .into_any_element();
+        let bar = super::review::action_bar(
+            Button::new("change-reject")
+                .ghost()
+                .small()
+                .selected(self.review.rejecting.is_some())
+                .label(t!("review.reject_ellipsis").into_owned())
+                .on_click(cx.listener(|this, _, w, cx| this.reject_proposal(w, cx))),
+            None,
+            Button::new("change-save")
+                .primary()
+                .small()
+                .disabled(kept == 0)
+                .label(save)
+                .on_click(cx.listener(move |this, _, w, cx| this.accept_change(i, w, cx))),
+        );
+        (detail, bar)
     }
 }

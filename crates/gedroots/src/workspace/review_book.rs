@@ -318,7 +318,7 @@ impl Workspace {
         item: &ChapterItem,
         g: &Gedcom,
         cx: &mut Context<Self>,
-    ) -> AnyElement {
+    ) -> (AnyElement, AnyElement) {
         let (chapter, book) = self.chapter_title(item, g);
         let w = &item.req.writing;
         let mut k = 0;
@@ -348,7 +348,7 @@ impl Workspace {
         }
         let optional = w.blocks().any(Block::optional);
         let body = v_flex().gap_4().children(self.your_request(&item.id)).child(body);
-        v_flex()
+        let detail = v_flex()
             .flex_1()
             .min_w_0()
             .items_center()
@@ -382,33 +382,23 @@ impl Workspace {
                     )
                     .child(
                         v_flex().id("chapter-detail").flex_1().min_h_0().overflow_y_scroll().px_4().py_2().child(body),
-                    )
-                    .child(
-                        h_flex()
-                            .px_4()
-                            .py_3()
-                            .gap_2()
-                            .border_t_1()
-                            .border_color(theme::border())
-                            .child(
-                                Button::new("chapter-reject")
-                                    .ghost()
-                                    .small()
-                                    .selected(self.review.rejecting.is_some())
-                                    .label(t!("review.reject_ellipsis").into_owned())
-                                    .on_click(cx.listener(|this, _, w, cx| this.reject_proposal(w, cx))),
-                            )
-                            .child(div().flex_1())
-                            .child(
-                                Button::new("chapter-save")
-                                    .primary()
-                                    .small()
-                                    .label(t!("review.save_chapter").into_owned())
-                                    .on_click(cx.listener(move |this, _, w, cx| this.accept_chapter(i, w, cx))),
-                            ),
-                    )
-                    .children(self.reject_popover(cx)),
+                    ),
             )
-            .into_any_element()
+            .into_any_element();
+        let bar = super::review::action_bar(
+            Button::new("chapter-reject")
+                .ghost()
+                .small()
+                .selected(self.review.rejecting.is_some())
+                .label(t!("review.reject_ellipsis").into_owned())
+                .on_click(cx.listener(|this, _, w, cx| this.reject_proposal(w, cx))),
+            None,
+            Button::new("chapter-save")
+                .primary()
+                .small()
+                .label(t!("review.save_chapter").into_owned())
+                .on_click(cx.listener(move |this, _, w, cx| this.accept_chapter(i, w, cx))),
+        );
+        (detail, bar)
     }
 }
