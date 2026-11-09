@@ -3,6 +3,9 @@ _version: 2
 research.focus_placeholder:
   en: Focus…
   fr: Focus…
+research.status.all:
+  en: All
+  fr: Toutes
 research.group.in_progress:
   en: In Progress
   fr: En cours

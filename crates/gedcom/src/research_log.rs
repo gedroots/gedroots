@@ -443,4 +443,30 @@ mod tests {
         );
         assert_eq!(again.log[1].agent, "Codex");
     }
+
+    #[test]
+    fn research_page_filters_leads_in_progress_by_the_focus() {
+        // Two people outside Sosa 1-63 (no parents link to the root), one worked on each.
+        let file =
+            FILE.replace("0 TRLR\n", "0 @I2@ INDI\n1 NAME Paul /DURAND/\n0 @I3@ INDI\n1 NAME Anne /LEROY/\n0 TRLR\n");
+        let mut g = Gedcom::parse(&file).unwrap();
+        let clue = NewEntry { kind: LogKind::Clue, text: "A burial".into(), ..Default::default() };
+        assert!(g.log_research("I2", Goal::Death, &clue, false));
+        assert!(g.log_research("I3", Goal::Death, &clue, false));
+        let shown = |focus: &str| {
+            let mut v: Vec<String> =
+                g.research_page(focus, 2026).iter().filter(|l| l.in_progress()).map(|l| l.person.id.clone()).collect();
+            v.sort();
+            v
+        };
+        // The default focus keeps every lead in progress, whatever the Sosa range.
+        assert_eq!(shown(""), ["I2", "I3"]);
+        // Other criteria apply to them too.
+        assert_eq!(shown("sosa:1-63 durand"), ["I2"]);
+        assert_eq!(shown("leroy"), ["I3"]);
+        assert!(shown("marchand").is_empty());
+        // Listed once.
+        let page = g.research_page("durand", 2026);
+        assert_eq!(page.iter().filter(|l| l.person.id == "I2" && l.goal == Goal::Death).count(), 1);
+    }
 }

@@ -10,6 +10,7 @@
 //! the user or an agent notes goes in the file with an undo point.
 
 use super::add::{AddDialog, plus_button};
+use super::filters::scope_pill;
 use super::relatives::PickPurpose;
 use super::*;
 use crate::commands::label;
@@ -38,6 +39,8 @@ pub(super) struct ResearchState {
     pub live: std::collections::HashMap<String, Live>,
     /// The handoff is unfolded (folded by default: the clues and the log say the rest).
     pub handoff_open: bool,
+    /// Only the leads of this group (scope bar); `None`: all of them.
+    pub status: Option<Group>,
 }
 
 /// An agent's last tool call: shown while it is recent.
@@ -60,6 +63,7 @@ impl Default for ResearchState {
             show_not_found: false,
             show_ignored: false,
             handoff_open: false,
+            status: None,
             menu_lead: Rc::default(),
             live: Default::default(),
         }
@@ -81,7 +85,7 @@ pub(super) struct SearchDialog {
 
 /// Group of the list.
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Group {
+pub(super) enum Group {
     InProgress,
     ToFind,
     NotFound,
@@ -98,6 +102,8 @@ impl Group {
             TaskState::Suggested | TaskState::Planned | TaskState::Found => Group::ToFind,
         }
     }
+
+    const ALL: [Group; 4] = [Group::InProgress, Group::ToFind, Group::NotFound, Group::Ignored];
 
     fn label(self) -> std::borrow::Cow<'static, str> {
         match self {
@@ -199,24 +205,17 @@ fn year_of(input: &Entity<InputState>, cx: &App) -> Option<i32> {
 }
 
 impl Workspace {
-    /// Recomputes the leads of the focus (the file or the focus changed).
+    /// Recomputes the leads of the focus (the file or the focus changed): the leads being worked
+    /// on show whatever the Sosa range, as long as they match the rest of the focus.
     pub(super) fn refresh_research(&mut self) {
         let leads = match &self.doc {
             // Sosa numbers need a root person.
-            Some(doc) if doc.ged.root().is_some() || !self.research.focus.contains("sosa") => {
-                doc.ged.research_leads(&self.research.focus, current_year())
+            Some(doc) if doc.ged.root().is_none() && self.research.focus.contains("sosa") => {
+                doc.ged.leads_in_progress(current_year())
             }
-            _ => Vec::new(),
+            Some(doc) => doc.ged.research_page(&self.research.focus, current_year()),
+            None => Vec::new(),
         };
-        // The leads being worked on show whatever the focus.
-        let mut leads = leads;
-        if let Some(doc) = &self.doc {
-            for l in doc.ged.leads_in_progress(current_year()) {
-                if !leads.iter().any(|m| lead_key(m) == lead_key(&l)) {
-                    leads.push(l);
-                }
-            }
-        }
         self.research.leads = Rc::new(leads);
     }
 
@@ -289,9 +288,9 @@ impl Workspace {
 
     /// Rows of the list (used for the selection and the history; the list draws the leads).
     pub(super) fn research_rows(&self) -> Vec<Row> {
-        self.research
-            .leads
-            .iter()
+        self.lead_groups()
+            .into_iter()
+            .flat_map(|(_, of)| of)
             .map(|l| Row {
                 key: lead_key(l),
                 title: lead_title(l),
@@ -464,26 +463,63 @@ impl Workspace {
         cx.notify();
     }
 
+    /// The groups of the list, in their order, with their leads (only the group chosen in the
+    /// scope bar, if any); empty groups left out.
+    fn lead_groups(&self) -> Vec<(Group, Vec<&Lead>)> {
+        Group::ALL
+            .into_iter()
+            .filter(|g| self.research.status.is_none_or(|s| s == *g))
+            .filter_map(|g| {
+                let mut of: Vec<&Lead> = self.research.leads.iter().filter(|l| self.group(l) == g).collect();
+                // Last worked on first.
+                if g == Group::InProgress {
+                    of.sort_by_key(|l| std::cmp::Reverse(l.log.last().map(|e| (e.date_key(), e.time.clone()))));
+                }
+                (!of.is_empty()).then_some((g, of))
+            })
+            .collect()
+    }
+
+    /// Scope bar under the field: all the leads, or those of one state (like the media types). Only
+    /// the states the focus has, and only when it has at least two; the chosen one stays shown.
+    fn render_lead_states(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let status = self.research.status;
+        let present: Vec<Group> = Group::ALL
+            .into_iter()
+            .filter(|g| status == Some(*g) || self.research.leads.iter().any(|l| self.group(l) == *g))
+            .collect();
+        let pill = |id: usize, label: std::borrow::Cow<'static, str>, value: Option<Group>, cx: &mut Context<Self>| {
+            scope_pill(("lead-state", id), label, status == value).on_click(cx.listener(move |this, _, _, cx| {
+                this.research.status = value;
+                this.build_rows(cx);
+                cx.notify();
+            }))
+        };
+        h_flex().id("lead-states").when(present.len() >= 2 || status.is_some(), |d| {
+            let mut d = d.px_3().pb_2().gap_1().overflow_x_scroll();
+            d = d.child(pill(0, t!("research.status.all"), None, cx));
+            for g in present {
+                d = d.child(pill(g as usize + 1, g.label(), Some(g), cx));
+            }
+            d
+        })
+    }
+
     /// The list: the focus field, then the leads by group.
     pub(super) fn render_research_list(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let leads = self.research.leads.clone();
         let selected = self.selected.clone();
         let mut body = v_flex().w_full().pb_2();
-        for g in [Group::InProgress, Group::ToFind, Group::NotFound, Group::Ignored] {
-            let mut of: Vec<&Lead> = leads.iter().filter(|l| self.group(l) == g).collect();
-            if of.is_empty() {
-                continue;
-            }
-            // Last worked on first.
-            if g == Group::InProgress {
-                of.sort_by_key(|l| std::cmp::Reverse(l.log.last().map(|e| (e.date_key(), e.time.clone()))));
-            }
+        let status = self.research.status;
+        for (g, of) in self.lead_groups() {
+            // A group chosen in the scope bar is shown whole.
             let open = match g {
+                _ if status.is_some() => true,
                 Group::ToFind | Group::InProgress => true,
                 Group::NotFound => self.research.show_not_found,
                 Group::Ignored => self.research.show_ignored,
             };
-            let foldable = !matches!(g, Group::ToFind | Group::InProgress);
+            let foldable = status.is_none() && !matches!(g, Group::ToFind | Group::InProgress);
             body = body.child(
                 h_flex()
                     .id(SharedString::from(format!("lead-group-{}", g as u8)))
@@ -569,7 +605,7 @@ impl Workspace {
                     );
             }
         }
-        let empty = leads.is_empty();
+        let empty = leads.is_empty() || (status.is_some() && self.lead_groups().is_empty());
         v_flex()
             .w(px(300.))
             .flex_none()
@@ -578,6 +614,7 @@ impl Workspace {
             .border_r_1()
             .border_color(theme::border())
             .child(self.render_search_field(cx))
+            .child(self.render_lead_states(cx))
             .child(self.render_search_notes(cx))
             .child(
                 div()

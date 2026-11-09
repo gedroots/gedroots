@@ -421,31 +421,12 @@ impl Workspace {
         let types: Vec<String> = self.media_index.as_ref().map(|i| i.types.clone()).unwrap_or_default();
         let current = self.active_media_type();
         let pill = |id: usize, label: String, value: Option<String>, on: bool, cx: &mut Context<Self>| {
-            div()
-                .id(("media-type", id))
-                .flex_none()
-                .px_2()
-                .py_0p5()
-                .rounded(theme::RADIUS_SM)
-                .border_1()
-                .text_xs()
-                .cursor_pointer()
-                .when(on, |d| {
-                    d.bg(theme::accent_soft())
-                        .border_color(theme::accent())
-                        .text_color(theme::text())
-                        .font_weight(FontWeight::SEMIBOLD)
-                })
-                .when(!on, |d| {
-                    d.border_color(transparent_black()).text_color(theme::muted()).hover(|d| d.bg(theme::hover()))
-                })
-                .child(label)
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    this.media_type = value.clone();
-                    this.build_rows(cx);
-                    this.refresh_suggestions(cx);
-                    cx.notify();
-                }))
+            scope_pill(("media-type", id), label, on).on_click(cx.listener(move |this, _, _, cx| {
+                this.media_type = value.clone();
+                this.build_rows(cx);
+                this.refresh_suggestions(cx);
+                cx.notify();
+            }))
         };
         h_flex().id("media-types").when(types.len() >= 2, |d| {
             let mut d = d.px_3().pb_2().gap_1().overflow_x_scroll();
@@ -530,4 +511,26 @@ fn group_icon(s: &Suggestion) -> IconName {
         Group::Medium => IconName::Image,
         Group::Criteria => IconName::Search,
     }
+}
+
+/// A pill of a scope bar (media types, research states): the chosen one outlined in violet, the
+/// others muted; no counts.
+pub(super) fn scope_pill(id: (&'static str, usize), label: impl Into<SharedString>, on: bool) -> Stateful<Div> {
+    div()
+        .id(id)
+        .flex_none()
+        .px_2()
+        .py_0p5()
+        .rounded(theme::RADIUS_SM)
+        .border_1()
+        .text_xs()
+        .cursor_pointer()
+        .when(on, |d| {
+            d.bg(theme::accent_soft())
+                .border_color(theme::accent())
+                .text_color(theme::text())
+                .font_weight(FontWeight::SEMIBOLD)
+        })
+        .when(!on, |d| d.border_color(transparent_black()).text_color(theme::muted()).hover(|d| d.bg(theme::hover())))
+        .child(label.into())
 }
