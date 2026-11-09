@@ -6,6 +6,7 @@ use super::*;
 use crate::agent::book::ChapterRequest;
 use crate::t;
 use gedroots_book::Block;
+use gpui_kit::component::Selectable;
 use gpui_kit::component::checkbox::Checkbox;
 use std::collections::BTreeSet;
 
@@ -42,16 +43,30 @@ impl Workspace {
             "params": serde_json::from_str::<serde_json::Value>(&item.req.request).unwrap_or_default(),
         });
         let kept = self.doc.as_ref().and_then(|d| d.ged.agent_proposal(&id)).unwrap_or_default();
+        let title = format!("{chapter} · {book}");
+        let same = |c: &ChapterItem| c.req.book == item.req.book && c.req.generation == item.req.generation;
+        // A chapter replaces the one waiting for the same generation; one the user sent back asking
+        // for changes is answered by the next one for that chapter.
+        let corrects = match self.review.chapters.iter().find(|c| same(c)) {
+            Some(old) => self.corrected_by(Some(&old.id)),
+            None => self.doc.as_ref().and_then(|d| {
+                let sent_back = d.ged.agent_changes_requested();
+                let p = sent_back.iter().rev().find(|p| {
+                    p.kind == gedcom::agent_proposals::ProposalKind::Chapter && p.title == title && p.id != id
+                })?;
+                Some(p.id.clone())
+            }),
+        };
         self.keep_proposal(gedcom::agent_proposals::StoredProposal {
             id: id.clone(),
             kind: gedcom::agent_proposals::ProposalKind::Chapter,
-            title: format!("{chapter} · {book}"),
+            title,
             about: item.req.writing.people.iter().map(|(x, _)| x.clone()).collect(),
             agent: item.req.agent.clone(),
             data: data.to_string(),
+            corrects: corrects.or(kept.corrects.clone()),
             ..kept
         });
-        let same = |c: &ChapterItem| c.req.book == item.req.book && c.req.generation == item.req.generation;
         match self.review.chapters.iter().position(same) {
             Some(i) => {
                 let old = std::mem::replace(&mut self.review.chapters[i], item);
@@ -73,9 +88,15 @@ impl Workspace {
         (i < self.review.chapters.len()).then_some(i)
     }
 
-    fn take_chapter(&mut self, i: usize, outcome: gedcom::agent_proposals::Outcome) -> ChapterItem {
+    pub(super) fn take_chapter(
+        &mut self,
+        i: usize,
+        outcome: gedcom::agent_proposals::Outcome,
+        note: &str,
+    ) -> ChapterItem {
+        self.review.rejecting = None;
         let item = self.review.chapters.remove(i);
-        self.decide_proposal(&item.id, outcome, "");
+        self.decide_proposal(&item.id, outcome, note);
         let total = self.review.total();
         self.review.sel = self.review.sel.min(total.saturating_sub(1));
         if total == 0 {
@@ -86,14 +107,8 @@ impl Workspace {
 
     /// Withdrawn by its agent. Always `true`, to chain after a lookup.
     pub(super) fn withdraw_chapter(&mut self, i: usize) -> bool {
-        self.take_chapter(i, gedcom::agent_proposals::Outcome::Withdrawn);
+        self.take_chapter(i, gedcom::agent_proposals::Outcome::Withdrawn, "");
         true
-    }
-
-    pub(super) fn reject_chapter(&mut self, i: usize, cx: &mut Context<Self>) {
-        self.take_chapter(i, gedcom::agent_proposals::Outcome::Rejected);
-        self.set_status(t!("review.rejected"), false);
-        cx.notify();
     }
 
     /// “Grandparents · The Marchand Family”.
@@ -121,7 +136,7 @@ impl Workspace {
         let kept = item.req.writing.without(&item.excluded);
         let old = spec.chapters.get(&item.req.generation).cloned().unwrap_or_default();
         spec.chapters.insert(item.req.generation, kept.over(&old));
-        self.take_chapter(i, gedcom::agent_proposals::Outcome::Saved);
+        self.take_chapter(i, gedcom::agent_proposals::Outcome::Saved, "");
         let title = format!("{chapter} · {book}");
         let msg = t!("review.chapter_saved", title = title).into_owned();
         self.before_agent_change();
@@ -162,10 +177,10 @@ impl Workspace {
             .when(!sel, |d| d.hover(|d| d.bg(theme::hover())))
             .child(div().font_weight(FontWeight::MEDIUM).child(chapter))
             .child(div().text_xs().text_color(theme::muted()).truncate().child(meta))
-            .on_click(cx.listener(move |this, _, _, cx| {
-                this.review.sel = n;
-                cx.notify();
-            }))
+            .when(self.requested_changes(&item.id).is_some(), |d| {
+                d.child(div().text_xs().text_color(theme::accent()).child(t!("review.corrected").into_owned()))
+            })
+            .on_click(cx.listener(move |this, _, _, cx| this.review_select(n, cx)))
             .into_any_element()
     }
 
@@ -332,12 +347,14 @@ impl Workspace {
             );
         }
         let optional = w.blocks().any(Block::optional);
+        let body = v_flex().gap_4().children(self.your_request(&item.id)).child(body);
         v_flex()
             .flex_1()
             .min_w_0()
             .items_center()
             .child(
                 v_flex()
+                    .relative()
                     .size_full()
                     .max_w(px(640.))
                     .child(
@@ -377,8 +394,9 @@ impl Workspace {
                                 Button::new("chapter-reject")
                                     .ghost()
                                     .small()
-                                    .label(t!("review.reject").into_owned())
-                                    .on_click(cx.listener(move |this, _, _, cx| this.reject_chapter(i, cx))),
+                                    .selected(self.review.rejecting.is_some())
+                                    .label(t!("review.reject_ellipsis").into_owned())
+                                    .on_click(cx.listener(|this, _, w, cx| this.reject_proposal(w, cx))),
                             )
                             .child(div().flex_1())
                             .child(
@@ -388,7 +406,8 @@ impl Workspace {
                                     .label(t!("review.save_chapter").into_owned())
                                     .on_click(cx.listener(move |this, _, w, cx| this.accept_chapter(i, w, cx))),
                             ),
-                    ),
+                    )
+                    .children(self.reject_popover(cx)),
             )
             .into_any_element()
     }

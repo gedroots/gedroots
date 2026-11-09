@@ -70,7 +70,8 @@ impl Workspace {
         let d = on!(d, cx, ReviewProposals, |this, w, cx| this.open_review(cx));
         let d = on!(d, cx, AcceptProposal, |this, w, cx| this.accept_proposal(w, cx));
         // Only in the review: elsewhere ⌘⌫ is Edit › Delete.
-        let d = if self.review.open { on!(d, cx, RejectProposal, |this, w, cx| this.reject_proposal(cx)) } else { d };
+        let d =
+            if self.review.open { on!(d, cx, RejectProposal, |this, w, cx| this.reject_proposal(w, cx)) } else { d };
         let d = on!(d, cx, ConnectAgent, |this, w, cx| this.open_agent_dialog(cx));
         let d = on!(d, cx, MobileDevices, |this, w, cx| this.open_mobile_dialog(w, cx));
         let d = if sample { d } else { on!(d, cx, SaveFileAs, |this, w, cx| this.save_file_as(w, cx)) };
