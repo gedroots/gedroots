@@ -146,6 +146,30 @@ review:
   reject:
     en: Reject
     fr: Rejeter
+  reject_ellipsis:
+    en: Reject…
+    fr: Rejeter…
+  reject_why:
+    en: Why Reject It?
+    fr: Pourquoi la rejeter ?
+  reject_placeholder:
+    en: "Optional. E.g. the bride is Anna, not Maria"
+    fr: "Facultatif. Ex. : l'épouse s'appelle Anna, pas Maria"
+  agent_reads:
+    en: The agent will read it
+    fr: L'agent lira ce retour
+  request_changes:
+    en: Request Changes
+    fr: Demander une correction
+  changes_requested:
+    en: Changes requested, nothing was written. The agent reads them at its next step
+    fr: Correction demandée, rien n'a été écrit. L'agent la lira à sa prochaine action
+  your_request:
+    en: Your Request
+    fr: Votre demande
+  corrected:
+    en: Corrected
+    fr: Corrigé
   edit:
     en: Edit in Record Entry…
     fr: Modifier dans la saisie d'acte…

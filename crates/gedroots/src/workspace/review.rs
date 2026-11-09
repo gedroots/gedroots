@@ -7,8 +7,10 @@
 //! page shows the record’s image, an “In the tree” / “Proposed” comparison (each person can be
 //! unchecked), the attachment (repository, source, file, event) and, on request, the exact GEDCOM
 //! lines that will change. “Save to Tree” writes everything at once (a single undo point) and
-//! organizes the file according to File Settings › Media; “Reject” removes it without writing
-//! anything. Changes for a Data Quality issue are listed after the acts (`review_change.rs`).
+//! organizes the file according to File Settings › Media; “Reject…” removes it without writing
+//! anything, with the user's reason, or asks the agent for changes: it proposes it again
+//! (`replaces`), and the correction shows what the user asked. Changes for a Data Quality issue are
+//! listed after the acts (`review_change.rs`).
 
 use super::*;
 use crate::agent::propose::{self, Outcome, Pending, Queued};
@@ -16,7 +18,9 @@ use crate::t;
 use gedcom::Conflict;
 use gedcom::agent_proposals::{ProposalKind, StoredProposal};
 use gedcom::proposal::{Change, Field, Proposal, SourceChoice};
+use gpui_kit::component::Selectable;
 use gpui_kit::component::checkbox::Checkbox;
+use gpui_kit::component::input::{InputEvent, Textarea, TextareaState};
 use gpui_kit::component::menu::{DropdownMenu, PopupMenuItem};
 use std::collections::BTreeSet;
 
@@ -129,6 +133,10 @@ pub(super) struct Review {
     pub(super) decided: Vec<propose::Decision>,
     /// Temporary id → person saved in the tree.
     saved: std::collections::HashMap<String, String>,
+    /// “Reject…” open: the user's reason, or what the agent should change.
+    pub(super) rejecting: Option<Entity<TextareaState>>,
+    /// Its text changes (the button follows) and ⌘↩.
+    reject_sub: Option<Subscription>,
 }
 
 impl Review {
@@ -166,15 +174,12 @@ fn or_dash(v: &str) -> String {
     if v.trim().is_empty() { "—".into() } else { v.to_string() }
 }
 
-fn decision(id: String, outcome: Outcome) -> propose::Decision {
-    propose::Decision { id, outcome, new_people: Vec::new() }
-}
-
 /// What became of a proposal, for the agent.
 pub(super) fn outcome_text(o: Outcome) -> &'static str {
     match o {
         Outcome::Saved => "the user saved it",
         Outcome::Rejected => "the user rejected it",
+        Outcome::ChangesRequested => "the user asked for changes: propose it again with `replaces`",
         Outcome::Edited => "the user opened it in record entry",
         Outcome::Withdrawn => "it was withdrawn",
         Outcome::Replaced => "it was replaced",
@@ -274,13 +279,37 @@ impl Workspace {
         }
     }
 
-    /// Records in the file what became of a proposal.
+    /// Records in the file what became of a proposal, and tells its agent (`news`).
     pub(super) fn decide_proposal(&mut self, id: &str, outcome: Outcome, note: &str) {
         if let Some(doc) = &mut self.doc
             && doc.ged.decide_agent_proposal(id, outcome, note)
         {
             doc.dirty = true;
         }
+        let note = note.trim().to_string();
+        self.review.decided.push(propose::Decision { id: id.to_string(), outcome, note, new_people: Vec::new() });
+    }
+
+    /// The proposal `id` corrects after the user asked for changes, and what they asked.
+    pub(super) fn requested_changes(&self, id: &str) -> Option<String> {
+        let g = &self.doc.as_ref()?.ged;
+        let asked = g.agent_proposal(&g.agent_proposal(id)?.corrects?)?;
+        Some(asked.note).filter(|n| !n.trim().is_empty())
+    }
+
+    /// Whether `r` is a proposal the user asked to correct, not answered yet.
+    pub(super) fn awaits_correction(&self, r: &str) -> bool {
+        self.doc.as_ref().is_some_and(|d| d.ged.agent_awaits_correction(r))
+    }
+
+    /// The proposal a new one corrects: given by `replaces` when the user asked for changes on it,
+    /// or the one the waiting proposal it replaces corrected.
+    pub(super) fn corrected_by(&self, replaces: Option<&str>) -> Option<String> {
+        let r = replaces?;
+        if self.awaits_correction(r) {
+            return Some(r.to_string());
+        }
+        self.doc.as_ref()?.ged.agent_proposal(r)?.corrects
     }
 
     /// Queues again the proposals the file keeps as waiting, oldest first, as their agent sent
@@ -376,14 +405,15 @@ impl Workspace {
         let Some(doc) = &self.doc else { return Err("no file is open in GEDRoots".into()) };
         let g = &doc.ged;
         let replaced = match &pending.replaces {
-            Some(r) => Some(self.review.items.iter().position(|it| &it.id == r).ok_or_else(|| {
-                match self.review.decided.iter().rev().find(|d| &d.id == r) {
-                    Some(d) => format!("proposal {r} is no longer waiting: {}", outcome_text(d.outcome)),
-                    None => format!("no proposal {r}"),
-                }
-            })?),
+            Some(r) => match self.review.items.iter().position(|it| &it.id == r) {
+                Some(i) => Some(i),
+                // Sent back by the user: the correction is a new proposal, which points to it.
+                None if g.agent_awaits_correction(r) => None,
+                None => return Err(g.agent_not_replaceable(r)),
+            },
             None => None,
         };
+        let corrects = self.corrected_by(pending.replaces.as_deref());
         propose::link_known(&mut pending.proposal, &pending.temps, &self.review.saved);
         pending.proposal.complete(g);
         pending.proposal.check(g)?;
@@ -425,6 +455,7 @@ impl Workspace {
                 data: data.to_string(),
                 ..self.doc.as_ref().and_then(|d| d.ged.agent_proposal(&id)).unwrap_or_default()
             };
+            let stored = StoredProposal { corrects: corrects.or(stored.corrects.clone()), ..stored };
             self.keep_proposal(stored);
         }
         let item = Item { id: id.clone(), pending, excluded: BTreeSet::new(), conflicts: Default::default(), demo };
@@ -432,7 +463,6 @@ impl Workspace {
             Some(i) => {
                 let old = std::mem::replace(&mut self.review.items[i], item);
                 self.decide_proposal(&old.id, Outcome::Replaced, &id);
-                self.review.decided.push(decision(old.id, Outcome::Replaced));
                 self.set_status(t!("review.replaced"), false);
             }
             None => {
@@ -462,6 +492,12 @@ impl Workspace {
             cx.notify();
             return Ok(self.review_count());
         }
+        // Sent back by the user: the agent gives up on correcting it.
+        if self.awaits_correction(id) {
+            self.decide_proposal(id, Outcome::Withdrawn, "");
+            cx.notify();
+            return Ok(self.review_count());
+        }
         let Some(i) = self.review.items.iter().position(|it| it.id == id) else {
             return Err(match self.review.decided.iter().rev().find(|d| d.id == id) {
                 Some(d) => format!("proposal {id} is no longer waiting: {}", outcome_text(d.outcome)),
@@ -470,7 +506,7 @@ impl Workspace {
         };
         let sel = self.review.sel;
         self.review.sel = i;
-        self.review_take(Outcome::Withdrawn);
+        self.review_take(Outcome::Withdrawn, "");
         let total = self.review.total();
         self.review.sel = if i < sel { sel - 1 } else { sel.min(total.saturating_sub(1)) };
         self.set_status(t!("review.withdrawn"), false);
@@ -508,21 +544,22 @@ impl Workspace {
         cx.notify();
     }
 
-    fn review_select(&mut self, i: usize, cx: &mut Context<Self>) {
+    pub(super) fn review_select(&mut self, i: usize, cx: &mut Context<Self>) {
         self.review.sel = i;
+        self.review.rejecting = None;
         cx.notify();
     }
 
     /// Removes the displayed proposal, remembering what became of it; closes the page if none is
     /// left.
-    fn review_take(&mut self, outcome: Outcome) -> Option<Item> {
+    fn review_take(&mut self, outcome: Outcome, note: &str) -> Option<Item> {
         if self.review.sel >= self.review.items.len() {
             return None;
         }
+        self.review.rejecting = None;
         let item = self.review.items.remove(self.review.sel);
         if !item.demo {
-            self.decide_proposal(&item.id, outcome, "");
-            self.review.decided.push(decision(item.id.clone(), outcome));
+            self.decide_proposal(&item.id, outcome, note);
         }
         let total = self.review.total();
         self.review.sel = self.review.sel.min(total.saturating_sub(1));
@@ -532,23 +569,142 @@ impl Workspace {
         Some(item)
     }
 
-    pub(super) fn reject_proposal(&mut self, cx: &mut Context<Self>) {
-        if !self.review.open {
+    /// “Reject…”: asks why, in a popover above the button.
+    pub(super) fn reject_proposal(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.review.open || self.review.is_empty() {
             return;
         }
-        if let Some(i) = self.selected_change() {
-            self.reject_change(i, cx);
-            return;
-        }
-        if let Some(i) = self.selected_chapter() {
-            self.reject_chapter(i, cx);
-            return;
-        }
-        if self.review_take(Outcome::Rejected).is_some() {
-            self.set_status(t!("review.rejected"), false);
-            self.tour_did(super::tour::Advance::Decide, cx);
-        }
+        let state = match &self.review.rejecting {
+            Some(s) => s.clone(),
+            None => {
+                let ph = t!("review.reject_placeholder");
+                let s = cx.new(|cx| TextareaState::new(window, cx).auto_grow(3, 8).placeholder(ph));
+                // ⌘↩ sends the request for changes; typing enables it.
+                let sub = cx.subscribe_in(&s, window, |this, _, ev: &InputEvent, window, cx| match ev {
+                    InputEvent::PressEnter { secondary: true, .. } => this.confirm_reject(true, window, cx),
+                    InputEvent::Change => cx.notify(),
+                    _ => {}
+                });
+                self.review.rejecting = Some(s.clone());
+                self.review.reject_sub = Some(sub);
+                s
+            }
+        };
+        state.update(cx, |s, cx| s.focus(window, cx));
         cx.notify();
+    }
+
+    pub(super) fn close_reject(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.review.reject_sub = None;
+        if self.review.rejecting.take().is_some() {
+            window.focus(&self.focus, cx);
+            cx.notify();
+        }
+    }
+
+    /// Rejects the displayed proposal with the reason typed (if any); `changes`: asks its agent
+    /// to correct it, which needs the reason.
+    pub(super) fn confirm_reject(&mut self, changes: bool, window: &mut Window, cx: &mut Context<Self>) {
+        let note = self.review.rejecting.as_ref().map(|s| s.read(cx).value().trim().to_string()).unwrap_or_default();
+        if changes && note.is_empty() {
+            return;
+        }
+        let outcome = if changes { Outcome::ChangesRequested } else { Outcome::Rejected };
+        self.close_reject(window, cx);
+        let status = if changes { t!("review.changes_requested") } else { t!("review.rejected") };
+        if let Some(i) = self.selected_change() {
+            self.take_change(i, outcome, &note);
+        } else if let Some(i) = self.selected_chapter() {
+            self.take_chapter(i, outcome, &note);
+        } else if self.review_take(outcome, &note).is_some() {
+            self.tour_did(super::tour::Advance::Decide, cx);
+        } else {
+            return;
+        }
+        self.set_status(status, false);
+        cx.notify();
+    }
+
+    /// The popover of “Reject…”, above the button at the bottom left of the proposal.
+    pub(super) fn reject_popover(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let state = self.review.rejecting.as_ref()?;
+        let has_text = !state.read(cx).value().trim().is_empty();
+        Some(
+            v_flex()
+                .id("reject-popover")
+                .occlude()
+                .absolute()
+                .left_3()
+                .bottom(px(52.))
+                .w(px(440.))
+                .max_w(relative(0.9))
+                .p_3()
+                .gap_2()
+                .rounded(theme::RADIUS_LG)
+                .border_1()
+                .border_color(theme::border_strong())
+                .bg(theme::panel())
+                .shadow_lg()
+                .on_mouse_down_out(cx.listener(|this, _, w, cx| this.close_reject(w, cx)))
+                .capture_key_down(cx.listener(|this, ev: &KeyDownEvent, w, cx| {
+                    if ev.keystroke.key == "escape" {
+                        cx.stop_propagation();
+                        this.close_reject(w, cx);
+                    }
+                }))
+                .child(div().text_sm().font_weight(FontWeight::SEMIBOLD).child(t!("review.reject_why").into_owned()))
+                .child(Textarea::new(state).small())
+                .child(
+                    h_flex()
+                        .gap_2()
+                        .items_center()
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .text_xs()
+                                .text_color(theme::muted())
+                                .child(t!("review.agent_reads").into_owned()),
+                        )
+                        .child(
+                            Button::new("reject-confirm")
+                                .small()
+                                .label(t!("review.reject").into_owned())
+                                .on_click(cx.listener(|this, _, w, cx| this.confirm_reject(false, w, cx))),
+                        )
+                        .child(
+                            Button::new("reject-changes")
+                                .primary()
+                                .small()
+                                .disabled(!has_text)
+                                .label(t!("review.request_changes").into_owned())
+                                .on_click(cx.listener(|this, _, w, cx| this.confirm_reject(true, w, cx))),
+                        ),
+                )
+                .into_any_element(),
+        )
+    }
+
+    /// “Your request” above a correction the agent sent after the user asked for changes.
+    pub(super) fn your_request(&self, id: &str) -> Option<AnyElement> {
+        let asked = self.requested_changes(id)?;
+        Some(
+            v_flex()
+                .gap_1()
+                .child(label_caps(t!("review.your_request").into_owned()))
+                .child(
+                    div()
+                        .px_3()
+                        .py_2()
+                        .rounded(theme::RADIUS_SM)
+                        .border_l_2()
+                        .border_color(theme::accent())
+                        .bg(theme::accent_soft())
+                        .text_sm()
+                        .child(asked),
+                )
+                .into_any_element(),
+        )
     }
 
     /// Saves the displayed proposal: an undo point, then the file organized.
@@ -562,6 +718,10 @@ impl Workspace {
         }
         if !self.review.open || self.doc.is_none() {
             return;
+        }
+        // ⌘↩ in “Reject…” sends the request for changes.
+        if self.review.rejecting.is_some() {
+            return self.confirm_reject(true, window, cx);
         }
         if let Some(i) = self.selected_change() {
             self.accept_change(i, window, cx);
@@ -621,7 +781,7 @@ impl Workspace {
                 for it in &mut self.review.items {
                     propose::link_known(&mut it.pending.proposal, &it.pending.temps, &self.review.saved);
                 }
-                self.review_take(Outcome::Saved);
+                self.review_take(Outcome::Saved, "");
                 if let Some(d) = self.review.decided.last_mut().filter(|d| d.outcome == Outcome::Saved) {
                     d.new_people = saved;
                 }
@@ -667,7 +827,7 @@ impl Workspace {
         };
         // Record entry has its own fields for what the review lists as deduced facts.
         act.fold_deduced_facts();
-        self.review_take(Outcome::Edited);
+        self.review_take(Outcome::Edited, "");
         self.review.open = false;
         self.rebuild_rows(cx);
         let source = act.source.clone();
@@ -749,6 +909,9 @@ impl Workspace {
                     .when(!sel, |d| d.hover(|d| d.bg(theme::hover())))
                     .child(div().font_weight(FontWeight::MEDIUM).child(title(g, &p)))
                     .when(!meta.is_empty(), |d| d.child(div().text_xs().text_color(theme::muted()).child(meta)))
+                    .when(self.requested_changes(&item.id).is_some(), |d| {
+                        d.child(div().text_xs().text_color(theme::accent()).child(t!("review.corrected").into_owned()))
+                    })
                     // A doubtful proposal stands out in the list.
                     .when(p.act.quality.is_some_and(|q| q <= 1), |d| {
                         d.child(
@@ -1172,6 +1335,7 @@ impl Workspace {
         let url = item.pending.proposal.url.trim().to_string();
         let can_save = problem.is_none();
         v_flex()
+            .relative()
             .w(px(500.))
             .flex_none()
             .border_l_1()
@@ -1195,6 +1359,7 @@ impl Workspace {
                     .py_2()
                     .gap_4()
                     .when_some(problem, |d, e| d.child(div().text_sm().text_color(theme::danger()).child(e)))
+                    .children(self.your_request(&item.id))
                     .child(v_flex().gap_1().child(label_caps(t!("review.record").into_owned())).child(grid))
                     .when_some(facts, |d, facts| {
                         d.child(v_flex().gap_1().child(label_caps(t!("review.facts").into_owned())).child(facts))
@@ -1241,8 +1406,9 @@ impl Workspace {
                         Button::new("review-reject")
                             .ghost()
                             .small()
-                            .label(t!("review.reject").into_owned())
-                            .on_click(cx.listener(|this, _, _, cx| this.reject_proposal(cx))),
+                            .selected(self.review.rejecting.is_some())
+                            .label(t!("review.reject_ellipsis").into_owned())
+                            .on_click(cx.listener(|this, _, w, cx| this.reject_proposal(w, cx))),
                     )
                     .child(div().flex_1())
                     .child(
@@ -1260,6 +1426,7 @@ impl Workspace {
                             .on_click(cx.listener(|this, _, w, cx| this.accept_proposal(w, cx))),
                     ),
             )
+            .children(self.reject_popover(cx))
     }
 }
 
